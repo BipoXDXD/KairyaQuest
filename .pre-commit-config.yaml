@@ -18,4 +18,12 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+        # Sem isto o pre-commit engole toda a saida do hook quando ele passa.
+        # No pre-commit/pre-merge-commit isso e aceitavel (o gate leva
+        # segundos), mas o gate-push roda "make bootstrap" e "make check" em
+        # um worktree novo: sao minutos de npm ci e varredura, durante os
+        # quais um push silencioso e indistinguivel de um push travado. Ver a
+        # saida tambem e o que torna auditavel a afirmacao de que o gate
+        # rodou de verdade na ref enviada.
+        verbose: true
         stages: [pre-push]
