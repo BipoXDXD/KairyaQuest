@@ -3,6 +3,13 @@
 
 WEB := frontend
 
+# Diretorio das ferramentas baixadas por scripts/. FQ_TOOLS_DIR (absoluto)
+# sobrescreve, para o scripts/check-push.sh compartilhar o cache do
+# repositorio principal com os worktrees temporarios do pre-push. O binario
+# compartilhado continua sendo verificado pelo proprio hash SHA-256 em
+# scripts/install-gitleaks.sh.
+TOOLS := $(if $(FQ_TOOLS_DIR),$(FQ_TOOLS_DIR),.tools)
+
 help: ## Lista os alvos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -22,7 +29,7 @@ check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh
-	.tools/gitleaks dir . --no-banner --redact --exit-code 1 --config .gitleaks.toml
+	$(TOOLS)/gitleaks dir . --no-banner --redact --exit-code 1 --config .gitleaks.toml
 
 format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format

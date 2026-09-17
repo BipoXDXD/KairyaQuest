@@ -7,7 +7,20 @@ set -euo pipefail
 
 VERSION="8.30.1"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TOOLS="${ROOT}/.tools"
+
+# FQ_TOOLS_DIR (caminho ABSOLUTO) sobrescreve o .tools/ local. Existe para
+# o scripts/check-push.sh: ele valida cada ref em um worktree novo, onde
+# .tools/ nao existe (o diretorio e ignorado pelo git), e sem isto o
+# Gitleaks seria baixado inteiro -- 21 MB mais o tempo de rede -- a cada
+# push. Apontando o cache para o .tools/ do repositorio principal, o
+# binario e reaproveitado.
+#
+# Compartilhar NAO afrouxa a verificacao: o binario reaproveitado passa
+# pela mesma checagem contra BIN_SHA256 abaixo, exatamente como o local. E
+# justamente essa checagem por hash que torna o compartilhamento seguro --
+# um diretorio de cache compartilhado sem ela seria um vetor obvio de
+# troca de binario.
+TOOLS="${FQ_TOOLS_DIR:-${ROOT}/.tools}"
 BIN="${TOOLS}/gitleaks"
 
 case "$(uname -s)-$(uname -m)" in
@@ -54,4 +67,4 @@ echo "${BIN_SHA256}  ${TMP}/gitleaks" | shasum -a 256 -c - >/dev/null || {
 
 mv "${TMP}/gitleaks" "$BIN"
 chmod +x "$BIN"
-echo "gitleaks ${VERSION} instalado em .tools/"
+echo "gitleaks ${VERSION} instalado em ${TOOLS}/"
