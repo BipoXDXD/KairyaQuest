@@ -12,10 +12,18 @@ que já usa `AGENTS.md` com outros agentes: um `CLAUDE.md` que o importa com a
 sintaxe `@caminho`, seguido do conteúdo específico do Claude. O import é
 expandido e carregado no início da sessão, antes desta seção.
 
-**Confirme que carregou.** Rode `/context` e verifique se `CLAUDE.md` e
-`AGENTS.md` aparecem em **Memory files**. Se `AGENTS.md` não estiver lá, você
-está trabalhando sem as regras do projeto — pare e leia o arquivo à mão antes
-de continuar.
+**Confirme que carregou — pelo conteúdo, não pela listagem.** O teste é
+saber, sem abrir arquivo nenhum, o que o `AGENTS.md` manda: por exemplo, que
+a `main` é protegida e que nenhum alvo do Makefile invoca `pre-commit`. Se
+você não tem esse conteúdo em contexto, está trabalhando sem as regras do
+projeto — leia `AGENTS.md` à mão antes de continuar.
+
+`/context` lista os arquivos de memória carregados e é onde a documentação
+oficial manda conferir que o `CLAUDE.md` entrou. **Não conte com ver
+`AGENTS.md` como uma linha própria ali:** ele é um import, e não foi
+verificado se a listagem mostra um arquivo importado com nome próprio ou já
+expandido dentro do `CLAUDE.md`. Ausência na listagem não prova que não
+carregou — por isso o critério acima é o conteúdo.
 
 **Instruções de nível de usuário não relaxam estas.** Um `~/.claude/CLAUDE.md`
 pessoal também é carregado e pode contradizer o projeto em matéria de estilo
