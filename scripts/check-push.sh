@@ -26,20 +26,16 @@ cleanup() {
     # com uma pausa curta, dando tempo do processo orfao realmente
     # terminar.
     #
-    # Cada tentativa usa o comando como CONDICAO de um "if" -- a forma
-    # que o bash isenta de "set -e". Isto e obrigatorio aqui: esta funcao
-    # e chamada por on_signal ANTES do "exit 130/143" dele; se um "rm -rf"
-    # dentro dela falhasse sem essa isencao, "set -e" encerraria o script
-    # ali mesmo, com o codigo de saida do rm em vez do codigo do sinal --
-    # o proprio bug que este trap existe para evitar, so que causado pela
-    # limpeza em vez da interrupcao.
+    # Cada tentativa usa o comando como CONDICAO de um "if" -- em efeito
+    # sobre "set -e" isto e IDENTICO a "CMD || true" (o lado esquerdo de
+    # um "||" ja e isento; nao ha diferenca de comportamento). A troca e
+    # so lexical: este projeto proibe o idioma "|| true" por convencao,
+    # e escrever "if CMD; then :; fi" em vez disso mantem uma busca por
+    # "|| true" no repositorio livre de falsos positivos, o que importa
+    # para a proibicao continuar facil de auditar.
     local tentativa
     for tentativa in 1 2 3 4 5 6 7 8 9 10; do
       [ -d "$alvo" ] || break
-      # "if CMD; then :; fi": CMD e a CONDICAO do if, entao seu codigo de
-      # saida (falhe ou nao) nunca aciona "set -e" -- e a unica forma de
-      # rodar um comando "melhor esforco" sem arriscar abortar o script
-      # nem recorrer a "|| true"/"|| :" soltos.
       if git worktree remove --force "$alvo" </dev/null >/dev/null 2>&1; then :; fi
       if [ -d "$alvo" ]; then
         if rm -rf "$alvo" >/dev/null 2>&1; then :; fi
@@ -47,6 +43,20 @@ cleanup() {
       [ -d "$alvo" ] || break
       sleep 0.3
     done
+
+    # Se depois de 10 tentativas o diretorio ainda esta la, isto e uma
+    # falha real de limpeza, nao "melhor esforco" silencioso -- e a
+    # diferenca entre as duas coisas e exatamente avisar quando nao
+    # consegue. NAO mexe em "status": a limpeza nunca e o gate, e uma
+    # falha de higiene aqui nao pode reprovar um push cujo codigo esta
+    # correto (o veredicto continua vindo so de make bootstrap/check).
+    # Mas o recurso vazado (worktree registrado no git + diretorio em
+    # $TMPDIR) precisa ficar visivel para alguem limpar a mao.
+    if [ -d "$alvo" ]; then
+      echo "!! nao foi possivel remover o worktree temporario em ${alvo} -- limpeza manual necessaria:" >&2
+      echo "!!   git worktree remove --force ${alvo}" >&2
+      echo "!!   rm -rf ${alvo}" >&2
+    fi
   fi
 }
 
