@@ -22,7 +22,7 @@ check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh
-	.tools/gitleaks dir . --no-banner --redact --exit-code 1
+	.tools/gitleaks dir . --no-banner --redact --exit-code 1 --config .gitleaks.toml
 
 format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format

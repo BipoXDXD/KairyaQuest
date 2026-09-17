@@ -1,0 +1,27 @@
+title = "Gitleaks config do FocusQuest"
+
+# ESTENDE o conjunto de regras padrao do Gitleaks -- nao o substitui. Sem
+# "useDefault = true" aqui, um [allowlist] proprio bastaria para revogar
+# silenciosamente todas as regras embutidas (private-key, aws-access-key-id
+# etc.), o que seria uma regressao grave e silenciosa do gate. Com
+# useDefault, a config oficial e carregada primeiro e este arquivo apenas
+# acrescenta a ela.
+[extend]
+useDefault = true
+
+[allowlist]
+description = '''
+.superpowers/ e diretorio de scratch do processo de execucao (planejamento,
+relatorios de tarefas). Esta ignorado pelo git (.superpowers/sdd/.gitignore
+tem um "*" cobrindo tudo ali) e nunca e commitado -- portanto nunca pode
+vazar um segredo via commit, que e o que esta varredura existe para
+impedir. Relatorios de tarefas ali dentro documentam, por exigencia de
+rastreabilidade, os blocos de segredo de teste usados para validar a
+propria deteccao do Gitleaks (ex.: task-4-report.md contem o bloco de
+chave privada plantado e removido no Step 7). Excluir APENAS este
+diretorio; frontend/coverage/, frontend/dist/ e todo o resto do projeto
+continuam sendo varridos de verdade pela regra padrao.
+'''
+paths = [
+  '''^\.superpowers/''',
+]
