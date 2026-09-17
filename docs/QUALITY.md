@@ -192,10 +192,10 @@ esta varredura existe para impedir.
 
 A exclusão existe porque relatórios de tarefa dentro de `.superpowers/`
 documentam, por exigência de rastreabilidade, os blocos de segredo de teste
-usados para validar a própria detecção do Gitleaks (por exemplo, este
-relatório da Task 6 registra a chave RSA de teste plantada e removida na
-demonstração da Seção "segredo plantado"). Sem a exclusão, `make check`
-reprovaria sempre que esse relatório existisse no disco, mesmo sem nunca
+usados para validar a própria detecção do Gitleaks (por exemplo, o
+`task-6-report.md` desta mesma tarefa registra a chave RSA de teste
+plantada e removida na demonstração "segredo plantado"). Sem a exclusão,
+`make check` reprovaria sempre que esse relatório existisse no disco, mesmo sem nunca
 chegar a um commit — o que tornaria impossível documentar as próprias
 demonstrações do gate sem também desativar a varredura por completo. A
 exclusão é estreita e específica: `frontend/coverage/`, `frontend/dist/` e
