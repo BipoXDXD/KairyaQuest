@@ -1,0 +1,40 @@
+# ---- Python ----
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# ---- Node ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+coverage/
+playwright-report/
+test-results/
+
+# ---- Segredos ----
+# .env.example é versionado de propósito (README §4).
+.env
+.env.*
+!.env.example
+
+# ---- IDE: estado pessoal ----
+# .run/ NÃO entra aqui: é configuração compartilhada de execução (README §4).
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- macOS ----
+.DS_Store
+
+# ---- Logs ----
+logs/
+*.log
+npm-debug.log*
