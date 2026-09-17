@@ -16,20 +16,62 @@ cleanup() {
   local alvo="$work"
   work=""
   if [ -n "$alvo" ]; then
-    # --force descarta qualquer alteracao local no worktree (nao deveria
-    # haver nenhuma: e um worktree descartavel criado so para validar um
-    # sha). O fallback com rm -rf cobre o caso de o registro do git ja ter
-    # sumido (ex.: esta funcao rodando duas vezes para a mesma iteracao,
-    # uma pelo fim normal do laco e outra pelo trap de EXIT) -- um
-    # worktree que ja nao existe nao pode fazer a limpeza falhar.
-    git worktree remove --force "$alvo" >/dev/null 2>&1 || rm -rf "$alvo"
+    # Depois de um SIGINT/SIGTERM, o "npm ci" morto (filho do "make" que
+    # ja terminou) pode continuar por um instante finalizando sozinho seu
+    # proprio desligamento -- escrevendo/apagando arquivos dentro do
+    # worktree. Se isso coincide com esta limpeza, tanto o "git worktree
+    # remove" quanto um "rm -rf" isolado podem falhar com "Directory not
+    # empty" (visto na pratica), porque o processo orfao recria entradas
+    # enquanto tentamos apagar a arvore. Por isso tentamos algumas vezes
+    # com uma pausa curta, dando tempo do processo orfao realmente
+    # terminar.
+    #
+    # Cada tentativa usa o comando como CONDICAO de um "if" -- a forma
+    # que o bash isenta de "set -e". Isto e obrigatorio aqui: esta funcao
+    # e chamada por on_signal ANTES do "exit 130/143" dele; se um "rm -rf"
+    # dentro dela falhasse sem essa isencao, "set -e" encerraria o script
+    # ali mesmo, com o codigo de saida do rm em vez do codigo do sinal --
+    # o proprio bug que este trap existe para evitar, so que causado pela
+    # limpeza em vez da interrupcao.
+    local tentativa
+    for tentativa in 1 2 3 4 5 6 7 8 9 10; do
+      [ -d "$alvo" ] || break
+      # "if CMD; then :; fi": CMD e a CONDICAO do if, entao seu codigo de
+      # saida (falhe ou nao) nunca aciona "set -e" -- e a unica forma de
+      # rodar um comando "melhor esforco" sem arriscar abortar o script
+      # nem recorrer a "|| true"/"|| :" soltos.
+      if git worktree remove --force "$alvo" </dev/null >/dev/null 2>&1; then :; fi
+      if [ -d "$alvo" ]; then
+        if rm -rf "$alvo" >/dev/null 2>&1; then :; fi
+      fi
+      [ -d "$alvo" ] || break
+      sleep 0.3
+    done
   fi
 }
-# EXIT cobre o fim normal do script; INT e TERM cobrem Ctrl-C e kill
-# durante o make -C bootstrap, que leva minutos e e a janela mais provavel
-# de interrupcao. Sem isto, uma interrupcao nessa janela deixa worktree
-# registrado no git e diretorio orfao em $TMPDIR.
-trap cleanup EXIT INT TERM
+
+# Um trap de SINAL (diferente do trap de EXIT) que so roda cleanup e
+# retorna devolve o controle ao script no ponto em que foi interrompido --
+# em bash, receber INT/TERM nao aborta por si so um script que tem trap
+# armado para o sinal. Sem sair explicitamente aqui, um Ctrl-C durante o
+# bootstrap da primeira ref mataria so aquele "make", limparia o worktree
+# e o laco seguiria para a proxima ref, comecando um bootstrap novo de
+# varios minutos -- exatamente quando quem apertou Ctrl-C concluiu (pela
+# limpeza visivel) que tinha cancelado. A reacao previsivel a isso e um
+# "kill -9", que nao dispara trap nenhum e deixa os orfaos que o trap
+# existe para evitar. Por isso encerramos aqui com o codigo de saida
+# convencional do sinal (128 + numero do sinal: INT=2, TERM=15) -- nao
+# zero, porque a ref interrompida nao foi validada e o push tem que ser
+# rejeitado mesmo assim.
+on_signal() {
+  local exit_code="$1"
+  cleanup
+  exit "$exit_code"
+}
+
+trap cleanup EXIT
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 
 while read -r ref_local sha_local _ref_remota _sha_remoto; do
   if [ "$sha_local" = "$ZERO" ]; then
