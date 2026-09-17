@@ -12,9 +12,9 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 Incremento 2 — fundação de qualidade. Compreende o saneamento (Incremento 0,
 já concluído antes deste) e o gate de qualidade completo (`make check`,
-hooks de git e sua documentação — Tasks 1 a 6 deste incremento). A fatia
-vertical (Incremento 1 da numeração original da spec) ainda não foi
-iniciada; ver "Próximo incremento".
+hooks de git, o workflow do GitHub Actions e a documentação dos três —
+Tasks 1 a 7 deste incremento). A fatia vertical (Incremento 1 da numeração
+original da spec) ainda não foi iniciada; ver "Próximo incremento".
 
 ## Decisões tomadas
 
@@ -49,7 +49,7 @@ iniciada; ver "Próximo incremento".
 
 ## Alterações do incremento 2
 
-Tasks 1 a 6 (spec em
+Tasks 1 a 7 (spec em
 `docs/superpowers/specs/2026-09-17-fundacao-qualidade-design.md`):
 
 - **Task 1:** `Makefile` (alvos `help`, `check`, `check-web`, `format`) e
@@ -73,10 +73,24 @@ Tasks 1 a 6 (spec em
   os próprios hooks — todos os onze commits anteriores, do saneamento à
   Task 4, antecederam a instalação do gate e não foram avaliados por ele).
 - **Task 6:** `docs/QUALITY.md` (comandos, regra de direção única,
-  denominador da cobertura, roadmap de `check-api`/`check-e2e`, limitações
-  conhecidas e procedimento de atualização do Gitleaks) e as oito
-  demonstrações de que o gate reprova de fato, registradas em
+  denominador da cobertura, roadmap de `check-api`/`check-e2e`, integração
+  contínua, limitações conhecidas e procedimento de atualização do
+  Gitleaks) e as oito demonstrações de que o gate reprova de fato,
+  registradas em
   `.superpowers/sdd/2026-09-17-fundacao-qualidade/task-6-report.md`.
+- **Task 7:** `.github/workflows/quality.yml` — o mesmo gate no GitHub
+  Actions, com um job por alvo do Makefile (`check-web`, `check-secrets`) e
+  o agregador `quality-gate` com `if: always()`, destinado a ser o status
+  obrigatório da proteção de branch (D5). Dispara em `push`,
+  `pull_request`, `workflow_dispatch` e `merge_group`, com
+  `contents: read`, sem segredos, sem `continue-on-error` e sem cancelar
+  execuções anteriores. Versões de `actions/checkout` e `actions/setup-node`
+  confirmadas via `gh api` (@v7 nas duas), não copiadas de memória.
+  **Escrito e validado localmente — nunca executado de verdade**, porque o
+  repositório ainda não tem remoto: o YAML passou por `actionlint` via
+  Docker. Detalhe em
+  `.superpowers/sdd/2026-09-17-fundacao-qualidade/task-7-report.md`;
+  descrição funcional em `docs/QUALITY.md` §5.
 
 ## Comandos e resultados
 
@@ -102,6 +116,9 @@ Executado na raiz (incremento 2):
 | Comando | Resultado |
 |---|---|
 | `make check` | Aprovado: ESLint, Prettier `--check`, `tsc -b` e Vitest com 100% de cobertura, seguidos de Gitleaks sem achados, em ~2,5 s em árvore limpa. Primeiro commit validado pelo gate (via hook `pre-commit`, não por invocação manual): `b237e47`. |
+| `shellcheck` via Docker | Aprovado (`koalaman/shellcheck:stable`) em `scripts/install-gitleaks.sh` e `scripts/check-push.sh`. Os dois únicos avisos são falsos positivos conhecidos, ambos em `check-push.sh`: SC2034 na variável de controle do `for` da limpeza (ela é um contador, não é lida de propósito) e SC2329 em `on_signal`, que é invocada por `trap` e o ShellCheck não enxerga. Nenhum defeito real. |
+| `actionlint` via Docker | Aprovado (`rhysd/actionlint:latest`) em `.github/workflows/quality.yml`, sem findings. |
+| `git push` contra remoto bare local | Aprovado: o `pre-push` roda o gate em worktree isolado, aceita o push de `main` e rejeita o push de uma branch com erro de tipo. Saída completa em `.superpowers/sdd/2026-09-17-fundacao-qualidade/final-fix-report.md`. |
 
 ## Ambiente verificado
 
@@ -111,7 +128,7 @@ Docker 29.7.2 com daemon rodando; Compose v5.5.1; git 2.55.0; gh 2.100.0.
 **Versões fixadas do gate:** Gitleaks 8.30.1 (checksums do tarball e do
 binário extraído em `scripts/install-gitleaks.sh` — os dois valores ficam
 só ali, não duplicados aqui; procedimento de atualização em
-`docs/QUALITY.md` §6); Ruff, mypy e pre-commit conforme `uv.lock`; Prettier
+`docs/QUALITY.md` §7); Ruff, mypy e pre-commit conforme `uv.lock`; Prettier
 3.9.7 e Vitest 5.0.1 conforme `frontend/package-lock.json`.
 
 ## Setup (clone ou worktree novo)
@@ -136,8 +153,11 @@ local, sem aviso.
    `.python-version` e `.venv` existem desde a Task 3 deste incremento
    (D2), mas só com o grupo `dev` (Ruff, mypy, pre-commit) — sem pacote,
    sem dependência de aplicação, sem nenhum módulo Python real.
-2. **Sem remoto.** Nenhum remote configurado; CI e proteções de branch
-   (README §12) pendentes de autorização.
+2. **Remoto não configurado e proteção de branch não aplicada.** Nenhum
+   remote existe ainda. O workflow do CI já está escrito e validado
+   localmente (Task 7), mas nunca rodou; e sem remoto não há como marcar o
+   status `quality-gate` como obrigatório na proteção de branch (README
+   §12). O primeiro push depende de autorização.
 3. **`AGENTS.md` e `CLAUDE.md` não criados** (README §13).
 4. **`docs/ARCHITECTURE.md` não criado** (README §3).
 5. **`check-api` e `check-e2e` ainda não existem.** Ruff, mypy e pytest
@@ -145,9 +165,6 @@ local, sem aviso.
    junto com o primeiro fluxo ponta a ponta real. Contrato completo e
    motivo da ausência atual em `docs/QUALITY.md` §4 (roadmap dos alvos
    ausentes).
-6. **`shellcheck` não está instalado nesta máquina.** `scripts/install-gitleaks.sh`
-   e `scripts/check-push.sh` não passaram por análise estática de shell;
-   só foram validados por execução manual das demonstrações da Task 6.
 
 ## Próximo incremento
 

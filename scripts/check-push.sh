@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Valida o gate no topo de cada ref enviada, em worktree isolado.
 #
-# Limitacoes conhecidas (documentadas em docs/QUALITY.md secao 5):
+# Limitacoes conhecidas (documentadas em docs/QUALITY.md secao 6):
 #  - commits intermediarios nao sao validados um a um;
 #  - executado pelo framework pre-commit, so UMA ref e visivel por push
 #    (ver o bloco "De onde vem a lista de refs" abaixo).
@@ -128,7 +128,7 @@ trap 'on_signal 143' TERM
 # rastreamento do remoto ainda estao no estado ANTERIOR ao push e nao
 # dizem o que esta sendo enviado). Nao da para reprovar o que nao se
 # consegue nem enumerar: validamos a ref visivel, e o buraco fica
-# registrado em docs/QUALITY.md secao 5. Pelo caminho da stdin (hook
+# registrado em docs/QUALITY.md secao 6. Pelo caminho da stdin (hook
 # nativo) a cobertura multi-ref continua completa.
 refs_texto=""
 origem=""
@@ -156,7 +156,7 @@ if [ -n "${PRE_COMMIT_LOCAL_BRANCH:-}" ] || [ -n "${PRE_COMMIT_TO_REF:-}" ]; the
 
   [ -n "$ref_local" ] || ref_local="(ref sem nome)"
   adiciona_ref "$ref_local" "$sha_local"
-  echo "==> refs obtidas das ${origem}; um push multi-ref expoe apenas a primeira (docs/QUALITY.md secao 5)"
+  echo "==> refs obtidas das ${origem}; um push multi-ref expoe apenas a primeira (docs/QUALITY.md secao 6)"
 else
   origem="entrada padrao (hook nativo)"
   while read -r ref_local sha_local _ref_remota _sha_remoto; do

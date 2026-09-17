@@ -29,7 +29,7 @@ mantém "nenhum alvo do Makefile invoca `pre-commit`" (seção 2 abaixo) como
 regra absoluta, sem exceção a lembrar.
 
 Sem o segundo comando, `git commit` e `git push` funcionam normalmente —
-sem nenhuma validação. Ver a limitação correspondente na seção 5.
+sem nenhuma validação. Ver a limitação correspondente na seção 6.
 
 ## 1. Comandos
 
@@ -127,7 +127,59 @@ O mesmo vale para `check-e2e`: sem um fluxo real de ponta a ponta, um
 `check-e2e` existiria apenas para navegar por uma tela estática, sem
 nenhuma asserção de negócio significativa.
 
-## 5. Limitações conhecidas
+## 5. Integração contínua
+
+O workflow `.github/workflows/quality.yml` é o mesmo gate, executado no
+GitHub Actions. Dispara em `push` e `pull_request` de qualquer branch, sem
+filtro de caminho, mais `workflow_dispatch` e `merge_group`; permissão
+mínima (`contents: read`), sem segredos, sem `continue-on-error`, e com
+`cancel-in-progress: false` porque o README §12 proíbe cancelar
+verificações anteriores.
+
+**Paridade 1:1 entre job e alvo do Makefile (decisão D5).** Cada job de
+verificação executa **um** alvo, e nada além dele:
+
+| Job | Executa |
+|---|---|
+| `check-web` | `make check-web` |
+| `check-secrets` | `make check-secrets` |
+| `quality-gate` | nenhum alvo: agrega o resultado dos dois acima |
+
+A regra é o que impede o CI e a máquina local de divergirem. Um passo que
+existisse só no workflow (ou só no Makefile) criaria uma verificação que
+ninguém consegue reproduzir do outro lado, e o primeiro efeito prático
+seria um CI vermelho que passa localmente — exatamente o que faz alguém
+procurar um jeito de pular o gate. Por isso, quando faltar uma verificação,
+ela entra primeiro como alvo do Makefile e só depois ganha um job; nunca o
+contrário. Ver a divergência conhecida sobre o `uv.lock` na seção 4.
+
+Os passos que o job faz além do alvo são de **preparação de ambiente**, não
+de verificação: `actions/checkout`, `actions/setup-node` (Node 24, cache de
+npm apontado para `frontend/package-lock.json`) e `npm ci`. O job
+`check-secrets` não precisa de preparo nenhum: `make check-secrets` já
+instala o Gitleaks fixado por checksum, e um checkout raso basta porque
+`gitleaks dir .` varre a árvore de arquivos em disco, não o histórico.
+
+**O agregador `quality-gate` e o `if: always()`.** É o job único destinado a
+virar o status obrigatório da proteção de branch — a lista de `needs`
+cresce junto com os jobs, mas a proteção do remoto continua apontando para
+um nome só. Ele precisa de `if: always()` porque, sem isso, um `needs` que
+falha faz o job dependente ser **pulado**, e um check pulado não reprova
+nada: o status obrigatório simplesmente nunca reportaria, e um PR quebrado
+apareceria como "sem verificação pendente" em vez de vermelho. Com
+`always()`, o job roda sempre e exige o literal `success` de cada
+dependência — `failure`, `cancelled` e `skipped` reprovam do mesmo jeito.
+Aprovar por não ter conseguido olhar é o que o gate proíbe em todas as
+camadas, e aqui não é diferente.
+
+Limitação registrada e deliberadamente não corrigida agora: a lista de
+`needs` do `quality-gate` é estática, então um job novo que alguém esqueça
+de acrescentar ali passaria despercebido pelo agregador. O conserto (gerar
+a lista, ou usar uma action de agregação de terceiros) traz dependência ou
+metaprogramação de YAML que não se paga com dois jobs; revisar quando
+houver mais.
+
+## 6. Limitações conhecidas
 
 Sem eufemismo:
 
@@ -182,13 +234,16 @@ Sem eufemismo:
   quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,
   editar ou apagar `.pre-commit-config.yaml`, ou desinstalar os hooks.
   Nada nesta camada impede isso: **a proteção real é a do remoto** (branch
-  protection e o status `quality-gate` obrigatório em CI, README §12), que
-  ainda depende de autorização e configuração pendentes (ver
+  protection e o status `quality-gate` obrigatório em CI, README §12). O
+  workflow que produz esse status já existe e está descrito na seção 5
+  (`.github/workflows/quality.yml`); o que falta é o outro lado — o
+  repositório ainda não tem remoto configurado, e sem remoto não há como
+  aplicar a proteção de branch que torna o `quality-gate` obrigatório (ver
   `docs/HANDOFF.md`). Os hooks locais existem para dar feedback rápido e
   reduzir o volume de commits quebrados que chegam ao CI, não para
   substituir a proteção do remoto.
 
-## 6. Como atualizar o Gitleaks
+## 7. Como atualizar o Gitleaks
 
 A versão do Gitleaks é fixada em `scripts/install-gitleaks.sh`
 (`VERSION="8.30.1"` hoje) e verificada por **dois** checksums SHA-256
@@ -242,7 +297,7 @@ plataforma), apague `.tools/gitleaks` local e rode `make bootstrap` para
 confirmar que o download, o checksum do tarball e o checksum do binário
 extraído batem antes de commitar a mudança.
 
-## 7. Por que `.superpowers/sdd/` está excluído do `.gitleaks.toml`
+## 8. Por que `.superpowers/sdd/` está excluído do `.gitleaks.toml`
 
 O `[allowlist]` em `.gitleaks.toml` exclui da varredura de segredos um único
 caminho: `^\.superpowers/sdd/`. Esse é o diretório de scratch do processo de
