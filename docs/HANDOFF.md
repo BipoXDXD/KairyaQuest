@@ -98,6 +98,22 @@ Tasks 1 a 7 (spec em
   caminho que o leitor deste documento consiga abrir; descrição funcional
   em `docs/QUALITY.md` §5.
 
+### Documentação de agentes e arquitetura (README §13 e §3)
+
+Resolve as pendências 3 e 4 abaixo. Primeiro incremento entregue pelo fluxo
+de branch + pull request, já sob a `main` protegida.
+
+- `AGENTS.md` (raiz) — regras comuns a Kimi, Codex e Claude: leitura
+  obrigatória antes de trabalhar, fluxo por branch e PR, `make check` antes de
+  propor commit ou merge, proibição de `--no-verify`/`SKIP`/`|| true`/
+  `continue-on-error`, um implementador por worktree, e as regras desta base
+  que um agente novo quebraria sem saber (direção única da invocação,
+  paridade 1:1 CI × Makefile, cobertura de 100%, contrato do `check-api`,
+  push de uma ref por vez, instalação dos hooks por clone/worktree).
+- `CLAUDE.md` (raiz) — importa `AGENTS.md` e acrescenta apenas o específico do
+  Claude Code. Sem conteúdo duplicado.
+- `docs/ARCHITECTURE.md` — ver pendência 4.
+
 ## Comandos e resultados
 
 Executados em `frontend/` (incremento 0):
@@ -180,8 +196,32 @@ local, sem aviso.
    `scripts/check-push.sh`, que só existe quando o push inclui o commit
    raiz; e a branch `Linux-x86_64` de `scripts/install-gitleaks.sh`, que a
    máquina de desenvolvimento (ARM) nunca executa.
-3. **`AGENTS.md` e `CLAUDE.md` não criados** (README §13).
-4. **`docs/ARCHITECTURE.md` não criado** (README §3).
+3. **`AGENTS.md` e `CLAUDE.md` criados** (README §13). `AGENTS.md` na raiz
+   concentra as regras comuns; `CLAUDE.md` o importa com `@AGENTS.md`, o
+   mecanismo oficial do Claude Code, e acrescenta só o que é específico dele.
+   Sem duplicação de conteúdo entre os dois.
+
+   A descoberta de instruções por agente foi registrada com o estado de cada
+   uma, conforme o §13 exige ("não invente capacidades"): **Claude Code** e
+   **Codex** confirmados na documentação oficial de cada um; **Kimi Code
+   NÃO confirmado** — a documentação declara os arquivos globais
+   (`~/.kimi-code/AGENTS.md`, `~/.agents/AGENTS.md`) e cita `AGENTS.md` como
+   exemplo de instrução de projeto, sem afirmar que o arquivo da raiz é
+   descoberto automaticamente. Nenhum dos três foi verificado por execução
+   neste repositório. A tabela com o estado de cada agente está em
+   `AGENTS.md` §5.
+4. **`docs/ARCHITECTURE.md` criado** (README §3). Separa em blocos rotulados o
+   que existe hoje (árvore gerada do disco, com a responsabilidade de cada
+   diretório) do que é alvo e ainda não foi implementado (a árvore do §3 do
+   README, as camadas do backend e os caminhos do frontend que ainda não
+   nasceram). Documenta onde colocar cada tipo de arquivo, as convenções de
+   fronteira e a divergência deliberada `frontend/` × `web/`.
+
+   O backend está registrado como **contrato**, nunca como descrição: não
+   existe um único arquivo `.py` no repositório, e descrevê-lo como existente
+   seria a afirmação falsa que a revisão deste projeto trata como defeito
+   grave. Mesmo tratamento para `.run/`, `alembic/`, `compose.yaml`,
+   `Dockerfile` e `.env.example`, todos ausentes e registrados como tal.
 5. **`check-api` e `check-e2e` ainda não existem.** Ruff, mypy e pytest
    entram no gate junto com o primeiro módulo Python; Playwright/axe-core
    junto com o primeiro fluxo ponta a ponta real. Contrato completo e
