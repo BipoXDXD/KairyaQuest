@@ -165,6 +165,18 @@ local, sem aviso.
    junto com o primeiro fluxo ponta a ponta real. Contrato completo e
    motivo da ausência atual em `docs/QUALITY.md` §4 (roadmap dos alvos
    ausentes).
+6. **Divergência conhecida da spec: o `uv.lock` não é validado em lugar
+   nenhum.** A spec previa `uv sync --frozen` no CI; o workflow só faz
+   `npm ci`, e `uv sync --frozen` existe apenas no alvo `bootstrap`, que o
+   CI não chama. Um `uv.lock` dessincronizado do `pyproject.toml` não é
+   detectado por nada — e, medido com `uv 0.12.13`, **`--frozen` não
+   validaria nem se estivesse no CI**: ele usa o lockfile como está sem
+   compará-lo ao `pyproject.toml`. Quem valida é `uv sync --locked` ou
+   `uv lock --check`. Deliberadamente **não corrigido agora**: um passo só
+   no CI quebraria a paridade 1:1 de D5, e um alvo só para isso colocaria
+   uma etapa Python no gate sem nenhum arquivo `.py` no repositório. Entra
+   junto com o alvo `check-api`, que vai precisar de `uv` de qualquer
+   forma. Detalhe, com a medição, em `docs/QUALITY.md` §4.
 
 ## Próximo incremento
 

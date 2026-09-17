@@ -127,6 +127,56 @@ O mesmo vale para `check-e2e`: sem um fluxo real de ponta a ponta, um
 `check-e2e` existiria apenas para navegar por uma tela estática, sem
 nenhuma asserção de negócio significativa.
 
+### Divergência conhecida da spec: o `uv.lock` não é validado
+
+A spec de design previa `uv sync --frozen` no CI. O workflow só faz
+`npm ci`; `uv sync --frozen` existe apenas no alvo `bootstrap`, que o CI
+não chama. Consequência real, sem eufemismo: um `uv.lock` dessincronizado
+do `pyproject.toml` **não é detectado por nada** — nem localmente, nem no
+CI.
+
+E há um detalhe pior, que a spec não previa: **`--frozen` não valida nada**.
+No `uv`, `--frozen` significa "use o lockfile como está, sem atualizá-lo";
+ele não compara o lockfile com o `pyproject.toml`. Medido com
+`uv 0.12.13`, acrescentando uma dependência ao `pyproject.toml` sem
+regravar o lock:
+
+```
+$ uv sync --frozen        # lockfile defasado
+Checked 17 packages in 0.27ms          # passa, sem reclamar
+
+$ uv sync --locked        # mesmo estado
+error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+$ uv lock --check         # mesmo estado
+error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+```
+
+Ou seja: mesmo que `uv sync --frozen` estivesse no CI exatamente como a
+spec pedia, o `uv.lock` continuaria sem validação. A verificação que a spec
+queria se escreve `uv sync --locked` (ou `uv lock --check`). O `--frozen`
+do `bootstrap` está certo onde está — o papel dele é instalar sem mexer no
+lock, e é isso que se quer dentro do worktree do `pre-push`.
+
+A decisão é **não corrigir agora**, e o registro aqui é a correção. Um
+passo de verificação do `uv.lock` no CI que não existisse no `make check`
+quebraria a paridade 1:1 da seção 5 (decisão D5) logo no primeiro
+incremento em que ela foi escrita; e criar um alvo de Makefile só para isso
+significaria colocar uma etapa Python no gate quando nenhuma ferramenta
+Python está no gate e não há um único arquivo `.py` no repositório — perto
+demais do "sucesso com suíte vazia" que o README §9 proíbe.
+
+A validação do `uv.lock` entra junto com o alvo `check-api` da tabela
+acima, que vai precisar de `uv` de qualquer forma para instalar Ruff, mypy
+e pytest de maneira reproduzível — e aí a checagem correta (`--locked`, não
+`--frozen`) entra como parte do alvo, visível tanto localmente quanto no
+job correspondente, sem quebrar a paridade. Até lá, o risco
+aceito é: quem alterar o `pyproject.toml` sem rodar `uv lock` deixa o
+lockfile defasado e ninguém avisa — nem o `make bootstrap`, que usa
+`--frozen` e instala alegremente a partir do lock velho. O sintoma aparece
+depois, como uma dependência declarada que simplesmente não está instalada,
+possivelmente na máquina de outra pessoa.
+
 ## 5. Integração contínua
 
 O workflow `.github/workflows/quality.yml` é o mesmo gate, executado no
