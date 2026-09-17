@@ -40,7 +40,15 @@ sem nenhuma validação. Ver a limitação correspondente na seção 5.
 | `make check` | Gate completo. Agrega `check-web` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint, depois Prettier em modo verificação, depois TypeScript sem emissão, depois Vitest com cobertura exigida de 100%, nesta ordem. Cada etapa só roda se a anterior passar. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
-| `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar código, e é manual. |
+| `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar arquivos **versionados**, e é manual. |
+
+Uma precisão sobre "só `make format` modifica": `make check` **escreve** em
+disco — `frontend/coverage/` (relatórios do Vitest) e
+`frontend/node_modules/.tmp/*.tsbuildinfo` (cache incremental do `tsc -b`).
+Os dois caminhos são ignorados pelo git, então `git status` continua limpo
+depois de um `make check` e nenhum arquivo versionado muda. A frase correta
+é "`make check` não modifica arquivos versionados", não "não modifica
+arquivo nenhum".
 
 ## 2. A regra da direção única
 
@@ -130,6 +138,30 @@ Sem eufemismo:
   topo da ref corrigir o problema, o `pre-push` aprova o push inteiro sem
   jamais ter validado o commit intermediário isoladamente. Um
   `git bisect` futuro pode pousar em um commit que nunca passou pelo gate.
+- **Sob o `pre-commit`, um push multi-ref valida só uma das refs.** O
+  framework `pre-commit` consome toda a entrada padrão antes de chamar os
+  hooks e repassa o que decidiu em variáveis de ambiente; em
+  `_pre_push_ns()` ele percorre as linhas de refs e **retorna na primeira
+  ref enviável**. Um `git push remoto main outra` expõe apenas uma das duas
+  ao `scripts/check-push.sh`, e não há como recuperar as demais: o conjunto
+  de refs de um push depende do refspec da linha de comando, que não chega
+  ao hook por nenhum outro canal (as refs de rastreamento do remoto ainda
+  refletem o estado *anterior* ao push). O script valida a ref que enxerga e
+  não finge ter validado as outras. Pelo caminho da entrada padrão (o
+  script instalado como hook nativo do git, ou executado à mão) a cobertura
+  multi-ref continua completa. O hábito que fecha o buraco na prática é
+  empurrar uma ref por vez.
+- **`git merge --ff-only` e `git rebase` não disparam hook nenhum.** O
+  README §11 já avisa que `pre-merge-commit` "não cobre fast-forward nem
+  todos os fluxos", e esta seção não listava a consequência: um merge
+  fast-forward **não cria commit**, logo não há `pre-commit` nem
+  `pre-merge-commit` para disparar; `git rebase` reescreve commits sem
+  passar pelo `pre-commit` (o que existe é `pre-rebase`, que este projeto
+  não instala, e que de todo modo roda *antes* da reescrita). Na prática
+  quem fecha o buraco é o `pre-push`: por mais commits que tenham entrado
+  na branch por fast-forward ou rebase, o topo da ref é validado em
+  worktree isolado antes de o conteúdo sair da máquina. O que escapa
+  continua sendo o commit intermediário (primeira limitação desta lista).
 - **O gate roda inteiro a cada commit, e vai ficar lento conforme o
   projeto cresce.** Hoje `make check` leva cerca de 2 segundos porque o
   frontend é pequeno e não há backend. Isso é uma decisão deliberada do
