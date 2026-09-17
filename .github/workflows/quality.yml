@@ -1,0 +1,57 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Sem cancel-in-progress: o README s12 proibe cancelar verificacoes anteriores.
+  group: quality-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias do frontend
+        run: npm ci
+        working-directory: frontend
+      - name: Gate do frontend
+        run: make check-web
+
+  check-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Varredura de segredos
+        run: make check-secrets
+
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [check-web, check-secrets]
+    if: always()
+    steps:
+      - name: Exigir sucesso explicito de todos os jobs
+        run: |
+          echo "check-web=${{ needs.check-web.result }}"
+          echo "check-secrets=${{ needs.check-secrets.result }}"
+          for r in "${{ needs.check-web.result }}" "${{ needs.check-secrets.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "quality-gate reprovado: um job nao terminou em success" >&2
+              exit 1
+            fi
+          done
+          echo "quality-gate aprovado"
