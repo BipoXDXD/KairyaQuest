@@ -70,11 +70,10 @@ Tasks 1 a 6 (spec em
   **Primeiro commit validado pelo gate: `b237e47`** (o commit que introduziu
   os próprios hooks — todos os onze commits anteriores, do saneamento à
   Task 4, antecederam a instalação do gate e não foram avaliados por ele).
-- **Task 6:** `docs/QUALITY.md` (este handoff mais os comandos, a regra de
-  direção única, o denominador da cobertura, o roadmap de `check-api` e
-  `check-e2e`, as limitações conhecidas e o procedimento de atualização do
-  Gitleaks) e as oito demonstrações de que o gate reprova de fato,
-  registradas em
+- **Task 6:** `docs/QUALITY.md` (comandos, regra de direção única,
+  denominador da cobertura, roadmap de `check-api`/`check-e2e`, limitações
+  conhecidas e procedimento de atualização do Gitleaks) e as oito
+  demonstrações de que o gate reprova de fato, registradas em
   `.superpowers/sdd/2026-09-17-fundacao-qualidade/task-6-report.md`.
 
 ## Comandos e resultados
