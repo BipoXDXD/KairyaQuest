@@ -38,3 +38,6 @@ test-results/
 logs/
 *.log
 npm-debug.log*
+
+# Binarios de ferramenta baixados por scripts/
+.tools/
