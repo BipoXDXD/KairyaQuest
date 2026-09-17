@@ -154,7 +154,7 @@ if [ -n "${PRE_COMMIT_LOCAL_BRANCH:-}" ] || [ -n "${PRE_COMMIT_TO_REF:-}" ]; the
     fi
   fi
 
-  [ -n "$ref_local" ] || ref_local="(ref sem nome)"
+  [ -n "$ref_local" ] || ref_local="(ref-sem-nome)"
   adiciona_ref "$ref_local" "$sha_local"
   echo "==> refs obtidas das ${origem}; um push multi-ref expoe apenas a primeira (docs/QUALITY.md secao 6)"
 else

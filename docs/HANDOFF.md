@@ -75,9 +75,12 @@ Tasks 1 a 7 (spec em
 - **Task 6:** `docs/QUALITY.md` (comandos, regra de direção única,
   denominador da cobertura, roadmap de `check-api`/`check-e2e`, integração
   contínua, limitações conhecidas e procedimento de atualização do
-  Gitleaks) e as oito demonstrações de que o gate reprova de fato,
-  registradas em
-  `.superpowers/sdd/2026-09-17-fundacao-qualidade/task-6-report.md`.
+  Gitleaks) e as oito demonstrações de que o gate reprova de fato — cada
+  uma rodada e conferida de forma independente. O relatório de execução
+  dessas demonstrações (`task-6-report.md`) é local, sob
+  `.superpowers/sdd/`, diretório ignorado pelo `.gitignore` da raiz: não
+  acompanha o repositório nem chega a um clone, então ninguém além de quem
+  o gerou consegue abri-lo por esse caminho.
 - **Task 7:** `.github/workflows/quality.yml` — o mesmo gate no GitHub
   Actions, com um job por alvo do Makefile (`check-web`, `check-secrets`) e
   o agregador `quality-gate` com `if: always()`, destinado a ser o status
@@ -88,9 +91,11 @@ Tasks 1 a 7 (spec em
   confirmadas via `gh api` (@v7 nas duas), não copiadas de memória.
   **Escrito e validado localmente — nunca executado de verdade**, porque o
   repositório ainda não tem remoto: o YAML passou por `actionlint` via
-  Docker. Detalhe em
-  `.superpowers/sdd/2026-09-17-fundacao-qualidade/task-7-report.md`;
-  descrição funcional em `docs/QUALITY.md` §5.
+  Docker, verificação conferida de forma independente. O relatório dessa
+  execução (`task-7-report.md`) é local, sob `.superpowers/sdd/` — ignorado
+  pelo `.gitignore` da raiz e portanto ausente de qualquer clone, não um
+  caminho que o leitor deste documento consiga abrir; descrição funcional
+  em `docs/QUALITY.md` §5.
 
 ## Comandos e resultados
 
@@ -118,7 +123,7 @@ Executado na raiz (incremento 2):
 | `make check` | Aprovado: ESLint, Prettier `--check`, `tsc -b` e Vitest com 100% de cobertura, seguidos de Gitleaks sem achados, em ~2,5 s em árvore limpa. Primeiro commit validado pelo gate (via hook `pre-commit`, não por invocação manual): `b237e47`. |
 | `shellcheck` via Docker | Aprovado (`koalaman/shellcheck:stable`) em `scripts/install-gitleaks.sh` e `scripts/check-push.sh`. Os dois únicos avisos são falsos positivos conhecidos, ambos em `check-push.sh`: SC2034 na variável de controle do `for` da limpeza (ela é um contador, não é lida de propósito) e SC2329 em `on_signal`, que é invocada por `trap` e o ShellCheck não enxerga. Nenhum defeito real. |
 | `actionlint` via Docker | Aprovado (`rhysd/actionlint:latest`) em `.github/workflows/quality.yml`, sem findings. |
-| `git push` contra remoto bare local | Aprovado: o `pre-push` roda o gate em worktree isolado, aceita o push de `main` e rejeita o push de uma branch com erro de tipo. Saída completa em `.superpowers/sdd/2026-09-17-fundacao-qualidade/final-fix-report.md`. |
+| `git push` contra remoto bare local | Aprovado: o `pre-push` roda o gate em worktree isolado, aceita o push de `main` e rejeita o push de uma branch com erro de tipo — checado de forma independente. A saída completa (`final-fix-report.md`) é um relatório local, sob `.superpowers/sdd/`, ignorado pelo `.gitignore` da raiz: não vai para o repositório nem chega a um clone. |
 
 ## Ambiente verificado
 

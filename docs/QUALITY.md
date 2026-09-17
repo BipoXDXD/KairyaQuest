@@ -28,6 +28,20 @@ colateral inaceitável. Manter os dois comandos sempre separados também
 mantém "nenhum alvo do Makefile invoca `pre-commit`" (seção 2 abaixo) como
 regra absoluta, sem exceção a lembrar.
 
+O mesmo compartilhamento de worktree tem um efeito colateral análogo sobre
+`.tools/`, não só sobre hooks. `scripts/check-push.sh` exporta
+`FQ_TOOLS_DIR` apontando para o `.tools/` do repositório **principal**,
+para o worktree temporário do `pre-push` reaproveitar o Gitleaks já
+baixado em vez de baixar de novo a cada ref. Se a ref sendo validada fixar
+uma versão diferente de Gitleaks em `scripts/install-gitleaks.sh`, rodar
+`make bootstrap`/`make check` nesse worktree baixa a nova versão e grava
+por cima do binário do repositório principal — validar uma ref muta o
+repositório principal como efeito colateral. Não é vetor de troca de
+binário: `install-gitleaks.sh` sempre confere o binário contra o
+`BIN_SHA256` fixado antes de reutilizá-lo ou sobrescrevê-lo, então o que
+fica em `.tools/gitleaks` continua sendo exatamente o que aquele script
+esperava, nunca algo não verificado.
+
 Sem o segundo comando, `git commit` e `git push` funcionam normalmente —
 sem nenhuma validação. Ver a limitação correspondente na seção 6.
 
@@ -206,9 +220,12 @@ contrário. Ver a divergência conhecida sobre o `uv.lock` na seção 4.
 Os passos que o job faz além do alvo são de **preparação de ambiente**, não
 de verificação: `actions/checkout`, `actions/setup-node` (Node 24, cache de
 npm apontado para `frontend/package-lock.json`) e `npm ci`. O job
-`check-secrets` não precisa de preparo nenhum: `make check-secrets` já
-instala o Gitleaks fixado por checksum, e um checkout raso basta porque
-`gitleaks dir .` varre a árvore de arquivos em disco, não o histórico.
+`check-secrets` também roda `actions/checkout@v7` — todo job precisa dele
+para ter os arquivos em disco —, mas não precisa de preparo de **Node,
+Python nem instalação de nenhuma ferramenta**: `make check-secrets` já
+baixa o próprio binário do Gitleaks, fixado por checksum, e um checkout
+raso basta porque `gitleaks dir .` varre a árvore de arquivos em disco, não
+o histórico.
 
 **O agregador `quality-gate` e o `if: always()`.** É o job único destinado a
 virar o status obrigatório da proteção de branch — a lista de `needs`
@@ -253,6 +270,21 @@ Sem eufemismo:
   script instalado como hook nativo do git, ou executado à mão) a cobertura
   multi-ref continua completa. O hábito que fecha o buraco na prática é
   empurrar uma ref por vez.
+- **O `pre-commit` não chama hook nenhum quando o push não leva conteúdo
+  novo ao remoto.** Em `_pre_push_ns()` (`pre_commit/commands/hook_impl.py`),
+  a linha de uma ref é simplesmente pulada (`continue`) quando o SHA local é
+  zero (push só de deleção) ou quando `git rev-list` não encontra nenhum
+  ancestral que já não esteja no remoto (push de uma tag para um commit já
+  presente, ou de uma branch nova apontando para um commit que o remoto já
+  tem). Se **todas** as linhas da entrada caem nesses casos, a função
+  percorre o laço inteiro sem nunca retornar um namespace e devolve `None`;
+  `hook_impl()` então devolve o código do hook legado sem chamar
+  `scripts/check-push.sh` — o `pre-push` simplesmente não roda, nem para
+  aprovar nem para reprovar. Não é falha de segurança, porque nenhum
+  conteúdo novo entra no remoto por nenhum desses três caminhos: não há o
+  que validar. Mas quem lê esta documentação precisa saber que, nesses
+  casos específicos, o gate não é "aprovado silenciosamente" — ele
+  simplesmente não é executado.
 - **`git merge --ff-only` e `git rebase` não disparam hook nenhum.** O
   README §11 já avisa que `pre-merge-commit` "não cobre fast-forward nem
   todos os fluxos", e esta seção não listava a consequência: um merge
