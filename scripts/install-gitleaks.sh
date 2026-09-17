@@ -41,7 +41,29 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
-if [ -x "$BIN" ] && echo "${BIN_SHA256}  ${BIN}" | shasum -a 256 -c - >/dev/null 2>&1; then
+# shasum e um script Perl que so vem de graca em sistemas com Perl (macOS,
+# Debian/Ubuntu completos); imagens Linux enxutas trazem sha256sum, do
+# coreutils, e nenhum shasum. As duas ferramentas aceitam o mesmo formato
+# "<hash>  <arquivo>" em "-c -", entao basta escolher qual chamar.
+#
+# Sem esta deteccao, em uma imagem slim o "shasum" ausente fazia a checagem
+# falhar e o script imprimia "checksum nao confere" -- acusando adulteracao
+# quando o problema era ferramenta que nao existe. Esse diagnostico
+# enganoso e exatamente o defeito que a Task 5 se deu ao trabalho de
+# eliminar em outros pontos do gate. Hoje o runner do GitHub tem shasum, e
+# por isso o defeito nunca apareceu; ele esperava a primeira imagem slim.
+if command -v shasum >/dev/null 2>&1; then
+  verifica_sha256() { shasum -a 256 -c -; }
+elif command -v sha256sum >/dev/null 2>&1; then
+  verifica_sha256() { sha256sum -c -; }
+else
+  echo "erro: nem 'shasum' nem 'sha256sum' foram encontrados no PATH." >&2
+  echo "Instale um dos dois (coreutils fornece sha256sum); sem verificacao" >&2
+  echo "de checksum este script nao instala nada." >&2
+  exit 1
+fi
+
+if [ -f "$BIN" ] && [ -x "$BIN" ] && echo "${BIN_SHA256}  ${BIN}" | verifica_sha256 >/dev/null 2>&1; then
   exit 0
 fi
 
@@ -52,7 +74,7 @@ trap 'rm -rf "$TMP"' EXIT
 echo "baixando gitleaks ${VERSION}..."
 curl --fail --silent --show-error --location --output "${TMP}/${ASSET}" "$URL"
 
-echo "${SHA256}  ${TMP}/${ASSET}" | shasum -a 256 -c - >/dev/null || {
+echo "${SHA256}  ${TMP}/${ASSET}" | verifica_sha256 >/dev/null || {
   echo "erro: checksum do gitleaks nao confere. Download abortado." >&2
   exit 1
 }
@@ -60,11 +82,16 @@ echo "${SHA256}  ${TMP}/${ASSET}" | shasum -a 256 -c - >/dev/null || {
 mkdir -p "$TOOLS"
 tar -xzf "${TMP}/${ASSET}" -C "$TMP" gitleaks
 
-echo "${BIN_SHA256}  ${TMP}/gitleaks" | shasum -a 256 -c - >/dev/null || {
+echo "${BIN_SHA256}  ${TMP}/gitleaks" | verifica_sha256 >/dev/null || {
   echo "erro: checksum do binario extraido do gitleaks nao confere. Instalacao abortada." >&2
   exit 1
 }
 
+# Sem o rm, um "$BIN" que ja exista como DIRETORIO faz o mv aninhar o
+# binario dentro dele ("${BIN}/gitleaks"). A checagem la em cima passa a
+# falhar para sempre (o teste -f rejeita diretorio), e cada execucao rebaixa
+# 21 MB enquanto imprime "instalado" -- idempotencia perdida em silencio.
+rm -rf "$BIN"
 mv "${TMP}/gitleaks" "$BIN"
 chmod +x "$BIN"
 echo "gitleaks ${VERSION} instalado em ${TOOLS}/"
