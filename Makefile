@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-secrets format
+.PHONY: help bootstrap check check-web check-api check-secrets format
 
 WEB := frontend
 
@@ -16,16 +16,22 @@ help: ## Lista os alvos disponíveis
 
 bootstrap: ## Instala as dependencias dos dois ecossistemas
 	cd $(WEB) && npm ci
-	uv sync --frozen
+	uv sync --locked
 	./scripts/install-gitleaks.sh
 
-check: check-web check-secrets ## Gate completo. E o que os hooks e o CI executam.
+check: check-web check-api check-secrets ## Gate completo. E o que os hooks e o CI executam.
 
 check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run lint
 	cd $(WEB) && npm run format:check
 	cd $(WEB) && npm run typecheck
 	cd $(WEB) && npm run test:coverage
+
+check-api: ## Ruff, mypy e pytest com cobertura no backend
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run mypy src tests
+	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh

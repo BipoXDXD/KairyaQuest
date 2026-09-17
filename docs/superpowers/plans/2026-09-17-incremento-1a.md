@@ -291,7 +291,9 @@ from focusquest.core.config import Settings
 
 def test_le_a_url_do_banco_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/d")
-    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/t")
+    monkeypatch.setenv(
+        "FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/t"
+    )
     settings = Settings()
     assert settings.database_url == "postgresql+psycopg://u:p@h:55432/d"
     assert settings.test_database_url == "postgresql+psycopg://u:p@h:55432/t"
@@ -580,8 +582,6 @@ def create_engine_from_url(url: str) -> Engine:
     """Cria a engine. `pool_pre_ping` evita entregar conexao morta apos o
     banco reiniciar, o que acontece com frequencia em desenvolvimento."""
     return create_engine(url, pool_pre_ping=True, future=True)
-
-
 ```
 
 **Não** acrescente uma `session_factory` aqui. Ela só terá consumidor na Task 9,
@@ -992,7 +992,9 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
     section["sqlalchemy.url"] = _url()
-    connectable = engine_from_config(section, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    connectable = engine_from_config(
+        section, prefix="sqlalchemy.", poolclass=pool.NullPool
+    )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
@@ -1037,7 +1039,9 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("display_name", sa.Text, nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
     )
@@ -1058,8 +1062,10 @@ def upgrade() -> None:
         "missions",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column(
-            "user_id", sa.Integer,
-            sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
         ),
         sa.Column("instructions", sa.Text, nullable=False),
         sa.Column("completion_criterion", sa.Text, nullable=False),
@@ -1070,18 +1076,22 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
         # VARCHAR + CHECK em vez de ENUM nativo (decisao A6 da spec):
         # acrescentar um estado depois e uma migracao comum, dentro de
         # transacao, em vez de ALTER TYPE ADD VALUE.
         sa.CheckConstraint(
-            "state IN " + str(ESTADOS), name="ck_missions_state",
+            "state IN " + str(ESTADOS),
+            name="ck_missions_state",
         ),
         sa.CheckConstraint("difficulty >= 1", name="ck_missions_difficulty"),
         sa.CheckConstraint(
-            "estimated_minutes > 0", name="ck_missions_estimated_minutes",
+            "estimated_minutes > 0",
+            name="ck_missions_estimated_minutes",
         ),
     )
     op.create_index("ix_missions_user_id", "missions", ["user_id"])
@@ -1094,12 +1104,16 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("operation_id", sa.Text, nullable=False),
         sa.Column(
-            "mission_id", sa.Integer,
-            sa.ForeignKey("missions.id", ondelete="CASCADE"), nullable=False,
+            "mission_id",
+            sa.Integer,
+            sa.ForeignKey("missions.id", ondelete="CASCADE"),
+            nullable=False,
         ),
         sa.Column("kind", sa.Text, nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
         sa.UniqueConstraint("operation_id", name="uq_mission_operations_operation_id"),
@@ -1309,9 +1323,13 @@ def test_identificador_de_operacao_e_unico(session: Session) -> None:
     missao = _missao()
     session.add(missao)
     session.flush()
-    session.add(MissionOperation(operation_id="op-1", mission_id=missao.id, kind="complete"))
+    session.add(
+        MissionOperation(operation_id="op-1", mission_id=missao.id, kind="complete")
+    )
     session.flush()
-    session.add(MissionOperation(operation_id="op-1", mission_id=missao.id, kind="complete"))
+    session.add(
+        MissionOperation(operation_id="op-1", mission_id=missao.id, kind="complete")
+    )
     with pytest.raises(IntegrityError):
         session.flush()
 ```
@@ -1453,10 +1471,15 @@ Os casos 6 e 7 são o par que a spec desambiguou e não podem ser fundidos: reen
 
 ```python
 def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> None:
-    missao = criar_missao(session, user_id=1, instructions="x",
-                          completion_criterion="y", difficulty=2,
-                          estimated_minutes=30,
-                          deadline=datetime.now(UTC) + timedelta(days=1))
+    missao = criar_missao(
+        session,
+        user_id=1,
+        instructions="x",
+        completion_criterion="y",
+        difficulty=2,
+        estimated_minutes=30,
+        deadline=datetime.now(UTC) + timedelta(days=1),
+    )
     session.flush()
     primeira = concluir_missao(session, 1, missao.id, "op-abc")
     segunda = concluir_missao(session, 1, missao.id, "op-abc")
@@ -1465,10 +1488,15 @@ def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> 
 
 
 def test_operacao_nova_sobre_missao_concluida_e_bloqueada(session: Session) -> None:
-    missao = criar_missao(session, user_id=1, instructions="x",
-                          completion_criterion="y", difficulty=2,
-                          estimated_minutes=30,
-                          deadline=datetime.now(UTC) + timedelta(days=1))
+    missao = criar_missao(
+        session,
+        user_id=1,
+        instructions="x",
+        completion_criterion="y",
+        difficulty=2,
+        estimated_minutes=30,
+        deadline=datetime.now(UTC) + timedelta(days=1),
+    )
     session.flush()
     concluir_missao(session, 1, missao.id, "op-abc")
     with pytest.raises(TransicaoIlegalError):
@@ -1543,7 +1571,7 @@ def test_duas_conclusoes_simultaneas_produzem_uma_so(engine: Engine) -> None:
                 concluir_missao(s, 1, mission_id, operation_id)
                 s.commit()
                 resultados.append("ok")
-            except (IntegrityError, TransicaoIlegalError):
+            except IntegrityError, TransicaoIlegalError:
                 s.rollback()
                 resultados.append("bloqueado")
 
