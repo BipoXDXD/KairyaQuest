@@ -34,6 +34,11 @@ packages = ["src/focusquest"]
 target-version = "py314"
 line-length = 88
 src = ["src", "tests"]
+# A documentacao mostra codigo deliberadamente errado -- exemplos de defeito
+# que o gate deve reprovar. Um formatador que "conserta" esses exemplos
+# destroi o que eles ensinam. O Ruff 0.16+ formata blocos Python dentro de
+# Markdown por padrao, entao docs/ fica fora do escopo dele.
+extend-exclude = ["docs/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

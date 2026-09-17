@@ -31,11 +31,10 @@ test-results/
 .vscode/*
 !.vscode/extensions.json
 
-# ---- Claude Code: estado de agentes/worktrees ----
-# Worktrees de agentes paralelos (ex.: .claude/worktrees/<id>/) sao criados
-# dentro do repo principal. Sem isto, ruff/eslint atravessam para dentro
-# deles e medem conteudo de outra tarefa que nao e nosso.
-.claude/
+# Worktrees efemeros de agentes, criados dentro do proprio repo.
+# Apenas worktrees/: o resto de .claude/ pode conter configuracao de
+# projeto versionada de proposito.
+.claude/worktrees/
 
 # ---- macOS ----
 .DS_Store
