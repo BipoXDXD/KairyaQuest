@@ -89,9 +89,10 @@ Tasks 1 a 7 (spec em
   `contents: read`, sem segredos, sem `continue-on-error` e sem cancelar
   execuções anteriores. Versões de `actions/checkout` e `actions/setup-node`
   confirmadas via `gh api` (@v7 nas duas), não copiadas de memória.
-  **Escrito e validado localmente — nunca executado de verdade**, porque o
-  repositório ainda não tem remoto: o YAML passou por `actionlint` via
-  Docker, verificação conferida de forma independente. O relatório dessa
+  **Executado de verdade e aprovado** na primeira execução após o push
+  inicial: `check-web` em 21s, `check-secrets` em 5s e `quality-gate` em 3s.
+  Antes disso o YAML já havia passado por `actionlint` via Docker,
+  verificação conferida de forma independente. O relatório dessa
   execução (`task-7-report.md`) é local, sob `.superpowers/sdd/` — ignorado
   pelo `.gitignore` da raiz e portanto ausente de qualquer clone, não um
   caminho que o leitor deste documento consiga abrir; descrição funcional
@@ -158,11 +159,27 @@ local, sem aviso.
    `.python-version` e `.venv` existem desde a Task 3 deste incremento
    (D2), mas só com o grupo `dev` (Ruff, mypy, pre-commit) — sem pacote,
    sem dependência de aplicação, sem nenhum módulo Python real.
-2. **Remoto não configurado e proteção de branch não aplicada.** Nenhum
-   remote existe ainda. O workflow do CI já está escrito e validado
-   localmente (Task 7), mas nunca rodou; e sem remoto não há como marcar o
-   status `quality-gate` como obrigatório na proteção de branch (README
-   §12). O primeiro push depende de autorização.
+2. **Integração remota concluída.** Remoto em
+   `github.com/BipoXDXD/FocusQuest` (privado), 32 commits publicados, CI
+   verde na primeira execução, e a `main` protegida exigindo o status
+   `quality-gate`, com base atualizada obrigatória, `enforce_admins`
+   ativo e sem force-push nem deleção (README §12).
+
+   A proteção foi verificada por comportamento, não só por configuração:
+   um push direto na `main` é recusado pelo servidor com
+   `GH006: Required status check "quality-gate" is expected`, **mesmo
+   depois de o gate local ter aprovado** — as duas camadas são
+   independentes e a do servidor não confia na do cliente.
+
+   Consequência operacional: a `main` não aceita mais push direto. Todo
+   trabalho passa por branch e pull request, com merge condicionado ao
+   `quality-gate` verde.
+
+   Caminhos exercitados pela primeira vez neste push, ambos aprovados: a
+   trilha `PRE_COMMIT_LOCAL_BRANCH` + `git rev-parse` do
+   `scripts/check-push.sh`, que só existe quando o push inclui o commit
+   raiz; e a branch `Linux-x86_64` de `scripts/install-gitleaks.sh`, que a
+   máquina de desenvolvimento (ARM) nunca executa.
 3. **`AGENTS.md` e `CLAUDE.md` não criados** (README §13).
 4. **`docs/ARCHITECTURE.md` não criado** (README §3).
 5. **`check-api` e `check-e2e` ainda não existem.** Ruff, mypy e pytest
