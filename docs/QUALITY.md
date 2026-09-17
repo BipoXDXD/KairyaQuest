@@ -1,0 +1,203 @@
+# QUALITY
+
+Este documento descreve o gate de qualidade do FocusQuest: os comandos que o
+compõem, a regra que governa quem chama quem, o que a cobertura mede (e o que
+deliberadamente não mede), o roadmap dos alvos que ainda faltam, as
+limitações conhecidas sem eufemismo, e o procedimento de atualização do
+Gitleaks.
+
+## 1. Comandos
+
+| Comando | Descrição |
+|---|---|
+| `make help` | Lista os alvos disponíveis do Makefile, com a descrição de cada um. |
+| `make bootstrap` | Instala as dependências dos dois ecossistemas: `npm ci` no frontend, `uv sync --frozen` na raiz Python, e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
+| `make check` | Gate completo. Agrega `check-web` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
+| `make check-web` | ESLint, depois Prettier em modo verificação, depois TypeScript sem emissão, depois Vitest com cobertura exigida de 100%, nesta ordem. Cada etapa só roda se a anterior passar. |
+| `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
+| `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar código, e é manual. |
+
+## 2. A regra da direção única
+
+```
+git hook -> pre-commit -> make -> ferramentas
+```
+
+O framework `pre-commit` instala os hooks (`pre-commit`, `pre-merge-commit`,
+`pre-push`, via `.pre-commit-config.yaml`) e cada hook invoca um alvo do
+Makefile (`make check` para os dois primeiros estágios;
+`scripts/check-push.sh`, que por sua vez chama `make bootstrap` e
+`make check`, no `pre-push`). O Makefile invoca as ferramentas de fato
+(ESLint, Prettier, `tsc`, Vitest, Gitleaks).
+
+**Nenhum alvo do Makefile invoca `pre-commit`.** A dependência é estritamente
+descendente: hook chama `make`, `make` chama ferramenta. Se um alvo do
+Makefile chamasse `pre-commit` de volta, `make check` executado diretamente
+no terminal (fora de um commit) dispararia os hooks novamente, e um commit
+dispararia o hook, que chamaria `make check`, que chamaria o hook de novo —
+uma recursão sem base de parada óbvia, e um acoplamento que tornaria
+impossível rodar o gate isoladamente (por exemplo em CI, ou no
+`scripts/check-push.sh`, que precisa rodar `make check` dentro de um
+worktree onde não faz sentido reinstalar hooks). Ver README §9: `make check`
+é definido como "gate completo, reproduzível e não interativo", que vale
+"para qualquer branch" — uma definição que só se sustenta se o alvo puder
+ser chamado sozinho, sem pressupor que está sendo executado a partir de um
+hook.
+
+## 3. Denominador da cobertura
+
+Cobertura de 100% (linhas, ramificações, funções e instruções) é exigida
+apenas sobre o que está **dentro** do denominador. O que está **fora** é
+excluído deliberadamente, nunca por dificuldade de testar.
+
+**Dentro** (medido, com cobertura de 100% exigida):
+
+- Todo o código-fonte da aplicação em `frontend/src/**/*.{ts,tsx}` que não
+  seja teste nem configuração de teste.
+
+**Fora** (excluído do denominador, com a justificativa de cada exclusão):
+
+| Exclusão | Justificativa |
+|---|---|
+| `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
+| `frontend/src/test/**` | Infraestrutura de teste (setup do ambiente jsdom), não código de aplicação. |
+| `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
+| Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
+| Artefatos gerados (`frontend/dist/`, `frontend/coverage/`, `.tools/`) | Saída de build/instalação, recriada a cada execução; não é código-fonte. |
+| CSS e configuração de ferramentas (`vite.config.ts`, `eslint.config.js`, `.prettierrc.json`, `tsconfig*.json`) | Configuração declarativa, não lógica de aplicação testável por unidade. |
+
+Esta lista segue o README §9: "Declare o denominador: testes, dependências,
+arquivos gerados, CSS e configuração de ferramentas não são código de
+aplicação coberto por essas métricas." Cobertura de 100% sobre este
+denominador não prova ausência de bugs nem testa todas as combinações de
+estados possíveis — apenas garante que nenhuma linha, ramo, função ou
+instrução do código de aplicação ficou sem exercício por pelo menos um
+teste.
+
+## 4. Roadmap dos alvos ausentes
+
+Isto é um **contrato**, não uma lista de intenções: nenhum incremento que
+traga código de um ecossistema ainda não coberto pelo gate pode ser aceito
+sem trazer, no mesmo incremento, o alvo correspondente do Makefile.
+
+| Alvo | Conteúdo | Entra junto com |
+|---|---|---|
+| `check-api` | Ruff lint, Ruff `format --check`, mypy estrito, pytest com cobertura | O primeiro módulo Python |
+| `check-e2e` | Build, Playwright/Chromium, axe-core | O primeiro fluxo ponta a ponta real |
+
+Hoje, Ruff, mypy e pre-commit já estão fixados no `uv.lock` (a raiz Python
+existe desde o commit `28c74e4`), mas **fora** do `check` — de propósito,
+porque não há nenhum arquivo `.py` no repositório ainda. Declarar uma
+ferramenta sem ter o que ela verifique criaria uma etapa que sempre passa
+vazia, o que o README §9 proíbe explicitamente ("sucesso com suíte vazia").
+O mesmo vale para `check-e2e`: sem um fluxo real de ponta a ponta, um
+`check-e2e` existiria apenas para navegar por uma tela estática, sem
+nenhuma asserção de negócio significativa.
+
+## 5. Limitações conhecidas
+
+Sem eufemismo:
+
+- **O `pre-push` valida o topo de cada ref enviada, não cada commit
+  intermediário.** `scripts/check-push.sh` roda `make bootstrap` e
+  `make check` uma vez por ref, no SHA que está no topo dela, em um
+  worktree isolado. Se uma revisão no meio da pilha estiver quebrada mas o
+  topo da ref corrigir o problema, o `pre-push` aprova o push inteiro sem
+  jamais ter validado o commit intermediário isoladamente. Um
+  `git bisect` futuro pode pousar em um commit que nunca passou pelo gate.
+- **O gate roda inteiro a cada commit, e vai ficar lento conforme o
+  projeto cresce.** Hoje `make check` leva cerca de 2 segundos porque o
+  frontend é pequeno e não há backend. Isso é uma decisão deliberada do
+  README §11 ("Antes de cada commit, valide o conteúdo do índice" sem
+  filtro de arquivos alterados), não um descuido — mas o custo é real e
+  vai aumentar. Quando o tempo por commit se tornar proibitivo, a solução
+  não pode ser reduzir o que o gate verifica; é paralelizar, cachear ou
+  segmentar por escopo, mantendo a garantia de que todo o projeto continua
+  verificado antes de cada commit.
+- **Hooks não vêm no clone e são contornáveis por quem controla o Git.**
+  `pre-commit install` precisa ser executado (via `make bootstrap`) em cada
+  clone e em cada worktree novo — inclusive no PyCharm. Além disso, quem
+  tem acesso ao repositório local pode usar `--no-verify`, `SKIP`, editar
+  ou apagar `.pre-commit-config.yaml`, ou simplesmente não instalar os
+  hooks. Nada nesta camada impede isso: **a proteção real é a do remoto**
+  (branch protection e o status `quality-gate` obrigatório em CI, README
+  §12), que ainda depende de autorização e configuração pendentes (ver
+  `docs/HANDOFF.md`). Os hooks locais existem para dar feedback rápido e
+  reduzir o volume de commits quebrados que chegam ao CI, não para
+  substituir a proteção do remoto.
+
+## 6. Como atualizar o Gitleaks
+
+A versão do Gitleaks é fixada em `scripts/install-gitleaks.sh`
+(`VERSION="8.30.1"` hoje) e verificada por **dois** checksums SHA-256
+distintos, por plataforma — não apenas um:
+
+1. `SHA256`: o checksum do **tarball** (`.tar.gz`) baixado do GitHub
+   Releases, antes de extrair.
+2. `BIN_SHA256`: o checksum do **binário `gitleaks` já extraído** do
+   tarball. É esse segundo valor que permite o cache idempotente: em
+   execuções seguintes, `install-gitleaks.sh` confere o binário que já
+   está em `.tools/gitleaks` contra `BIN_SHA256` e, se bater, não baixa
+   nada. Sem ele, o script teria que sempre baixar e reextrair para
+   conferir o tarball, ou confiar cegamente no binário em cache sem
+   verificação — as duas opções ruins que a checagem em dois níveis evita.
+
+Para atualizar para uma nova versão `X.Y.Z`, os dois valores precisam ser
+obtidos e trocados juntos, por plataforma (`darwin_arm64` e `linux_x64`
+hoje). Esquecer o `BIN_SHA256` e atualizar só o `SHA256` do tarball quebra
+a instalação na próxima execução, porque o binário em cache (da versão
+antiga) vai falhar a checagem contra o novo `BIN_SHA256` que não foi
+atualizado, forçando um download — o que ainda funciona, mas mascara o
+esquecimento; o problema real aparece quando alguém tenta auditar os dois
+valores e descobre que só um mudou.
+
+Passo a passo:
+
+```bash
+# 1. Baixa a lista de checksums oficiais dos tarballs da nova versao.
+curl -sL "https://github.com/gitleaks/gitleaks/releases/download/vX.Y.Z/gitleaks_X.Y.Z_checksums.txt" \
+  | grep -E 'darwin_arm64|linux_x64'
+# Isto da o SHA256 de cada tarball (gitleaks_X.Y.Z_darwin_arm64.tar.gz e
+# gitleaks_X.Y.Z_linux_x64.tar.gz). Troque VERSION e os dois SHA256 em
+# scripts/install-gitleaks.sh.
+
+# 2. Para cada plataforma, baixe o tarball, extraia o binario e calcule o
+# checksum do binario extraido -- este NAO vem publicado pelo projeto
+# Gitleaks, precisa ser calculado localmente apos a extracao:
+curl -sL -o /tmp/gitleaks.tar.gz \
+  "https://github.com/gitleaks/gitleaks/releases/download/vX.Y.Z/gitleaks_X.Y.Z_darwin_arm64.tar.gz"
+tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+shasum -a 256 /tmp/gitleaks
+# O valor impresso vai para BIN_SHA256 da plataforma correspondente em
+# scripts/install-gitleaks.sh. Repita para cada plataforma suportada
+# (trocando o nome do asset), rodando em uma maquina daquela arquitetura
+# ou emulando-a -- o binario nunca deve ser confiado sem essa checagem
+# calculada de forma independente do proprio download.
+```
+
+Depois de trocar `VERSION`, `SHA256` e `BIN_SHA256` (os dois, por
+plataforma), apague `.tools/gitleaks` local e rode `make bootstrap` para
+confirmar que o download, o checksum do tarball e o checksum do binário
+extraído batem antes de commitar a mudança.
+
+## 7. Por que `.superpowers/` está excluído do `.gitleaks.toml`
+
+O `[allowlist]` em `.gitleaks.toml` exclui apenas o caminho `^\.superpowers/`
+da varredura de segredos. Esse diretório é o scratch do processo de
+execução dos agentes (planejamento, relatórios de tarefa como este) e está
+coberto por um `.gitignore` próprio (`.superpowers/sdd/.gitignore` com um
+`*` cobrindo tudo ali) — portanto nunca é commitado, e um segredo que exista
+apenas ali nunca pode vazar por meio de um commit, que é exatamente o que
+esta varredura existe para impedir.
+
+A exclusão existe porque relatórios de tarefa dentro de `.superpowers/`
+documentam, por exigência de rastreabilidade, os blocos de segredo de teste
+usados para validar a própria detecção do Gitleaks (por exemplo, este
+relatório da Task 6 registra a chave RSA de teste plantada e removida na
+demonstração da Seção "segredo plantado"). Sem a exclusão, `make check`
+reprovaria sempre que esse relatório existisse no disco, mesmo sem nunca
+chegar a um commit — o que tornaria impossível documentar as próprias
+demonstrações do gate sem também desativar a varredura por completo. A
+exclusão é estreita e específica: `frontend/coverage/`, `frontend/dist/` e
+todo o resto do projeto continuam sendo varridos de verdade pela regra
+padrão do Gitleaks.
