@@ -13,7 +13,10 @@ import '@testing-library/jest-dom/vitest'
 // chama act() do proprio React, sem passar pela biblioteca. Definir aqui
 // cobre os dois casos.
 declare global {
-  // eslint-disable-next-line no-var
+  // "var" e obrigatorio aqui: so declaracoes com var sao anexadas ao tipo
+  // de globalThis. A regra no-var nao esta ligada nesta configuracao, e um
+  // eslint-disable para ela seria uma diretiva inutil -- o proprio ESLint
+  // avisa quando isso acontece.
   var IS_REACT_ACT_ENVIRONMENT: boolean
 }
 
