@@ -41,3 +41,10 @@ npm-debug.log*
 
 # Binarios de ferramenta baixados por scripts/
 .tools/
+
+# Scratch do processo de execucao dos agentes (planejamento, relatorios de
+# tarefa). Precisa estar AQUI, na raiz versionada: .superpowers/sdd/.gitignore
+# e ignorado pelo proprio "*" que declara, logo nao e versionado e nao chega
+# em um clone. E esta linha que sustenta a isencao de .superpowers/sdd/ no
+# .gitleaks.toml.
+.superpowers/

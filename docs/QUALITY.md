@@ -210,24 +210,51 @@ plataforma), apague `.tools/gitleaks` local e rode `make bootstrap` para
 confirmar que o download, o checksum do tarball e o checksum do binário
 extraído batem antes de commitar a mudança.
 
-## 7. Por que `.superpowers/` está excluído do `.gitleaks.toml`
+## 7. Por que `.superpowers/sdd/` está excluído do `.gitleaks.toml`
 
-O `[allowlist]` em `.gitleaks.toml` exclui apenas o caminho `^\.superpowers/`
-da varredura de segredos. Esse diretório é o scratch do processo de
-execução dos agentes (planejamento, relatórios de tarefa como este) e está
-coberto por um `.gitignore` próprio (`.superpowers/sdd/.gitignore` com um
-`*` cobrindo tudo ali) — portanto nunca é commitado, e um segredo que exista
-apenas ali nunca pode vazar por meio de um commit, que é exatamente o que
-esta varredura existe para impedir.
+O `[allowlist]` em `.gitleaks.toml` exclui da varredura de segredos um único
+caminho: `^\.superpowers/sdd/`. Esse é o diretório de scratch do processo de
+execução dos agentes (planejamento, relatórios de tarefa). Relatórios ali
+dentro documentam, por exigência de rastreabilidade, os blocos de segredo de
+teste usados para validar a própria detecção do Gitleaks — `task-4-report.md`
+e `task-6-report.md` contêm as chaves privadas plantadas e removidas nas
+demonstrações. Sem a exclusão, `make check` reprovaria sempre que um desses
+relatórios existisse no disco, mesmo sem nunca chegar a um commit, e
+documentar as demonstrações do gate exigiria desligar a varredura por
+completo.
 
-A exclusão existe porque relatórios de tarefa dentro de `.superpowers/`
-documentam, por exigência de rastreabilidade, os blocos de segredo de teste
-usados para validar a própria detecção do Gitleaks (por exemplo, o
-`task-6-report.md` desta mesma tarefa registra a chave RSA de teste
-plantada e removida na demonstração "segredo plantado"). Sem a exclusão,
-`make check` reprovaria sempre que esse relatório existisse no disco, mesmo sem nunca
-chegar a um commit — o que tornaria impossível documentar as próprias
-demonstrações do gate sem também desativar a varredura por completo. A
-exclusão é estreita e específica: `frontend/coverage/`, `frontend/dist/` e
-todo o resto do projeto continuam sendo varridos de verdade pela regra
-padrão do Gitleaks.
+**O que esta exclusão garante, e o que ela não garante.** A redação anterior
+desta seção dizia que o diretório "está ignorado pelo git e nunca é
+commitado, portanto nunca pode vazar". Eram duas afirmações falsas:
+
+- **A isenção era mais larga que o `.gitignore` que a justificava.** O
+  `allowlist` cobria `^\.superpowers/` inteiro, mas o único `.gitignore` que
+  sustentava a premissa era `.superpowers/sdd/.gitignore`, que cobre apenas
+  `sdd/`. Demonstrado: uma chave privada em `.superpowers/notas/segredo.md`
+  aparecia como arquivo **não rastreado** em `git status` — isto é,
+  commitável — e `make check-secrets` retornava 0. Era o único caminho
+  conhecido em que algo entrava no repositório sem passar pelo gate. Corrigido
+  em duas frentes: o path da allowlist foi estreitado para
+  `^\.superpowers/sdd/`, e a raiz `.gitignore` passou a listar
+  `.superpowers/`.
+- **A proteção citada não vinha no clone.** `.superpowers/sdd/.gitignore`
+  declara `*`, e esse `*` ignora o próprio arquivo: ele nunca foi versionado
+  e portanto nunca chegou a um clone. A justificativa apoiava-se em um
+  arquivo que só existia na máquina onde foi criado. Quem sustenta a regra
+  hoje é a linha `.superpowers/` da raiz `.gitignore`, essa sim versionada.
+
+Depois da correção, o que vale é: nenhum arquivo sob `.superpowers/` entra no
+histórico pelo caminho normal, porque a raiz `.gitignore` o ignora; e o que
+está fora de `.superpowers/sdd/` é varrido pelo Gitleaks como qualquer outro
+caminho, de modo que as duas camadas se cobrem em vez de uma delas ser
+imaginária. Isso ainda **não** é impossibilidade de vazamento: `git add -f`
+continua podendo forçar a entrada de um arquivo ignorado, e a varredura não
+tem como impedir isso em `.superpowers/sdd/`. A garantia é a do caminho
+normal, não a de todos os caminhos possíveis.
+
+A exclusão é estreita e específica: `.superpowers/notas/` ou qualquer outro
+subdiretório de `.superpowers/`, `frontend/coverage/`, `frontend/dist/` e o
+restante do projeto continuam sendo varridos de verdade. Uma ressalva
+honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
+porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
+projeto, mas o efeito prático é o mesmo e vale estar escrito.

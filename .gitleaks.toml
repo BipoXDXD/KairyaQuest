@@ -11,17 +11,45 @@ useDefault = true
 
 [allowlist]
 description = '''
-.superpowers/ e diretorio de scratch do processo de execucao (planejamento,
-relatorios de tarefas). Esta ignorado pelo git (.superpowers/sdd/.gitignore
-tem um "*" cobrindo tudo ali) e nunca e commitado -- portanto nunca pode
-vazar um segredo via commit, que e o que esta varredura existe para
-impedir. Relatorios de tarefas ali dentro documentam, por exigencia de
-rastreabilidade, os blocos de segredo de teste usados para validar a
-propria deteccao do Gitleaks (ex.: task-4-report.md contem o bloco de
-chave privada plantado e removido no Step 7). Excluir APENAS este
-diretorio; frontend/coverage/, frontend/dist/ e todo o resto do projeto
-continuam sendo varridos de verdade pela regra padrao.
+.superpowers/sdd/ e o diretorio de scratch do processo de execucao
+(planejamento, relatorios de tarefa). Relatorios ali dentro documentam, por
+exigencia de rastreabilidade, os blocos de segredo de teste usados para
+validar a propria deteccao do Gitleaks (task-4-report.md e task-6-report.md
+contem as chaves privadas plantadas e removidas nas demonstracoes). Sem
+esta isencao, "make check" reprovaria sempre que um desses relatorios
+existisse no disco, e documentar as demonstracoes do gate exigiria desligar
+a varredura por completo.
+
+O escopo da isencao e exatamente o escopo do que o git ignora. Duas
+correcoes que este arquivo ja errou:
+
+ 1. A isencao valia para "^\.superpowers/" inteiro, mas o unico .gitignore
+    que a justificava era .superpowers/sdd/.gitignore, que cobre so o
+    subdiretorio sdd/. Um segredo em .superpowers/notas/ aparecia como
+    arquivo NAO RASTREADO em "git status" -- ou seja, commitavel -- e
+    passava batido pela varredura. Era o unico caminho conhecido em que
+    algo entrava no repositorio sem ser checado. O path abaixo foi
+    estreitado para "^\.superpowers/sdd/" e a raiz .gitignore passou a
+    listar ".superpowers/", para que a premissa "esta ignorado pelo git"
+    valha tambem fora de sdd/.
+
+ 2. Dizer "esta ignorado, portanto NUNCA pode vazar" era forte demais por
+    dois motivos. Primeiro: o proprio .superpowers/sdd/.gitignore e
+    ignorado pelo "*" que ele declara, entao nao e versionado e nao vem no
+    clone -- a protecao que a justificativa citava existia so na maquina
+    onde o arquivo foi criado. Depois da correcao, quem sustenta a regra e
+    a linha ".superpowers/" da raiz .gitignore, essa sim versionada.
+    Segundo: "git add -f" continua podendo forcar a entrada de um arquivo
+    ignorado. O que esta isencao garante, entao, nao e impossibilidade de
+    vazamento: e que o caminho normal (commitar sem forcar) nao consegue
+    levar nada de .superpowers/sdd/ para o historico.
+
+Isencao estreita e especifica: .superpowers/notas/ ou qualquer outro
+subdiretorio de .superpowers/, frontend/coverage/, frontend/dist/ e o
+restante do projeto continuam sendo varridos de verdade. A excecao a "o
+resto todo e varrido" e node_modules/, que a allowlist PADRAO do Gitleaks
+ja exclui -- nao esta config.
 '''
 paths = [
-  '''^\.superpowers/''',
+  '''^\.superpowers/sdd/''',
 ]
