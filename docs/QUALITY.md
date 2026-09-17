@@ -66,6 +66,12 @@ arquivo nenhum".
 
 ## 2. A regra da direção única
 
+> **Fonte de verdade:** `Makefile` e `.pre-commit-config.yaml`. Esta seção
+> explica a regra; quem a **impõe** são os dois arquivos. O `AGENTS.md` §4
+> repete a regra de forma resumida — se os dois textos divergirem, arbitre
+> pelos arquivos (`grep -rn "pre-commit" Makefile scripts/`; as ocorrências em
+> `scripts/` são comentários), nunca por um dos documentos.
+
 ```
 git hook -> pre-commit -> make -> ferramentas
 ```
@@ -92,6 +98,13 @@ ser chamado sozinho, sem pressupor que está sendo executado a partir de um
 hook.
 
 ## 3. Denominador da cobertura
+
+> **Fonte de verdade:** `frontend/vite.config.ts` — `test.coverage.thresholds`
+> para os limiares, `include`/`exclude` para o denominador. Esta seção e o
+> `AGENTS.md` §4 apenas **descrevem** o que aquela configuração impõe; nenhum
+> dos dois é dono dos números. Se um documento disser um valor e o
+> `vite.config.ts` disser outro, o `vite.config.ts` está certo e os dois
+> documentos precisam ser corrigidos.
 
 Cobertura de 100% (linhas, ramificações, funções e instruções) é exigida
 apenas sobre o que está **dentro** do denominador. O que está **fora** é
@@ -122,6 +135,13 @@ instrução do código de aplicação ficou sem exercício por pelo menos um
 teste.
 
 ## 4. Roadmap dos alvos ausentes
+
+> **Fonte de verdade:** esta seção, **enquanto os alvos não existirem**. Um
+> contrato sobre algo que ainda não foi escrito só pode morar num documento, e
+> a tabela abaixo é o texto normativo — o `AGENTS.md` §4 a resume e aponta
+> para cá. No instante em que `check-api` (ou `check-e2e`) existir no
+> `Makefile`, a fonte de verdade passa a ser o `Makefile`, e os dois textos
+> viram descrição de um alvo real, não contrato.
 
 Isto é um **contrato**, não uma lista de intenções: nenhum incremento que
 traga código de um ecossistema ainda não coberto pelo gate pode ser aceito
@@ -199,6 +219,11 @@ filtro de caminho, mais `workflow_dispatch` e `merge_group`; permissão
 mínima (`contents: read`), sem segredos, sem `continue-on-error`, e com
 `cancel-in-progress: false` porque o README §12 proíbe cancelar
 verificações anteriores.
+
+> **Fonte de verdade:** `.github/workflows/quality.yml`, confrontado com o
+> `Makefile`. A paridade é uma relação entre dois arquivos reais; a tabela
+> abaixo e o `AGENTS.md` §4 só a descrevem. Uma divergência se arbitra lendo
+> os dois arquivos, não os documentos.
 
 **Paridade 1:1 entre job e alvo do Makefile (decisão D5).** Cada job de
 verificação executa **um** alvo, e nada além dele:

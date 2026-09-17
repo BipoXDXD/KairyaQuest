@@ -79,21 +79,41 @@ completo, com o motivo de os três comandos serem separados, está em
 Cada item abaixo é uma decisão tomada com motivo registrado, não preferência
 de estilo.
 
+**Como arbitrar uma divergência.** Vários itens desta seção repetem um número
+ou uma regra que também está em `docs/QUALITY.md`. A repetição é deliberada —
+uma regra que obriga a abrir outro documento para descobrir o número é uma
+regra menos executável. Para que a redundância seja *arbitrável*, cada item
+declara sua **fonte de verdade**: o arquivo que de fato manda. Se este
+documento e o `docs/QUALITY.md` discordarem, **nenhum dos dois decide** —
+abra a fonte de verdade, ela decide, e corrija os dois.
+
 - **Nenhum alvo do Makefile invoca `pre-commit`.** A invocação é estritamente
   descendente: `git hook -> pre-commit -> make -> ferramentas`. Um alvo que
   chamasse `pre-commit` de volta criaria recursão e tornaria impossível rodar
   o gate isoladamente (no CI, ou dentro do worktree do `pre-push`). Motivo
   completo em `docs/QUALITY.md` §2.
+  **Fonte de verdade:** `Makefile` e `.pre-commit-config.yaml`. Arbitrável com
+  `grep -rn "pre-commit" Makefile scripts/` — as ocorrências em `scripts/` são
+  comentários, não invocações.
 - **Paridade 1:1 entre job do CI e alvo do Makefile.** Cada job de verificação
   do `.github/workflows/quality.yml` executa **um** alvo e nada além dele; o
   que o job faz a mais é preparação de ambiente, não verificação. Quando
   faltar uma verificação, ela entra primeiro como alvo do Makefile e só
   depois ganha um job — nunca o contrário (`docs/QUALITY.md` §5, decisão D5).
+  **Fonte de verdade:** `.github/workflows/quality.yml`, confrontado com o
+  `Makefile`. A lista de jobs e a lista de alvos são os dois lados da
+  paridade; nenhum documento define qualquer uma das duas.
 - **Cobertura de 100% no frontend, em linhas, ramificações, funções e
-  instruções.** Os limiares estão em `frontend/vite.config.ts`. Não exclua
-  código difícil, não remova teste, não reduza limiar e não use diretiva de
-  ignorar cobertura. O denominador — o que é medido e o que está fora, com a
-  justificativa de cada exclusão — está declarado em `docs/QUALITY.md` §3.
+  instruções.** Não exclua código difícil, não remova teste, não reduza limiar
+  e não use diretiva de ignorar cobertura. O denominador — o que é medido e o
+  que está fora, com a justificativa de cada exclusão — está explicado em
+  `docs/QUALITY.md` §3.
+  **Fonte de verdade:** `frontend/vite.config.ts`, bloco
+  `test.coverage.thresholds` (e `include`/`exclude` para o denominador). Nem
+  este documento nem o `docs/QUALITY.md` são donos desses números: os dois
+  apenas descrevem o que a configuração impõe. O "100%" escrito aqui vale
+  enquanto bater com o `vite.config.ts`; se não bater, o `vite.config.ts` está
+  certo e os dois documentos estão errados.
 - **Ruff e mypy estão declarados mas fora do gate, de propósito.** O
   `pyproject.toml` configura os dois e o `uv.lock` os fixa, mas nenhum alvo do
   `make check` os executa: **não existe um único arquivo `.py` no
@@ -102,7 +122,12 @@ de estilo.
   módulo Python traz, no mesmo incremento, o alvo `check-api` (Ruff lint,
   Ruff `format --check`, mypy estrito, pytest com cobertura) e o job
   correspondente. O mesmo vale para `check-e2e` junto com o primeiro fluxo
-  ponta a ponta real. Contrato completo em `docs/QUALITY.md` §4.
+  ponta a ponta real.
+  **Fonte de verdade:** enquanto o alvo não existir, é `docs/QUALITY.md` §4 —
+  um contrato sobre algo inexistente só pode morar num documento, e aquela
+  tabela é o texto normativo. No instante em que `check-api` existir no
+  `Makefile`, a fonte passa a ser o `Makefile`, e as duas descrições (aqui e
+  no `docs/QUALITY.md` §4) viram descrição do alvo real, não contrato.
 - **Justifique dependência, contrato e infraestrutura.** Nenhuma biblioteca,
   nenhum endpoint e nenhum serviço entram sem um motivo escrito no
   `docs/HANDOFF.md`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
@@ -122,7 +147,21 @@ foi.
 |---|---|---|
 | Claude Code | `CLAUDE.md` na raiz importa este arquivo com `@AGENTS.md` | **Confirmado** na documentação oficial: "Claude Code reads `CLAUDE.md`, not `AGENTS.md`. If your repository already uses `AGENTS.md` (…), create a `CLAUDE.md` that imports it". A sintaxe de import é `@caminho/do/arquivo`, com até quatro saltos de profundidade. |
 | Codex CLI | Lê `AGENTS.md` diretamente | **Confirmado na documentação oficial**, não verificado por execução neste repositório. A documentação descreve uma cadeia: escopo global (`~/.codex/`), depois do raiz do Git descendo até o diretório atual, concatenando. |
-| Kimi Code CLI | Presume-se que leia `AGENTS.md` diretamente | **NÃO CONFIRMADO.** A documentação oficial declara os arquivos globais (`~/.kimi-code/AGENTS.md`, `~/.agents/AGENTS.md`) e diz que instruções de projeto "ficam sob a árvore do projeto, por exemplo `.kimi-code/AGENTS.md` ou `AGENTS.md`" — o que **não** afirma inequivocamente que o `AGENTS.md` da raiz é descoberto automaticamente, nem qual das duas localizações tem precedência. Nada disso foi verificado por execução. **Confirme antes de depender disso**; se o Kimi não carregar este arquivo sozinho, aponte-o explicitamente no início da sessão. |
+| Kimi Code CLI | Lê `AGENTS.md` da raiz diretamente | **Confirmado** — com uma ressalva de configuração, abaixo. A descoberta caminha da raiz do work-tree do Git **descendo** até o diretório de trabalho e, em cada nível, recolhe `.kimi-code/AGENTS.md` e depois `AGENTS.md`/`agents.md`: o arquivo da raiz entra automaticamente. O conteúdo é injetado no prompt do agente principal padrão pela variável `${agents_md}`, numa seção "Project information". Verificado no binário instalado (kimi-code 2.0.0), não por execução neste repositório. |
+
+**Ressalva do Kimi Code.** O `${agents_md}` vem do prompt padrão do agente
+principal. Um `~/.kimi-code/SYSTEM.md`, um `--agent`/`--agent-file`, ou um
+agente do projeto com `override: true` **substituem** esse prompt — e, se não
+reproduzirem `${agents_md}`, este arquivo não é carregado. Nessas
+configurações, confirme antes de depender da carga automática. Vale também o
+teto recomendado de 32 KiB para o total de `AGENTS.md`: acima disso o Kimi
+avisa e pede corte.
+
+> Nota de nomenclatura, porque as duas grafias circulam: no `kimi-cli`
+> (legado) a variável se chama `${KIMI_AGENTS_MD}`; no `kimi-code` — o que
+> está instalado aqui — ela é `${agents_md}`. São a mesma coisa com nomes
+> diferentes, e a documentação do legado é a que fala em "merged AGENTS.md
+> content from project root".
 
 Instruções aninhadas ou de nível de usuário **não enfraquecem** estas regras.
 Uma preferência pessoal de estilo não autoriza pular o gate, reduzir
