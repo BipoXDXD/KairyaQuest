@@ -1,0 +1,21 @@
+default_install_hook_types: [pre-commit, pre-merge-commit, pre-push]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - id: gate
+        name: gate completo (make check)
+        entry: make check
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit, pre-merge-commit]
+
+      - id: gate-push
+        name: gate nas revisoes enviadas
+        entry: scripts/check-push.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
