@@ -100,8 +100,10 @@ Tasks 1 a 7 (spec em
 
 ### Documentação de agentes e arquitetura (README §13 e §3)
 
-Resolve as pendências 3 e 4 abaixo. Primeiro incremento entregue pelo fluxo
-de branch + pull request, já sob a `main` protegida.
+Resolve as pendências 3 e 4 abaixo. Entregue pelo fluxo de branch + pull
+request (PR #2), sob a `main` protegida. **Não é o primeiro exercício desse
+fluxo:** o PR #1 (`docs/estado-remoto`) veio antes e já está mesclado em
+`0f43b28` — conferido com `gh pr list --state all`.
 
 - `AGENTS.md` (raiz) — regras comuns a Kimi, Codex e Claude: leitura
   obrigatória antes de trabalhar, fluxo por branch e PR, `make check` antes de
@@ -204,12 +206,14 @@ local, sem aviso.
    A descoberta de instruções por agente foi registrada com o estado de cada
    uma, conforme o §13 exige ("não invente capacidades"): **Claude Code** e
    **Codex** confirmados na documentação oficial de cada um; **Kimi Code
-   NÃO confirmado** — a documentação declara os arquivos globais
-   (`~/.kimi-code/AGENTS.md`, `~/.agents/AGENTS.md`) e cita `AGENTS.md` como
-   exemplo de instrução de projeto, sem afirmar que o arquivo da raiz é
-   descoberto automaticamente. Nenhum dos três foi verificado por execução
-   neste repositório. A tabela com o estado de cada agente está em
-   `AGENTS.md` §5.
+   confirmado no binário instalado** (kimi-code 2.0.0) — a função de
+   descoberta caminha da raiz do work-tree do Git até o diretório de trabalho
+   recolhendo `.kimi-code/AGENTS.md` e `AGENTS.md` em cada nível, e o prompt
+   padrão do agente principal injeta o resultado em `${agents_md}`. Fica a
+   ressalva de que `SYSTEM.md`, `--agent`/`--agent-file` e um agente de
+   projeto com `override: true` substituem esse prompt e podem derrubar a
+   injeção. Nenhum dos três foi verificado por execução neste repositório. A
+   tabela com o estado de cada agente está em `AGENTS.md` §5.
 4. **`docs/ARCHITECTURE.md` criado** (README §3). Separa em blocos rotulados o
    que existe hoje (árvore gerada do disco, com a responsabilidade de cada
    diretório) do que é alvo e ainda não foi implementado (a árvore do §3 do
