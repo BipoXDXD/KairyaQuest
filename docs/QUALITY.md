@@ -6,6 +6,31 @@ deliberadamente não mede), o roadmap dos alvos que ainda faltam, as
 limitações conhecidas sem eufemismo, e o procedimento de atualização do
 Gitleaks.
 
+## Primeiro uso após clonar
+
+Em um clone novo (ou um worktree novo), rode os três comandos abaixo, **nesta
+ordem**:
+
+```bash
+make bootstrap                                    # dependencias dos dois ecossistemas
+uv run pre-commit install --install-hooks         # hooks de git (NAO vem do bootstrap)
+make check                                        # confirma que o gate passa
+```
+
+O segundo comando é separado do primeiro **de propósito**, não por
+esquecimento: `make bootstrap` não instala hooks de git, e não vai passar a
+instalar. `scripts/check-push.sh` roda `make bootstrap` dentro de um
+worktree temporário a cada ref validada no `pre-push`; como um worktree
+compartilha o diretório `.git` do repositório principal, um
+`pre-commit install` disparado a partir de dentro de `bootstrap` reescreveria
+os hooks do repositório principal no meio da validação de um push — efeito
+colateral inaceitável. Manter os dois comandos sempre separados também
+mantém "nenhum alvo do Makefile invoca `pre-commit`" (seção 2 abaixo) como
+regra absoluta, sem exceção a lembrar.
+
+Sem o segundo comando, `git commit` e `git push` funcionam normalmente —
+sem nenhuma validação. Ver a limitação correspondente na seção 5.
+
 ## 1. Comandos
 
 | Comando | Descrição |
@@ -114,14 +139,19 @@ Sem eufemismo:
   não pode ser reduzir o que o gate verifica; é paralelizar, cachear ou
   segmentar por escopo, mantendo a garantia de que todo o projeto continua
   verificado antes de cada commit.
-- **Hooks não vêm no clone e são contornáveis por quem controla o Git.**
-  `pre-commit install` precisa ser executado (via `make bootstrap`) em cada
-  clone e em cada worktree novo — inclusive no PyCharm. Além disso, quem
-  tem acesso ao repositório local pode usar `--no-verify`, `SKIP`, editar
-  ou apagar `.pre-commit-config.yaml`, ou simplesmente não instalar os
-  hooks. Nada nesta camada impede isso: **a proteção real é a do remoto**
-  (branch protection e o status `quality-gate` obrigatório em CI, README
-  §12), que ainda depende de autorização e configuração pendentes (ver
+- **Hooks não vêm no clone.** `make bootstrap` **não** instala hooks de git
+  — só dependências (npm, uv, Gitleaks). `uv run pre-commit install
+  --install-hooks` precisa ser executado à parte, uma vez por clone e uma
+  vez por cada worktree novo (inclusive no PyCharm), como descrito em
+  "Primeiro uso após clonar" no início deste documento. Enquanto isso não
+  for feito, `git commit` e `git push` funcionam sem nenhuma validação, sem
+  aviso nenhum de que o gate não está ativo.
+- **Hooks são contornáveis por quem controla o Git.** Mesmo instalados,
+  quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,
+  editar ou apagar `.pre-commit-config.yaml`, ou desinstalar os hooks.
+  Nada nesta camada impede isso: **a proteção real é a do remoto** (branch
+  protection e o status `quality-gate` obrigatório em CI, README §12), que
+  ainda depende de autorização e configuração pendentes (ver
   `docs/HANDOFF.md`). Os hooks locais existem para dar feedback rápido e
   reduzir o volume de commits quebrados que chegam ao CI, não para
   substituir a proteção do remoto.

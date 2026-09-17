@@ -64,9 +64,11 @@ Tasks 1 a 6 (spec em
 - **Task 4:** `scripts/install-gitleaks.sh` (Gitleaks 8.30.1, fixado por
   dois checksums SHA-256 — do tarball e do binário extraído — D4) e o alvo
   `check-secrets`, agregado em `check` junto com `check-web`.
-- **Task 5:** `.pre-commit-config.yaml` instalando hooks
-  `pre-commit`/`pre-merge-commit`/`pre-push` (D3) e `scripts/check-push.sh`,
-  que valida o topo de cada ref enviada em worktree isolado (D5, D6).
+- **Task 5:** `.pre-commit-config.yaml` declarando os três estágios de hook
+  (`pre-commit`/`pre-merge-commit`/`pre-push`, D3) e `scripts/check-push.sh`,
+  que valida o topo de cada ref enviada em worktree isolado (D5, D6). A
+  instalação em si (`uv run pre-commit install --install-hooks`) não faz
+  parte de `make bootstrap` — ver "Setup" acima.
   **Primeiro commit validado pelo gate: `b237e47`** (o commit que introduziu
   os próprios hooks — todos os onze commits anteriores, do saneamento à
   Task 4, antecederam a instalação do gate e não foram avaliados por ele).
@@ -111,6 +113,22 @@ binário extraído em `scripts/install-gitleaks.sh` — os dois valores ficam
 só ali, não duplicados aqui; procedimento de atualização em
 `docs/QUALITY.md` §6); Ruff, mypy e pre-commit conforme `uv.lock`; Prettier
 3.9.7 e Vitest 5.0.1 conforme `frontend/package-lock.json`.
+
+## Setup (clone ou worktree novo)
+
+`make bootstrap` **não** instala hooks de git — só dependências. Em
+qualquer clone ou worktree novo, rode os três comandos abaixo, nesta ordem
+(detalhado, com o porquê da separação, em `docs/QUALITY.md`, seção
+"Primeiro uso após clonar"):
+
+```bash
+make bootstrap
+uv run pre-commit install --install-hooks
+make check
+```
+
+Sem o segundo comando, commits e pushes não passam por nenhuma validação
+local, sem aviso.
 
 ## Pendências
 
