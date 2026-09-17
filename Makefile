@@ -16,6 +16,7 @@ check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run lint
 	cd $(WEB) && npm run format:check
 	cd $(WEB) && npm run typecheck
+	cd $(WEB) && npm run test:coverage
 
 format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format
