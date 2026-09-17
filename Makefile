@@ -9,6 +9,7 @@ help: ## Lista os alvos disponíveis
 
 bootstrap: ## Instala as dependencias dos dois ecossistemas
 	cd $(WEB) && npm ci
+	uv sync --frozen
 
 check: check-web ## Gate completo. E o que os hooks e o CI executam.
 

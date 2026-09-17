@@ -1,0 +1,23 @@
+[project]
+name = "focusquest"
+version = "0.1.0"
+description = "Plataforma de estudos gamificada com tutoria interativa"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = ["mypy", "pre-commit", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
