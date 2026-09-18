@@ -62,10 +62,10 @@ Cada uma está no código, com o motivo no comentário do arquivo citado.
 
 | Decisão | Motivo |
 |---|---|
-| Fórmula de XP: `20 + 10 * d * (d - 1)` (`XP_BASE` e `XP_INCREMENTO` em `domain.py`) | O piso impede que a missão fácil valha quase nada; o termo quadrático faz o difícil compensar sem explodir (dificuldade 1 vale 20, dificuldade 5 vale 220). Uma curva linear faria das missões fáceis a forma mais eficiente de ganhar XP por hora. |
+| Fórmula de XP: `20 + 10 * d * (d - 1)` (`XP_BASE` e `XP_INCREMENTO` em `domain.py`) | O piso impede que a missão fácil valha quase nada; o termo quadrático faz o difícil compensar sem explodir (dificuldade 1 vale 20, dificuldade 5 vale 220). Uma curva linear faria das missões fáceis a forma mais eficiente de ganhar XP por hora. Quem decidiu foi o agente, numa ausência em que o dono autorizou todas as decisões. A spec reservava essa decisão ao dono; em 2026-09-18 ele delegou a resolução da divergência, e a spec foi emendada (seção "Emendas"). |
 | Teto de dificuldade `DIFICULDADE_MAXIMA = 5`, no schema e não no domínio | A curva de XP foi calibrada nessa faixa, e cinco é a granularidade que uma pessoa consegue julgar. O domínio responde quanto vale uma dificuldade; a borda responde qual aceita receber. |
 | `deadline` exige fuso na entrada (422 para datetime sem fuso) | Aceitar datetime sem fuso fazia o mesmo prazo sair em duas serializações diferentes (sem `Z` no 201, com `Z` no GET), que o JavaScript lê como dois instantes. Normalizar em silêncio seria adivinhar o fuso do cliente. |
-| Missão inexistente e missão de outro usuário respondem o **mesmo** 404, com o mesmo corpo | Desvio deliberado da spec, que previa respostas distintas: responder 403, ou um 404 com o motivo verdadeiro, revelaria que o recurso existe. A distinção vai para o log (`INFO` para inexistente, `WARNING` para acesso negado). |
+| Missão inexistente e missão de outro usuário respondem o **mesmo** 404, com o mesmo corpo | A spec previa respostas distintas e foi emendada em 2026-09-18 (seção "Emendas"): responder 403, ou um 404 com o motivo verdadeiro, revelaria que o recurso existe. A distinção vai para o log (`INFO` para inexistente, `WARNING` para acesso negado). |
 | Um `operation_id` fica vinculado à primeira operação em que foi usado; reusá-lo em outra missão ou outro tipo de operação é 409 (`OperacaoReutilizadaError`), e não sucesso | Aceitar qualquer reuso como "já feito" faria concluir a missão B com a chave da missão A devolver a missão A como sucesso, com a B ainda pendente. |
 | O `commit` é feito pela rota, não pela dependência de sessão | Um commit depois do `yield` rodaria com a resposta já montada, e uma falha nele não teria como mudar o status. |
 | Corpo de erro `{"detail": ...}` com chave em inglês e prosa em pt-BR | A chave é contrato de payload e é a mesma que o FastAPI usa no 422; o texto é interface. |
@@ -417,6 +417,15 @@ que não tinham chegado aqui)
     faz sentido são decisões de produto do dono, não correção. Se ninguém
     decidir, o sistema aceita dado absurdo — não quebra. Pesa mais no 1b,
     em que quem propõe a missão é um LLM.
+    **Decidido pelo dono em 2026-09-18, ainda não implementado:** as missões
+    são **diárias (24 h)** e **reveladas semanalmente**, e uma sequência de 7
+    dias leva a uma **missão especial com bônus de XP**. Não entrou no 1a por
+    dois motivos. Primeiro, um teto global de 1440 minutos em
+    `estimated_minutes` pode contradizer a missão especial, cuja duração o
+    design ainda não fixou. Segundo, a janela do prazo depende de como a
+    revelação semanal distribui as missões. Os limites de negócio entram no
+    incremento que introduzir o ciclo diário, e esse incremento começa por
+    design próprio.
 27. **A guarda da faixa do prazo supõe a sessão do PostgreSQL em UTC.** O
     banco devolve o `timestamptz` no `TimeZone` da **sessão**, e o psycopg
     não lê um instante que, nesse fuso, cai fora dos anos 1 a 9999. Medido:
@@ -430,6 +439,10 @@ que não tinham chegado aqui)
     bordas volta a deixar a listagem em 500 — o teste
     `test_prazo_no_ultimo_instante_representavel_e_aceito_e_lido` reprova se
     o fuso da sessão mudar para leste de UTC.
+    **Conserto aceito pelo dono em 2026-09-18:** fixar `timezone=UTC` na
+    conexão da engine, num commit logo depois do merge deste incremento. O
+    mesmo commit corrige a docstring daquele teste, que diz avisar qualquer
+    mudança de fuso e só avisa a leste.
 28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
     `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
     `get_engine` estoura `ValidationError` antes do `try` que traduz a falha
