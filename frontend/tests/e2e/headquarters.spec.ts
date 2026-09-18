@@ -4,7 +4,13 @@
 // reprova com "This expression is not constructable"; o mesmo import nomeado
 // funciona nas duas formas de modulo.
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+  type PlaywrightWorkerArgs,
+} from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { API_URL } from './servers'
 
@@ -56,6 +62,7 @@ interface MissaoCriada extends PedidoDeMissao {
   id: number
   state: string
   xp: number
+  completed_at: string | null
 }
 
 /**
@@ -112,13 +119,43 @@ function idsEmOrdemDePrazo(): string[] {
     .map((missao) => String(missao.id))
 }
 
+/** Cria uma missao pela API dedicada e devolve o corpo do 201. */
+async function criarMissao(api: APIRequestContext, pedido: PedidoDeMissao): Promise<MissaoCriada> {
+  const resposta = await api.post('/api/missions', { data: pedido })
+  // O corpo entra na mensagem de falha: um 422 sem corpo diria apenas "nao
+  // foi 201", e o que interessa e QUAL campo a API recusou.
+  expect(resposta.status(), await resposta.text()).toBe(201)
+  return (await resposta.json()) as MissaoCriada
+}
+
 async function semear(api: APIRequestContext): Promise<void> {
   for (const pedido of PEDIDOS) {
-    const resposta = await api.post('/api/missions', { data: pedido })
-    // O corpo entra na mensagem de falha: um 422 sem corpo diria apenas "nao
-    // foi 201", e o que interessa e QUAL campo a API recusou.
-    expect(resposta.status(), await resposta.text()).toBe(201)
-    criadas.push((await resposta.json()) as MissaoCriada)
+    criadas.push(await criarMissao(api, pedido))
+  }
+}
+
+/**
+ * Uma missao PROPRIA do cenario que a cria, semeada pela API dedicada.
+ *
+ * Os cenarios de conclusao nao usam as missoes do `beforeAll`: concluir uma
+ * delas mudaria o que o primeiro cenario confere ('Pendente'), e o resultado
+ * passaria a depender da ordem em que os cenarios rodam.
+ */
+async function missaoDoCenario(
+  playwright: PlaywrightWorkerArgs['playwright'],
+  rotulo: string,
+): Promise<MissaoCriada> {
+  const api = await playwright.request.newContext({ baseURL: API_URL })
+  try {
+    return await criarMissao(api, {
+      instructions: `${rotulo} (e2e ${EXECUCAO})`,
+      completion_criterion: `Entrega conferida (e2e ${EXECUCAO})`,
+      difficulty: 2,
+      estimated_minutes: 30,
+      deadline: '2027-03-01T12:00:00Z',
+    })
+  } finally {
+    await api.dispose()
   }
 }
 
@@ -270,4 +307,102 @@ test('o estado de erro e acessivel e o "Tentar novamente" recupera a tela', asyn
 
   await expect(page.getByTestId('missions-list')).toBeVisible()
   await expect(erro).toHaveCount(0)
+})
+
+/**
+ * O primeiro fluxo de ESCRITA da tela: concluir uma missao pelo botao.
+ *
+ * Tres coisas que nenhum teste de unidade prova juntas: o clique sai do
+ * navegador, passa pelo proxy do build de producao e muda o estado no banco
+ * (a recarga le de novo e continua 'Concluída'); o `crypto.randomUUID` existe
+ * no navegador de verdade (ele so existe em contexto seguro, e
+ * `http://127.0.0.1` e um); e o estado concluido passa no axe.
+ */
+test('concluir pela tela muda o estado no servidor, e a tela concluida e acessivel', async ({
+  page,
+  playwright,
+}) => {
+  const alvo = await missaoDoCenario(playwright, 'Revisar o capitulo 4')
+  const lista = await abrirQuadro(page)
+  const item = lista.locator(`[data-mission-id="${String(alvo.id)}"]`)
+
+  // Pelo NOME ACESSIVEL, que diz qual missao o botao conclui.
+  await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
+
+  await expect(item.getByRole('status')).toHaveText('Missão concluída.')
+  await expect(item.getByTestId('mission-state')).toHaveText('Concluída')
+  await expect(item.getByTestId('mission-complete')).toHaveCount(0)
+
+  // Conjunto de regras PADRAO, sem `withTags` nem `disableRules`.
+  const resultado = await new AxeBuilder({ page }).analyze()
+  expect(resultado.violations).toEqual([])
+
+  // Persistiu: a recarga le do banco de novo, e nao do estado da tela.
+  await page.reload()
+  await expect(
+    page
+      .getByTestId('missions-list')
+      .locator(`[data-mission-id="${String(alvo.id)}"]`)
+      .getByTestId('mission-state'),
+  ).toHaveText('Concluída')
+})
+
+/**
+ * A resposta perdida no caminho -- o caso que a idempotencia existe para
+ * atender (README §7).
+ *
+ * O primeiro POST CHEGA ao servidor, que conclui; so a resposta e descartada
+ * antes de o navegador a ver (`route.fetch()` e depois `route.abort()`). Para
+ * a tela, isso e indistinguivel de uma falha de rede: ela nao sabe se
+ * concluiu. O reenvio com a MESMA chave tem de receber 200 com a MESMA
+ * conclusao, e nao 409 de "ja concluida" -- que e o que uma chave nova a cada
+ * clique produziria.
+ *
+ * Abortar antes de o pedido sair nao provaria nada disso: o servidor nunca
+ * teria concluido, e qualquer chave serviria no reenvio.
+ */
+test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma conclusao', async ({
+  page,
+  playwright,
+}) => {
+  const alvo = await missaoDoCenario(playwright, 'Refazer a lista 2')
+  const rota = `**/api/missions/${String(alvo.id)}/complete`
+  // O que o interceptador viu: a chave de cada pedido e o corpo de cada
+  // resposta que o servidor deu e o navegador nunca recebeu.
+  const chaves: string[] = []
+  const descartadas: MissaoCriada[] = []
+
+  await page.route(rota, async (route) => {
+    chaves.push((route.request().postDataJSON() as { operation_id: string }).operation_id)
+    const resposta = await route.fetch()
+    descartadas.push((await resposta.json()) as MissaoCriada)
+    await route.abort()
+  })
+
+  const lista = await abrirQuadro(page)
+  const item = lista.locator(`[data-mission-id="${String(alvo.id)}"]`)
+  await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
+
+  // A tela nao sabe se concluiu, e diz isso -- num alerta que o axe audita.
+  await expect(item.getByRole('alert')).toContainText('Tentar de novo é seguro')
+  const resultado = await new AxeBuilder({ page }).analyze()
+  expect(resultado.violations).toEqual([])
+
+  // O servidor, sim, concluiu: a resposta descartada trazia a missao concluida.
+  expect(descartadas).toHaveLength(1)
+  expect(descartadas[0]?.state).toBe('concluida')
+
+  await page.unroute(rota)
+  const reenvio = page.waitForResponse((resposta) =>
+    resposta.url().endsWith(`/api/missions/${String(alvo.id)}/complete`),
+  )
+  await item.getByRole('button', { name: `Tentar de novo a missão: ${alvo.instructions}` }).click()
+  const segunda = await reenvio
+
+  expect(segunda.status()).toBe(200)
+  const segundaConclusao = (await segunda.json()) as MissaoCriada
+  // A MESMA conclusao: o `completed_at` e o do primeiro pedido, e nao um novo.
+  expect(segundaConclusao.completed_at).toBe(descartadas[0]?.completed_at)
+  expect(JSON.parse(segunda.request().postData() ?? '{}')).toEqual({ operation_id: chaves[0] })
+  await expect(item.getByRole('status')).toHaveText('Missão concluída.')
 })

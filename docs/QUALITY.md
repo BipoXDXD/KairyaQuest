@@ -281,9 +281,12 @@ mesmos criaram.
   a API de desenvolvimento — e o cenário poderia **passar** contra o
   servidor errado.
 - **axe-core** com o conjunto de regras padrão (sem `withTags` nem
-  `disableRules`), exigindo zero violações, em dois estados da tela: a lista
-  carregada e o estado de erro (forçado com `page.route(...).abort()`). O
-  estado de carregando **não** é auditado.
+  `disableRules`), exigindo zero violações, em quatro estados da tela: a
+  lista carregada; o erro de carregamento (forçado com
+  `page.route(...).abort()`); a missão recém-concluída pelo botão; e o aviso
+  de falha da conclusão (a resposta do POST descartada com `route.fetch()` e
+  `route.abort()`, depois de o servidor concluir). O estado de carregando e
+  o de envio **não** são auditados.
 
 **O E2E divide o banco `focusquest_test` com a suíte pytest.** É uma decisão
 deliberada, e duas exigências estruturais a tornam segura: o cenário semeia
@@ -299,10 +302,11 @@ reprova o cenário. Duas consequências operacionais:
   ocupada), não aprovação silenciosa — mas é falha. No CI a corrida não
   existe: cada job tem o próprio serviço PostgreSQL.
 - **Cada execução do E2E deixa linhas no `focusquest_test`.** Elas só somem
-  no próximo `DROP SCHEMA` da suíte pytest. Depois de um `make check`
-  completo sobram as duas missões da última execução do E2E (medido: 2
-  linhas); `make check-e2e` rodado repetidamente, sem o `check-api` no
-  meio, acumula.
+  no próximo `DROP SCHEMA` da suíte pytest. Cada execução cria quatro
+  missões: as duas que o `beforeAll` semeia e uma por cenário de conclusão.
+  Depois de um `make check` completo sobram as quatro da última execução do
+  E2E (medido no Incremento A: 4 linhas); `make check-e2e` rodado
+  repetidamente, sem o `check-api` no meio, acumula quatro por execução.
 
 ### Validação dos lockfiles — assimetria declarada
 

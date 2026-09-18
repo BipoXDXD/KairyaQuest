@@ -10,6 +10,17 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento A — conclusão na tela.** Branch `feat/incremento-a`, aberta a
+partir de `49c17ac`, **empilhada sobre `docs/spec-ciclo-diario`** — o PR #6
+(spec e plano) ainda não estava mesclado à `main` quando esta branch foi
+aberta; quando ele for mesclado, a base passa a ser a `main`. Spec em
+`docs/superpowers/specs/2026-09-18-ciclo-diario-design.md` (seção B2,
+decisões C12 e C13); plano em
+`docs/superpowers/plans/2026-09-18-incremento-a.md`. Relógio injetável,
+`code` nos erros de domínio e o botão Concluir para as missões avulsas.
+Fecha as pendências 1 e 7. O texto abaixo, até "Incrementos anteriores",
+continua sendo o registro do Incremento 1a.
+
 **Incremento 1a — fatia vertical: missões persistidas.** Branch
 `feat/incremento-1a`, aberta a partir de `a869292` (a `main` naquele
 momento). A implementação vai de `1ff982d` a `96eaeba` — 23 commits,
@@ -83,6 +94,21 @@ Cada uma está no código, com o motivo no comentário do arquivo citado.
 | A guarda de `.env` do `pre-push` mora em `scripts/push-env.sh`, carregada pelo `check-push.sh` | Extraída para ser testada (`tests/integration/test_push_env.py`) sem disparar push nem criar worktree; o `check-push.sh` chama a mesma função, e um teste roda uma cópia dele para provar que chama. |
 | `timeout-minutes` em todos os jobs do CI | O padrão do runner é seis horas; um job travado deixaria o pull request sem veredito nesse tempo. |
 
+### Incremento A — decisões que a spec não fixava
+
+O motivo de cada uma está também no código citado.
+
+| Decisão | Motivo |
+|---|---|
+| `get_clock` (`core/clock.py`) entrega o **relógio** (`Clock = Callable[[], datetime]`), e não o instante | Um instante resolvido pelo FastAPI seria lido antes da trava; o serviço lê o relógio depois do `FOR UPDATE` (C13). |
+| `concluir_missao(..., *, clock: Clock)` obrigatório e somente-nomeado | Nenhum chamador esquece o relógio em silêncio: o mypy e o `TypeError` recusam. |
+| O `created_at` das tabelas continua vindo do `now()` do banco | É auditoria, e não regra; a C13 fala do serviço. |
+| O `code` mora em `main.py` (`CodigoDeErro`), com `codigo` obrigatório em `_erro` | É tradução para HTTP. Posto na exceção, `NaoPertenceAoUsuarioError` carregaria `missao_nao_encontrada`, falso no domínio. |
+| O cliente HTTP não lê o `detail`; `ApiError.code` é `string \| null` | Garantia estrutural de que o `detail` não chega à tela; quem consome estreita o `code` com `Object.hasOwn`. |
+| Um mapa exaustivo `code → { message, recovery }` (`completionFailure.ts`) | Mensagem e ação mudam juntas; um `code` novo reprova o `tsc` até ganhar as duas. |
+| O `operation_id` nasce no primeiro clique, num `useRef`, e só troca depois de `operacao_reutilizada` | Uma chave nova por clique transformaria o reenvio numa conclusão nova (409). |
+| O erro de carregamento da lista mostra a `message` do `ApiError` (`O servidor respondeu 503.`) | A leitura da lista não tem erro de domínio com `code`; o texto é do cliente, e não do backend. |
+
 ### Incrementos anteriores
 
 | Decisão | Motivo |
@@ -118,6 +144,26 @@ serviço.
 - **Endpoints:** os três de `/api/missions`, `/health` e `/ready` — ver
   "O contrato HTTP que existe" em `docs/ARCHITECTURE.md` §3. O de concluir
   existe pela decisão A8.
+
+## Alterações do Incremento A
+
+Commits `92f92d0`, `c31aa06`, `b38a74a`, `34c7014`, `bdfb49b`:
+
+- **Relógio injetável:** `core/clock.py` (`Clock`, `system_now`,
+  `get_clock`); `concluir_missao` recebe o relógio e o lê depois da trava;
+  a rota o injeta. Testes com relógio fixo, `completed_at` por igualdade, e
+  uma sonda `FOR KEY SHARE NOWAIT` provando a ordem.
+- **`code` nos erros:** `{"detail": ..., "code": ...}` em todo erro de
+  domínio, com três códigos; os dois 404 idênticos byte a byte; o 422 sem
+  `code`, com teste que recusa um handler que o acrescente.
+- **Cliente HTTP:** `ApiError` com `status` e `code`, `postJson`, e o
+  `detail` deixou de ser lido.
+- **Botão Concluir:** `useCompleteMission` e `CompletionControls`, com os
+  estados da tabela do plano e o `operation_id` mantido entre as tentativas.
+- **E2E:** dois cenários novos, concluir e a resposta perdida, com o axe no
+  estado concluído e no aviso de falha.
+- **Documentação:** este arquivo, o `docs/ARCHITECTURE.md` (árvore,
+  contrato de erro, feature `missions`, §5.7) e o `docs/QUALITY.md` §4.
 
 ## Alterações do Incremento 1a
 
@@ -218,6 +264,8 @@ incremento aplicada:
 | `scripts/check-push.sh`, executado à mão pela entrada padrão, sem push | Aprovado, EXIT 0, cerca de 25 s: `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env` nele, com as variáveis `FOCUSQUEST_*` vindas do repositório principal. O worktree foi removido ao fim. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` | 2 — as missões da última execução do E2E; as anteriores foram apagadas pelo `DROP SCHEMA` da suíte pytest. |
 | Jobs `check-api` e `check-e2e` no GitHub Actions | **Não executados.** A branch não foi empurrada. |
+| `make check` duas vezes seguidas, sobre o topo de `feat/incremento-a` | Aprovado, EXIT 0 nas duas. Frontend: 68 testes, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). Backend: 115 testes, cobertura total de 100%. E2E: 6 cenários em Chromium. Gitleaks sem achados. |
+| Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A) | 4 — as missões da última execução do E2E. |
 
 ## Ambiente verificado
 
@@ -408,10 +456,13 @@ ninguém mexer.
     fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E usa, e o
     E2E usa portas fixas (8100, 5273). No CI não há corrida: cada job tem o
     seu PostgreSQL.
-20. **Cada execução do E2E deixa linhas no `focusquest_test`**, que só somem
-    no próximo `DROP SCHEMA` da suíte pytest. `make check-e2e` rodado
-    repetidamente, sem o `check-api` no meio, acumula.
-21. **O axe audita os estados carregado e de erro, não o de carregando.**
+20. **Cada execução do E2E deixa quatro missões no `focusquest_test`** (duas
+    desde o Incremento A são concluídas), que só somem no próximo
+    `DROP SCHEMA` da suíte pytest. `make check-e2e` rodado repetidamente,
+    sem o `check-api` no meio, acumula.
+21. **O axe audita quatro estados** — a lista carregada, o erro de
+    carregamento, a missão recém-concluída e o aviso de falha da conclusão
+    —, **mas não o de carregando nem o de envio** ("Concluindo…").
 22. **Um `package-lock.json` defasado passa no `make check` local e reprova no
     CI** — assimetria declarada em `docs/QUALITY.md` §4.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
@@ -496,6 +547,24 @@ que não tinham chegado aqui)
     `tests/integration/test_missions_concorrencia.py`; o mypy e o gate não
     acusam. Se ninguém mexer: nada muda no comportamento.
 
+**Criadas pelo Incremento A**
+
+32. **O tipo `MissionErrorCode` do frontend espelha o `CodigoDeErro` do
+    backend à mão.** Nada amarra os dois. Um `code` novo no backend, sem a
+    linha no frontend, cai na mensagem genérica ("Não foi possível confirmar
+    a conclusão…"), que é segura mas imprecisa. Os handlers também não
+    declaram `responses`, então o `/openapi.json` não publica o corpo de
+    erro. Amarrar de verdade pediria gerar os tipos a partir do OpenAPI.
+33. **`crypto.randomUUID` só existe em contexto seguro** (HTTPS, `localhost`,
+    `127.0.0.1`). O servidor de desenvolvimento (`localhost`) e o do E2E
+    (`127.0.0.1`) são contextos seguros; o E2E prova o segundo, e o
+    `isSecureContext` do Chromium em `http://127.0.0.1` foi medido `true`.
+    Um frontend aberto por HTTP num IP de rede —
+    testar pelo celular em `http://192.168.x.x:5173`, por exemplo — não tem
+    a função, e o clique em Concluir lançaria `TypeError` antes de o pedido
+    sair. **Não medido**; é o que a especificação da Web Crypto diz. Se
+    ninguém mexer, o botão parece não fazer nada nesse cenário.
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -504,8 +573,9 @@ B → C**. O desenho de A, B e C está em
 
 - **A — conclusão na tela:** relógio injetável (pendência 7), `code` legível
   por máquina nos erros (pendência 1) e o botão Concluir, com o `operation_id`
-  preservado entre tentativas. É o próximo.
-- **1b — a Tifa**, descrito abaixo.
+  preservado entre tentativas. **Entregue** (ver "Alterações do Incremento
+  A").
+- **1b — a Tifa**, descrito abaixo. **É o próximo.**
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
   navegação lateral), depois do 1b.
 
@@ -529,7 +599,9 @@ O que o 1b vai encontrar e precisa saber, porque morde:
   (pendência 12). E, pelo `AGENTS.md` §4, o SDK do provedor entra com
   motivo escrito aqui.
 - Propor e confirmar uma missão toca a criação e, provavelmente, a
-  conclusão — e a conclusão tem os dois 409 sem `code` (pendência 1).
+  conclusão. A conclusão já responde `code` e a tela já conclui: o fluxo da
+  Tifa deve reusar `postJson`, o `CodigoDeErro` e o mapa exaustivo de
+  `completionFailure.ts`, em vez de criar um caminho paralelo.
 - O E2E do chat divide o banco e as portas do E2E atual (pendências 19 e
   20).
 
