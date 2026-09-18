@@ -449,9 +449,11 @@ que não tinham chegado aqui)
     `create_engine_from_url` registra um `SET TIME ZONE 'UTC'` em toda
     conexão nova, e o `alembic/env.py` passou a criar a engine por ela — as
     engines da aplicação, da suíte e do Alembic nascem no mesmo lugar. O
-    mecanismo **não** é o `options=-c timezone=UTC` previsto acima: com a
-    variável `PGTZ` definida, a `libpq` a envia depois das `options` e o
-    servidor fica com o fuso do `PGTZ` (medido com PostgreSQL 18 e libpq 18).
+    mecanismo **não** é o `options=-c timezone=UTC` previsto acima: o
+    servidor processa primeiro as `options` do pacote de partida e só depois
+    os demais parâmetros, onde a `libpq` põe o `PGTZ` — o último aplicado
+    vence, e com `PGTZ` definido o servidor fica com o fuso dele (medido com
+    PostgreSQL 18 e libpq 18).
     Teste novo, `tests/integration/test_sessao_em_utc.py`, com `PGTZ` em
     `Asia/Tokyo` e em `America/Sao_Paulo`: `SHOW TimeZone` responde `UTC` em
     dois usos da mesma conexão; `9999-12-31T23:59:59Z` (pedindo leste) e
