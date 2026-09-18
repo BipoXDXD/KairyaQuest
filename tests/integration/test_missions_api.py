@@ -27,7 +27,10 @@ from focusquest.core.database import get_engine, get_session
 from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, xp_para_dificuldade
 from focusquest.modules.missions.models import Mission, MissionOperation, User
-from focusquest.modules.missions.schemas import DIFICULDADE_MAXIMA
+from focusquest.modules.missions.schemas import (
+    DIFICULDADE_MAXIMA,
+    MAIOR_INTEIRO_DA_COLUNA,
+)
 
 # O usuario unico semeado pela migracao (README s8) -- o mesmo que o router
 # assume enquanto nao houver autenticacao.
@@ -317,6 +320,138 @@ def test_o_prazo_do_201_e_o_mesmo_instante_do_get(client: TestClient) -> None:
     esperado = datetime.fromisoformat(prazo)
     assert datetime.fromisoformat(criada["deadline"]) == esperado
     assert datetime.fromisoformat(listada["deadline"]) == esperado
+
+
+# ---------------------------------------------------------------------------
+# Entrada fora da faixa que o armazenamento representa: 422, nunca 500
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "minutos",
+    [MAIOR_INTEIRO_DA_COLUNA + 1, 3_000_000_000, 2**63],
+    ids=["um acima do int4", "tres bilhoes", "2 elevado a 63"],
+)
+def test_estimativa_acima_do_int4_devolve_422(client: TestClient, minutos: int) -> None:
+    """Acima do teto TECNICO da coluna, recusa na borda.
+
+    Sem o `le`, os tres valores chegavam ao INSERT e estouravam a coluna int4
+    -- 500, medido pela revisao final da branch. O teto nao e de negocio
+    ("quanto tempo cabe numa missao" e decisao aberta do dono); e so o maior
+    numero que a coluna guarda.
+    """
+    resposta = client.post("/api/missions", json=_corpo(estimated_minutes=minutos))
+
+    assert resposta.status_code == 422
+    locais = [erro["loc"] for erro in resposta.json()["detail"]]
+    assert ["body", "estimated_minutes"] in locais
+
+
+def test_estimativa_no_teto_do_int4_e_aceita(client: TestClient) -> None:
+    """A borda ACEITA do teto: prova que ele e `le` e nao `lt`, e que o maior
+    valor que a guarda deixa passar cabe mesmo na coluna -- um teto maior que a
+    coluna trocaria o 422 de volta por um 500."""
+    corpo = _criar(client, estimated_minutes=MAIOR_INTEIRO_DA_COLUNA)
+
+    assert corpo["estimated_minutes"] == MAIOR_INTEIRO_DA_COLUNA
+
+
+@pytest.mark.parametrize(
+    "mission_id",
+    [0, -1, MAIOR_INTEIRO_DA_COLUNA + 1, 99_999_999_999],
+    ids=["zero", "negativo", "um acima do int4", "onze digitos"],
+)
+def test_id_de_missao_fora_da_faixa_devolve_422(
+    client: TestClient, mission_id: int
+) -> None:
+    """O id do CAMINHO tambem e entrada, e tambem tem faixa.
+
+    `/api/missions/99999999999/complete` chegava ao banco e estourava o
+    parametro int4 -- 500. O `loc` e `["path", "mission_id"]`, e nao `body`: e
+    ele que prova que quem recusou foi a guarda da rota, e nao outra validacao
+    qualquer do corpo.
+    """
+    resposta = client.post(
+        f"/api/missions/{mission_id}/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert resposta.status_code == 422
+    locais = [erro["loc"] for erro in resposta.json()["detail"]]
+    assert ["path", "mission_id"] in locais
+
+
+def test_id_de_missao_no_teto_do_int4_chega_ao_caso_de_uso(client: TestClient) -> None:
+    """A borda ACEITA: o maior id que a coluna guarda passa pela guarda e recebe
+    o 404 de missao inexistente -- nem 422 (guarda estrita demais) nem 500."""
+    resposta = client.post(
+        f"/api/missions/{MAIOR_INTEIRO_DA_COLUNA}/complete",
+        json={"operation_id": "op-abc"},
+    )
+
+    assert resposta.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "prazo",
+    ["9999-12-31T23:59:59-03:00", "0001-01-01T00:00:00+03:00"],
+    ids=["depois do ano 9999 em UTC", "antes do ano 1 em UTC"],
+)
+def test_prazo_fora_da_faixa_em_utc_devolve_422(client: TestClient, prazo: str) -> None:
+    """A data local cabe no `datetime`; o instante, convertido para UTC, nao.
+
+    O primeiro caso e o medido: `AwareDatetime` o aceitava, a API respondia
+    201 e o PostgreSQL gravava `10000-01-01 02:59:59+00`. O segundo e o
+    espelho na outra borda. O tipo `value_error` na assercao distingue esta
+    recusa das outras do mesmo campo (malformado, sem fuso).
+    """
+    resposta = client.post("/api/missions", json=_corpo(deadline=prazo))
+
+    assert resposta.status_code == 422
+    erros = resposta.json()["detail"]
+    assert ["body", "deadline"] in [erro["loc"] for erro in erros]
+    assert "value_error" in [erro["type"] for erro in erros]
+
+
+def test_prazo_extremo_recusado_nao_quebra_a_listagem(client: TestClient) -> None:
+    """O teste que importa mais que os outros desta secao: o que o usuario ve.
+
+    Antes da guarda, UM prazo extremo aceito deixava o `GET /api/missions`
+    respondendo 500 para sempre -- a linha gravada nao podia mais ser lida, e a
+    tela do Quartel-General ficava presa no estado de erro ate alguem apagar a
+    linha por SQL. Os testes de recusa acima sao meios; este e o fim.
+    """
+    tentativa = client.post(
+        "/api/missions", json=_corpo(deadline="9999-12-31T23:59:59-03:00")
+    )
+
+    listagem = client.get("/api/missions")
+
+    # A listagem e conferida ANTES do status da tentativa, de proposito: sem a
+    # guarda, e ela que quebra (a leitura da linha estoura no psycopg), e o
+    # teste precisa reprovar pelo sintoma que o usuario ve -- nao so pelo 201
+    # que o precede. Medido por mutacao.
+    assert listagem.status_code == 200
+    assert listagem.json() == []
+    assert tentativa.status_code == 422
+
+
+def test_prazo_no_ultimo_instante_representavel_e_aceito_e_lido(
+    client: TestClient,
+) -> None:
+    """A borda ACEITA do prazo, lida de volta: prova que a guarda nao recusa
+    mais do que precisa, e que o que ela aceita a listagem consegue ler.
+
+    Vale com a sessao do PostgreSQL em UTC, que e o padrao do servidor deste
+    projeto. Com a sessao em outro fuso a leitura deste instante estouraria --
+    e o limite registrado no docs/HANDOFF.md, e este teste e o que avisaria se
+    o fuso da sessao mudasse.
+    """
+    criada = _criar(client, deadline="9999-12-31T23:59:59Z")
+
+    listagem = client.get("/api/missions")
+
+    assert listagem.status_code == 200
+    assert [missao["id"] for missao in listagem.json()] == [criada["id"]]
 
 
 # ---------------------------------------------------------------------------

@@ -12,11 +12,12 @@ e o quarto endpoint esqueceria dela.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy.orm import Session
 
 from focusquest.core.database import get_session
 from focusquest.modules.missions.schemas import (
+    MAIOR_INTEIRO_DA_COLUNA,
     MissionComplete,
     MissionCreate,
     MissionRead,
@@ -41,6 +42,13 @@ router = APIRouter(prefix="/api/missions", tags=["missions"])
 # A sessao da requisicao, escrita uma vez. Repetir o `Annotated` em tres
 # assinaturas convidaria a divergirem.
 SessaoDaRequisicao = Annotated[Session, Depends(get_session)]
+
+# O identificador da missao no caminho, limitado a faixa da coluna `id` (int4).
+# Sem o teto, `/api/missions/99999999999/complete` chegava ao banco e estourava
+# o parametro -- 500 em vez de 422. Sem o piso, zero e negativos nao estouram
+# nada, mas nunca serao id de missao: recusar na borda diz isso ao cliente com
+# o `loc` do campo, em vez de um 404 que sugeriria "talvez exista".
+IdDaMissao = Annotated[int, Path(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -84,7 +92,7 @@ def listar(session: SessaoDaRequisicao) -> list[MissionRead]:
 
 @router.post("/{mission_id}/complete")
 def concluir(
-    mission_id: int, dados: MissionComplete, session: SessaoDaRequisicao
+    mission_id: IdDaMissao, dados: MissionComplete, session: SessaoDaRequisicao
 ) -> MissionRead:
     """Conclui a missao, de forma idempotente pelo identificador de operacao.
 

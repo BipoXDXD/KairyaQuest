@@ -13,9 +13,17 @@ banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
 da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+)
 
 from focusquest.modules.missions.domain import (
     MissionState,
@@ -46,6 +54,45 @@ from focusquest.modules.missions.domain import (
 # com dificuldade maior continuariam sendo lidas e precificadas normalmente.
 DIFICULDADE_MAXIMA = 5
 
+# O maior inteiro que cabe numa coluna `Integer` do PostgreSQL (int4). E um teto
+# TECNICO, nao de negocio: acima dele o INSERT estoura a coluna e a API
+# responderia 500 (medido: `estimated_minutes` de 3_000_000_000 e de 2**63, e
+# `/api/missions/99999999999/complete`). Recusar com 422 na borda e o que
+# cumpre "nenhum caminho de erro retorna 500 por omissao".
+#
+# Ele NAO responde "quanto tempo cabe numa missao" -- isso e decisao de
+# produto, deixada em aberto para o dono (docs/HANDOFF.md). Quando ela vier,
+# entra como um teto proprio, com nome proprio, e este continua valendo para os
+# identificadores de rota, que nao tem teto de negocio nenhum.
+MAIOR_INTEIRO_DA_COLUNA = 2**31 - 1
+
+
+def _instante_representavel(prazo: datetime) -> datetime:
+    """Recusa o prazo cujo instante, em UTC, o `datetime` do Python nao representa.
+
+    `AwareDatetime` aceita `9999-12-31T23:59:59-03:00`, porque a data LOCAL
+    cabe no `datetime`. O instante, nao: em UTC ele e `10000-01-01T02:59:59Z`.
+    O PostgreSQL grava esse valor sem reclamar, e a partir dai toda leitura da
+    linha falha no Python -- medido: o `GET /api/missions` passava a responder
+    500 para sempre, ate alguem apagar a linha por SQL.
+
+    A conversao para UTC e a pergunta certa porque e o que a coluna
+    `timestamptz` guarda. Nao ha janela de negocio aqui (prazo no passado, prazo
+    longe demais): essa decisao e do dono e ficou aberta de proposito.
+
+    Limite conhecido, registrado no docs/HANDOFF.md: a leitura volta no fuso da
+    SESSAO do PostgreSQL. Com a sessao em UTC -- o padrao do servidor deste
+    projeto -- esta guarda basta; com a sessao em outro fuso, um instante a
+    poucas horas das bordas passaria aqui e ainda estouraria na leitura.
+    """
+    try:
+        prazo.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError(
+            "prazo fora da faixa representavel quando convertido para UTC"
+        ) from exc
+    return prazo
+
 
 class MissionCreate(BaseModel):
     """O que a API aceita para criar uma missao.
@@ -56,7 +103,10 @@ class MissionCreate(BaseModel):
 
     `deadline` exige FUSO (`AwareDatetime`): um datetime naive e recusado com
     422. O motivo e um defeito medido, nao purismo. A coluna e `timestamptz`,
-    entao a leitura seguinte sempre sai em UTC com `Z`; com
+    entao a leitura seguinte sai com fuso -- no fuso da SESSAO do PostgreSQL,
+    que e quem converte o instante na leitura, e nao a API: com a sessao em UTC
+    (o padrao do servidor deste projeto) sai com `Z`, com a sessao em
+    `America/Sao_Paulo` sai com `-03:00` (medido). Com
     `expire_on_commit=False`, o 201 serializa o objeto como ele CHEGOU no
     pedido. Aceitar naive fazia o mesmo prazo sair em duas serializacoes
     diferentes -- `"...T10:00:00"` no 201 e `"...T10:00:00Z"` no GET --, e em
@@ -72,8 +122,8 @@ class MissionCreate(BaseModel):
     instructions: str = Field(min_length=1)
     completion_criterion: str = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
-    estimated_minutes: int = Field(gt=0)
-    deadline: AwareDatetime
+    estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
+    deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
 
 
 class MissionComplete(BaseModel):
