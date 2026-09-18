@@ -7,11 +7,17 @@ import pytest
 from focusquest.core.config import Settings
 
 
-def test_le_a_url_do_banco_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_le_a_url_do_banco_do_ambiente(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/d")
     monkeypatch.setenv(
         "FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/t"
     )
+    # Sem o chdir, este teste le o .env real do repositorio: com
+    # extra="forbid" ativo, qualquer chave FOCUSQUEST_* que alguem acrescente
+    # la derruba este teste por um motivo que ele nao afirma testar.
+    monkeypatch.chdir(tmp_path)
     settings = Settings()
     assert settings.database_url == "postgresql+psycopg://u:p@h:55432/d"
     assert settings.test_database_url == "postgresql+psycopg://u:p@h:55432/t"
