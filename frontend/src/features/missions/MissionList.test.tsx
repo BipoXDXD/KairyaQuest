@@ -124,6 +124,25 @@ describe('MissionList', () => {
     expect(itens[1]).toHaveAttribute('data-mission-id', '8')
   })
 
+  it('marca a lista com role="list" EXPLICITA, que o list-style do Tailwind removeria', async () => {
+    stubFetchResolving([pendente, concluida])
+
+    render(<MissionList />)
+
+    const lista = await screen.findByTestId('missions-list')
+    // A asseveracao que de fato reprova e a do ATRIBUTO. Medido: com apenas
+    // `getByRole('list')`, apagar o `role="list"` do componente NAO reprova --
+    // o jsdom computa a role implicita do `<ul>` e nao reproduz o
+    // comportamento do Safari/VoiceOver, que remove a role de lista quando o
+    // `list-style` e none (o preflight do Tailwind o zera). Uma guarda que nao
+    // consegue dizer "nao" nao e guarda.
+    expect(lista).toHaveAttribute('role', 'list')
+    // E a arvore de acessibilidade continua expondo lista e itens -- o que a
+    // role explicita existe para preservar.
+    expect(screen.getByRole('list')).toBe(lista)
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
   it('exibe os campos da missao, com o prazo como instante no atributo dateTime', async () => {
     stubFetchResolving([pendente])
 

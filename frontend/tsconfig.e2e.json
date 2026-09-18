@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
+    "target": "es2023",
+    /* Node (o processo do Playwright) MAIS DOM: o cenario roda no Node, mas
+       `evaluateAll` recebe elementos do documento, e sem `DOM` os tipos do
+       Playwright e do axe-core nao resolvem `Element`. */
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode: o Playwright resolve os imports do cenario com o proprio
+       transpilador, que aceita caminho relativo sem extensao -- por isso
+       `bundler`, e nao `nodenext`, que exigiria `./servers.js` para importar
+       um arquivo `.ts`. */
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+  },
+  /* O terceiro projeto existe para que `npm run typecheck` (`tsc -b`) TAMBEM
+     confira o E2E. Sem ele, o `playwright.config.ts` e as specs nao entrariam
+     em nenhum projeto: o Playwright transpila sem conferir tipo, e um erro de
+     tipo no cenario so apareceria como falha de execucao -- ou nao apareceria. */
+  "include": ["playwright.config.ts", "tests/e2e"],
+}

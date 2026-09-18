@@ -132,7 +132,17 @@ function MissionsContent({
 
     case 'loaded':
       return (
-        <ul data-testid="missions-list" className="flex flex-col gap-3">
+        // `role="list"` explicito num `<ul>` nao e redundancia. O preflight do
+        // Tailwind aplica `list-style: none`, e o Safari com VoiceOver REMOVE a
+        // role de lista quando o list-style e none: a lista deixa de ser
+        // anunciada como lista e o leitor de tela perde a contagem de itens.
+        //
+        // Quem guarda este atributo e o teste de unidade -- e pela asseveracao
+        // do ATRIBUTO, nao por `getByRole('list')`: medido, o jsdom computa a
+        // role implicita do `<ul>` e a consulta por role passa mesmo sem o
+        // atributo. O axe em Chromium tambem nao o acusa, porque o defeito e
+        // do Safari. Ver MissionList.test.tsx.
+        <ul role="list" data-testid="missions-list" className="flex flex-col gap-3">
           {state.missions.map((mission) => (
             <MissionCard key={mission.id} mission={mission} />
           ))}

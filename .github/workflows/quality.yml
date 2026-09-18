@@ -30,6 +30,95 @@ jobs:
       - name: Gate do frontend
         run: make check-web
 
+  check-api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # A MESMA versao fixada no compose.yaml. `latest` e proibido pelo
+        # README s10, e uma versao diferente da local faria o CI verificar
+        # outro banco.
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: focusquest
+          POSTGRES_PASSWORD: focusquest_local
+          POSTGRES_DB: focusquest
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U focusquest -d focusquest"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      # As duas variaveis nao tem valor padrao em core/config.py: sem elas o
+      # Settings reprova na partida, e e assim de proposito.
+      FOCUSQUEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest
+      FOCUSQUEST_TEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - name: Instalar dependencias do backend
+        run: uv sync --locked
+      # O `services:` do Actions nao monta o volume de
+      # /docker-entrypoint-initdb.d/ que o compose.yaml usa, entao o
+      # focusquest_test nao nasce com o servico. O arquivo executado aqui e o
+      # MESMO scripts/init-test-db.sql do compose: a DDL do banco de teste
+      # tem um lugar so.
+      - name: Criar o banco de teste
+        run: PGPASSWORD=focusquest_local psql -h 127.0.0.1 -p 55432 -U focusquest -d focusquest -v ON_ERROR_STOP=1 -f scripts/init-test-db.sql
+      - name: Gate do backend
+        run: make check-api
+
+  check-e2e:
+    runs-on: ubuntu-latest
+    services:
+      # Servico PROPRIO deste job, e nao compartilhado com o check-api. E o
+      # que faz a corrida pelo focusquest_test nao existir no CI: cada job tem
+      # o seu PostgreSQL, no seu container.
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: focusquest
+          POSTGRES_PASSWORD: focusquest_local
+          POSTGRES_DB: focusquest
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U focusquest -d focusquest"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      FOCUSQUEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest
+      FOCUSQUEST_TEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - name: Instalar dependencias do frontend
+        run: npm ci
+        working-directory: frontend
+      - name: Instalar dependencias do backend
+        run: uv sync --locked
+      - name: Criar o banco de teste
+        run: PGPASSWORD=focusquest_local psql -h 127.0.0.1 -p 55432 -U focusquest -d focusquest -v ON_ERROR_STOP=1 -f scripts/init-test-db.sql
+      # `--with-deps` AQUI, e nao no macOS: o installDeps() do Playwright so
+      # trata win32 e linux. Em darwin ele e no-op; no runner ubuntu-latest e
+      # ele que instala as bibliotecas de sistema do Chromium.
+      - name: Instalar o Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Gate ponta a ponta
+        run: make check-e2e
+
   check-secrets:
     runs-on: ubuntu-latest
     steps:
@@ -39,14 +128,20 @@ jobs:
 
   quality-gate:
     runs-on: ubuntu-latest
-    needs: [check-web, check-secrets]
+    # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
+    # o agregador aprovaria sem te-lo verificado (limitacao registrada em
+    # docs/QUALITY.md s5). Os quatro jobs de verificacao estao aqui, e o loop
+    # abaixo confere os quatro.
+    needs: [check-web, check-api, check-e2e, check-secrets]
     if: always()
     steps:
       - name: Exigir sucesso explicito de todos os jobs
         run: |
           echo "check-web=${{ needs.check-web.result }}"
+          echo "check-api=${{ needs.check-api.result }}"
+          echo "check-e2e=${{ needs.check-e2e.result }}"
           echo "check-secrets=${{ needs.check-secrets.result }}"
-          for r in "${{ needs.check-web.result }}" "${{ needs.check-secrets.result }}"; do
+          for r in "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}"; do
             if [ "$r" != "success" ]; then
               echo "quality-gate reprovado: um job nao terminou em success" >&2
               exit 1

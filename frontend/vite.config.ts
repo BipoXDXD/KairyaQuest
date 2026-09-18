@@ -27,6 +27,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Os testes de unidade moram ao lado do codigo, em `src/`. O padrao do
+    // Vitest (`**/*.{test,spec}.*`) tambem varre `tests/e2e/`, e MEDIDO:
+    // `npx vitest list --filesOnly` listava `tests/e2e/headquarters.spec.ts`
+    // antes desta linha. O cenario do Playwright rodando sob o jsdom falharia
+    // no import do `@playwright/test` -- uma falha ruidosa, mas sobre nada.
+    //
+    // Isto NAO e exclusao de codigo dificil da cobertura: o denominador de
+    // cobertura e `coverage.include` (`src/**`), que nunca incluiu `tests/`.
+    // Aqui se declara apenas QUEM roda sob o Vitest.
+    include: ['src/**/*.test.{ts,tsx}'],
     // O cliente HTTP recusa carregar sem `VITE_API_URL` (ver
     // src/shared/api/client.ts). Os testes precisam do mesmo valor que o
     // ambiente de desenvolvimento usa; `client.test.ts` sobrescreve com
