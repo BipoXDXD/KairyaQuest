@@ -58,7 +58,9 @@ FocusQuest/
 │   │   │       ├── completionFailure.ts # code de erro → mensagem e ação da tela
 │   │   │       ├── types.ts
 │   │   │       ├── useCompleteMission.test.tsx
-│   │   │       ├── useCompleteMission.ts # conclui uma missão; o operation_id vive num useRef
+│   │   │       ├── useCompleteMission.ts # conclui uma missão; pede e devolve a chave ao registro
+│   │   │       ├── useCompletionRegistry.test.tsx
+│   │   │       ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
 │   │   │       ├── useMissions.test.tsx
 │   │   │       └── useMissions.ts
 │   │   ├── pages/
@@ -395,7 +397,14 @@ na transição ilegal não há o que repetir; no identificador gasto, gera-se um
   `operation_id` gerado no primeiro clique e **mantido entre as tentativas**
   (README §7), e `completionFailure.ts` traduz o `code` de cada falha em
   mensagem e ação (tentar de novo com a mesma chave, com uma chave nova, ou
-  atualizar o quadro).
+  atualizar o quadro). As chaves moram em `useCompletionRegistry.ts`, um
+  registro **por missão** que vive no `MissionList`, acima dos cartões: o
+  reload remonta os cartões, e a chave de uma tentativa com resultado
+  desconhecido tem de sobreviver a isso. O mesmo registro conta as conclusões
+  em voo, e "Atualizar o quadro" pedido com uma delas em voo **espera** — o
+  botão fica desabilitado em "Aguardando a conclusão em andamento…" e o quadro
+  recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
+  React; nada disso sai da feature.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
   `requestJson` (GET) e `postJson` (POST) e a tradução de falha em
   `ApiError`, que carrega `status` e `code`. O cliente **não lê o `detail`**:

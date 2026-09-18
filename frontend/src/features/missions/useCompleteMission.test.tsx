@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { Mission } from './types'
 import { useCompleteMission } from './useCompleteMission'
+import { useCompletionRegistry } from './useCompletionRegistry'
 
 const concluida: Mission = {
   id: 7,
@@ -22,6 +23,21 @@ const concluida: Mission = {
 // so "uma chave qualquer".
 const PRIMEIRA_CHAVE = '00000000-0000-4000-8000-000000000001'
 const SEGUNDA_CHAVE = '00000000-0000-4000-8000-000000000002'
+
+/**
+ * O hook como o quadro o usa: com o registro de verdade, e nao com um falso.
+ *
+ * Assim a sequencia de chaves que o teste le e a que a tela mandaria. O
+ * `reload` e um espiao: aqui so interessa se a conclusao avisa o registro.
+ */
+function renderCompletion() {
+  const reload = vi.fn()
+  const rendered = renderHook(() => {
+    const { registry, reload: requestReload } = useCompletionRegistry(reload)
+    return { ...useCompleteMission(7, registry), requestReload }
+  })
+  return { ...rendered, reload }
+}
 
 /** O `operation_id` de cada POST que o hook fez, na ordem. */
 function sentOperationIds(fetchMock: Mock): string[] {
@@ -53,7 +69,7 @@ describe('useCompleteMission', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     expect(result.current.state).toEqual({ status: 'idle' })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -64,7 +80,7 @@ describe('useCompleteMission', () => {
 
   it('fica em submitting enquanto a resposta nao chega', () => {
     vi.stubGlobal('fetch', vi.fn(pendingForever))
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     act(() => {
       result.current.complete()
@@ -76,7 +92,7 @@ describe('useCompleteMission', () => {
   it('conclui pelo POST da missao e chega em completed com a missao que a API devolveu', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json(concluida))
     vi.stubGlobal('fetch', fetchMock)
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     act(() => {
       result.current.complete()
@@ -98,7 +114,7 @@ describe('useCompleteMission', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(Response.json(concluida))
     vi.stubGlobal('fetch', fetchMock)
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     act(() => {
       result.current.complete()
@@ -126,7 +142,7 @@ describe('useCompleteMission', () => {
       )
       .mockResolvedValueOnce(Response.json(concluida))
     vi.stubGlobal('fetch', fetchMock)
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     act(() => {
       result.current.complete()
@@ -177,7 +193,7 @@ describe('useCompleteMission', () => {
         .mockResolvedValueOnce(respostaDeFalha())
         .mockResolvedValueOnce(Response.json(concluida))
       vi.stubGlobal('fetch', fetchMock)
-      const { result } = renderHook(() => useCompleteMission(7))
+      const { result } = renderCompletion()
 
       act(() => {
         result.current.complete()
@@ -205,7 +221,7 @@ describe('useCompleteMission', () => {
           Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
         ),
     )
-    const { result } = renderHook(() => useCompleteMission(7))
+    const { result } = renderCompletion()
 
     act(() => {
       result.current.complete()
@@ -220,5 +236,111 @@ describe('useCompleteMission', () => {
         },
       })
     })
+  })
+
+  it.each<[string, () => Response]>([
+    ['o sucesso', () => Response.json(concluida)],
+    [
+      'transicao_ilegal',
+      () => Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    ],
+    [
+      'missao_nao_encontrada',
+      () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+    ],
+  ])('depois de %s, a chave sai do registro: um novo envio gera outra', async (_caso, resposta) => {
+    // T5. Essa chave nao tem mais uso -- a missao foi concluida, ou nao ha o
+    // que concluir --, e manter a entrada faria o registro crescer sem limite.
+    // A tela nao oferece Concluir de novo nesses casos; o segundo `complete()`
+    // aqui e so o jeito de ver, por fora, que a entrada saiu.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(resposta())
+      .mockImplementationOnce(pendingForever)
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderCompletion()
+
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).not.toBe('submitting')
+    })
+    act(() => {
+      result.current.complete()
+    })
+
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
+  })
+
+  it('avisa o registro do voo: com o POST pendente, a recarga espera; quando ele termina, sai', async () => {
+    let responder: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            responder = resolve
+          }),
+      ),
+    )
+    const { result, reload } = renderCompletion()
+
+    act(() => {
+      result.current.complete()
+      result.current.requestReload()
+    })
+    expect(reload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      responder(Response.json(concluida))
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('avisa o fim do voo tambem quando o POST falha', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const { result, reload } = renderCompletion()
+
+    act(() => {
+      result.current.complete()
+      result.current.requestReload()
+    })
+    expect(reload).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('avisa o fim do voo UMA vez por envio: a conclusao seguinte em voo ainda segura a recarga', async () => {
+    // Um `settled` a mais deixaria o contador do registro negativo, e a
+    // proxima conclusao em voo nao seguraria mais a recarga -- a remontagem no
+    // meio do pedido voltaria, sem nenhum outro teste reprovar (medido).
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json(concluida))
+        .mockImplementationOnce(pendingForever),
+    )
+    const { result, reload } = renderCompletion()
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('completed')
+    })
+
+    act(() => {
+      result.current.complete()
+      result.current.requestReload()
+    })
+
+    expect(reload).not.toHaveBeenCalled()
   })
 })

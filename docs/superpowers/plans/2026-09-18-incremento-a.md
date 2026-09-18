@@ -72,8 +72,9 @@ Cada uma foi validada executando o plano num worktree descartável. O motivo vai
 | `transicao_ilegal` | some; aparece **Atualizar o quadro** (recarrega a lista) | vazia | "Esta missão já estava concluída. Atualize o quadro para ver o estado atual." |
 | `missao_nao_encontrada` | some; aparece **Atualizar o quadro** | vazia | "Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais." |
 | Missão que já veio `concluida` na lista | nenhum | nenhuma | — |
+| "Atualizar o quadro" pedido com outra conclusão em voo (Task 6) | **Aguardando a conclusão em andamento…**, desabilitado; o quadro recarrega sozinho, uma vez, quando não resta conclusão em voo | a do **quadro** (`missions-reload-status`, fora dos cartões): "Aguardando a conclusão em andamento para atualizar o quadro." | o do cartão, que já estava |
 
-A região `role="status"` existe desde o primeiro render, ainda vazia, porque um leitor de tela só anuncia mudanças numa região viva que já estava no documento.
+A região `role="status"` existe desde o primeiro render, ainda vazia, porque um leitor de tela só anuncia mudanças numa região viva que já estava no documento. A região da espera (Task 6) segue a mesma regra no nível do quadro: existe desde o primeiro render do `MissionList`, em todos os estados da lista.
 
 ## Mapa de arquivos
 

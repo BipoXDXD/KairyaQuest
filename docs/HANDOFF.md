@@ -121,7 +121,9 @@ O motivo de cada uma está também no código citado.
 | O `code` mora em `main.py` (`CodigoDeErro`), com `codigo` obrigatório em `_erro` | É tradução para HTTP. Posto na exceção, `NaoPertenceAoUsuarioError` carregaria `missao_nao_encontrada`, falso no domínio. |
 | O cliente HTTP não lê o `detail`; `ApiError.code` é `string \| null` | Garantia estrutural de que o `detail` não chega à tela; quem consome estreita o `code` com `Object.hasOwn`. |
 | Um mapa exaustivo `code → { message, recovery }` (`completionFailure.ts`) | Mensagem e ação mudam juntas; um `code` novo reprova o `tsc` até ganhar as duas. |
-| O `operation_id` nasce no primeiro clique, num `useRef`, e só troca depois de `operacao_reutilizada` | Uma chave nova por clique transformaria o reenvio numa conclusão nova (409). |
+| O `operation_id` nasce no primeiro clique e só troca depois de `operacao_reutilizada` | Uma chave nova por clique transformaria o reenvio numa conclusão nova (409). |
+| As chaves moram num registro **por missão** no `MissionList` (`useCompletionRegistry`), e não num `useRef` do cartão (Task 6) | O reload remonta os cartões; a chave de uma tentativa com resultado desconhecido morria ali (pendência 35). A chave sai do registro no sucesso, em `transicao_ilegal` e em `missao_nao_encontrada`, para o registro não crescer sem limite. |
+| "Atualizar o quadro" com conclusão em voo **espera**, e recarrega uma vez quando a última termina (Task 6) | Pedido do dono. Sem a espera, o reload remontaria o cartão no meio do POST. A espera sozinha não bastaria: depois de uma falha de rede nada está em voo, e o reload remontaria o cartão do mesmo jeito — por isso as duas peças. |
 | O erro de carregamento da lista mostra a `message` do `ApiError` (`O servidor respondeu 503.`) | A leitura da lista não tem erro de domínio com `code`; o texto é do cliente, e não do backend. |
 
 ### Incrementos anteriores
@@ -177,6 +179,11 @@ Commits `92f92d0`, `c31aa06`, `b38a74a`, `34c7014`, `bdfb49b`:
   estados da tabela do plano e o `operation_id` mantido entre as tentativas.
 - **E2E:** dois cenários novos, concluir e a resposta perdida, com o axe no
   estado concluído e no aviso de falha.
+- **Task 6, pedida pelo dono:** "Atualizar o quadro" espera a conclusão em
+  andamento, e a chave sobrevive à remontagem. `useCompletionRegistry` guarda
+  as chaves por missão no `MissionList` e conta as conclusões em voo;
+  `useCompleteMission` recebe o registro. Região viva do quadro
+  (`missions-reload-status`) desde o primeiro render. Fecha a pendência 35.
 - **Documentação:** este arquivo, o `docs/ARCHITECTURE.md` (árvore,
   contrato de erro, feature `missions`, §5.7) e o `docs/QUALITY.md` §4.
 
@@ -270,8 +277,8 @@ no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
 
 ## Resultados
 
-Executados nesta sessão, na raiz, sobre `96eaeba` com a documentação deste
-incremento aplicada:
+Cada linha registra a revisão em que foi medida; as medições são de sessões
+e de revisões diferentes, e a mais recente fica por último:
 
 | Comando | Resultado |
 |---|---|
@@ -488,7 +495,9 @@ ninguém mexer.
     sem o `check-api` no meio, acumula.
 21. **O axe audita quatro estados** — a lista carregada, o erro de
     carregamento, a missão recém-concluída e o aviso de falha da conclusão
-    —, **mas não o de carregando nem o de envio** ("Concluindo…").
+    —, **mas não o de carregando, nem o de envio** ("Concluindo…"), **nem o
+    de espera do quadro** ("Aguardando a conclusão em andamento…", Task 6),
+    que só os testes de unidade cobrem.
 22. **Um `package-lock.json` defasado passa no `make check` local e reprova no
     CI** — assimetria declarada em `docs/QUALITY.md` §4.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
@@ -619,7 +628,7 @@ que não tinham chegado aqui)
     dos `setState` pode deixar a tela em "falhou" com a missão de fato
     concluída, e o "Tentar de novo" recupera. Ficou assim porque há um único
     consumidor do hook. Um segundo consumidor herda o risco.
-35. **"Atualizar o quadro" descarta a chave de uma conclusão em voo em outro
+35. ~~**"Atualizar o quadro" descarta a chave de uma conclusão em voo em outro
     cartão.** `useCompleteMission(listed.id)` é instanciado por cartão, e o
     `reload` de `useMissions` remonta os cartões. Medido: com o POST da
     missão A pendente, clicar em "Atualizar o quadro" por causa da missão B
@@ -627,12 +636,30 @@ que não tinham chegado aqui)
     o `FOR UPDATE` serializa e a segunda recebe `transicao_ilegal`. Mas a
     tela diria "Esta missão já estava concluída" sobre a conclusão que ela
     mesma fez. A janela é estreita. Saídas: guardar as chaves por
-    `missionId` acima do cartão, ou não desmontar a lista durante o reload.
+    `missionId` acima do cartão, ou não desmontar a lista durante o reload.~~
+    **Resolvida pela Task 6 do Incremento A**, com as duas peças: o
+    "Atualizar o quadro" pedido com conclusão em voo espera e recarrega uma
+    vez quando a última termina; e as chaves moram num registro por missão
+    no `MissionList` (`useCompletionRegistry`), que não desmonta no reload.
+    O cenário medido é o teste T3 de `MissionList.test.tsx`: `/7`, `/8`,
+    "Atualizar o quadro" e `/7` de novo com a **primeira** chave. Provado por
+    mutação: sem a espera, com a chave de volta no cartão, ou sem tirar a
+    entrada no sucesso, o teste correspondente reprova.
 36. **Um erro sem `code` que não se resolve sozinho** (um 422, ou um 404 de
     rota errada) oferece "Tentar de novo é seguro" para sempre —
     `describeCompletionFailure` cai em `UNCONFIRMED` com `recovery: 'retry'`
     e não escala. Hoje a tela não alcança esse caso, porque a chave é UUID
     (não colide) e o id vem da lista (não erra a rota).
+37. **Um POST de conclusão que nunca termina segura o "Atualizar o quadro"
+    para sempre.** A espera da Task 6 só acaba quando não resta conclusão em
+    voo, e o `fetch` não tem timeout próprio: enquanto o navegador mantiver
+    a requisição aberta, o botão fica em "Aguardando a conclusão em
+    andamento…" e o quadro não recarrega sozinho. **Não medido** por quanto
+    tempo o navegador mantém a requisição. Recarregar a página sai da
+    espera, e a chave dessa tentativa se perde com ela (a pendência 35 era
+    sobre a remontagem dos cartões, não sobre recarregar a página). Saída,
+    se virar problema: um `AbortSignal.timeout` no `postJson`, tratado como
+    falha de rede — resultado desconhecido, chave mantida.
 
 ## Próximo incremento
 

@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { postJson } from '../../shared/api/client'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
 import type { Mission } from './types'
+import type { CompletionRegistry } from './useCompletionRegistry'
 
 /**
  * Os estados da conclusao de UMA missao, como uniao discriminada.
@@ -31,35 +32,59 @@ export interface UseCompleteMissionResult {
  * segunda receberia `transicao_ilegal`, e a tela diria "ja estava concluida"
  * sobre uma conclusao que ela mesma acabou de fazer.
  *
- * A chave so e trocada quando a API diz que ela pertence a outra operacao
- * (`operacao_reutilizada`): com ela, toda tentativa seria recusada, e trocar e
- * seguro porque a missao nao foi concluida por ela.
+ * A chave NAO mora aqui: mora no `registry`, que o quadro mantem acima dos
+ * cartoes. Este hook e instanciado por cartao, e o "Atualizar o quadro"
+ * remonta os cartoes; guardada aqui, a chave de uma tentativa com resultado
+ * desconhecido morria na remontagem (pendencia 35 do HANDOFF). Por isso o
+ * registro e argumento: o dono da chave e a missao, e a missao sobrevive ao
+ * cartao.
  *
- * Fica num `useRef`, e nao num `useState`: a chave nao aparece na tela, e
- * troca-la nao deve renderizar nada.
+ * Quando a chave sai do registro, este hook decide pelo resultado:
+ *
+ * - **falha que se repete com a mesma chave** (`recovery: 'retry'` -- rede,
+ *   5xx, 422, `code` desconhecido): a chave FICA. Nao se sabe se o servidor
+ *   concluiu, e so a mesma chave torna o reenvio seguro;
+ * - **`operacao_reutilizada`**: a chave sai, e o proximo envio gera outra. Com
+ *   ela, toda tentativa seria recusada, e trocar e seguro porque a missao nao
+ *   foi concluida por ela;
+ * - **sucesso, `transicao_ilegal`, `missao_nao_encontrada`**: a chave sai,
+ *   porque nao tem mais uso. Mante-la so faria o registro crescer.
+ *
+ * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que
+ * faz o "Atualizar o quadro" esperar a conclusao em andamento.
  */
-export function useCompleteMission(missionId: number): UseCompleteMissionResult {
+export function useCompleteMission(
+  missionId: number,
+  registry: CompletionRegistry,
+): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
-  const operationId = useRef<string | null>(null)
 
   const complete = useCallback(() => {
-    operationId.current ??= crypto.randomUUID()
     setState({ status: 'submitting' })
+    // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
+    // ja encontra esta conclusao em voo.
+    registry.started()
 
     postJson<Mission>(`/missions/${String(missionId)}/complete`, {
-      operation_id: operationId.current,
+      operation_id: registry.operationIdFor(missionId),
     })
       .then((mission) => {
+        registry.release(missionId)
         setState({ status: 'completed', mission })
       })
       .catch((error: unknown) => {
         const failure = describeCompletionFailure(error)
-        if (failure.recovery === 'retry-with-new-operation') {
-          operationId.current = null
+        if (failure.recovery !== 'retry') {
+          registry.release(missionId)
         }
         setState({ status: 'failed', failure })
       })
-  }, [missionId])
+      .finally(() => {
+        // Por ultimo, depois do estado final: se havia recarga esperando, ela
+        // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
+        registry.settled()
+      })
+  }, [missionId, registry])
 
   return { state, complete }
 }
