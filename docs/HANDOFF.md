@@ -18,8 +18,13 @@ aberta; quando ele for mesclado, a base passa a ser a `main`. Spec em
 decisões C12 e C13); plano em
 `docs/superpowers/plans/2026-09-18-incremento-a.md`. Relógio injetável,
 `code` nos erros de domínio e o botão Concluir para as missões avulsas.
-Fecha as pendências 1 e 7. O texto abaixo, até "Incrementos anteriores",
-continua sendo o registro do Incremento 1a.
+Fecha as pendências 1 e 7. **Estado de publicação: a branch não foi
+empurrada.** Ela não tem upstream, nenhum pull request foi aberto e,
+portanto, os jobs do CI **não rodaram** para ela. Está empilhada sobre
+`docs/spec-ciclo-diario` (o PR #6, ainda aberto). O texto abaixo, até
+"Incrementos anteriores", é o registro histórico do Incremento 1a — vale
+como aconteceu, mas seu estado de publicação, descrito logo a seguir, foi
+superado pelo merge do PR #4.
 
 **Incremento 1a — fatia vertical: missões persistidas.** Branch
 `feat/incremento-1a`, aberta a partir de `a869292` (a `main` naquele
@@ -29,10 +34,13 @@ commit que a registra, logo depois deles. Spec em
 `docs/superpowers/specs/2026-09-17-incremento-1a-design.md`; plano em
 `docs/superpowers/plans/2026-09-17-incremento-1a.md`.
 
-**Estado de publicação: a branch não foi empurrada.** Ela não tem upstream,
-nenhum pull request foi aberto e, portanto, os jobs `check-api` e
-`check-e2e` **nunca rodaram no GitHub Actions**. Publicar exige autorização
-do responsável pelo projeto (README §1, `AGENTS.md` §2).
+**Estado de publicação: mesclada pelo PR #4.** A branch `feat/incremento-1a`
+foi empurrada, o PR #4 foi aberto e mesclado à `main` por merge commit
+(`e3ef7bf`, `git log main -1`), e os quatro jobs do CI — `check-api`,
+`check-e2e`, `check-secrets` e `check-web`, mais o `quality-gate` — rodaram e
+passaram nesse PR (`gh pr checks 4`). Publicar exigiu autorização do
+responsável pelo projeto (README §1, `AGENTS.md` §2), já dada para este
+incremento.
 
 O Incremento 1 original (fatia vertical **mais** a tutora) foi dividido em
 dois, por decisão do usuário: **1a** (este) entrega API, PostgreSQL, Alembic,
@@ -263,7 +271,7 @@ incremento aplicada:
 | `make check` sobre a árvore da onda de correção final (a mesma que virou `8b75d69`) | Aprovado, EXIT 0. Frontend: 36 testes, cobertura de 100% nos quatro eixos (50/50 instruções, 22/22 ramificações, 18/18 funções, 48/48 linhas). `uv lock --check` aprovado. Ruff sem achados, 34 arquivos já formatados. mypy sem problemas em 30 arquivos. pytest: 110 testes, 2 avisos, cobertura total de 100%. E2E: 4 cenários aprovados em Chromium, com o navegador em `Asia/Tokyo`. Gitleaks sem achados. |
 | `scripts/check-push.sh`, executado à mão pela entrada padrão, sem push | Aprovado, EXIT 0, cerca de 25 s: `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env` nele, com as variáveis `FOCUSQUEST_*` vindas do repositório principal. O worktree foi removido ao fim. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` | 2 — as missões da última execução do E2E; as anteriores foram apagadas pelo `DROP SCHEMA` da suíte pytest. |
-| Jobs `check-api` e `check-e2e` no GitHub Actions | **Não executados.** A branch não foi empurrada. |
+| Jobs `check-api` e `check-e2e` no GitHub Actions | **Executados e verdes**, no PR #4 (mesclado por `e3ef7bf`), junto com `check-secrets`, `check-web` e `quality-gate` (`gh pr checks 4`). |
 | `make check` duas vezes seguidas, sobre o topo de `feat/incremento-a` | Aprovado, EXIT 0 nas duas. Frontend: 68 testes, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). Backend: 115 testes, cobertura total de 100%. E2E: 6 cenários em Chromium. Gitleaks sem achados. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A) | 4 — as missões da última execução do E2E. |
 
@@ -302,7 +310,7 @@ local, sem aviso. Sem o `.env` e o `make db-up`, o `check-api` e o
 
 ## Pendências
 
-### Resolvidas por este incremento
+### Resolvidas pelo Incremento 1a
 
 1. ~~**Backend sem código de aplicação.**~~ Resolvida: o pacote
    `focusquest`, com o módulo `missions`, a migração e as duas suítes de
@@ -321,6 +329,12 @@ As outras três entradas da lista anterior (integração remota, `AGENTS.md` e
 `CLAUDE.md`, `docs/ARCHITECTURE.md`) eram registros de conclusão do
 Incremento 2, não pendências abertas; estão resumidas em "Incrementos
 anteriores", abaixo.
+
+**O Incremento A resolveu, por sua vez, as pendências 1 e 7 da lista
+"Abertas"** logo a seguir — os dois 409 sem `code` legível por máquina, e o
+relógio não injetável. Estão riscadas nos itens 1 (seção "Contrato e API")
+e 7 (seção "Domínio e persistência"), com o texto de como cada uma foi
+fechada.
 
 ### Abertas
 
@@ -564,6 +578,29 @@ que não tinham chegado aqui)
     a função, e o clique em Concluir lançaria `TypeError` antes de o pedido
     sair. **Não medido**; é o que a especificação da Web Crypto diz. Se
     ninguém mexer, o botão parece não fazer nada nesse cenário.
+34. **`useCompleteMission` não se protege sozinho contra envio duplo.** A
+    única guarda é o `disabled` do botão, que é testada; o hook em si aceita
+    dois `complete()` no mesmo tick. Medido pela revisão final: dois
+    `complete()` no mesmo tick mandam **dois POSTs com a mesma chave**, e o
+    servidor responde 200 aos dois **sem duplicar**, porque a chave é
+    idempotente e a trava serializa. O risco que sobra é cosmético: a ordem
+    dos `setState` pode deixar a tela em "falhou" com a missão de fato
+    concluída, e o "Tentar de novo" recupera. Ficou assim porque há um único
+    consumidor do hook. Um segundo consumidor herda o risco.
+35. **"Atualizar o quadro" descarta a chave de uma conclusão em voo em outro
+    cartão.** `useCompleteMission(listed.id)` é instanciado por cartão, e o
+    `reload` de `useMissions` remonta os cartões. Medido: com o POST da
+    missão A pendente, clicar em "Atualizar o quadro" por causa da missão B
+    e depois em Concluir na A faz a A sair com **chave nova**. Não duplica:
+    o `FOR UPDATE` serializa e a segunda recebe `transicao_ilegal`. Mas a
+    tela diria "Esta missão já estava concluída" sobre a conclusão que ela
+    mesma fez. A janela é estreita. Saídas: guardar as chaves por
+    `missionId` acima do cartão, ou não desmontar a lista durante o reload.
+36. **Um erro sem `code` que não se resolve sozinho** (um 422, ou um 404 de
+    rota errada) oferece "Tentar de novo é seguro" para sempre —
+    `describeCompletionFailure` cai em `UNCONFIRMED` com `recovery: 'retry'`
+    e não escala. Hoje a tela não alcança esse caso, porque a chave é UUID
+    (não colide) e o id vem da lista (não erra a rota).
 
 ## Próximo incremento
 
