@@ -20,8 +20,14 @@ decisões C12 e C13); plano em
 `code` nos erros de domínio e o botão Concluir para as missões avulsas.
 Fecha as pendências 1 e 7. **Estado de publicação: a branch não foi
 empurrada.** Ela não tem upstream, nenhum pull request foi aberto e,
-portanto, os jobs do CI **não rodaram** para ela. Está empilhada sobre
-`docs/spec-ciclo-diario` (o PR #6, ainda aberto). O texto abaixo, até
+portanto, os jobs do CI **não rodaram** para ela.
+**Integração da `main`:** o PR #6 foi mesclado à `main` em `4a9a2a4` (merge
+commit, `gh pr view 6`), e o PR #5 (`fix/sessao-em-utc`, sessão do
+PostgreSQL em UTC) entrou na `main` por rebase, em `2440515` e `c08c2a1`.
+A `origin/main` (`4a9a2a4`) foi integrada nesta branch por **merge**
+(`b6f8c9d`), e não por rebase, para que os SHAs dos commits do Incremento A
+citados abaixo continuem válidos; desde então a base desta branch é a
+`main`. O merge não teve conflito de texto. O texto abaixo, até
 "Incrementos anteriores", é o registro histórico do Incremento 1a — vale
 como aconteceu, mas seu estado de publicação, descrito logo a seguir, foi
 superado pelo merge do PR #4.
@@ -274,8 +280,9 @@ incremento aplicada:
 | `scripts/check-push.sh`, executado à mão pela entrada padrão, sem push | Aprovado, EXIT 0, cerca de 25 s: `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env` nele, com as variáveis `FOCUSQUEST_*` vindas do repositório principal. O worktree foi removido ao fim. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` | 2 — as missões da última execução do E2E; as anteriores foram apagadas pelo `DROP SCHEMA` da suíte pytest. |
 | Jobs `check-api` e `check-e2e` no GitHub Actions | **Executados e verdes**, no PR #4 (mesclado por `e3ef7bf`), junto com `check-secrets`, `check-web` e `quality-gate` (`gh pr checks 4`). |
-| `make check` duas vezes seguidas, sobre o topo de `feat/incremento-a` | Aprovado, EXIT 0 nas duas. Frontend: 68 testes, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). Backend: 115 testes, cobertura total de 100%. E2E: 6 cenários em Chromium. Gitleaks sem achados. |
-| Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A) | 4 — as missões da última execução do E2E. |
+| `make check` duas vezes seguidas, sobre o topo de `feat/incremento-a` **antes** da integração da `main` | Aprovado, EXIT 0 nas duas. Frontend: 68 testes, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). Backend: 115 testes, cobertura total de 100%. E2E: 6 cenários em Chromium. Gitleaks sem achados. |
+| `make check` duas vezes seguidas, sobre o merge da `main` (`b6f8c9d`) | Aprovado, EXIT 0 nas duas. Frontend: 68 testes em 8 arquivos, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). `uv lock --check` aprovado. Ruff sem achados, 37 arquivos já formatados. mypy sem problemas em 33 arquivos. Backend: 122 testes (os 115 do Incremento A, mais os 6 de `test_sessao_em_utc.py` e 1 de `test_migrations.py`, vindos do PR #5), 2 avisos, cobertura total de 100%. E2E: 6 cenários aprovados em Chromium — inclusive o da resposta perdida, que compara o `completed_at` do reenvio com o do primeiro 200 **como texto**, garantido agora pela sessão em UTC. Gitleaks sem achados. |
+| Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A, remedida depois do merge) | 4, duas delas concluídas — as missões da última execução do E2E. |
 
 ## Ambiente verificado
 
@@ -531,7 +538,8 @@ que não tinham chegado aqui)
     conexão da engine, num commit logo depois do merge deste incremento. O
     mesmo commit corrige a docstring daquele teste, que diz avisar qualquer
     mudança de fuso e só avisa a leste.~~
-    **Resolvida na branch `fix/sessao-em-utc` (2026-09-18):**
+    **Resolvida na branch `fix/sessao-em-utc` (2026-09-18), mesclada à
+    `main` pelo PR #5 e integrada ao Incremento A por merge:**
     `create_engine_from_url` registra um `SET TIME ZONE 'UTC'` em toda
     conexão nova, e o `alembic/env.py` passou a criar a engine por ela — as
     engines da aplicação, da suíte e do Alembic nascem no mesmo lugar. O
