@@ -12,8 +12,10 @@
 #
 # A URL NAO esta escrita aqui. Ela vem de `Settings().test_database_url`, o
 # unico lugar do projeto que sabe onde o banco de teste mora: repetir a URL
-# aqui criaria uma segunda copia para divergir da primeira -- e uma credencial
-# versionada.
+# aqui criaria uma segunda copia para divergir da primeira -- quem mudasse a
+# porta ou o nome do banco no .env mudaria um e esqueceria o outro. O motivo e
+# uma fonte so, e nao sigilo: a credencial LOCAL ja esta versionada, de
+# proposito, no compose.yaml, no .env.example e no workflow do CI.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then

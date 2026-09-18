@@ -196,77 +196,24 @@ export FQ_TOOLS_DIR="${ROOT}/.tools"
 # o que atravessa e ENDERECO de banco -- configuracao de ambiente --, nao
 # resultado de verificacao: o worktree continua rodando "make bootstrap" e
 # "make check" inteiros, sobre o codigo que esta sendo enviado, e nenhum alvo
-# e pulado. Segundo, a ausencia da configuracao RECUSA o push (o bloco
-# "faltando" abaixo) em vez de degradar para "pular o check-api": transformar
+# e pulado. Segundo, a ausencia da configuracao RECUSA o push (a recusa
+# de scripts/push-env.sh) em vez de degradar para "pular o check-api": transformar
 # falha de configuracao em gate cego e o defeito oposto, e este projeto ja o
 # consertou no CI.
 #
-# Lista de PERMISSAO por regex ancorada, e NUNCA "source". Um .env deveria ter
-# so pares chave=valor, mas "source" EXECUTA o arquivo: uma linha
-# "rm -rf ~" ou "$(curl ...)" que entrasse ali por acidente ou por malicia
-# rodaria com o shell de quem empurra, e num hook de push isso passaria
-# despercebido. Aqui somente "FOCUSQUEST_<MAIUSCULAS/DIGITOS/_>=" casa --
-# comentario, linha em branco, "export FOO=", nome minusculo e outro prefixo
-# simplesmente nao casam -- e nada e executado.
+# O MECANISMO -- a lista de permissao que le o .env sem executa-lo e a recusa
+# que nomeia o que falta -- mora em scripts/push-env.sh, e nao aqui. Nao e
+# estetica: foi extraido para poder ser TESTADO sem disparar push nem criar
+# worktree (tests/integration/test_push_env.py). Este script chama a MESMA
+# funcao que o teste chama, e nada alem dela; nenhuma linha do mecanismo ficou
+# duplicada aqui.
 #
-# Dois detalhes que quebram uma implementacao ingenua: a divisao e no PRIMEIRO
-# "=" (a classe de caracteres do nome nao inclui "=", e uma URL de banco com
-# senha contem "="), e aspas envolventes sao removidas, como o python-dotenv
-# faz, para o valor chegar ao Settings do mesmo jeito que chega no repositorio
-# principal.
-#
-# Uma variavel JA exportada no ambiente vence a linha do .env. E a mesma
-# precedencia do pydantic-settings (ambiente acima do .env), entao o worktree
-# se comporta como o repositorio principal se comportaria.
-ARQUIVO_ENV="${ROOT}/.env"
-
-if [ -f "$ARQUIVO_ENV" ]; then
-  while IFS= read -r linha || [ -n "$linha" ]; do
-    linha="${linha%$'\r'}"
-    [[ $linha =~ ^(FOCUSQUEST_[A-Z0-9_]*)=(.*)$ ]] || continue
-    nome="${BASH_REMATCH[1]}"
-    valor="${BASH_REMATCH[2]}"
-    case "$valor" in
-      \"*\")
-        valor="${valor#\"}"
-        valor="${valor%\"}"
-        ;;
-      \'*\')
-        valor="${valor#\'}"
-        valor="${valor%\'}"
-        ;;
-    esac
-    if [ -z "${!nome:-}" ]; then
-      export "${nome}=${valor}"
-    fi
-  done <"$ARQUIVO_ENV"
-fi
-
-# Falha FECHADA, nomeando o que falta. Uma mensagem "configure o .env" sem
-# dizer QUAL variavel obriga quem empurra a procurar; e a instrucao concreta
-# evita a reacao que a especificacao proibe (tentar "--no-verify" achando que
-# o gate esta quebrado).
-#
-# Isto recusa tambem um push que so DELETA ref, que nao carrega codigo nenhum.
-# Aceito de proposito: a alternativa e um segundo caminho de codigo, exercitado
-# quase nunca, para relaxar uma guarda -- e uma guarda com excecao que ninguem
-# testa e uma guarda que apodrece. Recusar com a instrucao na tela custa um
-# comando a quem deleta uma branch.
-faltando=""
-for nome in FOCUSQUEST_DATABASE_URL FOCUSQUEST_TEST_DATABASE_URL; do
-  [ -n "${!nome:-}" ] || faltando="${faltando} ${nome}"
-done
-
-if [ -n "$faltando" ]; then
-  echo "!! configuracao ausente: o gate nao pode rodar no worktree de validacao, push rejeitado" >&2
-  echo "!! variaveis obrigatorias sem valor:${faltando}" >&2
-  echo "!! elas nao tem default em src/focusquest/core/config.py, e o worktree temporario nao herda o .env (ele e gitignored)" >&2
-  echo "!! conserte de um dos dois jeitos, no repositorio principal (${ROOT}):" >&2
-  echo "!!   1. crie o .env a partir do modelo:  cp .env.example .env  (e ajuste o que precisar)" >&2
-  echo "!!   2. ou exporte as variaveis no shell que dispara o push" >&2
-  echo "!! NAO existe a opcao de pular o check-api: gate cego nao e gate" >&2
-  exit 1
-fi
+# Chamada SEM "||" nem "if" em volta, de proposito: sob "set -e", o retorno
+# nao-zero da funcao derruba o script com codigo 1 -- a recusa. Qualquer
+# contexto condicional em volta desligaria o "set -e" DENTRO da funcao.
+# shellcheck source=scripts/push-env.sh
+. "${ROOT}/scripts/push-env.sh"
+exportar_env_focusquest "${ROOT}/.env"
 
 while read -r ref_local sha_local; do
   [ -n "$ref_local" ] || continue
