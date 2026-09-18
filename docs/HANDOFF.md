@@ -146,7 +146,7 @@ O `AGENTS.md` §4 exige motivo escrito para infraestrutura nova.
 - **O que ficou sem cache, e por quê:** o Chromium do Playwright no
   `check-e2e`. O `--with-deps` instala pacotes por `apt`, que cache de
   diretório não cobre; o cache restauraria ~300 MB de outro serviço de rede;
-  e o baixador do Playwright já faz 5 tentativas. Ver pendência 32.
+  e o baixador do Playwright já faz 5 tentativas. Ver pendência 39.
 - **Paridade 1:1 preservada:** cache e nova tentativa são preparo de
   ambiente; cada job continua executando um alvo só. `docs/QUALITY.md` §5
   descreve a mudança.
@@ -530,7 +530,7 @@ que não tinham chegado aqui)
     `tests/integration/test_missions_concorrencia.py`; o mypy e o gate não
     acusam. Se ninguém mexer: nada muda no comportamento.
 
-32. **O `check-e2e` ainda vai à rede a cada execução, sem cache.** O passo
+39. **O `check-e2e` ainda vai à rede a cada execução, sem cache.** O passo
     `npx playwright install --with-deps chromium` roda `apt-get update`,
     instala pacotes de fonte por `apt` e baixa ~300 MB de navegador. Ficou
     sem cache de propósito (ver "Infraestrutura de CI: cache do Gitleaks"):
