@@ -793,4 +793,61 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(ESPERA_ANUNCIO)
     expect(listGets(fetchMock)).toBe(1)
   })
+
+  it('T7: se operationIdFor lancar antes do POST, nada fica em voo e o cartao nao trava em "Concluindo..."', async () => {
+    // Regressao da rodada de correcao 1: a ordem antiga era setState
+    // 'submitting' -> registry.started() -> operationIdFor() (que chama
+    // crypto.randomUUID()). Se randomUUID lancasse, o postJson nunca saia e o
+    // `finally` que chama `settled()` tambem nao -- o contador do registro
+    // ficava em 1 para sempre, e o cartao de A ficava preso em "Concluindo...".
+    // Medido com um teste temporario, sobre a ordem antiga:
+    // {gets: 1, reload: "Aguardando a conclusão em andamento…",
+    //  A: "Concluindo… a missão: A"}.
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReset()
+      .mockImplementationOnce(() => {
+        throw new DOMException('randomUUID requires a secure context', 'SecurityError')
+      })
+      .mockReturnValueOnce(K2)
+    const fetchMock = routedFetch({
+      lists: [ok([missaoA, missaoB]), ok([missaoA, missaoB])],
+      posts: { 8: [conflict('transicao_ilegal')] },
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    // Sem error boundary, o React nao rejoga a excecao do manipulador de
+    // evento para quem despachou o clique: ele a reporta como um `ErrorEvent`
+    // em `window` (o mesmo caminho de um erro de producao sem error
+    // boundary). Ouvimos e paramos a propagacao so aqui, na borda do teste,
+    // para o erro esperado nao virar excecao nao tratada -- nada na producao
+    // engole nada.
+    const reportedErrors: ErrorEvent[] = []
+    const onWindowError = (event: ErrorEvent) => {
+      reportedErrors.push(event)
+      event.preventDefault()
+    }
+    window.addEventListener('error', onWindowError)
+    try {
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    } finally {
+      window.removeEventListener('error', onWindowError)
+    }
+    expect(reportedErrors).toHaveLength(1)
+    expect((reportedErrors[0]?.error as Error).message).toMatch(/secure context/)
+
+    // O cartao de A NAO ficou em "Concluindo...": a chave nunca nasceu, entao
+    // nem `setState` nem `registry.started()` rodaram.
+    const concluirA = within(card(7)).getByTestId('mission-complete')
+    expect(concluirA).toHaveTextContent('Concluir')
+    expect(concluirA).not.toBeDisabled()
+
+    // Nada de A ficou em voo: o "Atualizar o quadro" pedido pelo transicao_
+    // ilegal de B recarrega NA HORA, sem entrar em espera.
+    const atualizar = await bPedeAtualizar()
+    fireEvent.click(atualizar)
+
+    expect(listGets(fetchMock)).toBe(2)
+    expect(screen.getByTestId('missions-reload-status')).toBeEmptyDOMElement()
+  })
 })

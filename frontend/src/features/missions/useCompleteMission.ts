@@ -60,13 +60,20 @@ export function useCompleteMission(
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
 
   const complete = useCallback(() => {
+    // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
+    // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
+    // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
+    // que nunca vai settle. Antes desta ordem, uma excecao aqui deixava o
+    // contador do registro preso em 1 para sempre (regressao medida na
+    // revisao da Task 6).
+    const operationId = registry.operationIdFor(missionId)
     setState({ status: 'submitting' })
     // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
     // ja encontra esta conclusao em voo.
     registry.started()
 
     postJson<Mission>(`/missions/${String(missionId)}/complete`, {
-      operation_id: registry.operationIdFor(missionId),
+      operation_id: operationId,
     })
       .then((mission) => {
         registry.release(missionId)

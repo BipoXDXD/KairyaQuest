@@ -498,7 +498,12 @@ ninguém mexer.
     carregamento, a missão recém-concluída e o aviso de falha da conclusão
     —, **mas não o de carregando, nem o de envio** ("Concluindo…"), **nem o
     de espera do quadro** ("Aguardando a conclusão em andamento…", Task 6),
-    que só os testes de unidade cobrem.
+    que só os testes de unidade cobrem. **Achado na rodada de correção 1 da
+    Task 6:** um botão com foco perde o foco no Chromium quando fica
+    `disabled` — o `activeElement` vira `body`. É o caso do "Atualizar o
+    quadro" durante a espera: quem o ativou pelo teclado e o mantinha
+    focado perde o foco assim que ele desabilita. Nem o E2E nem o axe
+    auditam isso.
 22. **Um `package-lock.json` defasado passa no `make check` local e reprova no
     CI** — assimetria declarada em `docs/QUALITY.md` §4.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
@@ -661,6 +666,20 @@ que não tinham chegado aqui)
     sobre a remontagem dos cartões, não sobre recarregar a página). Saída,
     se virar problema: um `AbortSignal.timeout` no `postJson`, tratado como
     falha de rede — resultado desconhecido, chave mantida.
+38. **O registro de chaves (`useCompletionRegistry`) pode reter uma entrada
+    além do necessário**, nos dois casos em que a missão com falha de
+    resultado desconhecido (`recovery: 'retry'`) deixa de oferecer um
+    Concluir que a solte:
+    - a missão **some da lista**, apagada em outro lugar. A chave fica no
+      registro até a página recarregar;
+    - a missão **volta como `concluida`** num "Atualizar o quadro"
+      seguinte, porque o servidor tinha mesmo concluído a operação cujo
+      resultado o cliente não confirmou. O cartão não oferece mais
+      Concluir (`concluida` é terminal, A5), então nada solta a chave, que
+      fica no registro até a página recarregar.
+    O crescimento é limitado — só cresce com falhas de resultado
+    desconhecido, uma por missão — e não foi resolvido: fica registrado
+    como limitação, não como bug esquecido.
 
 ## Próximo incremento
 
