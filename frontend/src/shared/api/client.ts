@@ -37,7 +37,16 @@ if (typeof configured !== 'string' || configured.length === 0) {
 
 const BASE_URL = configured
 
-/** Falha de uma chamada a API, com o status quando houve resposta. */
+/**
+ * Falha de uma chamada a API, com o status e o `code` quando houve resposta.
+ *
+ * A `message` e escrita por ESTE cliente, em pt-BR, e nunca vem do `detail` do
+ * backend. O `detail` e prosa para quem depura: nao tem acento, e o da transicao
+ * ilegal expoe o valor cru do estado. Quem precisa decidir -- que mensagem
+ * mostrar, se da para tentar de novo -- decide pelo `code` (spec do ciclo
+ * diario, secao Erros). O `detail` nem e lido, e e isso que garante que ele nao
+ * chega a tela por um caminho que alguem esqueceu.
+ */
 export class ApiError extends Error {
   /**
    * O status HTTP, ou `null` quando nao houve resposta nenhuma.
@@ -47,26 +56,59 @@ export class ApiError extends Error {
    */
   readonly status: number | null
 
-  constructor(message: string, status: number | null, options?: ErrorOptions) {
+  /**
+   * O `code` legivel por maquina do corpo de erro, ou `null` quando ele nao
+   * veio: falha de rede, 422 do FastAPI (que nao tem `code`), corpo que nao e
+   * JSON, `code` que nao e texto.
+   *
+   * E `string`, e nao a uniao dos codigos conhecidos: o cliente nao sabe quais
+   * codigos cada tela entende, e afirmar a uniao aqui seria uma conversao de
+   * tipo sem verificacao. Quem consome estreita o valor.
+   */
+  readonly code: string | null
+
+  constructor(message: string, status: number | null, code: string | null, options?: ErrorOptions) {
     super(message, options)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
 /**
- * Le o `detail` do corpo de erro da API, ou `null` quando ele nao existe.
+ * Le o `code` do corpo de erro da API, ou `null` quando ele nao existe.
  *
- * A chave e `detail` em ingles porque e contrato de payload; a prosa dentro
- * dela vem em pt-BR do backend e pode ir direto para a tela. Nem todo corpo de
- * erro tem `detail` de texto: o 422 do FastAPI manda uma LISTA de erros de
- * validacao, e um proxy no caminho pode devolver HTML. Nos dois casos a funcao
- * responde `null` e quem chamou usa a mensagem com o status.
+ * Nem todo corpo de erro tem `code`: o 422 do FastAPI manda so a lista de erros
+ * de validacao em `detail`, e um proxy no caminho pode devolver HTML.
  */
-async function readDetail(response: Response): Promise<string | null> {
+async function readCode(response: Response): Promise<string | null> {
   const body: unknown = await response.json().catch(() => null)
-  const detail = (body as { detail?: unknown } | null)?.detail
-  return typeof detail === 'string' ? detail : null
+  const code = (body as { code?: unknown } | null)?.code
+  return typeof code === 'string' ? code : null
+}
+
+/**
+ * Faz o pedido e traduz qualquer falha em `ApiError`. E o unico `fetch` da
+ * aplicacao.
+ *
+ * O tipo `T` e uma afirmacao de quem chama, nao uma validacao: o cliente nao
+ * valida o formato do corpo. Validar aqui exigiria um schema por endpoint, e o
+ * contrato ja e verificado do outro lado, pelos testes do backend.
+ */
+async function send<T>(path: string, init: RequestInit): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${BASE_URL}${path}`, init)
+  } catch (cause) {
+    throw new ApiError('Não foi possível falar com o servidor.', null, null, { cause })
+  }
+
+  if (!response.ok) {
+    const code = await readCode(response)
+    throw new ApiError(`O servidor respondeu ${String(response.status)}.`, response.status, code)
+  }
+
+  return (await response.json()) as T
 }
 
 /**
@@ -74,29 +116,23 @@ async function readDetail(response: Response): Promise<string | null> {
  *
  * `path` comeca com barra e NAO termina com barra: `/api/missions/` responde
  * 307 e gasta um round-trip a cada chamada, em silencio.
- *
- * O tipo `T` e uma afirmacao de quem chama, nao uma validacao: o cliente nao
- * valida o formato do corpo. Validar aqui exigiria um schema por endpoint, e o
- * contrato ja e verificado do outro lado, pelos testes do backend.
  */
 export async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  let response: Response
-  try {
-    response = await fetch(`${BASE_URL}${path}`, {
-      headers: { Accept: 'application/json' },
-      signal,
-    })
-  } catch (cause) {
-    throw new ApiError('Não foi possível falar com o servidor.', null, { cause })
-  }
+  return send<T>(path, { headers: { Accept: 'application/json' }, signal })
+}
 
-  if (!response.ok) {
-    const detail = await readDetail(response)
-    throw new ApiError(
-      detail ?? `O servidor respondeu ${String(response.status)}.`,
-      response.status,
-    )
-  }
-
-  return (await response.json()) as T
+/**
+ * Faz um POST em `path` com `body` serializado em JSON, e devolve a resposta.
+ *
+ * Nao recebe `AbortSignal`, de proposito: o unico POST da tela e a conclusao
+ * de missao, e cancelar um pedido que muda estado no servidor nao desfaz a
+ * mudanca -- so esconde da tela se ela aconteceu. Quem precisa saber repete o
+ * pedido com o mesmo `operation_id`, que e idempotente.
+ */
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return send<T>(path, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }

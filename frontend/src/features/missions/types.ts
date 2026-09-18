@@ -52,3 +52,14 @@ export const MISSION_STATE_LABELS: Record<MissionState, string> = {
   em_andamento: 'Em andamento',
   concluida: 'Concluída',
 }
+
+/**
+ * Os `code` de erro que as rotas de missao devolvem (spec do ciclo diario,
+ * decisao C12). Espelha `CodigoDeErro`, em src/focusquest/main.py, e nada amarra
+ * os dois automaticamente: um code novo no backend entra aqui a mao, e entao o
+ * `tsc` exige a traducao dele em `completionFailure.ts`.
+ *
+ * Sao DADOS, nao texto de interface: a tela nunca mostra o code, e nunca mostra
+ * o `detail` que vem junto.
+ */
+export type MissionErrorCode = 'missao_nao_encontrada' | 'transicao_ilegal' | 'operacao_reutilizada'

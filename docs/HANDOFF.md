@@ -294,14 +294,19 @@ ninguém mexer.
    (os dois 404, idênticos byte a byte), `transicao_ilegal` e
    `operacao_reutilizada`, no enum `CodigoDeErro` de `main.py`. O 422 de
    validação continua no formato do FastAPI, sem `code`.
-   **E a prosa do `detail` também não está pronta para a tela**, ao contrário
+   ~~**E a prosa do `detail` também não está pronta para a tela**, ao contrário
    do que o comentário de `frontend/src/shared/api/client.ts` afirma ("pode ir
    direto para a tela"): as mensagens do backend não têm acento
    (`"missao nao encontrada"`), e a de transição ilegal expõe o valor cru do
    enum (`'em_andamento'`), o que contraria a regra do próprio frontend de
    nunca mostrar estado cru. Hoje é inalcançável — a tela só faz GET —, mas
    precisa ser resolvido junto com o `code`, antes de ligar o fluxo de
-   conclusão.
+   conclusão.~~ **Resolvida no Incremento A:** o cliente HTTP não lê mais o
+   `detail`. O `ApiError` carrega `status` e `code`, e a `message` dele é
+   escrita pelo cliente (`O servidor respondeu 409.`). A conclusão traduz o
+   `code` por um mapa exaustivo sobre o tipo (`completionFailure.ts`), e um
+   `code` desconhecido cai numa mensagem genérica. O comentário de
+   `client.ts` foi corrigido.
 2. **O `/openapi.json` não expressa a exigência de fuso em `deadline`.** O
    schema diz só `date-time`; a recusa do datetime sem fuso é verificada em
    runtime. Um cliente gerado do schema só a descobre ao receber o 422.

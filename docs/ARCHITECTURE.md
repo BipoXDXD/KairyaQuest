@@ -54,6 +54,8 @@ FocusQuest/
 │   │   │   └── missions/          # a feature de missões: tipos, hook de dados e componente
 │   │   │       ├── MissionList.test.tsx
 │   │   │       ├── MissionList.tsx
+│   │   │       ├── completionFailure.test.ts
+│   │   │       ├── completionFailure.ts # code de erro → mensagem e ação da tela
 │   │   │       ├── types.ts
 │   │   │       ├── useMissions.test.tsx
 │   │   │       └── useMissions.ts
@@ -379,8 +381,11 @@ na transição ilegal não há o que repetir; no identificador gasto, gera-se um
   tela como união discriminada (carregando, vazio, erro, carregado), e
   `MissionList.tsx` os desenha.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
-  a tradução de falha em `ApiError`. Os demais `shared/` (`ui/`, `hooks/`,
-  `lib/`, `types/`) continuam contrato.
+  `requestJson` (GET) e `postJson` (POST) e a tradução de falha em
+  `ApiError`, que carrega `status` e `code`. O cliente **não lê o `detail`**:
+  a `message` do `ApiError` é escrita por ele, e quem decide o que mostrar
+  decide pelo `code`. Os demais `shared/` (`ui/`, `hooks/`, `lib/`, `types/`)
+  continuam contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
 - **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
@@ -509,8 +514,11 @@ legitimamente pertence a ele — nunca antes.
 7. **Idioma: interface em português do Brasil; contratos externos em
    inglês; identificadores internos podem ficar em português** (README §3).
    Contrato externo são nomes de coluna, chaves de payload JSON e rotas —
-   o que atravessa o sistema. O texto que a pessoa lê é pt-BR, inclusive a
-   prosa dentro do `detail` de um erro. Nomes internos do código Python
+   o que atravessa o sistema. O texto que a pessoa lê é pt-BR com acento, e
+   é escrito pelo frontend: a prosa do `detail` de um erro é pt-BR **sem
+   acento**, para quem depura, e a tela nunca a mostra — ela decide pelo
+   `code`. Os valores de `code` estão em português pela mesma razão dos
+   valores de estado: são dado, não chave. Nomes internos do código Python
    (`criar_missao`, `xp_para_dificuldade`, `DIFICULDADE_MAXIMA`) estão em
    português; os valores do estado da missão (`pendente`, `em_andamento`,
    `concluida`) também, por serem dado e não chave de payload.

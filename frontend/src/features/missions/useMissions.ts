@@ -27,8 +27,10 @@ export interface UseMissionsResult {
 /**
  * Mensagem para a pessoa a partir do erro.
  *
- * O `ApiError` ja carrega prosa em pt-BR -- vinda do `detail` do backend ou
- * montada pelo cliente --, entao ela vai direto. Qualquer outra coisa e um
+ * O `ApiError` ja carrega prosa em pt-BR, escrita pelo cliente HTTP -- nunca o
+ * `detail` do backend, que o cliente nem le --, entao ela vai direto. A leitura
+ * da lista nao tem erro de dominio com `code`: o que chega aqui e rede fora ou
+ * servidor falhando, e o status basta. Qualquer outra coisa e um
  * defeito nosso, e nao tem mensagem propria que ajude alguem: falar
  * "SyntaxError: Unexpected token" para quem quer estudar nao informa nada.
  */

@@ -76,8 +76,10 @@ describe('MissionList', () => {
 
     const erro = await screen.findByTestId('missions-error')
     expect(erro).toHaveAttribute('role', 'alert')
-    expect(erro).toHaveTextContent('Banco indisponível.')
+    expect(erro).toHaveTextContent('O servidor respondeu 503.')
     expect(erro).toHaveTextContent(/falha ao carregar/i)
+    // A prosa do backend nao chega a tela (spec do ciclo diario, secao Erros).
+    expect(erro).not.toHaveTextContent('Banco indisponível.')
     // O ponto do teste: o erro nao diz "nenhuma missão", porque nao se sabe
     // se existem missoes -- so se sabe que nao foi possivel ler.
     expect(erro).not.toHaveTextContent(/nenhuma missão/i)
