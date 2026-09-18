@@ -25,12 +25,17 @@ worktree novo:
 ```bash
 make bootstrap
 uv run pre-commit install --install-hooks
+cp .env.example .env
+make db-up
+make migrate-test
 make check
 ```
 
 Sem o segundo comando, `git commit` e `git push` funcionam sem nenhuma
-validação e sem nenhum aviso de que o gate não está ativo. O procedimento
-completo, com o motivo de os três comandos serem separados, está em
+validação e sem nenhum aviso de que o gate não está ativo. Sem o `.env` e
+sem o PostgreSQL de pé (`make db-up`), o `check-api` e o `check-e2e`
+reprovam. O procedimento completo, com o motivo de a instalação dos hooks
+ser separada do `make bootstrap` e o papel de cada passo, está em
 `docs/QUALITY.md`, seção "Primeiro uso após clonar".
 
 ## 2. Fluxo de trabalho
@@ -115,20 +120,21 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   apenas descrevem o que a configuração impõe. O "100%" escrito aqui vale
   enquanto bater com o `vite.config.ts`; se não bater, o `vite.config.ts` está
   certo e os dois documentos estão errados.
-- **Ruff e mypy estão declarados mas fora do gate, de propósito.** O
-  `pyproject.toml` configura os dois e o `uv.lock` os fixa, mas nenhum alvo do
-  `make check` os executa: **não existe um único arquivo `.py` no
-  repositório**, e uma etapa que sempre passa vazia é o "sucesso com suíte
-  vazia" que o README §9 proíbe. Isto é um **contrato**: quem criar o primeiro
-  módulo Python traz, no mesmo incremento, o alvo `check-api` (Ruff lint,
-  Ruff `format --check`, mypy estrito, pytest com cobertura) e o job
-  correspondente. O mesmo vale para `check-e2e` junto com o primeiro fluxo
-  ponta a ponta real.
-  **Fonte de verdade:** enquanto o alvo não existir, é `docs/QUALITY.md` §4 —
-  um contrato sobre algo inexistente só pode morar num documento, e aquela
-  tabela é o texto normativo. No instante em que `check-api` existir no
-  `Makefile`, a fonte passa a ser o `Makefile`, e as duas descrições (aqui e
-  no `docs/QUALITY.md` §4) viram descrição do alvo real, não contrato.
+- **Ruff, mypy e pytest estão no gate, pelo alvo `check-api`; Playwright e
+  axe-core, pelo `check-e2e`.** Os dois alvos nasceram no Incremento 1a,
+  junto com o primeiro código Python e o primeiro fluxo ponta a ponta — a
+  regra que os exigia (nenhum ecossistema entra sem o seu alvo no mesmo
+  incremento) foi cumprida, e continua valendo para o próximo que entrar. O
+  `check-api` roda `uv lock --check`, Ruff lint, Ruff `format --check`, mypy
+  estrito sobre `src tests alembic` e pytest com cobertura de 100%; ele e o
+  `check-e2e` precisam de um PostgreSQL de pé e **não podem rodar ao mesmo
+  tempo na mesma máquina** — os dois usam o banco `focusquest_test`, e a
+  suíte pytest faz `DROP SCHEMA` nele (`docs/QUALITY.md` §4).
+  **Fonte de verdade:** o `Makefile`. Até o alvo existir, a fonte era o
+  `docs/QUALITY.md` §4, porque um contrato sobre algo inexistente só podia
+  morar num documento; com as receitas escritas, este item e aquela seção
+  são descrição do alvo real, e se divergirem da receita, a receita está
+  certa.
 - **Justifique dependência, contrato e infraestrutura.** Nenhuma biblioteca,
   nenhum endpoint e nenhum serviço entram sem um motivo escrito no
   `docs/HANDOFF.md`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
