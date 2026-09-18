@@ -384,8 +384,10 @@ a nega.
 
 ## Relógio e fusos
 
-- **`core/clock.py`** expõe uma dependência que devolve o instante atual, com
-  fuso. O serviço deixa de chamar `datetime.now(UTC)` diretamente.
+- **`core/clock.py`** expõe uma dependência que devolve o **relógio**
+  (`Clock = Callable[[], datetime]`), não o instante: um instante resolvido
+  pelo FastAPI seria lido antes da rota começar, portanto antes da trava
+  (decisão C13). O serviço deixa de chamar `datetime.now(UTC)` diretamente.
 - **Base de fusos do Python.** Dia e semana são calculados com `zoneinfo`. O
   pacote **`tzdata`** entra para garantir que **exista** uma base de fusos IANA
   em qualquer máquina. A base do sistema continua tendo precedência: o `zoneinfo`

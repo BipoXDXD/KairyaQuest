@@ -51,10 +51,16 @@ FocusQuest/
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
-│   │   │   └── missions/          # a feature de missões: tipos, hook de dados e componente
+│   │   │   └── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
 │   │   │       ├── MissionList.test.tsx
 │   │   │       ├── MissionList.tsx
+│   │   │       ├── completionFailure.test.ts
+│   │   │       ├── completionFailure.ts # code de erro → mensagem e ação da tela
 │   │   │       ├── types.ts
+│   │   │       ├── useCompleteMission.test.tsx
+│   │   │       ├── useCompleteMission.ts # conclui uma missão; pede e devolve a chave ao registro
+│   │   │       ├── useCompletionRegistry.test.tsx
+│   │   │       ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
 │   │   │       ├── useMissions.test.tsx
 │   │   │       └── useMissions.ts
 │   │   ├── pages/
@@ -101,6 +107,7 @@ FocusQuest/
 │       ├── core/                  # infraestrutura comum a todos os módulos
 │       │   ├── __init__.py
 │       │   ├── base.py            # base declarativa do SQLAlchemy
+│       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
 │       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
 │       │   ├── database.py        # engine e sessão por requisição
 │       │   └── errors.py          # erros de domínio comuns
@@ -129,6 +136,7 @@ FocusQuest/
 │   │   └── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
 │   └── unit/                      # sem banco
 │       ├── __init__.py
+│       ├── test_clock.py
 │       ├── test_config.py
 │       ├── test_missions_domain.py
 │       └── test_package.py
@@ -289,6 +297,12 @@ concluir missão ou confirmar recompensa por conta própria.
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
   nem token.
+- **O instante da conclusão vem do relógio injetado.** A rota de concluir
+  recebe o relógio pela dependência `get_clock` (`core/clock.py`) e o repassa
+  ao serviço, que o lê **depois** de travar a linha (decisão C13 da spec do
+  ciclo diário). A dependência entrega o relógio, e não o instante: um
+  instante resolvido pelo FastAPI seria lido antes da trava. Os testes o
+  substituem por `dependency_overrides`.
 - **Sem barra final.** As rotas são `/api/missions`, sem `/` no fim. Um
   pedido a `/api/missions/` recebe **`307`** com `Location` apontando para
   `/api/missions` (o redirecionamento automático do FastAPI/Starlette;
@@ -345,24 +359,24 @@ concluir missão ou confirmar recompensa por conta própria.
   chave de payload. Não existe endpoint de iniciar missão: `em_andamento` e
   `started_at` existem no modelo e no domínio, mas as rotas atuais não os
   alcançam, e por isso `actual_duration_minutes` sai sempre `null` por elas.
-- **Corpo de erro**: `{"detail": ...}`, com a **chave em inglês** (a mesma
-  que o FastAPI usa no 422 de validação) e a **prosa em pt-BR**. O 422 de
-  validação mantém o formato nativo do FastAPI, em que `detail` é uma
-  **lista** de erros, não um texto.
+- **Corpo de erro de domínio**: `{"detail": ..., "code": ...}`, com as
+  **chaves em inglês**. O `code` é o que o cliente lê para decidir; o
+  `detail` é prosa em pt-BR **sem acento**, para quem depura, e a tela nunca
+  o mostra. Os códigos estão no enum `CodigoDeErro` de `main.py` e são só os
+  que algum handler devolve. O 422 de validação mantém o formato nativo do
+  FastAPI, em que `detail` é uma **lista** de erros e não há `code`.
 
-| Situação | Status | `detail` |
-|---|---|---|
-| Missão inexistente | `404` | `"missao nao encontrada"` |
-| Missão de outro usuário | `404`, não 403 | o **mesmo** corpo do 404 acima — responder diferente revelaria que o recurso existe |
-| Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
-| `operation_id` já gasto em outra operação | `409` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
-| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | lista de erros do FastAPI |
+| Situação | Status | `code` | `detail` |
+|---|---|---|---|
+| Missão inexistente | `404` | `missao_nao_encontrada` | `"missao nao encontrada"` |
+| Missão de outro usuário | `404`, não 403 | `missao_nao_encontrada` | o **mesmo** corpo do 404 acima, byte a byte: responder diferente revelaria que o recurso existe |
+| Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | `transicao_ilegal` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
+| `operation_id` já gasto em outra operação | `409` | `operacao_reutilizada` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
+| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | — | lista de erros do FastAPI |
 
-Os dois 409 **não têm um `code` legível por máquina**: só a mensagem em
-português os distingue, e a ação correta do cliente é oposta nos dois
-(transição ilegal: não há o que repetir; identificador gasto: gerar um
-`operation_id` novo e repetir o mesmo corpo). Registrado como pendência em
-`docs/HANDOFF.md`.
+Os dois 409 pedem ações **opostas** do cliente, e é o `code` que os separa:
+na transição ilegal não há o que repetir; no identificador gasto, gera-se um
+`operation_id` novo e repete-se o mesmo corpo.
 
 ### Frontend — parte descrição, parte contrato
 
@@ -378,10 +392,25 @@ português os distingue, e a ação correta do cliente é oposta nos dois
   componentes, hooks, contratos e testes **daquele** assunto, agrupados. Em
   `missions`, `useMissions.ts` busca os dados e expõe os quatro estados de
   tela como união discriminada (carregando, vazio, erro, carregado), e
-  `MissionList.tsx` os desenha.
+  `MissionList.tsx` os desenha. Cada cartão ainda não concluído tem o botão
+  **Concluir**: `useCompleteMission.ts` envia `POST /complete` com um
+  `operation_id` gerado no primeiro clique e **mantido entre as tentativas**
+  (README §7), e `completionFailure.ts` traduz o `code` de cada falha em
+  mensagem e ação (tentar de novo com a mesma chave, com uma chave nova, ou
+  atualizar o quadro). As chaves moram em `useCompletionRegistry.ts`, um
+  registro **por missão** que vive no `MissionList`, acima dos cartões: o
+  reload remonta os cartões, e a chave de uma tentativa com resultado
+  desconhecido tem de sobreviver a isso. O mesmo registro conta as conclusões
+  em voo, e "Atualizar o quadro" pedido com uma delas em voo **espera** — o
+  botão fica desabilitado em "Aguardando a conclusão em andamento…" e o quadro
+  recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
+  React; nada disso sai da feature.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
-  a tradução de falha em `ApiError`. Os demais `shared/` (`ui/`, `hooks/`,
-  `lib/`, `types/`) continuam contrato.
+  `requestJson` (GET) e `postJson` (POST) e a tradução de falha em
+  `ApiError`, que carrega `status` e `code`. O cliente **não lê o `detail`**:
+  a `message` do `ApiError` é escrita por ele, e quem decide o que mostrar
+  decide pelo `code`. Os demais `shared/` (`ui/`, `hooks/`, `lib/`, `types/`)
+  continuam contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
 - **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
@@ -452,6 +481,7 @@ legitimamente pertence a ele — nunca antes.
 |---|---|---|
 | Rota HTTP | `src/focusquest/modules/<módulo>/router.py`, registrada em `src/focusquest/main.py` com `include_router` | existe (`missions`) |
 | Tradução de erro de domínio em status HTTP | `src/focusquest/main.py`, com `exception_handler` — em um lugar só, não por rota | existe |
+| Código de erro (`code`) do contrato HTTP | `src/focusquest/main.py`, enum `CodigoDeErro`, junto dos handlers — nunca nas exceções do domínio | existe |
 | Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` | existe (`missions`) |
 | Caso de uso | `src/focusquest/modules/<módulo>/service.py` | existe (`missions`) |
 | Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` | existe (`missions`) |
@@ -509,8 +539,11 @@ legitimamente pertence a ele — nunca antes.
 7. **Idioma: interface em português do Brasil; contratos externos em
    inglês; identificadores internos podem ficar em português** (README §3).
    Contrato externo são nomes de coluna, chaves de payload JSON e rotas —
-   o que atravessa o sistema. O texto que a pessoa lê é pt-BR, inclusive a
-   prosa dentro do `detail` de um erro. Nomes internos do código Python
+   o que atravessa o sistema. O texto que a pessoa lê é pt-BR com acento, e
+   é escrito pelo frontend: a prosa do `detail` de um erro é pt-BR **sem
+   acento**, para quem depura, e a tela nunca a mostra — ela decide pelo
+   `code`. Os valores de `code` estão em português pela mesma razão dos
+   valores de estado: são dado, não chave. Nomes internos do código Python
    (`criar_missao`, `xp_para_dificuldade`, `DIFICULDADE_MAXIMA`) estão em
    português; os valores do estado da missão (`pendente`, `em_andamento`,
    `concluida`) também, por serem dado e não chave de payload.

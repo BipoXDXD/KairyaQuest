@@ -23,6 +23,7 @@ from sqlalchemy import Engine, delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
+from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, xp_para_dificuldade
@@ -39,6 +40,9 @@ ESTUDANTE = 1
 # dono diferente. Sem ele o handler de NaoPertenceAoUsuarioError seria
 # inalcancavel pela API, e um ramo inalcancavel e um ramo descoberto.
 OUTRO = 2
+
+# O instante que o relogio injetado devolve nos testes que o substituem.
+AGORA = datetime(2026, 9, 18, 15, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -82,6 +86,19 @@ def cliente_real(banco_migrado: Engine) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.pop(get_engine, None)
+
+
+@pytest.fixture
+def relogio_fixo() -> Iterator[datetime]:
+    """Substitui o relogio da API por um que devolve sempre `AGORA`.
+
+    O override devolve uma FUNCAO que devolve o instante -- `get_clock`
+    entrega um relogio, nao uma hora (ver `core/clock.py`). Remove a propria
+    chave no teardown, pelo motivo escrito em `client`.
+    """
+    app.dependency_overrides[get_clock] = lambda: lambda: AGORA
+    yield AGORA
+    app.dependency_overrides.pop(get_clock, None)
 
 
 def _prazo(dias: int) -> str:
@@ -510,6 +527,26 @@ def test_concluir_devolve_200_com_o_estado_novo(client: TestClient) -> None:
     assert listadas[0]["state"] == MissionState.CONCLUIDA.value
 
 
+def test_concluir_grava_o_instante_do_relogio_injetado(
+    client: TestClient, relogio_fixo: datetime
+) -> None:
+    """A rota entrega ao servico o relogio da DEPENDENCIA, e nao outro.
+
+    E o teste que prova a ligacao entre `get_clock` e `concluir_missao`: se a
+    rota passasse `system_now` direto, ou o servico voltasse a chamar
+    `datetime.now(UTC)`, o `completed_at` seria a hora real, e nao o instante
+    fixo que o override instalou. Comparado como instante, nao como texto.
+    """
+    criada = _criar(client)
+
+    resposta = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    assert datetime.fromisoformat(resposta.json()["completed_at"]) == relogio_fixo
+
+
 def test_duracao_real_no_corpo_vem_dos_instantes(
     client: TestClient, session: Session
 ) -> None:
@@ -578,6 +615,23 @@ def test_identificador_de_operacao_vazio_devolve_422(client: TestClient) -> None
     assert ["body", "operation_id"] in locais
 
 
+def test_erro_de_validacao_mantem_o_formato_do_fastapi(client: TestClient) -> None:
+    """O 422 de validacao NAO ganha `code` (spec do ciclo diario, secao Erros).
+
+    O `code` e dos erros de DOMINIO. O 422 continua no formato nativo do
+    FastAPI -- `detail` como LISTA de erros, com `loc` e `type` --, que e o que
+    diz ao cliente qual campo corrigir. Um handler de `RequestValidationError`
+    que acrescentasse `code` mudaria esse contrato para todos os endpoints de
+    uma vez; este teste e o que recusa essa mudanca.
+    """
+    resposta = client.post("/api/missions", json=_corpo(difficulty=0))
+
+    assert resposta.status_code == 422
+    corpo = resposta.json()
+    assert set(corpo) == {"detail"}
+    assert isinstance(corpo["detail"], list)
+
+
 def test_operacao_nova_sobre_missao_concluida_devolve_409(client: TestClient) -> None:
     """Transicao ilegal e conflito de ESTADO do recurso -- 409 --, e a resposta
     explica o bloqueio (README s8) em vez de um 500 generico."""
@@ -593,6 +647,10 @@ def test_operacao_nova_sobre_missao_concluida_devolve_409(client: TestClient) ->
     # sobram. Conferir so "409" deixaria passar um corpo vazio.
     assert "concluida" in detalhe
     assert "nenhum estado" in detalhe
+    # O `code` e o que o cliente le para decidir; a prosa e para quem depura.
+    # Os dois 409 desta API so se distinguem por ele, e a acao do cliente e
+    # oposta nos dois (aqui, nao ha o que repetir).
+    assert resposta.json()["code"] == "transicao_ilegal"
 
 
 def test_chave_de_operacao_gasta_em_outra_missao_devolve_409(
@@ -618,6 +676,9 @@ def test_chave_de_operacao_gasta_em_outra_missao_devolve_409(
     assert str(primeira["id"]) not in detalhe
     # E a segunda missao continua pendente: a recusa nao deixou rastro.
     assert client.get("/api/missions").json()[1]["state"] == MissionState.PENDENTE.value
+    # O outro 409, com o outro `code`: aqui o cliente gera um `operation_id`
+    # novo e repete o MESMO corpo.
+    assert resposta.json()["code"] == "operacao_reutilizada"
 
 
 def test_missao_inexistente_devolve_404(
@@ -636,7 +697,12 @@ def test_missao_inexistente_devolve_404(
         )
 
     assert resposta.status_code == 404
-    assert resposta.json() == {"detail": "missao nao encontrada"}
+    # O corpo INTEIRO, e nao so o `code`: uma chave a mais (o id pedido, o
+    # motivo) seria informacao que o 404 de missao alheia nao pode dar.
+    assert resposta.json() == {
+        "detail": "missao nao encontrada",
+        "code": "missao_nao_encontrada",
+    }
     assert "9999" in _logado(caplog)
 
 
@@ -668,7 +734,10 @@ def test_missao_de_outro_usuario_responde_o_mesmo_que_missao_inexistente(
     )
 
     assert negada.status_code == inexistente.status_code == 404
-    assert negada.json() == inexistente.json()
+    # Byte a byte, e nao so o JSON interpretado: a ordem das chaves e o
+    # espacamento tambem sao observaveis por quem esta do outro lado.
+    assert negada.content == inexistente.content
+    assert negada.json()["code"] == "missao_nao_encontrada"
     assert str(alheia) not in negada.text
     # O log, sim, diz exatamente o que aconteceu.
     registrado = _logado(caplog)

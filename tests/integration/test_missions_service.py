@@ -32,6 +32,16 @@ ESTUDANTE = 1
 # Nasce e morre dentro da transacao da fixture `session`.
 OUTRO = 2
 
+# O instante que o relogio destes testes devolve. Fixo e com fuso: e ele que
+# permite afirmar o `completed_at` por IGUALDADE, e nao por uma janela entre
+# dois `datetime.now()` -- a compensacao que a pendencia 7 registrava.
+AGORA = datetime(2026, 9, 18, 15, 0, tzinfo=UTC)
+
+
+def _relogio() -> datetime:
+    """O relogio fixo destes testes: toda leitura devolve `AGORA`."""
+    return AGORA
+
 
 def _criar(session: Session, *, user_id: int = ESTUDANTE, dias: int = 1) -> int:
     """Cria uma missao pelo servico e devolve o id.
@@ -161,24 +171,25 @@ def test_listar_ordena_pelo_prazo(session: Session) -> None:
 
 
 def test_concluir_marca_o_estado_e_o_instante(session: Session) -> None:
-    mission_id = _criar(session)
-    antes = datetime.now(UTC)
+    """O `completed_at` e o instante que o RELOGIO RECEBIDO devolveu.
 
-    missao = concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+    Igualdade exata, e nao janela de tempo: com o relogio injetado, o teste
+    sabe qual instante esperar. E e isso que da dente a assercao -- um servico
+    que voltasse a chamar `datetime.now(UTC)` direto gravaria a hora real, e a
+    hora real nao e 18/09/2026 as 15:00.
+    """
+    mission_id = _criar(session)
+
+    missao = concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
 
     assert missao.state is MissionState.CONCLUIDA
-    assert missao.completed_at is not None
-    # O instante e gravado com timezone (README s8) e fica dentro da janela
-    # do proprio teste -- nao basta "nao e None", que um valor fixo qualquer
-    # tambem satisfaria.
-    assert missao.completed_at.tzinfo is not None
-    assert antes <= missao.completed_at <= datetime.now(UTC)
+    assert missao.completed_at == AGORA
     assert _operacoes(session, mission_id) == 1
 
 
 def test_concluir_missao_inexistente_e_recusado(session: Session) -> None:
     with pytest.raises(MissaoNaoEncontradaError) as excecao:
-        concluir_missao(session, ESTUDANTE, 9999, "op-abc")
+        concluir_missao(session, ESTUDANTE, 9999, "op-abc", clock=_relogio)
 
     # A mensagem EXPLICA o bloqueio (README s8): diz qual missao nao existe.
     assert "9999" in str(excecao.value)
@@ -195,7 +206,7 @@ def test_concluir_missao_de_outro_usuario_e_recusado(session: Session) -> None:
     mission_id = _criar(session, user_id=OUTRO)
 
     with pytest.raises(NaoPertenceAoUsuarioError) as excecao:
-        concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+        concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
 
     assert str(mission_id) in str(excecao.value)
     assert str(ESTUDANTE) in str(excecao.value)
@@ -211,12 +222,20 @@ def test_concluir_missao_de_outro_usuario_e_recusado(session: Session) -> None:
 
 
 def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> None:
-    """Reenviar nao e erro -- e e o MESMO sucesso, nao um novo."""
-    mission_id = _criar(session)
+    """Reenviar nao e erro -- e e o MESMO sucesso, nao um novo.
 
-    primeira = concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
-    instante_original = primeira.completed_at
-    segunda = concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+    O reenvio chega uma hora depois, por um relogio que ANDOU: com um relogio
+    fixo nas duas chamadas, uma implementacao que concluisse de novo gravaria
+    o mesmo instante, e a assercao sobre `completed_at` passaria sem provar
+    nada.
+    """
+    mission_id = _criar(session)
+    depois = AGORA + timedelta(hours=1)
+
+    primeira = concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
+    segunda = concluir_missao(
+        session, ESTUDANTE, mission_id, "op-abc", clock=lambda: depois
+    )
 
     assert primeira.id == segunda.id
     assert segunda.state is MissionState.CONCLUIDA
@@ -224,7 +243,7 @@ def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> 
     # simplesmente concluisse de novo -- sobrescrevendo `completed_at` --
     # passaria no teste: o estado final seria o mesmo. O que "devolver o
     # mesmo sucesso" promete e que nada aconteceu da segunda vez.
-    assert segunda.completed_at == instante_original
+    assert segunda.completed_at == AGORA
     # E a prova de que reenvio nao duplica: uma operacao registrada, nao duas.
     assert _operacoes(session, mission_id) == 1
 
@@ -232,10 +251,10 @@ def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> 
 def test_operacao_nova_sobre_missao_concluida_e_bloqueada(session: Session) -> None:
     """Tentar de novo E erro -- e o erro explica o bloqueio."""
     mission_id = _criar(session)
-    concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+    concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
 
     with pytest.raises(TransicaoIlegalError) as excecao:
-        concluir_missao(session, ESTUDANTE, mission_id, "op-xyz")
+        concluir_missao(session, ESTUDANTE, mission_id, "op-xyz", clock=_relogio)
 
     assert "concluida" in str(excecao.value)
     assert _operacoes(session, mission_id) == 1
@@ -255,10 +274,10 @@ def test_reenviar_operacao_de_outra_missao_e_recusado(session: Session) -> None:
     """
     primeira_missao = _criar(session)
     segunda_missao = _criar(session)
-    concluir_missao(session, ESTUDANTE, primeira_missao, "op-abc")
+    concluir_missao(session, ESTUDANTE, primeira_missao, "op-abc", clock=_relogio)
 
     with pytest.raises(OperacaoReutilizadaError) as excecao:
-        concluir_missao(session, ESTUDANTE, segunda_missao, "op-abc")
+        concluir_missao(session, ESTUDANTE, segunda_missao, "op-abc", clock=_relogio)
 
     assert "op-abc" in str(excecao.value)
     # A mensagem NAO revela nada da outra missao. Ela nao tem digito nenhum,
@@ -290,7 +309,7 @@ def test_chave_usada_em_outro_tipo_de_operacao_e_recusada(session: Session) -> N
     session.flush()
 
     with pytest.raises(OperacaoReutilizadaError):
-        concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+        concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
 
     missao = listar_missoes(session, ESTUDANTE)[0]
     assert missao.state is MissionState.PENDENTE
@@ -319,6 +338,6 @@ def test_integrity_error_que_nao_e_o_conflito_de_chave_nao_e_traduzido(
     )
 
     with pytest.raises(IntegrityError) as excecao:
-        concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+        concluir_missao(session, ESTUDANTE, mission_id, "op-abc", clock=_relogio)
 
     assert "ck_temporario" in str(excecao.value.orig)

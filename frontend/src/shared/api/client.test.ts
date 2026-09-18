@@ -9,6 +9,16 @@ async function loadClient() {
   return import('./client')
 }
 
+/** O erro que a promessa rejeitou, para as assercoes sobre ele. */
+async function failureOf(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => {
+      throw new Error('a chamada deveria ter falhado')
+    },
+    (error: unknown) => error,
+  )
+}
+
 describe('client', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -78,82 +88,141 @@ describe('client', () => {
       const init = fetchMock.mock.calls[0]?.[1] as RequestInit
       expect(init.signal).toBe(controller.signal)
     })
+  })
 
-    it('transforma falha de rede em ApiError sem status, preservando a causa', async () => {
+  describe('postJson', () => {
+    it('envia POST com o corpo em JSON e devolve a resposta desserializada', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 7 }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { postJson } = await loadClient()
+
+      const resposta = await postJson<{ id: number }>('/missions/7/complete', {
+        operation_id: 'op-1',
+      })
+
+      expect(resposta).toEqual({ id: 7 })
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/missions/7/complete')
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(init.method).toBe('POST')
+      expect(init.body).toBe('{"operation_id":"op-1"}')
+      // Sem o Content-Type, o FastAPI nao le o corpo como JSON e responde 422.
+      const headers = new Headers(init.headers)
+      expect(headers.get('Content-Type')).toBe('application/json')
+      expect(headers.get('Accept')).toBe('application/json')
+    })
+  })
+
+  describe('traducao de falha em ApiError', () => {
+    it('transforma falha de rede em ApiError sem status nem code, preservando a causa', async () => {
       const causa = new TypeError('Failed to fetch')
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(causa))
-      const { ApiError, requestJson } = await loadClient()
+      const { ApiError, postJson } = await loadClient()
 
-      const erro = await requestJson('/missions').catch((e: unknown) => e)
+      const erro = await failureOf(postJson('/missions/7/complete', { operation_id: 'op-1' }))
 
       expect(erro).toBeInstanceOf(ApiError)
       // status nulo e o que distingue "nao houve resposta" de "o servidor
       // respondeu mal": a tela nao deve dizer 500 quando nada chegou.
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).cause).toBe(causa)
       expect((erro as Error).message).toMatch(/servidor/i)
     })
 
-    it('usa o detail do corpo de erro como mensagem', async () => {
+    it('expoe o code do corpo de erro, junto com o status', async () => {
       vi.stubGlobal(
         'fetch',
         vi
           .fn()
-          .mockResolvedValue(Response.json({ detail: 'Missao nao encontrada.' }, { status: 404 })),
+          .mockResolvedValue(
+            Response.json(
+              { detail: 'missao nao encontrada', code: 'missao_nao_encontrada' },
+              { status: 404 },
+            ),
+          ),
+      )
+      const { ApiError, postJson } = await loadClient()
+
+      const erro = await failureOf(postJson('/missions/9/complete', { operation_id: 'op-1' }))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(404)
+      expect((erro as InstanceType<typeof ApiError>).code).toBe('missao_nao_encontrada')
+    })
+
+    it('nunca usa o detail como mensagem, mesmo quando ele e texto', async () => {
+      // A prosa do `detail` e do backend: sem acento, e a da transicao expoe o
+      // valor cru do enum. A mensagem do erro e escrita AQUI, e o `detail` nao
+      // e lido. Antes do Incremento A, este era o caminho que o levava a tela.
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json(
+              { detail: 'PROSA-CRUA-DO-BACKEND', code: 'transicao_ilegal' },
+              { status: 409 },
+            ),
+          ),
+      )
+      const { requestJson } = await loadClient()
+
+      const erro = await failureOf(requestJson('/missions'))
+
+      expect((erro as Error).message).toBe('O servidor respondeu 409.')
+    })
+
+    it('devolve code nulo quando o code do corpo nao e texto', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: 'x', code: 42 }, { status: 409 })),
       )
       const { ApiError, requestJson } = await loadClient()
 
-      const erro = await requestJson('/missions/9').catch((e: unknown) => e)
+      const erro = await failureOf(requestJson('/missions'))
 
       expect(erro).toBeInstanceOf(ApiError)
-      expect((erro as Error).message).toBe('Missao nao encontrada.')
-      expect((erro as InstanceType<typeof ApiError>).status).toBe(404)
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
     })
 
-    it('cai para uma mensagem com o status quando detail nao e texto', async () => {
-      // 422 do FastAPI: detail e uma LISTA de erros de validacao, nao string.
+    it('devolve code nulo no 422 do FastAPI, que nao tem code', async () => {
+      // 422 do FastAPI: detail e uma LISTA de erros de validacao, e nao ha code.
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(Response.json({ detail: [{ loc: ['body'] }] }, { status: 422 })),
       )
-      const { requestJson } = await loadClient()
+      const { ApiError, requestJson } = await loadClient()
 
-      const erro = await requestJson('/missions').catch((e: unknown) => e)
+      const erro = await failureOf(requestJson('/missions'))
 
-      expect((erro as Error).message).toContain('422')
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).message).toBe('O servidor respondeu 422.')
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
     })
 
-    it('cai para uma mensagem com o status quando o corpo de erro nao e JSON', async () => {
+    it('devolve code nulo quando o corpo de erro nao e JSON', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(new Response('<html>502</html>', { status: 502 })),
       )
-      const { requestJson } = await loadClient()
+      const { ApiError, requestJson } = await loadClient()
 
-      const erro = await requestJson('/missions').catch((e: unknown) => e)
+      const erro = await failureOf(requestJson('/missions'))
 
-      expect((erro as Error).message).toContain('502')
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).message).toBe('O servidor respondeu 502.')
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
     })
 
-    it('cai para uma mensagem com o status quando o corpo de erro e JSON sem detail', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockResolvedValue(Response.json({ erro: 'x' }, { status: 500 })),
-      )
-      const { requestJson } = await loadClient()
-
-      const erro = await requestJson('/missions').catch((e: unknown) => e)
-
-      expect((erro as Error).message).toContain('500')
-    })
-
-    it('cai para uma mensagem com o status quando o corpo de erro e JSON nulo', async () => {
+    it('devolve code nulo quando o corpo de erro e JSON nulo', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(null, { status: 503 })))
-      const { requestJson } = await loadClient()
+      const { ApiError, requestJson } = await loadClient()
 
-      const erro = await requestJson('/missions').catch((e: unknown) => e)
+      const erro = await failureOf(requestJson('/missions'))
 
-      expect((erro as Error).message).toContain('503')
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).message).toBe('O servidor respondeu 503.')
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
     })
   })
 })

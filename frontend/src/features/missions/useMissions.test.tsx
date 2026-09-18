@@ -57,7 +57,7 @@ describe('useMissions', () => {
     })
   })
 
-  it('chega em error com a mensagem do ApiError quando a API falha', async () => {
+  it('chega em error com a mensagem do ApiError -- e nunca com o detail do backend', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(Response.json({ detail: 'Banco indisponivel.' }, { status: 503 })),
@@ -66,7 +66,10 @@ describe('useMissions', () => {
     const { result } = renderHook(() => useMissions())
 
     await waitFor(() => {
-      expect(result.current.state).toEqual({ status: 'error', message: 'Banco indisponivel.' })
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor respondeu 503.',
+      })
     })
   })
 

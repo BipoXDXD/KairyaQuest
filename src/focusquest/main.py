@@ -7,6 +7,7 @@ aceita dar para um bloqueio previsto (README s8: "explique bloqueios").
 """
 
 import logging
+from enum import StrEnum
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response, status
@@ -33,15 +34,45 @@ app.include_router(missions_router)
 NAO_ENCONTRADA = "missao nao encontrada"
 
 
-def _erro(status_code: int, detalhe: str) -> JSONResponse:
-    """A forma de todo corpo de erro desta API: `{"detail": ...}`.
+class CodigoDeErro(StrEnum):
+    """O `code` legivel por maquina de cada erro de dominio (decisao C12).
 
-    A chave e em ingles porque payload e contrato, como em `/ready`; e e
-    `detail` -- e nao um nome proprio -- porque e a chave que o proprio FastAPI
-    usa no 422 de validacao. Duas formas de erro no mesmo servico obrigariam o
-    cliente a tratar as duas.
+    O cliente DECIDE pelo `code`, e nunca pela prosa do `detail`: a prosa e
+    para quem depura, nao tem acento e pode mudar de redacao sem aviso. Os dois
+    409 desta API pedem acoes OPOSTAS do cliente -- nada a repetir na transicao
+    ilegal, identificador novo no reuso --, e so o `code` os separa.
+
+    Os VALORES sao contrato e estao em portugues porque a spec os fixou assim,
+    como os valores do estado da missao; o frontend os repete num tipo proprio.
+    Mora aqui, e nao nas classes de erro do dominio, porque e traducao para
+    HTTP -- e a traducao inteira mora neste arquivo. Posto na excecao, o codigo
+    obrigaria `NaoPertenceAoUsuarioError` a carregar `missao_nao_encontrada`,
+    que e mentira no dominio e so e verdade na resposta.
+
+    Tem so os codigos que algum handler devolve. Os do ciclo diario
+    (`missao_expirada`, `plano_existente`, ...) entram com o erro que os usa:
+    um membro sem handler seria contrato publicado que nenhum caminho alcanca.
     """
-    return JSONResponse(status_code=status_code, content={"detail": detalhe})
+
+    MISSAO_NAO_ENCONTRADA = "missao_nao_encontrada"
+    TRANSICAO_ILEGAL = "transicao_ilegal"
+    OPERACAO_REUTILIZADA = "operacao_reutilizada"
+
+
+def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:
+    """A forma de todo corpo de erro de dominio: `{"detail": ..., "code": ...}`.
+
+    As chaves sao em ingles porque payload e contrato, como em `/ready`; e a
+    prosa e `detail` -- e nao um nome proprio -- porque e a chave que o proprio
+    FastAPI usa no 422 de validacao. O 422 continua no formato nativo, sem
+    `code`: ele diz QUAL campo corrigir, e o `loc` ja e legivel por maquina.
+
+    `codigo` e obrigatorio, sem valor padrao: um handler novo que esquecesse o
+    `code` reprovaria no mypy, e nao na tela.
+    """
+    return JSONResponse(
+        status_code=status_code, content={"detail": detalhe, "code": codigo}
+    )
 
 
 @app.exception_handler(MissaoNaoEncontradaError)
@@ -53,7 +84,9 @@ def _nao_encontrada(request: Request, exc: MissaoNaoEncontradaError) -> JSONResp
     que o proprio cliente montou. O motivo completo vai para o log.
     """
     _log.info("missao nao encontrada: %s", exc)
-    return _erro(status.HTTP_404_NOT_FOUND, NAO_ENCONTRADA)
+    return _erro(
+        status.HTTP_404_NOT_FOUND, NAO_ENCONTRADA, CodigoDeErro.MISSAO_NAO_ENCONTRADA
+    )
 
 
 @app.exception_handler(NaoPertenceAoUsuarioError)
@@ -76,7 +109,11 @@ def _nao_pertence(request: Request, exc: NaoPertenceAoUsuarioError) -> JSONRespo
     quem opera consiga diferenciar "id que nunca existiu" de "id negado".
     """
     _log.warning("acesso negado a missao de outro usuario: %s", exc)
-    return _erro(status.HTTP_404_NOT_FOUND, NAO_ENCONTRADA)
+    # O MESMO `code` do 404 de inexistente, e nao um `nao_pertence` proprio:
+    # um codigo distinto seria o 403 escrito de outro jeito.
+    return _erro(
+        status.HTTP_404_NOT_FOUND, NAO_ENCONTRADA, CodigoDeErro.MISSAO_NAO_ENCONTRADA
+    )
 
 
 @app.exception_handler(TransicaoIlegalError)
@@ -87,7 +124,7 @@ def _transicao_ilegal(request: Request, exc: TransicaoIlegalError) -> JSONRespon
     onde para onde nao se pode ir e quais destinos sobram, sobre um recurso que
     o cliente ja tem direito de ver. E o "explique bloqueios" do README s8.
     """
-    return _erro(status.HTTP_409_CONFLICT, str(exc))
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.TRANSICAO_ILEGAL)
 
 
 @app.exception_handler(OperacaoReutilizadaError)
@@ -109,13 +146,13 @@ def _operacao_reutilizada(
        identificador novo e repetir o MESMO corpo.
     3. **Coincidir com a transicao ilegal e coerente.** Os dois 409 dizem a
        mesma coisa ao cliente -- "o pedido esta bem formado, o estado do
-       servidor e que bloqueia" --, e os corpos os separam.
+       servidor e que bloqueia" --, e o `code` os separa.
 
     A mensagem vem do servico, que a escreveu sem revelar nada da outra
     operacao (nem a missao, nem o tipo). Repeti-la aqui e seguro por
     construcao, nao por sorte.
     """
-    return _erro(status.HTTP_409_CONFLICT, str(exc))
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.OPERACAO_REUTILIZADA)
 
 
 @app.get("/health")

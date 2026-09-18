@@ -44,6 +44,7 @@ from sqlalchemy import Engine, delete, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from focusquest.core.clock import system_now
 from focusquest.core.errors import OperacaoReutilizadaError
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
 from focusquest.modules.missions.models import Mission, MissionOperation
@@ -172,7 +173,9 @@ def _concluir_em_paralelo(
             sessao.connection()
             barreira.wait()
             try:
-                concluir_missao(sessao, ESTUDANTE, mission_id, operation_id)
+                concluir_missao(
+                    sessao, ESTUDANTE, mission_id, operation_id, clock=system_now
+                )
                 sessao.commit()
                 resultados[indice] = "concluiu"
             except TransicaoIlegalError:
@@ -275,7 +278,9 @@ def test_concluir_trava_a_linha_da_missao(
         with Session(bind=banco_migrado) as sessao:
             sessao.execute(text(f"SET LOCAL lock_timeout = '{LIMITE_DE_TRAVA}'"))
             with pytest.raises(OperationalError) as excecao:
-                concluir_missao(sessao, ESTUDANTE, missao_commitada, "op-travada")
+                concluir_missao(
+                    sessao, ESTUDANTE, missao_commitada, "op-travada", clock=system_now
+                )
             sessao.rollback()
 
         # Nao basta "deu OperationalError": uma conexao caida daria o mesmo
@@ -289,6 +294,55 @@ def test_concluir_trava_a_linha_da_missao(
         assert missao is not None
         assert missao.state is MissionState.PENDENTE
     assert _operacoes_da_missao(banco_migrado, missao_commitada) == 0
+
+
+def test_relogio_e_lido_com_a_linha_ja_travada(
+    banco_migrado: Engine, missao_commitada: int
+) -> None:
+    """A hora da conclusao e lida DEPOIS da trava da linha (decisao C13).
+
+    O relogio injetado aqui e uma sonda: no momento em que o servico o le, ele
+    pergunta ao PostgreSQL, por OUTRA conexao, se a linha da missao ja esta
+    travada. `FOR KEY SHARE NOWAIT` conflita com o `FOR UPDATE` do servico e,
+    com `NOWAIT`, responde na hora com `LockNotAvailable` em vez de esperar --
+    entao a sonda nunca bloqueia o servico, e o teste nao depende de tempo.
+
+    Lido antes da trava, o relogio encontraria a linha livre. E a ordem que
+    o Incremento B precisa: a regra do dia compara a hora com a data da
+    missao, e uma hora lida antes de esperar a trava seria uma hora velha.
+
+    A lista `observado` afirma tambem que o relogio e lido UMA vez: nenhuma
+    leitura (`[]`) ou duas (`["travada", "travada"]`) reprovam.
+    """
+    observado: list[str] = []
+
+    def relogio_que_sonda_a_trava() -> datetime:
+        with banco_migrado.connect() as sonda:
+            try:
+                sonda.execute(
+                    text("SELECT id FROM missions WHERE id = :id FOR KEY SHARE NOWAIT"),
+                    {"id": missao_commitada},
+                )
+            except OperationalError as erro:
+                # Qualquer outra falha (conexao caida, SQL errado) nao pode
+                # passar por "travada": so a recusa de trava conta.
+                assert isinstance(erro.orig, psycopg.errors.LockNotAvailable)
+                observado.append("travada")
+            else:
+                observado.append("livre")
+        return datetime.now(UTC)
+
+    with Session(bind=banco_migrado) as sessao:
+        concluir_missao(
+            sessao,
+            ESTUDANTE,
+            missao_commitada,
+            "op-sonda",
+            clock=relogio_que_sonda_a_trava,
+        )
+        sessao.commit()
+
+    assert observado == ["travada"]
 
 
 def test_mesma_chave_em_missoes_diferentes_e_recusada_tambem_em_paralelo(
@@ -357,7 +411,9 @@ def test_conflito_gravado_apos_a_consulta_vira_o_mesmo_erro_de_dominio(
             intrusa.commit()
 
         with pytest.raises(OperacaoReutilizadaError) as excecao:
-            concluir_missao(sessao, ESTUDANTE, missao_commitada, "op-disputada")
+            concluir_missao(
+                sessao, ESTUDANTE, missao_commitada, "op-disputada", clock=system_now
+            )
         sessao.rollback()
 
     assert "op-disputada" in str(excecao.value)
