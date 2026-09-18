@@ -1,19 +1,21 @@
 """Contratos de entrada e saida da missao.
 
-Os nomes dos campos estao em INGLES porque payload de API e contrato -- lido
-por cliente, por teste de ponta a ponta e por quem depurar a rede --, nao
-interface. O texto em portugues que a pessoa le pertence ao frontend, que
-traduz o estado. Os comentarios e as docstrings daqui seguem em portugues,
+Os nomes dos campos estao em INGLES porque payload de API e contrato que
+atravessa sistemas -- lido por cliente, por teste de ponta a ponta e por quem
+depurar a rede --, nao interface. O texto em portugues que a pessoa le pertence
+ao frontend, que traduz o estado. Identificadores INTERNOS (`duracao_real`,
+`xp_para_dificuldade`, `DIFICULDADE_MAXIMA`) continuam em portugues: eles nao
+atravessam a rede. Os comentarios e as docstrings daqui seguem em portugues,
 pela mesma razao invertida: sao para quem mantem o codigo.
 
-Os dois campos computados (`xp` e `duracao_real_minutos`) nao existem no banco.
-Um campo derivado que fosse armazenado seria mais um lugar para discordar da
-fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
+Os dois campos computados (`xp` e `actual_duration_minutes`) nao existem no
+banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
+da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, computed_field
 
 from focusquest.modules.missions.domain import (
     MissionState,
@@ -51,13 +53,27 @@ class MissionCreate(BaseModel):
     `difficulty` e recusada fora de `[1, DIFICULDADE_MAXIMA]` com 422, antes de
     o caso de uso comecar -- ver o comentario da constante para o porque de o
     teto viver na borda e nao no dominio.
+
+    `deadline` exige FUSO (`AwareDatetime`): um datetime naive e recusado com
+    422. O motivo e um defeito medido, nao purismo. A coluna e `timestamptz`,
+    entao a leitura seguinte sempre sai em UTC com `Z`; com
+    `expire_on_commit=False`, o 201 serializa o objeto como ele CHEGOU no
+    pedido. Aceitar naive fazia o mesmo prazo sair em duas serializacoes
+    diferentes -- `"...T10:00:00"` no 201 e `"...T10:00:00Z"` no GET --, e em
+    JavaScript `new Date("...T10:00:00")` e hora LOCAL enquanto
+    `new Date("...T10:00:00Z")` e UTC. O mesmo campo viraria dois instantes.
+
+    A alternativa -- normalizar naive para UTC em silencio -- foi recusada: quem
+    manda "10:00" sem dizer onde nao informou o instante, e assumir um fuso por
+    ele e adivinhacao que produz hora errada para sempre e sem aviso. Recusar
+    alto obriga o cliente a ser explicito UMA vez.
     """
 
     instructions: str = Field(min_length=1)
     completion_criterion: str = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0)
-    deadline: datetime
+    deadline: AwareDatetime
 
 
 class MissionComplete(BaseModel):
@@ -108,13 +124,17 @@ class MissionRead(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def duracao_real_minutos(self) -> int | None:
+    def actual_duration_minutes(self) -> int | None:
         """Minutos entre o inicio e a conclusao, ou None se um deles falta.
 
         Em minutos inteiros, truncados: a unidade que o resto do contrato usa
         para tempo e o minuto (`estimated_minutes`), e devolver segundos aqui
         pediria ao cliente para converter para comparar estimativa com
         realizado.
+
+        O nome esta em ingles porque ele E a chave publicada no payload e no
+        `/openapi.json` -- contrato que atravessa sistemas. A funcao de dominio
+        que ele chama continua sendo `duracao_real`: essa nao atravessa nada.
         """
         duracao = duracao_real(self.started_at, self.completed_at)
         return None if duracao is None else int(duracao.total_seconds() // 60)

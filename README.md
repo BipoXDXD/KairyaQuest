@@ -26,7 +26,7 @@ Use Python com uv, FastAPI, Uvicorn, Pydantic, pydantic-settings, SQLAlchemy 2.x
 
 Execute PostgreSQL em Docker com versão suportada e fixada, sem `latest`; confira persistência e healthcheck. Separe desenvolvimento e testes.
 
-Preserve React, TypeScript, Vite, Tailwind e o gerenciador já adotado. Mantenha um lockfile por ecossistema; com npm, versione `package-lock.json` e valide `npm ci`. Verifique TypeScript estrito e compatibilidade, sem reinstalar o que funciona. Prefira estado local; não adicione Redux, Next.js ou engine 3D sem necessidade. Interface em português brasileiro; código em inglês.
+Preserve React, TypeScript, Vite, Tailwind e o gerenciador já adotado. Mantenha um lockfile por ecossistema; com npm, versione `package-lock.json` e valide `npm ci`. Verifique TypeScript estrito e compatibilidade, sem reinstalar o que funciona. Prefira estado local; não adicione Redux, Next.js ou engine 3D sem necessidade. Interface em português brasileiro; contratos externos — nomes de coluna, chaves de payload JSON e rotas — em inglês, e identificadores internos podem ficar em português.
 
 ### Monorepo por funcionalidade
 

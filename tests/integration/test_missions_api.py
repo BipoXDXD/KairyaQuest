@@ -7,8 +7,7 @@ teste de servico a mais.
 
 Quase todos os testes usam a fixture `session`, que reverte tudo no final: a
 sessao do teste E a sessao da requisicao, via `dependency_overrides`. A
-excecao deliberada e
-`test_a_requisicao_commita_de_verdade_e_devolve_a_conexao`, que roda com a
+excecao deliberada e `test_a_requisicao_commita_de_verdade`, que roda com a
 dependencia REAL -- e o unico jeito de provar que a requisicao commita, ja que
 uma sessao compartilhada com o teste mostraria os dados commitados ou nao.
 """
@@ -52,11 +51,17 @@ def client(session: Session) -> Iterator[TestClient]:
     teardown: escrita no corpo do teste, ela nao rodaria quando um assert
     caisse antes dela, e o override vazaria para os testes seguintes (a mesma
     licao que `test_health.py` registra).
+
+    E ela remove a PROPRIA chave, nao o dicionario inteiro. `clear()` funciona
+    enquanto houver um override por vez e derruba o override alheio no dia em
+    que duas fixtures se compuserem: o teardown roda em ordem inversa, entao a
+    fixture de dentro apagaria o que a de fora instalou, e o teste seguinte
+    falharia longe da causa.
     """
     app.dependency_overrides[get_session] = lambda: session
     with TestClient(app) as c:
         yield c
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture
@@ -67,11 +72,13 @@ def cliente_real(banco_migrado: Engine) -> Iterator[TestClient]:
     real chamaria `Settings().database_url` e a requisicao escreveria no banco
     de DESENVOLVIMENTO. Nenhum teste deste projeto toca aquele banco
     (README s10).
+
+    Remove a propria chave no teardown, pelo motivo escrito em `client`.
     """
     app.dependency_overrides[get_engine] = lambda: banco_migrado
     with TestClient(app) as c:
         yield c
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_engine, None)
 
 
 def _prazo(dias: int) -> str:
@@ -176,7 +183,7 @@ def test_criar_devolve_201_com_a_missao_pendente(client: TestClient) -> None:
     assert corpo["started_at"] is None
     assert corpo["completed_at"] is None
     # Campo computado: sem inicio nem fim, nao existe duracao real.
-    assert corpo["duracao_real_minutos"] is None
+    assert corpo["actual_duration_minutes"] is None
 
 
 @pytest.mark.parametrize("dificuldade", [1, 2, DIFICULDADE_MAXIMA])
@@ -224,6 +231,92 @@ def test_dificuldade_fora_da_faixa_devolve_422(
     assert resposta.status_code == 422
     locais = [erro["loc"] for erro in resposta.json()["detail"]]
     assert ["body", "difficulty"] in locais
+
+
+@pytest.mark.parametrize(
+    ("ajuste", "campo"),
+    [
+        ({"instructions": ""}, "instructions"),
+        ({"completion_criterion": ""}, "completion_criterion"),
+        ({"estimated_minutes": 0}, "estimated_minutes"),
+    ],
+    ids=["instrucao vazia", "criterio vazio", "estimativa zero"],
+)
+def test_campo_invalido_na_criacao_devolve_422(
+    client: TestClient, ajuste: dict[str, Any], campo: str
+) -> None:
+    """Cada restricao de `MissionCreate` tem aqui o teste que a faz dizer NAO.
+
+    Sem isto, `min_length=1` e `gt=0` eram decoracao: uma restricao declarativa
+    do pydantic nao tem LINHA para cobrir, entao 100% de cobertura nao prova
+    nada sobre ela. Medido pelo revisor: removidas as quatro restricoes, a
+    suite inteira continuava verde.
+
+    A assercao olha o `loc`, e nao so o status, pela mesma razao do teste de
+    `difficulty`: um 422 por qualquer outro campo satisfaria um teste que
+    checasse apenas `status_code == 422`, e ai a troca de uma restricao pela
+    outra passaria.
+
+    Instrucao vazia e criterio vazio sao recusados porque uma missao sem o que
+    fazer e sem como saber que acabou nao e uma missao; estimativa zero porque o
+    campo existe para ser comparado com o realizado, e "zero minuto" nao e uma
+    estimativa, e a ausencia dela.
+    """
+    resposta = client.post("/api/missions", json=_corpo(**ajuste))
+
+    assert resposta.status_code == 422
+    locais = [erro["loc"] for erro in resposta.json()["detail"]]
+    assert ["body", campo] in locais
+
+
+def test_prazo_sem_fuso_devolve_422(client: TestClient) -> None:
+    """`deadline` naive e RECUSADO, nao normalizado em silencio.
+
+    O defeito que isto fecha foi medido: com `datetime` simples, o mesmo prazo
+    saia em duas serializacoes -- `"2026-09-20T10:00:00"` no corpo do 201 e
+    `"2026-09-20T10:00:00Z"` no GET seguinte. A causa e a soma de duas
+    decisoes corretas: a coluna e `timestamptz`, entao a leitura vem sempre em
+    UTC; e `expire_on_commit=False` faz o 201 serializar o objeto como ele
+    chegou no pedido, sem offset. Em JavaScript essas duas strings sao
+    instantes DIFERENTES -- `new Date` le a primeira como hora local e a
+    segunda como UTC --, e a Task 10 consome exatamente este contrato.
+
+    Normalizar naive para UTC tambem resolveria a divergencia, e foi recusado:
+    quem envia "10:00" sem dizer onde nao informou um instante, e escolher um
+    fuso por ele e adivinhacao que sai errada em silencio e para sempre.
+    Recusar alto custa ao cliente ser explicito uma vez.
+    """
+    resposta = client.post("/api/missions", json=_corpo(deadline="2026-09-20T10:00:00"))
+
+    assert resposta.status_code == 422
+    erros = resposta.json()["detail"]
+    assert ["body", "deadline"] in [erro["loc"] for erro in erros]
+    # O tipo do erro, e nao so o `loc`: um prazo recusado por estar malformado
+    # satisfaria a assercao acima sem provar nada sobre o fuso.
+    assert "timezone_aware" in [erro["type"] for erro in erros]
+
+
+def test_o_prazo_do_201_e_o_mesmo_instante_do_get(client: TestClient) -> None:
+    """O MESMO campo, nas duas respostas, e o mesmo instante.
+
+    Nenhum teste comparava o `deadline` do 201 com o do GET, e foi essa
+    ausencia que deixou a divergencia de serializacao passar: os dois olhavam
+    um lado so. Aqui a comparacao e o proprio contrato.
+
+    A igualdade e de INSTANTE, nao de texto, e isso e deliberado: as duas
+    strings podem diferir legitimamente no offset (o pedido manda `-03:00`, o
+    `timestamptz` volta em UTC) sem que nada esteja errado. O que nao pode
+    diferir e o momento no tempo. Exigir a string identica proibiria o servidor
+    de normalizar o fuso -- uma promessa que o contrato nao faz.
+    """
+    prazo = "2026-09-20T10:00:00-03:00"
+
+    criada = _criar(client, deadline=prazo)
+    listada = client.get("/api/missions").json()[0]
+
+    esperado = datetime.fromisoformat(prazo)
+    assert datetime.fromisoformat(criada["deadline"]) == esperado
+    assert datetime.fromisoformat(listada["deadline"]) == esperado
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +381,7 @@ def test_duracao_real_no_corpo_vem_dos_instantes(
 
     Nao existe caso de uso de INICIAR missao no incremento 1a, entao o
     `started_at` e escrito direto na tabela -- e o unico jeito de alcancar
-    este ramo hoje. Sem este teste, o `else` de `duracao_real_minutos` ficaria
+    este ramo hoje. Sem este teste, o `else` de `actual_duration_minutes` ficaria
     descoberto e a cobertura de ramificacoes reprovaria.
     """
     criada = _criar(client)
@@ -301,7 +394,7 @@ def test_duracao_real_no_corpo_vem_dos_instantes(
         f"/api/missions/{criada['id']}/complete", json={"operation_id": "op-abc"}
     ).json()
 
-    assert corpo["duracao_real_minutos"] == 25
+    assert corpo["actual_duration_minutes"] == 25
 
 
 def test_reenviar_a_mesma_operacao_devolve_o_mesmo_200(
@@ -323,6 +416,30 @@ def test_reenviar_a_mesma_operacao_devolve_o_mesmo_200(
     assert segunda.status_code == 200
     assert segunda.json() == primeira.json()
     assert _operacoes(session, criada["id"]) == 1
+
+
+def test_identificador_de_operacao_vazio_devolve_422(client: TestClient) -> None:
+    """A quarta guarda que faltava dizer NAO: `operation_id` com `min_length=1`.
+
+    String vazia nao e um identificador -- e, pior, seria um identificador
+    COMPARTILHAVEL: dois clientes que a enviassem cairiam na mesma linha de
+    `mission_operations`, e o segundo receberia de volta a conclusao do
+    primeiro como se fosse a propria. A recusa vale mais na borda do que a
+    idempotencia valeria depois.
+
+    422 e nao 409: aqui o corpo esta errado, nao o estado do servidor. A
+    diferenca importa para o cliente -- corrigir o corpo versus gerar um
+    identificador novo.
+    """
+    criada = _criar(client)
+
+    resposta = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": ""}
+    )
+
+    assert resposta.status_code == 422
+    locais = [erro["loc"] for erro in resposta.json()["detail"]]
+    assert ["body", "operation_id"] in locais
 
 
 def test_operacao_nova_sobre_missao_concluida_devolve_409(client: TestClient) -> None:
@@ -420,7 +537,10 @@ def test_missao_de_outro_usuario_responde_o_mesmo_que_missao_inexistente(
     # O log, sim, diz exatamente o que aconteceu.
     registrado = _logado(caplog)
     assert str(alheia) in registrado
-    assert str(ESTUDANTE) in registrado
+    # O usuario NEGADO aparece dentro da frase que o nomeia. `str(ESTUDANTE)`
+    # solto se reduzia a `"1" in registrado`, satisfeito por qualquer id de
+    # missao que contivesse o digito 1 -- assercao que nao discriminava.
+    assert f"nao pertence ao usuario {ESTUDANTE}" in registrado
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +548,7 @@ def test_missao_de_outro_usuario_responde_o_mesmo_que_missao_inexistente(
 # ---------------------------------------------------------------------------
 
 
-def test_a_requisicao_commita_de_verdade_e_devolve_a_conexao(
+def test_a_requisicao_commita_de_verdade(
     banco_migrado: Engine, cliente_real: TestClient
 ) -> None:
     """Com a dependencia REAL: a requisicao persiste, e nao vaza conexao.

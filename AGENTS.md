@@ -4,8 +4,9 @@ Regras comuns a **todos** os agentes que trabalham neste repositório (Kimi,
 Codex, Claude). Este arquivo é a fonte única; `CLAUDE.md` o importa e
 acrescenta apenas o que é específico do Claude Code.
 
-Interface do produto em **português do Brasil**; identificadores de código em
-**inglês** (README §3).
+Interface do produto em **português do Brasil**; **contratos externos** — nomes
+de coluna, chaves de payload JSON e rotas — em **inglês**, e identificadores
+internos podem ficar em português (README §3).
 
 ## 1. Antes de escrever qualquer coisa
 
