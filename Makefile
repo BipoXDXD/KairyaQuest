@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-api check-secrets format db-up db-down
+.PHONY: help bootstrap check check-web check-api check-secrets format db-up db-down migrate migrate-test
 
 WEB := frontend
 
@@ -30,7 +30,11 @@ check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 check-api: ## Ruff, mypy e pytest com cobertura no backend
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy src tests
+# alembic/ entra no mypy junto com src e tests: o env.py resolve a URL do
+# banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
+# dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
+# mypy de fora era a unica assimetria.
+	uv run mypy src tests alembic
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 check-secrets: ## Varredura de segredos no projeto inteiro
@@ -45,3 +49,12 @@ db-up: ## Sobe o PostgreSQL e espera ficar saudavel
 
 db-down: ## Derruba o PostgreSQL, preservando o volume
 	docker compose down
+
+migrate: ## Aplica as migracoes no banco de desenvolvimento
+	uv run alembic upgrade head
+
+# Alvo separado em vez de variavel porque a escolha do banco precisa estar
+# escrita no nome do que se executa: `make migrate-test` nao se confunde com
+# `make migrate` do jeito que FQ_DB=test se confundiria com esquecer de passar.
+migrate-test: ## Aplica as migracoes no banco de teste
+	uv run alembic -x test=true upgrade head

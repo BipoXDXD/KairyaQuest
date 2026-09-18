@@ -1,0 +1,11 @@
+Configuracao de banco unico.
+
+A URL NAO vem deste diretorio nem do alembic.ini: o env.py a monta a partir
+de focusquest.core.config.Settings. Por padrao o alvo e o banco de
+DESENVOLVIMENTO; `-x test=true` troca para o de teste.
+
+    make migrate        # desenvolvimento
+    make migrate-test   # teste
+
+Migracoes deste projeto sao escritas a mao, nao por --autogenerate: as
+restricoes CHECK e os indices precisam ser explicitos.
