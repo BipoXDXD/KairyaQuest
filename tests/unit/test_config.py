@@ -28,3 +28,31 @@ def test_falha_quando_a_url_do_banco_nao_esta_no_ambiente(
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError):
         Settings()
+
+
+def test_falha_quando_ha_variavel_desconhecida_no_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Variavel desconhecida no .env e erro, nao e ignorada em silencio.
+
+    Sem essa politica, digitar "FOCUSQUEST_DATABSE_URL" (sem o "E") no .env
+    faria o pydantic engolir a variavel desconhecida e reportar a de sempre
+    como ausente -- apontando para o lugar errado do defeito real.
+
+    O arquivo .env precisa existir de verdade neste teste (nao basta
+    monkeypatch.setenv): a fonte que le variaveis do os.environ diretamente
+    descarta em silencio qualquer chave com o prefixo que nao bate com um
+    campo declarado, sem chegar a validacao. So a fonte que le o arquivo
+    .env repassa chaves desconhecidas como "extra", que e o que o
+    extra="forbid" (padrao do pydantic, sem extra="ignore" aqui) rejeita.
+    Isso foi confirmado rodando os dois casos manualmente antes de escrever
+    este teste.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "FOCUSQUEST_DATABASE_URL=postgresql+psycopg://u:p@h:55432/d\n"
+        "FOCUSQUEST_TEST_DATABASE_URL=postgresql+psycopg://u:p@h:55432/t\n"
+        "FOCUSQUEST_VARIAVEL_INEXISTENTE=qualquer-coisa\n"
+    )
+    with pytest.raises(ValueError):
+        Settings()

@@ -6,16 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Configuracao da aplicacao.
 
-    Nenhum campo tem valor padrao: esquecer de configurar precisa falhar na
-    partida, nao conectar em um banco qualquer.
+    Nenhum campo tem valor padrao para credencial: esquecer de configurar
+    precisa falhar na partida, nao conectar em um banco qualquer.
+
+    Variaveis desconhecidas sao REJEITADAS, nao ignoradas. Uma variavel que
+    o .env precisa carregar para outro consumidor -- como o compose -- e
+    declarada aqui, para que o conjunto de configuracao do projeto tenha um
+    lugar so onde esta escrito.
     """
 
-    # extra="ignore": o .env tambem alimenta o compose.yaml (ex.:
-    # FOCUSQUEST_DB_PORT), entao ele traz chaves que nao viram campo aqui.
-    # Sem isso, o pydantic rejeita a leitura do .env com "extra_forbidden".
-    model_config = SettingsConfigDict(
-        env_prefix="FOCUSQUEST_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="FOCUSQUEST_", env_file=".env")
 
     database_url: str
     test_database_url: str
+    # Consumida pelo compose.yaml, nao pelo Python. Declarada aqui porque o
+    # .env a carrega e porque variavel desconhecida deve continuar sendo erro.
+    db_port: int = 55432
