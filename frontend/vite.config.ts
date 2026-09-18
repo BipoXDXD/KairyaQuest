@@ -4,9 +4,36 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // O navegador nunca fala com a porta do backend. Ele pede `/api/...` para a
+  // propria origem do Vite, e o proxy encaminha -- entao nao existe pedido
+  // cross-origin e o backend nao precisa de CORSMiddleware. Autorizar origem
+  // no servidor resolveria o sintoma; fazer tudo sair da mesma origem faz o
+  // problema deixar de existir.
+  //
+  // O alvo vem do ambiente com a 8000 apenas como PADRAO porque o E2E sobe uma
+  // API dedicada em outra porta (o README §10 proibe reutilizar servidor
+  // pessoal). Com o alvo fixo em 8000, o pior caso do E2E nao seria falhar: ele
+  // PASSARIA, encaminhando contra a API de desenvolvimento.
+  //
+  // Atencao: `API_PROXY_TARGET` e lida do ambiente do PROCESSO, nao do `.env`.
+  // O Vite carrega `.env` para `import.meta.env` (so o que tem prefixo `VITE_`)
+  // e nao o injeta em `process.env`. Quem quiser trocar o alvo exporta a
+  // variavel antes de subir o Vite.
+  server: {
+    proxy: {
+      '/api': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8000',
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // O cliente HTTP recusa carregar sem `VITE_API_URL` (ver
+    // src/shared/api/client.ts). Os testes precisam do mesmo valor que o
+    // ambiente de desenvolvimento usa; `client.test.ts` sobrescreve com
+    // `vi.stubEnv` para exercitar a ausencia.
+    env: {
+      VITE_API_URL: '/api',
+    },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],

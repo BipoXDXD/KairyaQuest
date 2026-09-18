@@ -1,3 +1,5 @@
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // O React so entra em "modo de teste" quando este sinalizador global esta
@@ -21,3 +23,15 @@ declare global {
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
+// Desmonta o que cada teste renderizou.
+//
+// O @testing-library/react registra este afterEach por conta propria APENAS
+// quando o `afterEach` global existe -- e o Vitest daqui roda com
+// `globals: false` (nao ha `test.globals: true` no vite.config.ts), entao o
+// registro automatico nao acontece. Sem esta linha o DOM ACUMULA entre os
+// testes do mesmo arquivo, e a falha nao aparece como "vazou": aparece como
+// getByTestId encontrando varios elementos, ou findByTestId estourando o
+// tempo enquanto o elemento certo esta na tela -- medido nesta tarefa, com
+// oito testes reprovando por este motivo.
+afterEach(cleanup)

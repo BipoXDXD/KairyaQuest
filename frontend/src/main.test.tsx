@@ -1,9 +1,17 @@
 import { act } from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('main', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>'
+    // O `fetch` e stubbado ANTES do import porque main.tsx monta a arvore no
+    // proprio import, e a arvore ja busca as missoes. Sem o stub, o teste
+    // faria um pedido de verdade a uma URL relativa dentro do jsdom.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('monta a aplicação dentro de #root', async () => {
@@ -16,6 +24,6 @@ describe('main', () => {
       await import('./main')
     })
 
-    expect(document.querySelector('#root h1')).toHaveTextContent('Tailwind funcionando')
+    expect(document.querySelector('#root h1')).toHaveTextContent('Quartel-general')
   })
 })
