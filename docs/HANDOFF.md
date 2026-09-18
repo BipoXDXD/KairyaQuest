@@ -501,6 +501,17 @@ que não tinham chegado aqui)
 
 ## Próximo incremento
 
+**Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
+B → C**. O desenho de A, B e C está em
+`docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`:
+
+- **A — conclusão na tela:** relógio injetável (pendência 7), `code` legível
+  por máquina nos erros (pendência 1) e o botão Concluir, com o `operation_id`
+  preservado entre tentativas. É o próximo.
+- **1b — a Tifa**, descrito abaixo.
+- **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
+  navegação lateral), depois do 1b.
+
 **Incremento 1b** — a Tifa, o fluxo de propor e confirmar uma missão, e o
 chat. Não traz alvo de gate novo; estende os existentes. O que já está
 decidido e registrado na spec do 1a, "para 1b, não usado aqui":

@@ -115,7 +115,7 @@ Ligue a conversa aos objetivos, missões e progresso. Tifa deve entender o objet
 
 Conecte pedidos como “não entendi”, “quero uma pista”, “divida esta missão”, “estou sem tempo” e “replaneje minha semana” a funcionalidades reais, não botões decorativos.
 
-A personalidade será acolhedora, enérgica e assertiva. Permita ajustar intensidade, frequência e horários das cobranças, incluindo pausa. Não use culpa, ameaças, vigilância fictícia ou perda destrutiva de progresso por faltar um dia.
+A personalidade será acolhedora, enérgica e assertiva. Permita ajustar intensidade, frequência e horários das cobranças, incluindo pausa. Não use culpa, ameaças, vigilância fictícia ou perda destrutiva de progresso por faltar um dia. A sequência de dias do ciclo diário é um contador de hábito, não progresso: faltar a missão do dia a zera, mas nunca remove XP, conclusões nem nada que o usuário conquistou.
 
 Use falas originais, sem copiar diálogos. Não invente fontes nem trate explicações incertas como verificadas. A tutoria deve aumentar autonomia, não apenas entregar respostas prontas.
 
