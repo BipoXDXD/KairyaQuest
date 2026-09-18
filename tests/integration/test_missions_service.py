@@ -10,9 +10,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from focusquest.core.errors import MissaoNaoEncontradaError, NaoPertenceAoUsuarioError
+from focusquest.core.errors import (
+    MissaoNaoEncontradaError,
+    NaoPertenceAoUsuarioError,
+    OperacaoReutilizadaError,
+)
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
 from focusquest.modules.missions.models import MissionOperation, User
 from focusquest.modules.missions.service import (
@@ -52,9 +57,17 @@ def _registrar_outro_usuario(session: Session) -> None:
     session.flush()
 
 
-def _operacoes(session: Session) -> int:
+def _operacoes(session: Session, mission_id: int) -> int:
+    """Conta as operacoes DESTA missao.
+
+    Filtrar, em vez de contar a tabela inteira, e o que faz a assercao dizer
+    "esta missao tem uma conclusao registrada" em vez de "o banco tem uma
+    linha" -- que continuaria verde se a linha fosse de outra missao.
+    """
     return session.execute(
-        select(func.count()).select_from(MissionOperation)
+        select(func.count())
+        .select_from(MissionOperation)
+        .where(MissionOperation.mission_id == mission_id)
     ).scalar_one()
 
 
@@ -160,7 +173,7 @@ def test_concluir_marca_o_estado_e_o_instante(session: Session) -> None:
     # tambem satisfaria.
     assert missao.completed_at.tzinfo is not None
     assert antes <= missao.completed_at <= datetime.now(UTC)
-    assert _operacoes(session) == 1
+    assert _operacoes(session, mission_id) == 1
 
 
 def test_concluir_missao_inexistente_e_recusado(session: Session) -> None:
@@ -213,7 +226,7 @@ def test_reenviar_a_mesma_operacao_devolve_o_mesmo_sucesso(session: Session) -> 
     # mesmo sucesso" promete e que nada aconteceu da segunda vez.
     assert segunda.completed_at == instante_original
     # E a prova de que reenvio nao duplica: uma operacao registrada, nao duas.
-    assert _operacoes(session) == 1
+    assert _operacoes(session, mission_id) == 1
 
 
 def test_operacao_nova_sobre_missao_concluida_e_bloqueada(session: Session) -> None:
@@ -225,29 +238,87 @@ def test_operacao_nova_sobre_missao_concluida_e_bloqueada(session: Session) -> N
         concluir_missao(session, ESTUDANTE, mission_id, "op-xyz")
 
     assert "concluida" in str(excecao.value)
-    assert _operacoes(session) == 1
+    assert _operacoes(session, mission_id) == 1
 
 
-def test_reenviar_operacao_de_outra_missao_devolve_a_missao_original(
-    session: Session,
-) -> None:
-    """O identificador de operacao manda mais que o id da missao no pedido.
+def test_reenviar_operacao_de_outra_missao_e_recusado(session: Session) -> None:
+    """Um identificador de operacao fica preso a missao onde foi usado.
 
-    Reaproveitar um `operation_id` em outra missao e uso indevido do cliente.
-    O servico nao inventa uma conclusao nova por causa disso: devolve o que
-    AQUELA operacao produziu da primeira vez. E a mesma promessa de sempre --
-    um identificador de operacao corresponde a exatamente um efeito.
+    Reaproveitar a chave em outra missao nao e reenvio -- e chave gasta, e
+    recebe erro de dominio. O comportamento anterior (devolver a missao
+    ORIGINAL como sucesso) era pior do que parecia: o cliente pediu para
+    concluir a missao B, recebeu 200, e a missao B continuava pendente.
+
+    O mesmo engano em paralelo recebe o mesmo erro -- e o que
+    `test_mesma_chave_em_missoes_diferentes_e_recusada_tambem_em_paralelo`
+    prova, pelo outro caminho, o da restricao unica.
     """
     primeira_missao = _criar(session)
     segunda_missao = _criar(session)
     concluir_missao(session, ESTUDANTE, primeira_missao, "op-abc")
 
-    devolvida = concluir_missao(session, ESTUDANTE, segunda_missao, "op-abc")
+    with pytest.raises(OperacaoReutilizadaError) as excecao:
+        concluir_missao(session, ESTUDANTE, segunda_missao, "op-abc")
 
-    assert devolvida.id == primeira_missao
-    assert _operacoes(session) == 1
-    # A segunda missao nao foi tocada.
-    pendentes = [
-        m for m in listar_missoes(session, ESTUDANTE) if m.id == segunda_missao
-    ]
-    assert pendentes[0].state is MissionState.PENDENTE
+    assert "op-abc" in str(excecao.value)
+    # A mensagem NAO revela nada da outra missao. Ela nao tem digito nenhum,
+    # entao esta assercao so falha se o id vazar de verdade.
+    assert str(primeira_missao) not in str(excecao.value)
+    # E a segunda missao continua intocada: nem estado, nem operacao.
+    assert _operacoes(session, segunda_missao) == 0
+    intacta = [m for m in listar_missoes(session, ESTUDANTE) if m.id == segunda_missao]
+    assert intacta[0].state is MissionState.PENDENTE
+
+
+def test_chave_usada_em_outro_tipo_de_operacao_e_recusada(session: Session) -> None:
+    """A chave gasta num INICIO nao serve para concluir.
+
+    Hoje `concluir_missao` e a unica coisa que grava operacoes, entao este
+    caso nao acontece em producao -- o registro de tipo "start" e escrito
+    direto na tabela, como a operacao de inicio fara quando existir.
+
+    O teste existe porque a restricao UNIQUE do banco e sobre `operation_id`
+    SOZINHO, sem o tipo: uma chave gasta em qualquer tipo ja esta gasta. Sem
+    a conferencia de `kind`, a consulta de idempotencia encontraria este
+    registro de inicio e devolveria a missao como "ja concluida" -- 200 para
+    uma missao que continua pendente.
+    """
+    mission_id = _criar(session)
+    session.add(
+        MissionOperation(operation_id="op-abc", mission_id=mission_id, kind="start")
+    )
+    session.flush()
+
+    with pytest.raises(OperacaoReutilizadaError):
+        concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+
+    missao = listar_missoes(session, ESTUDANTE)[0]
+    assert missao.state is MissionState.PENDENTE
+
+
+def test_integrity_error_que_nao_e_o_conflito_de_chave_nao_e_traduzido(
+    session: Session,
+) -> None:
+    """A traducao reconhece a restricao; nao engole IntegrityError qualquer.
+
+    `concluir_missao` traduz a violacao da UNIQUE de `operation_id` para
+    `OperacaoReutilizadaError`. Se ela traduzisse qualquer `IntegrityError`,
+    uma violacao de chave estrangeira -- ou qualquer restricao futura --
+    chegaria ao cliente como "chave reutilizada", que e mentira, e o defeito
+    real ficaria escondido atras de uma mensagem plausivel.
+
+    A restricao temporaria nasce e morre dentro da transacao do teste: DDL no
+    PostgreSQL e transacional, e o rollback da fixture a remove.
+    """
+    mission_id = _criar(session)
+    session.execute(
+        text(
+            "ALTER TABLE mission_operations ADD CONSTRAINT ck_temporario "
+            "CHECK (kind <> 'complete')"
+        )
+    )
+
+    with pytest.raises(IntegrityError) as excecao:
+        concluir_missao(session, ESTUDANTE, mission_id, "op-abc")
+
+    assert "ck_temporario" in str(excecao.value.orig)

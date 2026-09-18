@@ -10,16 +10,35 @@ tornar tudo permanente para o dono da transacao.
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from focusquest.core.errors import MissaoNaoEncontradaError, NaoPertenceAoUsuarioError
+from focusquest.core.errors import (
+    MissaoNaoEncontradaError,
+    NaoPertenceAoUsuarioError,
+    OperacaoReutilizadaError,
+)
 from focusquest.modules.missions.domain import MissionState, validar_transicao
 from focusquest.modules.missions.models import Mission, MissionOperation
 
-# O tipo de operacao registrado em mission_operations. Constante nomeada
-# porque no dia em que existir "start" o literal solto teria de ser encontrado
-# em dois lugares -- e um deles ficaria para tras.
+# O tipo da operacao registrada em `mission_operations.kind`: QUAL operacao
+# aquele identificador nomeou. Hoje so existe a conclusao; havera pelo menos
+# o inicio.
+#
+# A consulta de idempotencia NAO filtra por `kind`, e isso e deliberado. A
+# restricao UNIQUE do banco e sobre `operation_id` SOZINHO, entao uma chave
+# gasta num inicio ja esta gasta para a conclusao. Filtrar por tipo faria a
+# consulta nao enxergar essa chave, e o INSERT seguinte esbarraria na UNIQUE
+# assim mesmo -- trocando um erro de dominio explicado por uma violacao crua.
+# A consulta le todos os tipos e CONFERE o tipo depois; e o que mantem a regra
+# do banco e a do codigo falando da mesma coisa.
 CONCLUSAO = "complete"
+
+# O nome que a migracao deu a restricao unica. Serve para reconhecer QUAL
+# IntegrityError e o conflito de identificador: traduzir qualquer
+# IntegrityError faria uma violacao de chave estrangeira ser reportada ao
+# cliente como "chave reutilizada", que e mentira.
+UNICIDADE_DA_OPERACAO = "uq_mission_operations_operation_id"
 
 
 def criar_missao(
@@ -107,10 +126,13 @@ def concluir_missao(
     sucesso repetido -- justamente a promessa que a idempotencia existe para
     cumprir.
 
-    A restricao unica em `operation_id` continua sendo a ultima linha de
-    defesa, para o caso que a trava de linha nao cobre: dois reenvios da
-    mesma operacao sobre missoes DIFERENTES nao disputam trava nenhuma, e ali
-    quem recusa e o banco.
+    Reusar um `operation_id` em OUTRA missao nao e nenhuma das duas coisas:
+    e chave gasta, e recebe `OperacaoReutilizadaError`. Esse caso tem dois
+    caminhos possiveis -- a consulta abaixo encontra a operacao alheia, ou a
+    restricao unica recusa o INSERT quando a operacao alheia foi gravada
+    depois da consulta -- e os DOIS terminam no mesmo erro. Sem isso, o mesmo
+    engano do cliente daria 200 em sequencia e 500 em paralelo, conforme o
+    escalonador.
     """
     missao = _buscar(session, user_id, mission_id, travar=True)
 
@@ -118,10 +140,10 @@ def concluir_missao(
         select(MissionOperation).where(MissionOperation.operation_id == operation_id)
     )
     if ja_feita is not None:
-        # A missao registrada na operacao, e nao a que veio no argumento: e o
-        # que a operacao realmente concluiu da primeira vez, e e esse o
-        # resultado que reenviar deve devolver.
-        return _buscar(session, user_id, ja_feita.mission_id)
+        _exigir_mesma_operacao(ja_feita, mission_id, operation_id)
+        # Mesma missao e mesmo tipo: e reenvio, e o resultado e o de antes.
+        # `missao` ja E a missao da operacao -- a conferencia acima garante.
+        return missao
 
     validar_transicao(missao.state, MissionState.CONCLUIDA)
     missao.state = MissionState.CONCLUIDA
@@ -131,8 +153,54 @@ def concluir_missao(
             operation_id=operation_id, mission_id=missao.id, kind=CONCLUSAO
         )
     )
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as erro:
+        # A janela que a trava de linha NAO fecha: duas missoes diferentes
+        # com o mesmo identificador de operacao nao disputam trava nenhuma,
+        # entao as duas consultas acima podem nao ver nada e os dois INSERTs
+        # chegarem juntos. Quem recusa ali e a UNIQUE -- e a recusa precisa
+        # sair com a mesma cara do caminho sequencial.
+        if UNICIDADE_DA_OPERACAO not in str(erro.orig):
+            raise
+        raise OperacaoReutilizadaError(_reuso(operation_id)) from erro
     return missao
+
+
+def _reuso(operation_id: str) -> str:
+    """A mensagem do reuso de identificador, escrita uma vez so.
+
+    Ela explica o bloqueio (README s8) sem dizer NADA sobre a outra operacao:
+    nem o id da missao, nem o tipo. Quem pediu nao tem direito a saber que a
+    chave caiu numa missao especifica -- saber isso ja e informacao sobre um
+    recurso que nao foi autorizado a ver. O `operation_id` aparece porque foi
+    o proprio cliente que o enviou.
+    """
+    return (
+        f"o identificador de operacao '{operation_id}' ja pertence a outra "
+        "operacao; envie um identificador novo"
+    )
+
+
+def _exigir_mesma_operacao(
+    ja_feita: MissionOperation, mission_id: int, operation_id: str
+) -> None:
+    """Confere que a operacao encontrada e a MESMA que se esta pedindo.
+
+    Duas dimensoes, e as duas importam:
+
+    - **missao diferente**: a chave foi gasta em outra missao. Sem esta
+      conferencia, `concluir_missao(missao_b, chave_da_missao_a)` devolveria
+      a missao A como sucesso.
+    - **tipo diferente**: a chave foi gasta em outra operacao da mesma
+      missao. Hoje `CONCLUSAO` e o unico tipo que existe, entao este ramo nao
+      tem como acontecer em producao -- mas ele ja esta escrito porque, no
+      dia em que houver um inicio, o defeito seria devolver como "concluida"
+      uma missao que so foi iniciada. E um registro de inicio, nao de
+      conclusao.
+    """
+    if ja_feita.mission_id != mission_id or ja_feita.kind != CONCLUSAO:
+        raise OperacaoReutilizadaError(_reuso(operation_id))
 
 
 def _buscar(

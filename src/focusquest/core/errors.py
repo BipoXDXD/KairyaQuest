@@ -14,6 +14,28 @@ class MissaoNaoEncontradaError(DomainError):
     """Nao existe missao com o identificador pedido."""
 
 
+class OperacaoReutilizadaError(DomainError):
+    """O identificador de operacao ja identifica OUTRA operacao.
+
+    Um `operation_id` fica vinculado a operacao em que foi usado pela
+    primeira vez -- a missao E o tipo. Reaproveita-lo em outra missao, ou
+    para outro tipo de operacao na mesma missao, e uso indevido do cliente:
+    nao e reenvio, e chave gasta.
+
+    A distincao em relacao ao reenvio legitimo e o que sustenta a promessa da
+    idempotencia. Se qualquer reuso fosse aceito como "ja feito", concluir a
+    missao B com uma chave gasta na missao A devolveria a missao A como
+    sucesso -- o cliente receberia 200 e a missao B continuaria pendente, sem
+    que nada no caminho tivesse parecido errado.
+
+    O nome e mais largo do que "de outra missao" de proposito, e o motivo e
+    estrutural: a restricao UNIQUE que sustenta tudo isso e sobre
+    `operation_id` SOZINHO, sem o tipo. Entao a mesma chave usada numa
+    operacao de inicio e numa de conclusao e o mesmo conflito, e precisa ser
+    o mesmo erro.
+    """
+
+
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
