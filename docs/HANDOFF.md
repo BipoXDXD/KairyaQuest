@@ -18,11 +18,9 @@ aberta; quando ele for mesclado, a base passa a ser a `main`. Spec em
 decisões C12 e C13); plano em
 `docs/superpowers/plans/2026-09-18-incremento-a.md`. Relógio injetável,
 `code` nos erros de domínio e o botão Concluir para as missões avulsas.
-Fecha as pendências 1 e 7. **Estado de publicação: PR #8 aberto, merge
-pendente.** A branch foi empurrada com autorização do dono e o PR #8 foi
-aberto; os jobs do CI rodaram e passaram sobre `7a3d507` (`gh pr checks 8`).
-O merge espera a autorização do dono e deve ser por **merge commit**, para
-preservar os SHAs citados abaixo.
+Fecha as pendências 1 e 7. **Estado de publicação: publicado pelo PR #8**,
+mesclado por **merge commit** com autorização do dono, para preservar os SHAs
+citados abaixo; estado atual em `gh pr view 8`.
 **Integração da `main`:** o PR #6 foi mesclado à `main` em `4a9a2a4` (merge
 commit, `gh pr view 6`), e o PR #5 (`fix/sessao-em-utc`, sessão do
 PostgreSQL em UTC) entrou na `main` por rebase, em `2440515` e `c08c2a1`.
@@ -743,7 +741,10 @@ B → C**. O desenho de A, B e C está em
   por máquina nos erros (pendência 1) e o botão Concluir, com o `operation_id`
   preservado entre tentativas. **Entregue** (ver "Alterações do Incremento
   A").
-- **1b — a Tifa**, descrito abaixo. **É o próximo.**
+- **1b — a Tifa**, descrito abaixo. **É o próximo.** Desenho aprovado pelo
+  dono em `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com
+  entrega em duas partes: 1b-1 (backend) e 1b-2 (frontend, E2E e a chamada
+  real).
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
   navegação lateral), depois do 1b.
 
