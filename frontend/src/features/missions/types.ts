@@ -20,7 +20,11 @@ export interface Mission {
   id: number
   instructions: string
   completion_criterion: string
-  /** De 1 a 5; o teto e imposto pela API. */
+  /**
+   * De 1 a 5; o teto e imposto pela API. O 5 espelha `DIFICULDADE_MAXIMA`, em
+   * src/focusquest/modules/missions/schemas.py, e nada amarra os dois: quem
+   * mudar la tem de mudar aqui e no "de 5" de `MissionList.tsx`.
+   */
   difficulty: number
   estimated_minutes: number
   /** ISO 8601 SEMPRE com fuso -- a API recusa prazo sem fuso com 422. */

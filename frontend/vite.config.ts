@@ -60,8 +60,16 @@ export default defineConfig({
     // src/shared/api/client.ts). Os testes precisam do mesmo valor que o
     // ambiente de desenvolvimento usa; `client.test.ts` sobrescreve com
     // `vi.stubEnv` para exercitar a ausencia.
+    //
+    // `TZ` fixado num fuso que NAO e o do produto (America/Sao_Paulo) e que tem
+    // offset de sinal oposto ao dele. Sem isto, o teste que prova que o prazo e
+    // apresentado em SP seria VACUO na maquina do dono, que esta em SP: um
+    // formatador sem `timeZone` produziria o mesmo texto e passaria (medido).
+    // Com o processo em Tokyo, esquecer o `timeZone` reprova em qualquer
+    // maquina -- inclusive na de quem nunca rodou o CI.
     env: {
       VITE_API_URL: '/api',
+      TZ: 'Asia/Tokyo',
     },
     coverage: {
       provider: 'v8',

@@ -72,9 +72,11 @@ const PEDIDOS: readonly PedidoDeMissao[] = [
     completion_criterion: `Dez exercicios corrigidos (e2e ${EXECUCAO})`,
     difficulty: 5,
     estimated_minutes: 90,
-    // Prazo com deslocamento -03:00, e nao `Z`: a API o normaliza para UTC na
-    // leitura, e e isso que a conferencia do `dateTime` abaixo comprova --
-    // comparando INSTANTES, nao strings.
+    // Prazo com deslocamento -03:00, e nao `Z`: a leitura devolve o mesmo
+    // instante escrito no fuso da SESSAO do PostgreSQL (UTC no servidor deste
+    // projeto, mas isso e configuracao do banco, nao promessa da API), e e a
+    // igualdade de INSTANTES -- nao de strings -- que a conferencia do
+    // `dateTime` abaixo comprova.
     deadline: '2027-02-15T21:00:00-03:00',
   },
   {
@@ -85,6 +87,20 @@ const PEDIDOS: readonly PedidoDeMissao[] = [
     deadline: '2027-01-10T13:00:00Z',
   },
 ]
+
+/**
+ * O TEXTO do prazo que a tela tem de mostrar para cada pedido, na mesma ordem
+ * de `PEDIDOS` -- escrito por extenso, em `America/Sao_Paulo`, pela mesma razao
+ * de nao importar os rotulos da aplicacao.
+ *
+ * Os dois fusos que importam aqui produzem textos diferentes: o navegador do
+ * cenario roda em `Asia/Tokyo` (ver `playwright.config.ts`), onde o primeiro
+ * prazo seria `16/02/2027 09:00`. Conferir so o atributo `dateTime` nao pegava
+ * um defeito de APRESENTACAO -- o instante estava certo e o texto, no fuso
+ * errado. Regex e nao texto exato: o separador entre data e hora muda entre
+ * versoes do ICU.
+ */
+const PRAZO_NA_TELA: readonly RegExp[] = [/15\/02\/2027.*21:00/, /10\/01\/2027.*10:00/]
 
 /** As missoes criadas, como a API as devolveu, na ordem de criacao. */
 const criadas: MissaoCriada[] = []
@@ -138,7 +154,7 @@ test.beforeAll(async ({ playwright }) => {
 test('o quadro mostra as missoes que esta execucao criou', async ({ page }) => {
   const lista = await abrirQuadro(page)
 
-  for (const criada of criadas) {
+  for (const [indice, criada] of criadas.entries()) {
     const item = lista.locator(`[data-mission-id="${String(criada.id)}"]`)
     await expect(item).toHaveCount(1)
 
@@ -168,10 +184,13 @@ test('o quadro mostra as missoes que esta execucao criou', async ({ page }) => {
     // O prazo: o atributo `dateTime` carrega o instante, e a comparacao e
     // entre INSTANTES. Comparar as strings reprovaria por formatacao --
     // `2027-02-15T21:00:00-03:00` e `2027-02-16T00:00:00Z` sao o mesmo momento
-    // escrito de dois jeitos, e a API normaliza para UTC na leitura.
+    // escrito de dois jeitos, e o offset da leitura depende do fuso da sessao
+    // do PostgreSQL, nao de uma regra da API.
     const prazo = await item.getByTestId('mission-deadline').getAttribute('dateTime')
     expect(prazo).not.toBeNull()
     expect(Date.parse(prazo ?? '')).toBe(Date.parse(criada.deadline))
+    // E o texto visivel, no fuso do produto -- com o navegador em outro fuso.
+    await expect(item.getByTestId('mission-deadline')).toHaveText(PRAZO_NA_TELA[indice])
   }
 })
 

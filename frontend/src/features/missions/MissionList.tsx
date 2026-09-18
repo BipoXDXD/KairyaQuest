@@ -6,12 +6,21 @@ import { useMissions, type MissionsState } from './useMissions'
  * Formatador do prazo, criado UMA vez fora do componente.
  *
  * O prazo chega como string ISO com fuso, entao `new Date(...)` produz o
- * instante certo -- nunca se deve cortar a string na mao para formatar. O texto
- * visivel sai no fuso de quem le; o instante original continua exposto no
- * atributo `dateTime` do `<time>`, que e o que um teste (ou um leitor de tela)
- * pode conferir sem depender do fuso da maquina.
+ * instante certo -- nunca se deve cortar a string na mao para formatar.
+ *
+ * O texto visivel sai em `America/Sao_Paulo`, e NAO no fuso de quem le: e o que
+ * o README §8 manda ("apresente em America/Sao_Paulo") e o que a decisao A3 da
+ * spec repete. Sem o `timeZone`, o `Intl` usaria o fuso do navegador, e a
+ * mesma missao mostraria dias diferentes para quem estivesse fora de SP. O
+ * instante original continua exposto no atributo `dateTime` do `<time>`.
+ *
+ * Quem guarda esta escolha e o teste de unidade com um instante em que SP e
+ * UTC caem em dias diferentes, rodando com o processo fixado em `Asia/Tokyo`
+ * (ver `vite.config.ts`) -- sem a fixacao, numa maquina em SP, o teste passaria
+ * sem o `timeZone`.
  */
 const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
@@ -54,6 +63,10 @@ function MissionCard({ mission }: { mission: Mission }) {
         </dd>
 
         <dt className="text-slate-400">Dificuldade</dt>
+        {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
+            src/focusquest/modules/missions/schemas.py. Nada amarra os dois
+            automaticamente (isso pediria gerar o tipo a partir do OpenAPI):
+            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. */}
         <dd data-testid="mission-difficulty">{mission.difficulty} de 5</dd>
 
         <dt className="text-slate-400">Estimativa</dt>

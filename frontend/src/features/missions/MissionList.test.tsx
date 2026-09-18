@@ -163,8 +163,31 @@ describe('MissionList', () => {
     // O atributo carrega a string ORIGINAL da API, com fuso: e o contrato que
     // o E2E pode conferir sem depender do fuso da maquina que roda o teste.
     expect(prazo).toHaveAttribute('dateTime', '2026-09-20T13:00:00Z')
-    // O texto visivel e formatado em pt-BR (dd/mm/aaaa), no fuso de quem le.
+    // O texto visivel e formatado em pt-BR (dd/mm/aaaa) e no fuso de
+    // America/Sao_Paulo, o que o README §8 e a decisao A3 da spec mandam -- nao
+    // no fuso de quem le. O fuso em si e provado no teste seguinte; aqui so o
+    // formato.
     expect(prazo).toHaveTextContent(/\d{2}\/\d{2}\/\d{4}/)
+  })
+
+  it('apresenta o prazo em America/Sao_Paulo, mesmo com o processo em outro fuso', async () => {
+    // Um instante em que SP e UTC caem em DIAS diferentes: 02:30 de 20/09 em
+    // UTC sao 23:30 de 19/09 em SP. Com qualquer instante "de meio de dia" o
+    // teste nao distinguiria os fusos pela data, so pela hora.
+    //
+    // O que da dente a este teste e o `TZ` do processo fixado em `Asia/Tokyo`
+    // no `vite.config.ts`. Sem ele, na maquina do dono -- que esta em SP --, o
+    // formatador SEM `timeZone` produziria o mesmo texto esperado, e o teste
+    // passaria sem o conserto (medido). Em Tokyo o formatador sem `timeZone`
+    // diz 20/09/2026 11:30, e o teste reprova.
+    stubFetchResolving([{ ...pendente, deadline: '2026-09-20T02:30:00Z' }])
+
+    render(<MissionList />)
+
+    await screen.findByTestId('missions-list')
+    // Regex e nao texto exato: o separador entre data e hora (virgula,
+    // espaco) muda entre versoes do ICU, e o que importa aqui e dia e hora.
+    expect(screen.getByTestId('mission-deadline')).toHaveTextContent(/19\/09\/2026.*23:30/)
   })
 
   it('omite a duracao real quando a API a devolve nula', async () => {

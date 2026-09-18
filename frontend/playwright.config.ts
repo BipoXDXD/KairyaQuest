@@ -38,6 +38,11 @@ export default defineConfig({
     // Rastro apenas do que falhou -- em `test-results/`, que o .gitignore da
     // raiz ja ignora.
     trace: 'retain-on-failure',
+    // O navegador num fuso que NAO e o do produto. A tela apresenta o prazo em
+    // `America/Sao_Paulo` (README §8); com o navegador herdando o fuso da
+    // maquina -- que, na do dono, E Sao Paulo --, a asseveracao do texto do
+    // prazo passaria mesmo se a aplicacao usasse o fuso de quem le.
+    timezoneId: 'Asia/Tokyo',
   },
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
