@@ -1,107 +1,20 @@
 """A migracao precisa aplicar em banco VAZIO (README s10)."""
 
-from argparse import Namespace
 from collections.abc import Iterator
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from sqlalchemy import Engine, inspect, make_url, text
 from sqlalchemy.exc import IntegrityError
 
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url
 
+from .conftest import alembic_config, exigir_banco_de_teste
+
 # As TABELAS que a migracao cria, sem `alembic_version` -- essa e do proprio
 # Alembic e sobrevive ao `downgrade base`.
 TABELAS_DA_MIGRACAO = frozenset({"users", "missions", "mission_operations"})
-
-
-def _exigir_banco_de_teste(engine: Engine) -> None:
-    """Recusa-se a rodar se o alvo nao for, comprovadamente, o banco de teste.
-
-    Os testes de migracao apagam o schema inteiro. A protecao do
-    `-x test=true` e convencao: qualquer modulo pode montar um Config sem
-    ele, e quem estiver com pressa monta. Esta guarda transforma a convencao
-    em estrutura -- o comando destrutivo passa a depender do que se pode
-    verificar sobre o alvo, nao da memoria de quem escreve o teste.
-
-    Sao DUAS condicoes independentes, e as duas precisam valer. Elas cobrem
-    erros de configuracao diferentes, e por isso nenhuma substitui a outra:
-
-    1. **O alvo e exatamente o banco de teste configurado.** Esta e a
-       verificacao forte, e e ela que recusa *servidor* errado. Conferir so
-       o nome nao bastava: `...@127.0.0.1:5432/qualquer_test` termina em
-       `_test` e mesmo assim aponta para a instalacao local do PostgreSQL da
-       porta 5432, que NAO pertence a este projeto. Um
-       FOCUSQUEST_TEST_DATABASE_URL mal configurado levaria o
-       `DROP SCHEMA public CASCADE` para o banco de outra pessoa.
-
-    2. **O nome termina em `_test`.** A condicao 1 sozinha aprovaria alguem
-       que apontasse a propria FOCUSQUEST_TEST_DATABASE_URL para o banco de
-       desenvolvimento -- a URL bateria com a configuracao, porque a
-       configuracao e que esta errada. Esta segunda camada nao consulta a
-       configuracao; e a convencao de nome que o .env.example estabelece,
-       conferida por fora dela.
-
-    Juntas: a 1 impede apontar para outro servidor, a 2 impede apontar a
-    variavel de teste para o banco errado.
-    """
-    esperado = make_url(Settings().test_database_url)
-
-    # Condicao 1: alvo igual ao configurado. A comparacao e entre objetos URL,
-    # nao entre strings, para nao depender de detalhe de formatacao. A
-    # mensagem mostra as duas URLs REDIGIDAS (`render_as_string()` esconde a
-    # senha por padrao): um traceback nao e lugar de credencial.
-    if engine.url != esperado:
-        raise RuntimeError(
-            "recusando rodar teste destrutivo: o alvo "
-            f"'{engine.url.render_as_string()}' nao e o banco de teste "
-            f"configurado ('{esperado.render_as_string()}')"
-        )
-
-    # Condicao 2: convencao de nome, conferida sem consultar a configuracao.
-    nome = engine.url.database or ""
-    if not nome.endswith("_test"):
-        raise RuntimeError(
-            f"recusando rodar teste destrutivo contra o banco '{nome}'; "
-            "esperado um banco cujo nome termine em '_test' -- confira "
-            "FOCUSQUEST_TEST_DATABASE_URL"
-        )
-
-
-def _alembic_config() -> Config:
-    """Configuracao do Alembic apontada para o banco de TESTE.
-
-    `cmd_opts` e o mesmo objeto que a linha de comando preenche: e dali que
-    `context.get_x_argument()` le o `-x`. Passar um Namespace no construtor,
-    em vez de remendar o atributo depois, e o caminho tipado -- o campo ja e
-    declarado como `Namespace | None`, entao nao ha `type: ignore` nenhum.
-    Sem esse `x`, o env.py cairia no banco de DESENVOLVIMENTO, e o
-    `DROP SCHEMA` abaixo destruiria dados reais.
-    """
-    return Config("alembic.ini", cmd_opts=Namespace(x=["test=true"]))
-
-
-@pytest.fixture(scope="module")
-def banco_migrado(engine: Engine) -> Engine:
-    """Banco de teste zerado e migrado do zero.
-
-    Esta fixture existe para que os testes nao dependam da ordem em que o
-    pytest os executa: cada um declara o estado de que precisa, em vez de
-    torcer para o primeiro teste ter rodado antes. Custa uma migracao por
-    modulo, nao por teste, porque o escopo e `module`.
-
-    A guarda vem ANTES do `DROP SCHEMA`, nao depois: uma verificacao que roda
-    depois do comando destrutivo nao e verificacao, e autopsia.
-    """
-    _exigir_banco_de_teste(engine)
-    with engine.begin() as conexao:
-        conexao.execute(text("DROP SCHEMA public CASCADE"))
-        conexao.execute(text("CREATE SCHEMA public"))
-
-    command.upgrade(_alembic_config(), "head")
-    return engine
 
 
 def test_migracao_aplica_em_banco_vazio(banco_migrado: Engine) -> None:
@@ -178,7 +91,7 @@ def test_guarda_recusa_servidor_diferente_do_configurado(
     para um servidor alheio a uma porta de distancia.
     """
     with pytest.raises(RuntimeError) as excecao:
-        _exigir_banco_de_teste(engine_em_outro_servidor)
+        exigir_banco_de_teste(engine_em_outro_servidor)
 
     mensagem = str(excecao.value)
     assert "nao e o banco de teste configurado" in mensagem
@@ -193,13 +106,13 @@ def test_guarda_recusa_o_banco_de_desenvolvimento(
 ) -> None:
     """A guarda precisa MORDER, e este e o teste que prova que ela morde.
 
-    Sem esta assercao, `_exigir_banco_de_teste` poderia estar quebrada --
+    Sem esta assercao, `exigir_banco_de_teste` poderia estar quebrada --
     aceitando qualquer alvo -- e a suite continuaria verde, porque o caminho
     feliz nunca a exercita. Uma guarda sem teste do caso que ela bloqueia e
     uma guarda que so parece existir.
     """
     with pytest.raises(RuntimeError) as excecao:
-        _exigir_banco_de_teste(engine_de_desenvolvimento)
+        exigir_banco_de_teste(engine_de_desenvolvimento)
 
     mensagem = str(excecao.value)
     assert "recusando rodar teste destrutivo" in mensagem
@@ -225,7 +138,7 @@ def test_guarda_recusa_configuracao_de_teste_apontada_para_o_banco_errado(
     )
 
     with pytest.raises(RuntimeError) as excecao:
-        _exigir_banco_de_teste(engine_de_desenvolvimento)
+        exigir_banco_de_teste(engine_de_desenvolvimento)
 
     mensagem = str(excecao.value)
     assert "termine em '_test'" in mensagem
@@ -236,7 +149,7 @@ def test_guarda_permite_o_banco_de_teste_configurado(engine: Engine) -> None:
     """O caso feliz tambem precisa de teste: uma guarda que recusa TUDO
     deixaria a suite vermelha por um motivo certo e uma razao errada, e o
     conserto obvio -- afrouxa-la -- desfaria a protecao."""
-    _exigir_banco_de_teste(engine)
+    exigir_banco_de_teste(engine)
 
 
 def test_sequence_de_users_avanca_apos_a_migracao(banco_migrado: Engine) -> None:
@@ -270,10 +183,10 @@ def test_downgrade_apaga_e_upgrade_devolve_o_esquema(banco_migrado: Engine) -> N
     reversibilidade no gate, para o `downgrade()` da proxima migracao nao
     apodrecer em silencio.
     """
-    command.downgrade(_alembic_config(), "base")
+    command.downgrade(alembic_config(), "base")
     apos_downgrade = set(inspect(banco_migrado).get_table_names())
     assert not (TABELAS_DA_MIGRACAO & apos_downgrade)
 
-    command.upgrade(_alembic_config(), "head")
+    command.upgrade(alembic_config(), "head")
     apos_upgrade = set(inspect(banco_migrado).get_table_names())
     assert apos_upgrade >= TABELAS_DA_MIGRACAO
