@@ -1,0 +1,453 @@
+# Spec de design — Incremento 1b: a Tifa, propor e confirmar uma missão, e o chat
+
+**Data:** 2026-09-18
+**Estado:** desenhada com o dono, seção por seção, e aprovada por ele em cada
+uma. **Nada foi implementado.** Entrega em duas partes, cada uma com o seu PR
+verde: **1b-1** (backend) e **1b-2** (frontend, E2E e a chamada real).
+
+## O que o README pede
+
+- §14: "Com credenciais, Tifa propõe uma missão e a cria após confirmação. Sem
+  elas, teste o contrato e mostre indisponibilidade; não simule tutoria real
+  com dados fixos."
+- §6: o provedor é configurável; chamadas e credenciais ficam no backend, com
+  limites, timeouts e modelo configuráveis; o modelo **solicita** e o backend
+  **autoriza e executa**; novos compromissos exigem confirmação; mensagens e
+  ações são persistidas com estados de proposta, confirmação, execução e
+  falha; o raciocínio interno do modelo não é armazenado; o adaptador
+  determinístico é para testes, não para tutoria real; a integração é testada
+  sem chamadas pagas nem segredos reais.
+- §5: a personalidade é acolhedora, enérgica e assertiva, sem culpa nem
+  ameaças, com falas originais, sem inventar fontes, e com pistas graduais
+  antes da solução.
+- §7: no desktop, um painel expansível da Tifa; no celular, a conversa não
+  cobre botões, não prende o teclado e não exige rolagem horizontal; o texto
+  digitado é preservado depois de falhas; o reenvio não duplica; o retrato é
+  um placeholder até haver assets autorizados.
+
+## Decisões do dono (2026-09-18)
+
+| # | Pergunta | Decisão |
+|---|---|---|
+| D1 | Credencial | O dono **tem uma chave da API da Anthropic** para o produto, separada da assinatura do Claude Code. Ela fica só no `.env` local dele: nunca no repositório, nunca no CI. |
+| D2 | Como confirmar uma proposta | **Cartão com botões Confirmar e Recusar.** O clique vai direto ao backend, sem passar pelo modelo: o "sim" é determinístico e testável. |
+| D3 | Forma da conversa | **Uma conversa contínua**, persistida. Só as últimas N mensagens vão ao modelo. |
+| D4 | Como a resposta chega | **Streaming no 1b.** O dono escolheu isso sabendo que o incremento cresce. |
+| D5 | Transporte do streaming | **Abordagem 1:** um POST que responde em `text/event-stream`, com a geração presa à requisição. As alternativas (turno em segundo plano com reconexão; WebSocket) foram recusadas. |
+| D6 | Divisão | **1b-1** backend, **1b-2** frontend. |
+| D7 | Histórico enviado ao modelo | **Configurável**, com padrão 20 mensagens. |
+| D8 | O servidor falso dos testes | Tem de emitir **o formato exato que a versão fixada do SDK entende**, garantido pelas três camadas da seção "O servidor falso". |
+
+Já decidido antes, na spec do 1a: **provedor Anthropic**, modelo padrão
+**`claude-opus-5`**, configurável; o módulo `tutoring` nasce no 1b.
+
+## Contexto que morde
+
+- **A missão não tem título.** Os campos do `MissionCreate` são
+  `instructions`, `completion_criterion`, `difficulty` (1 a
+  `DIFICULDADE_MAXIMA` = 5), `estimated_minutes` e `deadline`, que é
+  **obrigatório**. A Tifa precisa propor um prazo, então recebe o "agora" do
+  relógio injetável do Incremento A.
+- **O `Settings` recusa variável desconhecida** (pendência 12). Cada campo
+  novo entra também no `.env.example`, com prefixo `FOCUSQUEST_`.
+- **Exceção deliberada à docstring do `Settings`**, que diz que nenhuma
+  credencial tem valor padrão, "esquecer de configurar precisa falhar na
+  partida". A chave da Anthropic é **opcional**: o README §6 manda mostrar
+  indisponibilidade sem credencial, então a ausência dela é um **estado do
+  produto**, não uma configuração esquecida. A docstring passa a registrar a
+  exceção e o motivo. As URLs de banco continuam obrigatórias.
+- **O backend é síncrono** (SQLAlchemy 2 e psycopg 3 síncronos). O streaming
+  segue o mesmo modelo, e o módulo não abre um segundo modelo de concorrência.
+- **Erros** seguem o formato do A, `{"detail", "code"}`, com os códigos no
+  `CodigoDeErro` de `main.py`. Os valores são contrato e ficam em português,
+  como os do A. O cliente nunca lê o `detail`.
+
+## Modelo de dados (1b-1, migração `0002`)
+
+No padrão das tabelas existentes: `CheckConstraint` para estado,
+`UniqueConstraint` e índices únicos para idempotência, chave estrangeira para o
+usuário único semeado pela `0001`.
+
+### `tutor_messages`
+
+| Coluna | Tipo e regra |
+|---|---|
+| `id` | `Integer`, PK |
+| `user_id` | FK `users.id`, não nulo |
+| `role` | `Text`, `CHECK role IN ('user', 'tutor')` |
+| `content` | `Text`, não nulo. Numa resposta `interrompida` ou `falhou`, o texto parcial, que pode ser vazio |
+| `status` | `Text`, `CHECK status IN ('gerando', 'completa', 'interrompida', 'falhou')`. A mensagem do usuário nasce `completa` |
+| `client_message_id` | `Text`, nulo nas mensagens da Tifa. **Único** entre as mensagens do usuário |
+| `reply_to_id` | FK `tutor_messages.id`, nulo nas mensagens do usuário. Na resposta da Tifa, aponta para a pergunta |
+| `error_code` | `Text`, nulo. Preenchido quando `falhou` |
+| `created_at` | `timestamptz`, não nulo |
+
+**Restrições que o banco garante:**
+
+- `CHECK`: `role = 'user'` exige `client_message_id` não nulo, `reply_to_id`
+  nulo e `status = 'completa'`; `role = 'tutor'` exige `client_message_id`
+  nulo e `reply_to_id` não nulo.
+- **Uma resposta viva por pergunta:** índice único parcial em `reply_to_id`
+  `WHERE status = 'completa'`. "Tentar de novo" cria outra resposta; as
+  tentativas `interrompida` e `falhou` ficam como histórico.
+- **Uma resposta sendo gerada por vez:** índice único parcial em `user_id`
+  `WHERE status = 'gerando'`. A conversa é uma só: duas perguntas em paralelo
+  intercalariam as respostas.
+
+### `tutor_actions`
+
+| Coluna | Tipo e regra |
+|---|---|
+| `id` | `Integer`, PK |
+| `message_id` | FK `tutor_messages.id`, não nulo: a resposta da Tifa que propôs |
+| `kind` | `Text`, `CHECK kind IN ('create_mission')` |
+| `payload` | `JSONB`, não nulo. **Validado pelo `MissionCreate` antes de ser gravado**: uma proposta inválida nunca vira linha |
+| `state` | `Text`, `CHECK state IN ('proposta', 'executada', 'recusada', 'falhou')` |
+| `mission_id` | FK `missions.id`, nulo; `CHECK (state = 'executada') = (mission_id IS NOT NULL)` |
+| `operation_id` | `Text`, nulo; **único**. Gravado na confirmação |
+| `error_code` | `Text`, nulo; preenchido quando `falhou` |
+| `created_at`, `decided_at` | `timestamptz`; `decided_at` nulo enquanto `proposta` |
+
+**Confirmação e execução são um passo só no 1b.** O §6 lista os estados
+proposta, confirmação, execução e falha. Aqui, confirmar cria a missão, grava
+`state = 'executada'` e o `mission_id` **na mesma transação**, com
+`SELECT … FOR UPDATE` na ação. Não existe um estado "confirmada e ainda não
+executada" que alguém pudesse observar, e por isso ele não tem valor no
+`CHECK`. Se um fluxo futuro separar os dois passos, o estado entra junto.
+
+**O raciocínio interno do modelo não é pedido nem gravado** (§6). O
+_extended thinking_ fica desligado; só o texto final e a chamada de ferramenta,
+já convertida em ação, chegam ao banco.
+
+## Contrato HTTP (1b-1)
+
+| Método e rota | Entrada | Saída |
+|---|---|---|
+| `GET /api/tutoring/status` | — | `{"available": bool}`. `false` quando não há chave |
+| `GET /api/tutoring/messages` | — | as últimas 50 mensagens, em ordem cronológica, cada resposta da Tifa com as suas ações embutidas. **Sem paginação no 1b** (declarado em "Fora") |
+| `POST /api/tutoring/messages` | `{"client_message_id", "content"}` | `text/event-stream` (ver abaixo) |
+| `POST /api/tutoring/actions/{id}/confirm` | `{"operation_id"}` | `{"action", "mission"}` |
+| `POST /api/tutoring/actions/{id}/reject` | — | `{"action"}` |
+
+Os nomes de campo ficam em inglês: payload de API é contrato externo (README
+§3, decisão B do dono).
+
+### O stream do `POST /api/tutoring/messages`
+
+Eventos SSE, nesta ordem:
+
+1. `user_message`: a pergunta, **já gravada**, com o `id` do banco.
+2. `delta`, zero ou mais vezes: `{"text": "…"}`.
+3. Um final, e só um:
+   - `done`: a resposta `completa` e as ações dela, emitido **depois do
+     commit**;
+   - `error`: `{"code": "…"}`, emitido **depois de a falha estar gravada** como
+     `falhou`.
+
+Um stream que termina sem `done` nem `error` é **resultado desconhecido**,
+como a resposta perdida do Incremento A: o cliente oferece "Tentar de novo", e
+o reenvio é seguro.
+
+### Reenvio: o mesmo POST, o mesmo `client_message_id`
+
+"Tentar de novo" não é um endpoint próprio. O mesmo `client_message_id`
+resolve três casos:
+
+| O estado da pergunta | O que o POST faz |
+|---|---|
+| Já tem resposta `completa` | Emite `user_message` e um `done` com essa resposta, **sem chamar o modelo** |
+| A última resposta está `interrompida` ou `falhou` | Gera uma resposta nova |
+| Há uma resposta `gerando` | `409 mensagem_em_andamento` |
+
+Um `client_message_id` já gravado com **outro** `content` responde
+`409 operacao_reutilizada`, o código do A, com o mesmo sentido: gere um
+identificador novo.
+
+### A resposta `gerando` e o órfão
+
+A resposta nasce gravada como `gerando`, num commit próprio, antes de chamar
+o provedor. Isso evita segurar uma transação aberta durante o stream, e o
+índice parcial garante uma só por usuário.
+
+Se o processo morrer no meio, a linha ficaria `gerando` para sempre e
+travaria a conversa. Por isso toda nova pergunta primeiro marca como
+`interrompida` qualquer resposta `gerando` cujo `created_at` seja mais antigo
+que `tutor_timeout_seconds` mais uma folga de 30 segundos, medidos pelo
+relógio injetável.
+
+### Erros antes do stream
+
+Respondem JSON comum, e **a pergunta não é gravada**:
+
+| Situação | Resposta |
+|---|---|
+| Sem chave | `503 provedor_nao_configurado` |
+| Resposta `gerando` em andamento | `409 mensagem_em_andamento` |
+| `client_message_id` reusado com outro conteúdo | `409 operacao_reutilizada` |
+| Corpo inválido (vazio, campo faltando) | `422` do Pydantic, sem `code`, como no A |
+
+### Erros dentro do stream (`event: error`)
+
+| `code` | Quando |
+|---|---|
+| `provedor_indisponivel` | o provedor recusou ou falhou depois das tentativas do SDK |
+| `tempo_esgotado` | estourou `tutor_timeout_seconds` |
+| `proposta_invalida` | o modelo chamou `create_mission` com entrada que o `MissionCreate` recusa |
+
+### Confirmar e recusar
+
+| Situação | Resposta |
+|---|---|
+| Confirmar uma `proposta` | `200`; a missão nasce e a ação vira `executada`, na mesma transação |
+| Confirmar de novo com o mesmo `operation_id` | `200`, igual ao anterior |
+| `operation_id` já usado em outra ação | `409 operacao_reutilizada` |
+| Confirmar uma `executada` com um `operation_id` **novo** | `409 transicao_ilegal`, como concluir de novo uma missão concluída no A |
+| Confirmar uma `recusada` ou `falhou`; recusar uma `executada` ou `falhou` | `409 transicao_ilegal` |
+| Recusar uma `recusada` | `200`, idempotente |
+| O prazo já passou na hora de confirmar | `422 prazo_expirado`; a ação vira `falhou` com esse código |
+| Ação inexistente | `404 acao_nao_encontrada` |
+
+O `prazo_expirado` é a única pré-condição nova: o prazo proposto era futuro
+quando a Tifa o escreveu e pode ter passado quando você clica.
+
+## O provedor (1b-1)
+
+### A interface
+
+O serviço de tutoria depende de um `Protocol`, não do SDK. O provedor recebe o
+contexto do turno e devolve uma sequência de eventos: `Delta(texto)`,
+`Proposta(payload)` e `Fim`. O serviço grava e emite, e não sabe que existe
+Anthropic.
+
+### O adaptador Anthropic
+
+- **SDK oficial `anthropic`**, uma dependência nova com o motivo escrito no
+  `docs/HANDOFF.md`, como o `AGENTS.md` §4 exige. O README §6 permite "SDK
+  oficial ou HTTPX"; o SDK traz os tipos do stream, o que o servidor falso usa.
+- **Síncrono.** O `StreamingResponse` roda o gerador numa thread. Quando o
+  cliente desconecta, o Starlette para de consumir o gerador; o `finally`
+  fecha o stream do SDK e grava a resposta como `interrompida`, com o texto
+  parcial e **sem ação**.
+- **Tentativas:** no máximo 2, do próprio SDK, e só antes do primeiro evento.
+  Depois do primeiro `delta` não há nova tentativa.
+
+### A ferramenta `create_mission` só propõe
+
+- O `input_schema` é gerado do `MissionCreate`, a mesma fonte do
+  `POST /api/missions`, para as duas não divergirem.
+- Quando o modelo a chama, o backend **não a executa e não devolve
+  `tool_result`**. Ele valida a entrada pelo `MissionCreate` e grava uma
+  `tutor_action` com `state = 'proposta'`. O turno termina.
+- `tool_choice` com `disable_parallel_tool_use`: **uma proposta por resposta**,
+  como o §14 pede.
+- Se a entrada for inválida, nenhuma ação é gravada. A resposta vira `falhou`
+  com `proposta_invalida`, mantendo o texto já escrito, e **não há nova chamada
+  automática** (§6: "não repita chamadas indefinidamente").
+
+### O contexto de cada turno
+
+- As últimas `tutor_history_messages` mensagens com `status = 'completa'`. As
+  `interrompida` e `falhou` ficam fora, porque meio texto confunde o modelo.
+- **As ações antigas entram como texto**, com o estado real, por exemplo
+  "Proposta de missão #12 — executada". A API da Anthropic exige um
+  `tool_result` depois de cada `tool_use`, e o backend não devolve resultado;
+  representar a proposta como texto mantém o histórico bem formado e diz ao
+  modelo o que foi confirmado ou recusado.
+- As missões pendentes do usuário, só leitura. É o `get_study_context` do
+  §6, e não vira ferramenta no 1b: vai no prompt.
+- O "agora", pelo relógio injetável, em UTC.
+
+**Injeção de prompt.** O que o usuário escreve é dado não confiável (§6). O
+pior que uma injeção consegue é uma **proposta**, que a pessoa vê no cartão e
+pode recusar. A ferramenta não tem outro poder, e o backend nunca executa
+código, SQL ou shell vindos do modelo.
+
+### A persona
+
+O prompt de sistema fica num arquivo versionado do módulo `tutoring`, com o
+que o §5 exige: acolhedora, enérgica e assertiva; sem culpa, ameaça nem
+vigilância fictícia; falas originais; não inventar fontes nem tratar incerteza
+como verificada; pistas graduais antes da solução, respeitando o pedido da
+pessoa.
+
+### `Settings`
+
+Cada campo com a linha correspondente no `.env.example`:
+
+| Campo | Variável | Padrão |
+|---|---|---|
+| `anthropic_api_key` | `FOCUSQUEST_ANTHROPIC_API_KEY` | `SecretStr \| None = None`. Ausente: `available: false` |
+| `anthropic_base_url` | `FOCUSQUEST_ANTHROPIC_BASE_URL` | `None`, que usa o endereço do SDK. Só os testes o apontam para o servidor falso |
+| `tutor_model` | `FOCUSQUEST_TUTOR_MODEL` | `claude-opus-5` |
+| `tutor_max_tokens` | `FOCUSQUEST_TUTOR_MAX_TOKENS` | `1024` |
+| `tutor_timeout_seconds` | `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS` | `60` |
+| `tutor_history_messages` | `FOCUSQUEST_TUTOR_HISTORY_MESSAGES` | `20` |
+
+## O servidor falso
+
+Um servidor HTTP que fala o formato SSE da API de Mensagens da Anthropic e
+mora em `tests/`. O `anthropic_base_url` aponta o SDK real para ele no pytest
+e no E2E. Assim, os testes exercitam **o adaptador de produção inteiro**,
+incluindo a leitura que o SDK faz do stream, e não existe um "modo falso"
+dentro de `src/` que alguém pudesse ligar por engano.
+
+O falso é roteirizado por teste: texto em pedaços, uma chamada de
+`create_mission` com uma entrada dada, uma entrada inválida, uma falha HTTP,
+um corte no meio do stream, uma demora maior que o timeout. Ele conta as
+chamadas recebidas, para os testes provarem que o reenvio de uma pergunta já
+respondida não chama o modelo.
+
+**O formato exato (decisão D8), em três camadas:**
+
+1. **Construído com os tipos do SDK fixado.** Cada evento é um objeto do
+   próprio SDK (`RawMessageStartEvent`, `RawContentBlockStartEvent`,
+   `RawContentBlockDeltaEvent`, `RawContentBlockStopEvent`,
+   `RawMessageDeltaEvent`, `RawMessageStopEvent`), serializado pelo modelo
+   Pydantic dele. Não há JSON escrito à mão; um campo errado não passa no
+   mypy.
+2. **Teste de contrato.** O SDK real consome o stream do falso por
+   `client.messages.stream(...)`, e o teste confere que a `Message` final
+   montada pelo SDK tem o texto e o bloco `tool_use` com a entrada esperada. Se
+   a versão do SDK no `uv.lock` mudar e deixar de entender o falso, este teste
+   reprova no gate. A guarda é vista reprovando por mutação (trocar um tipo de
+   evento) antes de valer.
+3. **Referência gravada de uma chamada real.** A chamada real que o dono faz
+   uma vez no 1b-2 grava a **sequência de tipos de evento** de uma resposta
+   com texto e proposta, sem o conteúdo, num arquivo em `tests/`. Um teste
+   confere que o falso emite a mesma sequência. Isso cobre o que as camadas 1
+   e 2 não veem: o falso poderia ser válido para o SDK e ainda assim diferente
+   do que a API manda.
+
+A camada 3 só existe depois da chamada real. Até lá, o 1b-1 a registra como
+pendência no HANDOFF, sem afirmar mais do que foi medido.
+
+## A tela (1b-2)
+
+- **O painel da Tifa.** No desktop, fica à direita do Quartel-General,
+  expansível, com o estado aberto ou fechado lembrado no `localStorage`. No
+  celular, abre por um botão fixo como folha sobre a tela, com o campo de texto
+  acima do teclado, sem esconder o enviar e sem rolagem horizontal. A
+  navegação lateral fica para o Incremento C.
+- **Retrato:** placeholder original, com as iniciais e a cor verde-mako.
+  Nenhum asset dos jogos (§7).
+- A feature nova é `frontend/src/features/tutoring/`, que não importa nada de
+  fora de `shared/`. A recarga do quadro depois de uma confirmação passa pela
+  página, que compõe as duas features.
+
+### Estados
+
+| Estado | O que a pessoa vê |
+|---|---|
+| Carregando o histórico | esqueleto das mensagens |
+| Indisponível (`available: false` ou `503 provedor_nao_configurado`) | "A Tifa está fora do ar: falta configurar o provedor." O campo fica desabilitado e o Quartel-General continua funcionando |
+| Vazio | uma saudação fixa **da interface**, não uma fala inventada da Tifa |
+| Escrevendo | o texto chega pelos `delta`. "Tifa está escrevendo…" numa região viva que **existe desde o primeiro render**; o leitor de tela anuncia o início e o fim, não cada palavra |
+| Interrompida ou falhou | o texto parcial fica visível e marcado; "Tentar de novo" reenvia o mesmo `client_message_id` |
+| Proposta | cartão com instruções, critério, dificuldade, minutos e prazo, e os botões Confirmar e Recusar |
+| Executada | "Missão criada" e um link para o Quartel-General; a lista do quadro recarrega, respeitando a espera do Incremento A se houver uma conclusão em voo |
+| Recusada | o cartão fica marcado como recusado, sem botões |
+| Falhou (`prazo_expirado`) | a explicação, e a sugestão de pedir outra proposta à Tifa |
+
+**O texto digitado nunca se perde** (§7). O campo só é limpo quando o evento
+`user_message` confirma a gravação. Um `503` ou `409` antes do stream deixa o
+texto lá.
+
+### Reuso do Incremento A
+
+- O Confirmar segue o desenho do Concluir: `operation_id` criado no primeiro
+  clique, mantido entre tentativas de resultado desconhecido e trocado só
+  depois de `operacao_reutilizada`.
+- Um mapa exaustivo `code → {message, recovery}` sobre o tipo, com
+  `Object.hasOwn`, como o `completionFailure.ts`.
+- O `postJson` para confirmar e recusar. Uma função nova, `postStream`, no
+  `shared/api/client.ts`, com `fetch` e `ReadableStream`, porque o
+  `EventSource` só faz GET.
+
+## Testes
+
+Cobertura de 100% nos dois lados, e toda guarda nova vista reprovando por
+mutação antes de valer.
+
+### Backend (1b-1): PostgreSQL real e o servidor falso
+
+- O stream: a ordem dos eventos; o `done` só depois do commit, provado lendo o
+  banco no instante do `done`; o `error` só depois de a falha estar gravada.
+- A desconexão no meio: a resposta fica `interrompida`, com o texto parcial e
+  sem ação.
+- O reenvio, nos três casos: `done` imediato sem chamar o falso (o contador de
+  chamadas mede zero); resposta nova depois de uma `interrompida`; `409`
+  enquanto está `gerando`. E `operacao_reutilizada` com o mesmo id e outro
+  conteúdo.
+- Concorrência, com threads, como o teste de concorrência atual: duas
+  perguntas ao mesmo tempo resultam em exatamente uma `gerando` e um `409`;
+  dois Confirmar com o mesmo `operation_id` resultam em **uma** missão.
+- O órfão `gerando` é recolhido depois do prazo, com o relógio injetável
+  avançado, sem `sleep`.
+- A proposta inválida: nenhuma linha em `tutor_actions` e a resposta `falhou`
+  com `proposta_invalida`.
+- O `prazo_expirado` na confirmação, com o relógio injetável.
+- Sem chave: `available: false` e `503` antes de gravar qualquer coisa.
+- As três camadas do servidor falso.
+- O segredo: um teste procura o valor da chave na resposta HTTP e no log
+  capturado, e não o encontra. O `SecretStr` a esconde do `repr`.
+- As restrições do banco, cada uma provada por um `INSERT` direto que o banco
+  recusa.
+
+### Frontend (1b-2)
+
+O Vitest cobre cada estado da tabela da tela e o `postStream`, inclusive um
+stream cortado sem `done`, um `503` e um `409` antes do stream, com o texto
+preservado.
+
+### E2E (1b-2), com o servidor falso
+
+- Perguntar, ver o texto chegar, confirmar a proposta e ver a missão no
+  quadro.
+- Recusar uma proposta.
+- A resposta cortada no meio, seguida de "Tentar de novo", sem duplicar.
+- O estado indisponível.
+
+O axe roda nos estados escrevendo, proposta e indisponível. O servidor falso
+usa uma porta própria, acrescentada às pendências 19 e 20, que continuam
+valendo.
+
+### A chamada real (1b-2)
+
+O dono faz uma vez, localmente, com a chave dele, seguindo um roteiro curto no
+HANDOFF: pedir uma missão, confirmar, ver no quadro. Essa chamada grava a
+referência da camada 3. **O CI nunca chama a Anthropic** e nunca recebe a
+chave.
+
+## Fora do 1b, documentado sem endpoint
+
+- As ferramentas `propose_plan`, `submit_activity`, `reschedule_mission` e
+  `request_reward_evaluation` (§6).
+- O ajuste de intensidade, frequência e horários das cobranças, e a pausa (§5).
+- Várias conversas; paginação do histórico além das últimas 50 mensagens.
+- Retomar um stream depois de recarregar a página: a Abordagem 2 da decisão
+  D5, que pode vir depois sem mudar o contrato das mensagens. Até lá,
+  recarregar no meio de uma resposta a deixa `interrompida`, e a tela oferece
+  "Tentar de novo".
+- O retrato definitivo e as expressões da Tifa.
+- Concessão de XP pela Tifa: continua determinística, pela conclusão (§6).
+
+## Riscos
+
+- **Custo por mensagem.** Cada turno envia até 20 mensagens mais o contexto ao
+  `claude-opus-5`. O número e o modelo são configuráveis; nenhum teto de gasto
+  é imposto pelo produto no 1b.
+- **O formato do stream mudar numa versão futura do SDK.** As camadas 2 e 3
+  fazem o gate reprovar em vez de a tela quebrar em silêncio.
+- **O corte do stream no celular** (troca de rede, aba em segundo plano) vira
+  `interrompida` com mais frequência que no desktop. O reenvio é seguro e não
+  custa uma chamada se a resposta tiver chegado a `completa`.
+
+## Entregas de documentação
+
+- `docs/ARCHITECTURE.md`: o módulo `tutoring`, as tabelas, o contrato HTTP e o
+  stream, movidos de "contrato" para "existente" à medida que existirem.
+- `docs/HANDOFF.md`: o motivo do SDK `anthropic`; a exceção à docstring do
+  `Settings`; a camada 3 pendente até a chamada real; o roteiro da chamada
+  real; e o estado de publicação no formato que não envelhece ("publicado pelo
+  PR #N; ver `gh pr view N`").
+- `docs/QUALITY.md`: o servidor falso e o que ele garante.
