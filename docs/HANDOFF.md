@@ -98,6 +98,7 @@ Cada uma está no código, com o motivo no comentário do arquivo citado.
 | `uv lock --check` como primeira receita do `check-api`; **nenhum** equivalente npm no `check-web` | Cumpre a validação do lockfile Python que o `docs/QUALITY.md` prometia. Do lado npm não existe comando barato e confiável que compare sem instalar; a assimetria está declarada no `docs/QUALITY.md` §4. |
 | O `pre-push` passa ao worktree as variáveis `FOCUSQUEST_*` do `.env`, por lista de permissão, nunca `source`, e recusa o push se faltarem | Sem isso, todo push seria recusado com `ValidationError`; degradar para "pular o `check-api`" seria gate cego. `docs/QUALITY.md` §6. |
 | Tetos **técnicos** na entrada: `estimated_minutes` e `mission_id` até `MAIOR_INTEIRO_DA_COLUNA = 2**31 - 1` (int4), `mission_id` a partir de 1, e `deadline` recusado se, convertido para UTC, sair da faixa do `datetime` do Python | Sem eles, entrada fora da faixa do armazenamento respondia 500 — e um prazo extremo deixava o `GET /api/missions` em 500 para sempre. São tetos do armazenamento, **não** de negócio: estes ficam para o dono (pendência 26). |
+| A sessão do PostgreSQL é fixada em UTC por um `SET TIME ZONE 'UTC'` em toda conexão nova, registrado em `create_engine_from_url` — a fábrica por onde nascem as engines da aplicação, da suíte e do Alembic (correção pós-merge, branch `fix/sessao-em-utc`) | O `timestamptz` volta no fuso da sessão, e fora de UTC a leitura de um prazo aceito perto das bordas quebrava a listagem (pendência 27). É `SET`, e não `options=-c timezone=UTC`: a variável `PGTZ` do ambiente vence as `options` (medido), e o `SET` roda depois de tudo. O `autocommit` fica ligado durante o `SET` porque, dentro da transação implícita, o rollback do pool o desfazia (medido). |
 | O prazo é **apresentado** em `America/Sao_Paulo` (`timeZone` fixo no `Intl.DateTimeFormat`), e os testes rodam com o fuso do processo fixado em `Asia/Tokyo` (`test.env.TZ` no `vite.config.ts`, `timezoneId` no Playwright) | O README §8 e a A3 mandam apresentar em São Paulo. O fuso dos testes é fixado **fora** de São Paulo porque a máquina do dono está em São Paulo: lá, um teste sem essa fixação passaria com o defeito (medido). |
 | A guarda de `.env` do `pre-push` mora em `scripts/push-env.sh`, carregada pelo `check-push.sh` | Extraída para ser testada (`tests/integration/test_push_env.py`) sem disparar push nem criar worktree; o `check-push.sh` chama a mesma função, e um teste roda uma cópia dele para provar que chama. |
 | `timeout-minutes` em todos os jobs do CI | O padrão do runner é seis horas; um job travado deixaria o pull request sem veredito nesse tempo. |
@@ -226,7 +227,8 @@ branch inteira):
   `scripts/push-env.sh` (extraído do `check-push.sh`) e
   `tests/integration/test_push_env.py`.
 - **Comentários corrigidos:** o offset do instante devolvido depende do
-  `TimeZone` da sessão do PostgreSQL, não de uma regra da API; o motivo de o
+  `TimeZone` da sessão do PostgreSQL, não de uma regra da API (verdade na
+  época; deixou de ser quando a pendência 27 fixou a sessão em UTC); o motivo de o
   `scripts/e2e-env.sh` não repetir a URL é fonte única, não sigilo; o "de 5"
   do frontend nomeia a constante do backend que ele espelha.
 - **Documentação:** `docs/ARCHITECTURE.md` (os três casos do `/ready`, o 307
@@ -512,7 +514,7 @@ que não tinham chegado aqui)
     revelação semanal distribui as missões. Os limites de negócio entram no
     incremento que introduzir o ciclo diário, e esse incremento começa por
     design próprio.
-27. **A guarda da faixa do prazo supõe a sessão do PostgreSQL em UTC.** O
+27. ~~**A guarda da faixa do prazo supõe a sessão do PostgreSQL em UTC.** O
     banco devolve o `timestamptz` no `TimeZone` da **sessão**, e o psycopg
     não lê um instante que, nesse fuso, cai fora dos anos 1 a 9999. Medido:
     `9999-12-31T23:59:59Z` é lido com a sessão em UTC e em
@@ -528,7 +530,26 @@ que não tinham chegado aqui)
     **Conserto aceito pelo dono em 2026-09-18:** fixar `timezone=UTC` na
     conexão da engine, num commit logo depois do merge deste incremento. O
     mesmo commit corrige a docstring daquele teste, que diz avisar qualquer
-    mudança de fuso e só avisa a leste.
+    mudança de fuso e só avisa a leste.~~
+    **Resolvida na branch `fix/sessao-em-utc` (2026-09-18):**
+    `create_engine_from_url` registra um `SET TIME ZONE 'UTC'` em toda
+    conexão nova, e o `alembic/env.py` passou a criar a engine por ela — as
+    engines da aplicação, da suíte e do Alembic nascem no mesmo lugar. O
+    mecanismo **não** é o `options=-c timezone=UTC` previsto acima: o
+    servidor processa primeiro as `options` do pacote de partida e só depois
+    os demais parâmetros, onde a `libpq` põe o `PGTZ` — o último aplicado
+    vence, e com `PGTZ` definido o servidor fica com o fuso dele (medido com
+    PostgreSQL 18 e libpq 18).
+    Teste novo, `tests/integration/test_sessao_em_utc.py`, com `PGTZ` em
+    `Asia/Tokyo` e em `America/Sao_Paulo`: `SHOW TimeZone` responde `UTC` em
+    dois usos da mesma conexão; `9999-12-31T23:59:59Z` (pedindo leste) e
+    `0001-01-01T00:00:00Z` (pedindo oeste) são aceitos e lidos pelo GET com
+    200; e o reenvio de `/complete` devolve o mesmo corpo da primeira
+    conclusão. Sem o `SET`, os seis casos reprovam; com o `options` no lugar
+    dele, também. A suíte inteira passa com `PGTZ` em cada um dos dois
+    fusos. Efeito no contrato: todo instante lido do banco sai com `Z`; o 201
+    da criação continua ecoando o prazo com o offset que o cliente mandou
+    (`docs/ARCHITECTURE.md`).
 28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
     `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
     `get_engine` estoura `ValidationError` antes do `try` que traduz a falha

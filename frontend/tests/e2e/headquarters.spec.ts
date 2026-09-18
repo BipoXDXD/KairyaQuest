@@ -79,9 +79,9 @@ const PEDIDOS: readonly PedidoDeMissao[] = [
     completion_criterion: `Dez exercicios corrigidos (e2e ${EXECUCAO})`,
     difficulty: 5,
     estimated_minutes: 90,
-    // Prazo com deslocamento -03:00, e nao `Z`: a leitura devolve o mesmo
-    // instante escrito no fuso da SESSAO do PostgreSQL (UTC no servidor deste
-    // projeto, mas isso e configuracao do banco, nao promessa da API), e e a
+    // Prazo com deslocamento -03:00, e nao `Z`: o 201 devolve o prazo como ele
+    // chegou, com `-03:00`, e a listagem o le do banco, com `Z` (a API fixa a
+    // sessao do PostgreSQL em UTC). Sao duas grafias do mesmo instante, e e a
     // igualdade de INSTANTES -- nao de strings -- que a conferencia do
     // `dateTime` abaixo comprova.
     deadline: '2027-02-15T21:00:00-03:00',
@@ -220,9 +220,9 @@ test('o quadro mostra as missoes que esta execucao criou', async ({ page }) => {
 
     // O prazo: o atributo `dateTime` carrega o instante, e a comparacao e
     // entre INSTANTES. Comparar as strings reprovaria por formatacao --
-    // `2027-02-15T21:00:00-03:00` e `2027-02-16T00:00:00Z` sao o mesmo momento
-    // escrito de dois jeitos, e o offset da leitura depende do fuso da sessao
-    // do PostgreSQL, nao de uma regra da API.
+    // `2027-02-15T21:00:00-03:00` (o 201, que ecoa o pedido) e
+    // `2027-02-16T00:00:00Z` (a listagem, lida do banco em UTC) sao o mesmo
+    // momento escrito de dois jeitos.
     const prazo = await item.getByTestId('mission-deadline').getAttribute('dateTime')
     expect(prazo).not.toBeNull()
     expect(Date.parse(prazo ?? '')).toBe(Date.parse(criada.deadline))

@@ -130,7 +130,8 @@ FocusQuest/
 │   │   ├── test_missions_api.py
 │   │   ├── test_missions_concorrencia.py
 │   │   ├── test_missions_models.py
-│   │   └── test_missions_service.py
+│   │   ├── test_missions_service.py
+│   │   └── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
 │   └── unit/                      # sem banco
 │       ├── __init__.py
 │       ├── test_clock.py
@@ -331,12 +332,20 @@ concluir missão ou confirmar recompensa por conta própria.
   ele era aceito com 201, o PostgreSQL o gravava, e a partir daí o
   `GET /api/missions` respondia 500 para sempre. Não há janela de negócio
   (prazo no passado, prazo longe demais) — decisão de produto em aberto.
-- **O offset do instante devolvido depende da sessão do PostgreSQL**, não de
-  uma regra da API: a coluna é `timestamptz`, e o banco converte o instante
-  para o `TimeZone` da sessão na leitura. Com a sessão em UTC (o padrão do
-  servidor deste projeto) sai `Z`; com a sessão em `America/Sao_Paulo`
-  sairia `-03:00` (medido). O instante é o mesmo nos dois casos; quem
-  consome compara instantes, não strings.
+- **Todo instante lido do banco sai em UTC, com `Z`.** A coluna é
+  `timestamptz`, e o banco converte o instante para o `TimeZone` da
+  **sessão** na leitura; `create_engine_from_url` (`core/database.py`) fixa
+  essa sessão em UTC com um `SET TIME ZONE 'UTC'` em toda conexão nova, e
+  por ali nascem as engines da aplicação, da suíte e do Alembic. É um `SET`,
+  e não `options=-c timezone=UTC`, porque a variável `PGTZ` do ambiente vence
+  as `options` (medido). Sem o fuso fixado, a guarda da faixa do prazo não
+  bastava: com a sessão em `Asia/Tokyo` o último instante aceito, e com ela
+  em `America/Sao_Paulo` o primeiro, deixavam a listagem em 500 (medido;
+  `tests/integration/test_sessao_em_utc.py`).
+  **Exceção:** o 201 da criação serializa o prazo como ele chegou no pedido,
+  com o offset que o cliente mandou (`-03:00` entra e sai `-03:00`); só a
+  leitura seguinte o devolve com `Z`. O instante é o mesmo; quem consome
+  compara instantes, não strings.
 - **Saída** (`MissionRead`): `id`, `instructions`, `completion_criterion`,
   `difficulty`, `estimated_minutes`, `deadline`, `state`, `started_at`,
   `completed_at`, mais dois campos **derivados, nunca gravados**: `xp`

@@ -3,10 +3,11 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
 
 from focusquest.core.base import Base
 from focusquest.core.config import Settings
+from focusquest.core.database import create_engine_from_url
 
 config = context.config
 
@@ -50,11 +51,12 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = _url()
-    connectable = engine_from_config(
-        section, prefix="sqlalchemy.", poolclass=pool.NullPool
-    )
+    """A engine nasce pela MESMA fabrica da aplicacao, e nao por
+    `engine_from_config`: e o que da a migracao a mesma configuracao de
+    conexao que a aplicacao usa -- a sessao em UTC, hoje. O `alembic.ini` nao
+    tem chave `sqlalchemy.*` nenhuma (a URL vem de `_url()`), entao o
+    `engine_from_config` do template nao trazia nada que se perca aqui."""
+    connectable = create_engine_from_url(_url(), poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
