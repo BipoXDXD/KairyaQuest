@@ -2,11 +2,13 @@
 
 **Data:** 2026-09-18
 **Estado:** escrita durante uma ausência do dono e revisada por um revisor
-adversarial. **Nada foi implementado.** Antes do plano de implementação, o dono
-precisa tomar **três decisões bloqueantes** (seção "Decisões do dono"). Todas
-as outras decisões desta spec foram tomadas por autorização dele e estão
-marcadas com o motivo. As que **interpretam** o que ele disse também estão
-listadas no fim, em "Interpretações a confirmar".
+adversarial. **Nada foi implementado.** O dono tomou as **três decisões
+bloqueantes** em 2026-09-18 (seção "Decisões do dono"): **B1 (a)**, a sequência
+é contador de hábito e o README §5 foi emendado; **B2**, seguir o README (Ordem
+1); **B3 (b)**, os dias futuros aparecem bloqueados, **com o design de um baú
+fechado**. Todas as outras decisões desta spec foram tomadas por autorização
+dele e estão marcadas com o motivo. As que **interpretam** o que ele disse
+estão listadas no fim, em "Interpretações a confirmar".
 
 ## O que o dono disse
 
@@ -28,7 +30,7 @@ A pendência 26 do `docs/HANDOFF.md` registrou o resumo da primeira mensagem,
 aparece inteira na trilha, e cada missão é apresentada explicitamente no seu
 dia.** Ver B3.
 
-## Decisões do dono (bloqueiam o plano)
+## Decisões do dono (tomadas em 2026-09-18)
 
 ### B1. A regra da sequência conflita com o README §5
 
@@ -67,6 +69,11 @@ jogo é só o contador da sequência e o acesso à missão especial.
 Incremento B. Veja também a C6: um dia **sem plano** já nem conta nem quebra,
 então deixar de criar planos congela a sequência sem limite. Isso pesa na
 escolha entre (a) e (b).
+
+**Decisão do dono, 2026-09-18: (a).** A sequência é um contador de hábito:
+faltar a missão do dia a zera, e nunca remove XP, conclusões nem nada que o
+usuário conquistou. O README §5 foi emendado junto com esta decisão. A regra
+"qualquer outro dia para a contagem", em "Regras do ciclo", fica como está.
 
 ### B2. A ordem dos incrementos contraria o README §14
 
@@ -118,11 +125,11 @@ As duas ordens possíveis:
 | **1 — a do README** | A → 1b (Tifa) → B → C | Segue o §14 como está: a Tifa, que é "central no produto" (README, abertura), chega antes. Quando o ciclo vier, ela já existe, e ligar o `propose_plan` ao plano fica a um incremento de distância. | O ciclo, que é o que o dono está desenhando agora, espera o 1b inteiro. |
 | **2 — ciclo antes** | A → B → C → 1b | O ciclo chega antes, e ele é determinístico: não depende de credencial nem de modelo. | Exige **emendar o §14**, que nomeia o próximo incremento. Até o 1b, só a API cria missões, e as semanas ocultas não surpreendem ninguém. |
 
-**Recomendação: Ordem 1**, porque segue a autoridade do projeto sem emenda. É
-uma recomendação fraca: a diferença real entre as duas é só qual incremento vem
-primeiro, e o dono pode preferir o ciclo por motivo de produto que esta spec não
-conhece. O Incremento A vale nas duas ordens e pode começar assim que o dono
-aprovar esta spec.
+A recomendação era a Ordem 1, porque segue a autoridade do projeto sem emenda,
+e era uma recomendação fraca.
+
+**Decisão do dono, 2026-09-18: seguir o README — Ordem 1, A → 1b (Tifa) → B →
+C.** O próximo incremento é o A. O ciclo (B e C) vem depois do 1b.
 
 ### B3. O que a trilha mostra dos dias futuros
 
@@ -131,15 +138,21 @@ missoes restantes da semana numa area no menu, como uma trilha". Há duas
 leituras:
 
 - **(a) Conteúdo visível, missão bloqueada.** A trilha mostra a missão de cada
-  dia futuro da semana, que só pode ser feita no próprio dia. "Revelada a cada
-  dia" significa que a missão é apresentada no Quartel-General no seu dia.
-  **Esta spec assume (a)**, porque "visualizar as missões" é ver as missões, e
-  porque a primeira mensagem dizia "reveladas semanalmente".
+  dia futuro da semana, que só pode ser feita no próprio dia.
 - **(b) Só marcadores.** A trilha mostra que existe uma missão em cada dia, sem
   o conteúdo, como faz com a missão especial bloqueada. O conteúdo aparece no
   dia.
 
-Se o dono escolher (b), mudam só o `GET /api/plans/current` e a tela.
+**Decisão do dono, 2026-09-18: (b)** — os dias futuros aparecem "bloqueadas,
+com o design de um baú fechado". A trilha mostra, para cada dia futuro, um
+**baú fechado**: o usuário vê que há uma missão naquele dia, mas não o que ela
+é. O conteúdo é revelado no próprio dia.
+
+Isso muda mais do que a tela. Um dia futuro sem conteúdo visível é, para a API,
+o mesmo que a especial bloqueada: **não revelado**. Então a regra de ocultação
+(C11) passa a cobrir também os dias futuros da semana atual, e concluir um
+deles pelo `id` responde o **404 idêntico**, e não mais 409. O código
+`missao_bloqueada` deixa de existir, porque nenhum caminho o alcança.
 
 ## Contexto
 
@@ -171,7 +184,7 @@ Se o dono escolher (b), mudam só o `GET /api/plans/current` e a tela.
 | C8 | A especial fica disponível **do desbloqueio até o fim do dia seguinte** | O dono não fixou janela. O fim do dia seguinte garante pelo menos 24 h e evita que um marco no domingo dê só algumas horas. Perder a especial não quebra a sequência, porque a sequência é das diárias. |
 | C9 | A especial tem sempre a **dificuldade máxima** (5), e seu XP é **3 × XP(5) = 660** | "O triplo das missões difíceis", lido como três vezes o XP da dificuldade máxima. O XP continua **derivado** (A4), agora da dificuldade e do tipo, e nunca é gravado. |
 | C10 | `estimated_minutes` ≤ **1440** para a diária e a especial. O prazo delas **não é entrada nem coluna**: é calculado | O teto de 1440 min (24 h) interpreta "diárias (24 h)" como limite também da estimativa, e não só da janela. O prazo da diária é o fim do seu dia; o da especial, o fim do dia seguinte ao desbloqueio. Os dois são **derivados**, como o XP e a duração real, para não haver dois lugares que possam discordar. Isso **reduz** a pendência 26 às diárias e especiais. Para a avulsa ela continua aberta. |
-| C11 | **Semanas futuras e especial bloqueada são inexistentes para a API**: o mesmo 404, com o mesmo corpo, de "missão inexistente" | "As missões das semanas seguintes permanecem ocultas." Um status diferente revelaria que existem. As diárias da **semana atual** são visíveis, então concluir uma antes do dia dá **409**. |
+| C11 | **Tudo que ainda não foi revelado é inexistente para a API**: semanas futuras, dias futuros da semana atual e a especial bloqueada respondem o mesmo 404, com o mesmo corpo, de "missão inexistente" | "As missões das semanas seguintes permanecem ocultas", e os dias futuros aparecem como baú fechado (B3). Um status diferente revelaria que a missão existe. A trilha mostra os baús **sem `id` e sem conteúdo**, então nenhum endpoint afirma a existência de algo que outro nega. |
 | C12 | O corpo de erro ganha **`code`**: `{"detail": ..., "code": ...}` | Fecha a pendência 1. O frontend decide pelo `code` e mostra a sua própria mensagem em pt-BR. As mensagens do backend não têm acento, e a de transição expõe o valor cru do enum. |
 | C13 | **Relógio injetável**, por dependência do FastAPI, lido **depois** da trava da linha | Fecha a pendência 7. Viagem no tempo fica nos testes de integração, sem gancho de teste no código de produção. |
 | C14 | O plano é criado **só pela API** neste recorte, nas duas ordens; a tela lê, conclui e mostra a campanha | É o mesmo recorte do 1a, em que a tela listava e a criação era pela API. A Tifa escrever a semana (`propose_plan`) é um incremento posterior, em qualquer ordem (B2). Uma tela de "planejar a semana" não é o produto: o produto é a Tifa propor a semana. |
@@ -190,7 +203,7 @@ nunca gravado. Ele é diferente do `state` gravado (`pendente`, `em_andamento`,
 | Condição | `availability` | Concluir? |
 |---|---|---|
 | `D` anterior à data em que o plano foi criado | `fora_do_plano` | não — 409 `missao_expirada` |
-| `D > hoje` | `bloqueada` | não — 409 `missao_bloqueada` |
+| `D > hoje` | `bloqueada` (na trilha, um baú fechado sem `id` e sem conteúdo) | não — **404 idêntico** (C11) |
 | `D == hoje`, não concluída | `disponivel` | sim |
 | concluída | `concluida` | reenvio idempotente devolve o mesmo 200 |
 | `D < hoje`, não concluída | `perdida` | não — 409 `missao_expirada` |
@@ -198,8 +211,9 @@ nunca gravado. Ele é diferente do `state` gravado (`pendente`, `em_andamento`,
 **Ordem da conclusão**, fixada:
 1. trava da linha;
 2. leitura do relógio;
-3. **ocultação**: missão de semana futura ou especial bloqueada responde o 404
-   idêntico, **antes de qualquer outra checagem**;
+3. **ocultação**: missão ainda não revelada (semana futura, dia futuro da
+   semana atual ou especial bloqueada) responde o 404 idêntico, **antes de
+   qualquer outra checagem**;
 4. **reenvio**: se o `operation_id` já concluiu esta missão, devolve o mesmo 200
    **a qualquer hora**. Uma conclusão às 23:59:59 reenviada às 00:00:01 não
    pode receber 409;
@@ -308,7 +322,7 @@ a nega.
 |---|---|---|---|
 | `POST /api/plans` | cria o plano de uma semana: `week_start`, `days` (7 missões, de segunda a domingo) e `bonus` (1 missão, sem `difficulty`) | 201 com o plano | 422 de validação (Pydantic); 409 `plano_existente`; 409 `semana_encerrada` se a semana já terminou; 409 `semana_distante` se `week_start` fica além da semana seguinte |
 | `GET /api/cycle` | o dia: `today`, a missão de hoje (ou `null`), `streak`, `days_to_milestone`, e a especial se estiver `disponivel` | 200 | — |
-| `GET /api/plans/current` | a **trilha** da semana atual: os 7 dias com `availability` e conteúdo, e a especial com `availability` (conteúdo só se desbloqueada) | 200; `{"plan": null}` se não há plano na semana | — |
+| `GET /api/plans/current` | a **trilha** da semana atual: os 7 dias com `availability`, com conteúdo só nos dias já revelados (hoje e os anteriores) e baú fechado nos futuros; e a especial com `availability`, com conteúdo só se desbloqueada | 200; `{"plan": null}` se não há plano na semana | — |
 | `POST /api/missions/{id}/complete` | o endpoint do 1a, com as regras do ciclo | 200 | 404 (inexistente, alheia, semana futura, especial bloqueada — corpo idêntico); 409 com `code` |
 | `POST /api/missions`, `GET /api/missions` | as avulsas do 1a. A listagem passa a devolver **só avulsas** e ganha os campos novos do `MissionRead` | como no 1a | como no 1a |
 
@@ -316,10 +330,12 @@ a nega.
   devolve 200 com `null`, como o 1a devolve `[]` para a coleção vazia. A
   docstring de `listar`, no `router.py`, diz: a tela precisa distinguir
   "nenhuma missao" de "deu erro".
-- **O 201 do `POST /api/plans`** devolve os 7 dias com conteúdo e a especial
-  **como marcador**, sem `id`, conteúdo nem dificuldade, na mesma forma do
-  `GET /api/plans/current`. Assim o 201 não afirma a existência de uma especial
-  que a conclusão por `id` nega com 404.
+- **O 201 do `POST /api/plans`** devolve o plano **na mesma forma do
+  `GET /api/plans/current`**: conteúdo só nos dias já revelados, baú fechado
+  sem `id` nos dias futuros, e a especial como marcador sem `id`, conteúdo nem
+  dificuldade. Assim o 201 não afirma a existência de uma missão que a conclusão
+  por `id` nega com 404. Para um plano da semana seguinte, os 7 dias vêm como
+  baú. Quem criou o plano já sabe o que mandou.
 - **Limite de `week_start`:** no máximo a semana seguinte à atual. Isso impede o
   500 de uma semana no ano 9999, em que o fim do domingo estouraria o
   `datetime` (a mesma classe de defeito que a onda final do 1a fechou), e reduz o
@@ -336,9 +352,8 @@ a nega.
   sem motivo. A listagem também passa a **filtrar** só as avulsas. Hoje isso não
   muda nada, porque só existem avulsas, mas é mudança de comportamento, e fica
   declarada.
-- **Ocultação:** nenhum endpoint lista semanas futuras. Há três vazamentos
-  teóricos, que ficam declarados:
-  - o 201 do `POST /api/plans` devolve a semana futura a quem acabou de criá-la;
+- **Ocultação:** nenhum endpoint devolve conteúdo ou `id` de missão ainda não
+  revelada. Há dois vazamentos teóricos, que ficam declarados:
   - o 409 `plano_existente` confirma que uma semana futura existe;
   - os ids são sequenciais, então uma avulsa criada depois de um plano mostra
     um salto de 8.
@@ -354,7 +369,7 @@ a nega.
 - **Formato:** todo erro de domínio responde `{"detail": <prosa pt-BR>, "code":
   <código>}`.
 - **Códigos:** `missao_nao_encontrada`, `transicao_ilegal`,
-  `operacao_reutilizada`, `missao_bloqueada`, `missao_expirada`,
+  `operacao_reutilizada`, `missao_expirada`,
   `plano_existente`, `semana_encerrada` e `semana_distante`.
 - **Validação:** o 422 do Pydantic mantém o formato padrão do FastAPI. Regras
   que dependem do relógio não são validação Pydantic, e por isso respondem 409
@@ -407,9 +422,11 @@ a nega.
   duplicar (README §7).
 - **Campanhas — a trilha** (Incremento C):
   - os 7 dias, com `availability` em **texto e ícone**, nunca só cor;
-  - o conteúdo dos dias futuros, bloqueado (B3a);
-  - a especial como marcador com "N de 7" e, quando desbloqueada, com o
-    conteúdo;
+  - os dias já revelados com o conteúdo e o estado (concluída ou perdida);
+  - os dias futuros como **baú fechado** (B3), com texto acessível do tipo
+    "Missão de quinta-feira — revelada no dia", e nunca só a imagem;
+  - a especial bloqueada também como baú fechado, com "N de 7", e o conteúdo
+    quando desbloqueada;
   - **nenhuma semana futura**.
 
 ## Testes
@@ -427,10 +444,12 @@ a nega.
   - `days_to_milestone` com `s` = 0, 6, 7 e 8.
 - **Integração, com relógio injetado.**
   - A criação do plano e cada recusa, inclusive a semana encerrada e a distante.
-  - A conclusão no dia, antes (409) e depois (409).
+  - A conclusão no dia, antes do dia (404 idêntico) e depois do dia (409).
   - O **reenvio depois da meia-noite**, que devolve o mesmo 200.
-  - O 404 idêntico da semana futura e da especial bloqueada, comparando o
-    **corpo inteiro** com o de "inexistente".
+  - O 404 idêntico da semana futura, do dia futuro da semana atual e da
+    especial bloqueada, comparando o **corpo inteiro** com o de "inexistente".
+  - Na trilha e no 201 do plano, a ausência de `id` e de conteúdo nos dias
+    futuros e na especial bloqueada.
   - O `code` em cada erro.
   - A conclusão concorrente perto da meia-noite.
   - As restrições novas rejeitando no banco, inclusive a FK composta.
@@ -487,8 +506,9 @@ diárias e especiais); e a 9, que cresce.
 Cada uma foi decidida para o trabalho não parar. Mudar qualquer uma custa editar
 esta spec, porque nada foi implementado.
 
-1. **O que a trilha mostra dos dias futuros:** conteúdo, com a missão bloqueada
-   (B3).
+1. **A especial bloqueada usa o mesmo baú fechado dos dias futuros.** O dono
+   decidiu o baú para os dias futuros (B3). Estendê-lo à especial mantém um
+   visual só para "ainda não revelado".
 2. **"A dificuldade também aumenta":** a especial está sempre na dificuldade
    máxima (5). Há outras leituras:
    - a dificuldade cresce a cada marco, o que exigiria uma escala acima de 5;
