@@ -23,8 +23,9 @@ motivo de `test_push_env.py` e `test_e2e_env.py`: executam o script de
 verdade, com o ambiente de verdade.
 """
 
+import hashlib
 import os
-import shutil
+import re
 import subprocess
 from pathlib import Path
 
@@ -35,11 +36,12 @@ SAIDA_DO_CURL = 35
 
 
 def _rodar(
-    tmp_path: Path, diretorio_de_ferramentas: Path
+    tmp_path: Path, diretorio_de_ferramentas: Path, *, script: Path = SCRIPT
 ) -> subprocess.CompletedProcess[str]:
-    """Executa o script com um `curl` falso que sempre falha."""
+    """Executa o script (o real, ou uma copia via `script=`) com um `curl`
+    falso que sempre falha."""
     bin_falso = tmp_path / "bin"
-    bin_falso.mkdir()
+    bin_falso.mkdir(exist_ok=True)
     curl_falso = bin_falso / "curl"
     curl_falso.write_text(
         "#!/bin/sh\n"
@@ -49,7 +51,7 @@ def _rodar(
     curl_falso.chmod(0o755)
 
     return subprocess.run(
-        [str(SCRIPT)],
+        [str(script)],
         capture_output=True,
         text=True,
         check=False,
@@ -107,60 +109,55 @@ def test_aceita_binario_valido_do_cache_sem_ir_a_rede(tmp_path: Path) -> None:
     E o caminho positivo que faltava: os outros testes provam que um binario
     ERRADO e recusado, mas nenhum provava que um CERTO e aceito sem tocar na
     rede. Uma mutacao que trocasse `BIN_SHA256` por `SHA256` na comparacao
-    (linha 72 de install-gitleaks.sh) sobreviveria aos demais -- o script
+    (linha 75 de install-gitleaks.sh) sobreviveria aos demais -- o script
     sempre baixaria, e o cache ficaria inutil em silencio, que e justamente o
     motivo de ele existir.
 
-    Nao ha como fabricar um arquivo arbitrario cujo SHA-256 seja o
-    `BIN_SHA256` esperado -- o hash e do binario real, nao inventavel. Por
-    isso o teste copia o `.tools/gitleaks` que ja existe na raiz do
-    repositorio (instalado por um `./scripts/install-gitleaks.sh` anterior) e
-    confere o hash dele antes de usar, para nao dar falso positivo se algum
-    dia esse binario for trocado sem reinstalar.
+    O binario nao pode ser o `.tools/gitleaks` real: o job `check-api` do CI
+    roda este teste num checkout limpo, sem gitleaks instalado (so o job
+    `check-secrets`, num runner separado, o instala) -- e o mesmo vale para um
+    `make check` num clone novo. Dependeria de rede ou de um binario que pode
+    nao existir, exatamente o que este teste tem de provar que a guarda
+    dispensa.
+
+    A alternativa: fabricar um executavel qualquer e uma COPIA do script real
+    (no estilo de tests/integration/test_push_env.py) em que so o valor
+    esperado de `BIN_SHA256` e trocado pelo hash desse executavel -- em TODOS
+    os ramos de plataforma do `case`, nao so no da plataforma atual. Isso
+    mantem o teste igual em qualquer runner (Linux ou macOS) sem precisar
+    decidir em qual ramo mexer, e a mutacao (a) continua pegavel: ela troca o
+    NOME da variavel usada na comparacao, nao o valor de um ramo especifico,
+    entao sobrevive igual em qualquer plataforma testada.
     """
-    binario_real = SCRIPT.parent.parent / ".tools" / "gitleaks"
-    assert binario_real.is_file(), (
-        "faltando .tools/gitleaks -- rode ./scripts/install-gitleaks.sh "
-        "antes deste teste (ele nao vai a rede sozinho)."
-    )
-
-    plataforma = f"{os.uname().sysname}-{os.uname().machine}"
-    hashes_por_plataforma = {
-        "Darwin-arm64": (
-            "ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f"
-        ),
-        "Linux-x86_64": (
-            "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509"
-        ),
-    }
-    hash_esperado = hashes_por_plataforma.get(plataforma)
-    assert hash_esperado is not None, (
-        f"plataforma sem BIN_SHA256 conhecido: {plataforma}"
-    )
-    resultado_hash = subprocess.run(
-        ["shasum", "-a", "256", str(binario_real)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert resultado_hash.stdout.split()[0] == hash_esperado, (
-        "o .tools/gitleaks do repositorio nao confere com o BIN_SHA256 "
-        f"de {plataforma} -- reinstale com ./scripts/install-gitleaks.sh"
-    )
-
     ferramentas = tmp_path / "tools"
     ferramentas.mkdir()
     alvo = ferramentas / "gitleaks"
-    shutil.copy2(binario_real, alvo)
+    alvo.write_text("#!/bin/sh\nexit 0\n")
     alvo.chmod(0o755)
+    hash_do_alvo = hashlib.sha256(alvo.read_bytes()).hexdigest()
 
-    resultado = _rodar(tmp_path, ferramentas)
+    conteudo_original = SCRIPT.read_text()
+    conteudo_com_hash_trocado, trocas = re.subn(
+        r'BIN_SHA256="[0-9a-f]+"',
+        f'BIN_SHA256="{hash_do_alvo}"',
+        conteudo_original,
+    )
+    assert trocas >= 2, (
+        "esperava trocar o BIN_SHA256 de pelo menos dois ramos de plataforma "
+        "em install-gitleaks.sh -- o script mudou de formato?"
+    )
+
+    copia_do_script = tmp_path / "install-gitleaks.sh"
+    copia_do_script.write_text(conteudo_com_hash_trocado)
+    copia_do_script.chmod(0o755)
+
+    resultado = _rodar(tmp_path, ferramentas, script=copia_do_script)
 
     assert not (tmp_path / "curl-args").exists(), (
         "foi a rede com um binario valido em cache"
     )
-    assert resultado.returncode == 0
-    assert alvo.read_bytes() == binario_real.read_bytes(), (
+    assert resultado.returncode == 0, resultado.stderr
+    assert alvo.read_bytes() == b"#!/bin/sh\nexit 0\n", (
         "o binario em cache foi alterado"
     )
 
