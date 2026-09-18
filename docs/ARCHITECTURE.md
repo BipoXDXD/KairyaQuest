@@ -51,12 +51,14 @@ FocusQuest/
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
-│   │   │   └── missions/          # a feature de missões: tipos, hook de dados e componente
+│   │   │   └── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
 │   │   │       ├── MissionList.test.tsx
 │   │   │       ├── MissionList.tsx
 │   │   │       ├── completionFailure.test.ts
 │   │   │       ├── completionFailure.ts # code de erro → mensagem e ação da tela
 │   │   │       ├── types.ts
+│   │   │       ├── useCompleteMission.test.tsx
+│   │   │       ├── useCompleteMission.ts # conclui uma missão; o operation_id vive num useRef
 │   │   │       ├── useMissions.test.tsx
 │   │   │       └── useMissions.ts
 │   │   ├── pages/
@@ -379,7 +381,12 @@ na transição ilegal não há o que repetir; no identificador gasto, gera-se um
   componentes, hooks, contratos e testes **daquele** assunto, agrupados. Em
   `missions`, `useMissions.ts` busca os dados e expõe os quatro estados de
   tela como união discriminada (carregando, vazio, erro, carregado), e
-  `MissionList.tsx` os desenha.
+  `MissionList.tsx` os desenha. Cada cartão ainda não concluído tem o botão
+  **Concluir**: `useCompleteMission.ts` envia `POST /complete` com um
+  `operation_id` gerado no primeiro clique e **mantido entre as tentativas**
+  (README §7), e `completionFailure.ts` traduz o `code` de cada falha em
+  mensagem e ação (tentar de novo com a mesma chave, com uma chave nova, ou
+  atualizar o quadro).
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
   `requestJson` (GET) e `postJson` (POST) e a tradução de falha em
   `ApiError`, que carrega `status` e `code`. O cliente **não lê o `detail`**:

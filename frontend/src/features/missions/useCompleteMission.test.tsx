@@ -1,0 +1,178 @@
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import type { Mission } from './types'
+import { useCompleteMission } from './useCompleteMission'
+
+const concluida: Mission = {
+  id: 7,
+  instructions: 'Ler o capitulo 3 de algoritmos',
+  completion_criterion: 'Resumo de uma pagina entregue',
+  difficulty: 3,
+  estimated_minutes: 45,
+  deadline: '2026-09-20T13:00:00Z',
+  state: 'concluida',
+  started_at: null,
+  completed_at: '2026-09-18T15:00:00Z',
+  xp: 100,
+  actual_duration_minutes: null,
+}
+
+// Dois identificadores fixos, na ordem em que `crypto.randomUUID` os devolve.
+// Fixos para que o teste diga QUAL chave foi enviada em cada tentativa, e nao
+// so "uma chave qualquer".
+const PRIMEIRA_CHAVE = '00000000-0000-4000-8000-000000000001'
+const SEGUNDA_CHAVE = '00000000-0000-4000-8000-000000000002'
+
+/** O `operation_id` de cada POST que o hook fez, na ordem. */
+function sentOperationIds(fetchMock: Mock): string[] {
+  return fetchMock.mock.calls.map(([, init]) => {
+    const body = JSON.parse((init as RequestInit).body as string) as { operation_id: string }
+    return body.operation_id
+  })
+}
+
+function pendingForever() {
+  return new Promise<Response>(() => {
+    // Nunca resolve: e assim que o estado de envio fica observavel.
+  })
+}
+
+describe('useCompleteMission', () => {
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(PRIMEIRA_CHAVE)
+      .mockReturnValueOnce(SEGUNDA_CHAVE)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('comeca parado, sem ir a rede e sem gerar chave', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    expect(result.current.state).toEqual({ status: 'idle' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    // A chave nasce no primeiro clique, e nao na montagem: um quadro com vinte
+    // missoes nao precisa de vinte chaves que ninguem vai usar.
+    expect(crypto.randomUUID).not.toHaveBeenCalled()
+  })
+
+  it('fica em submitting enquanto a resposta nao chega', () => {
+    vi.stubGlobal('fetch', vi.fn(pendingForever))
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    act(() => {
+      result.current.complete()
+    })
+
+    expect(result.current.state).toEqual({ status: 'submitting' })
+  })
+
+  it('conclui pelo POST da missao e chega em completed com a missao que a API devolveu', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(concluida))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+    })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/missions/7/complete')
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
+  })
+
+  it('depois de uma falha de rede, a nova tentativa reenvia a MESMA chave', async () => {
+    // E o README §7: uma falha de rede nao diz se o servidor concluiu. Com a
+    // mesma chave, o reenvio devolve a conclusao que ja existe ou conclui
+    // agora -- nunca duas vezes.
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(Response.json(concluida))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('failed')
+    })
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
+  })
+
+  it('depois de operacao_reutilizada, a nova tentativa usa uma chave NOVA', async () => {
+    // A chave pertence a outra operacao: com ela, toda tentativa seria
+    // recusada. Trocar e seguro -- a missao nao foi concluida por ela.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ detail: 'x', code: 'operacao_reutilizada' }, { status: 409 }),
+      )
+      .mockResolvedValueOnce(Response.json(concluida))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'failed',
+        failure: {
+          message: 'Não foi possível registrar esta tentativa. Tente de novo.',
+          recovery: 'retry-with-new-operation',
+        },
+      })
+    })
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
+  })
+
+  it('transicao_ilegal chega em failed pedindo para atualizar o quadro', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+        ),
+    )
+    const { result } = renderHook(() => useCompleteMission(7))
+
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'failed',
+        failure: {
+          message: 'Esta missão já estava concluída. Atualize o quadro para ver o estado atual.',
+          recovery: 'refresh',
+        },
+      })
+    })
+  })
+})

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { MissionList } from './MissionList'
 import type { Mission } from './types'
 
@@ -227,5 +227,152 @@ describe('MissionList', () => {
 
     await screen.findByTestId('missions-list')
     expect(screen.getByTestId('missions')).not.toHaveTextContent(/em_andamento/)
+  })
+})
+
+describe('MissionList -- concluir', () => {
+  // A missao pendente depois de concluida, como a API a devolve no 200.
+  const pendenteConcluida: Mission = {
+    ...pendente,
+    state: 'concluida',
+    completed_at: '2026-09-18T15:00:00Z',
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** O corpo de cada POST de conclusao, na ordem em que saiu. */
+  function completionBodies(fetchMock: Mock): unknown[] {
+    return fetchMock.mock.calls
+      .filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as unknown)
+  }
+
+  it('oferece Concluir so para a missao que ainda nao foi concluida', async () => {
+    stubFetchResolving([pendente, emAndamento, concluida])
+
+    render(<MissionList />)
+
+    await screen.findByTestId('missions-list')
+    const [itemPendente, itemEmAndamento, itemConcluida] = screen.getAllByTestId('mission-item')
+    expect(within(itemPendente).getByTestId('mission-complete')).toBeInTheDocument()
+    expect(within(itemEmAndamento).getByTestId('mission-complete')).toBeInTheDocument()
+    // `concluida` e terminal (decisao A5): nao ha o que oferecer.
+    expect(within(itemConcluida).queryByTestId('mission-complete')).not.toBeInTheDocument()
+  })
+
+  it('da ao botao um nome acessivel que diz QUAL missao ele conclui', async () => {
+    // Com varias missoes no quadro, "Concluir" sozinho seria o mesmo nome em
+    // todos os botoes, e o leitor de tela nao teria como distingui-los.
+    stubFetchResolving([pendente])
+
+    render(<MissionList />)
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Concluir a missão: Ler o capitulo 3 de algoritmos',
+      }),
+    ).toBeVisible()
+  })
+
+  it('durante o envio, desabilita o botao e anuncia; um segundo clique nao reenvia', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json([pendente]))
+      .mockImplementationOnce(() => new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MissionList />)
+    const botao = await screen.findByTestId('mission-complete')
+
+    fireEvent.click(botao)
+    fireEvent.click(botao)
+
+    expect(botao).toBeDisabled()
+    expect(botao).toHaveTextContent('Concluindo…')
+    expect(screen.getByTestId('mission-completion-status')).toHaveTextContent(
+      'Concluindo a missão…',
+    )
+    // Um GET da lista e UM POST: o segundo clique caiu no botao desabilitado.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('depois do sucesso, mostra a missao concluida, anuncia e tira o botao', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json([pendente]))
+        .mockResolvedValueOnce(Response.json(pendenteConcluida)),
+    )
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    // O rotulo sai da missao que a API DEVOLVEU, e nao de um palpite da tela.
+    expect(await screen.findByText('Missão concluída.')).toHaveAttribute('role', 'status')
+    expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mission-completion-error')).not.toBeInTheDocument()
+  })
+
+  it('numa falha de rede, avisa e deixa tentar de novo com a MESMA chave', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json([pendente]))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(Response.json(pendenteConcluida))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    const aviso = await screen.findByTestId('mission-completion-error')
+    expect(aviso).toHaveAttribute('role', 'alert')
+    expect(aviso).toHaveTextContent(
+      'Não foi possível confirmar a conclusão. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+    )
+    const tentarDeNovo = screen.getByRole('button', {
+      name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
+    })
+
+    fireEvent.click(tentarDeNovo)
+
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const [primeiro, segundo] = completionBodies(fetchMock)
+    expect(segundo).toEqual(primeiro)
+  })
+
+  it('na transicao ilegal, tira o Concluir e oferece Atualizar o quadro, que recarrega', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json([pendente]))
+      .mockResolvedValueOnce(
+        Response.json(
+          { detail: 'PROSA-CRUA-DO-BACKEND', code: 'transicao_ilegal' },
+          { status: 409 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json([pendenteConcluida]))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    expect(await screen.findByTestId('mission-completion-error')).toHaveTextContent(
+      'Esta missão já estava concluída. Atualize o quadro para ver o estado atual.',
+    )
+    expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
+    // Nem a prosa do backend nem o code cru chegam a tela.
+    expect(screen.getByTestId('missions')).not.toHaveTextContent('PROSA-CRUA-DO-BACKEND')
+    expect(screen.getByTestId('missions')).not.toHaveTextContent('transicao_ilegal')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar o quadro' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    expect(screen.queryByTestId('mission-completion-error')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
