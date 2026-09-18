@@ -1,0 +1,533 @@
+"""Os endpoints da missao: contrato de entrada, de saida e de erro.
+
+Cada status HTTP deste arquivo e um RAMO do tradutor de erros, e nenhum deles
+tem como ser exercitado pelo servico -- `service.py` nao conhece HTTP de
+proposito. Por isso a traducao precisa de teste proprio aqui, e nao de um
+teste de servico a mais.
+
+Quase todos os testes usam a fixture `session`, que reverte tudo no final: a
+sessao do teste E a sessao da requisicao, via `dependency_overrides`. A
+excecao deliberada e
+`test_a_requisicao_commita_de_verdade_e_devolve_a_conexao`, que roda com a
+dependencia REAL -- e o unico jeito de provar que a requisicao commita, ja que
+uma sessao compartilhada com o teste mostraria os dados commitados ou nao.
+"""
+
+import logging
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, delete, func, select
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import QueuePool
+
+from focusquest.core.database import get_engine, get_session
+from focusquest.main import app
+from focusquest.modules.missions.domain import MissionState, xp_para_dificuldade
+from focusquest.modules.missions.models import Mission, MissionOperation, User
+from focusquest.modules.missions.schemas import DIFICULDADE_MAXIMA
+
+# O usuario unico semeado pela migracao (README s8) -- o mesmo que o router
+# assume enquanto nao houver autenticacao.
+ESTUDANTE = 1
+# Um segundo usuario, criado dentro da transacao do teste que precisa de um
+# dono diferente. Sem ele o handler de NaoPertenceAoUsuarioError seria
+# inalcancavel pela API, e um ramo inalcancavel e um ramo descoberto.
+OUTRO = 2
+
+
+@pytest.fixture
+def client(session: Session) -> Iterator[TestClient]:
+    """Cliente cuja requisicao usa a SESSAO DO TESTE.
+
+    A substituicao e do `get_session`, nao do `get_engine`: e ela que amarra a
+    requisicao a transacao que a fixture reverte no final. Se a rota tivesse
+    aberto uma sessao propria, este override nao teria efeito nenhum -- que e
+    o que faz ele valer como prova de que a rota depende de `get_session`.
+
+    A limpeza do dicionario global vive depois do `yield`, portanto no
+    teardown: escrita no corpo do teste, ela nao rodaria quando um assert
+    caisse antes dela, e o override vazaria para os testes seguintes (a mesma
+    licao que `test_health.py` registra).
+    """
+    app.dependency_overrides[get_session] = lambda: session
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def cliente_real(banco_migrado: Engine) -> Iterator[TestClient]:
+    """Cliente com a dependencia de sessao REAL, apontada para o banco de teste.
+
+    O override do `get_engine` aqui nao e conveniencia: sem ele a dependencia
+    real chamaria `Settings().database_url` e a requisicao escreveria no banco
+    de DESENVOLVIMENTO. Nenhum teste deste projeto toca aquele banco
+    (README s10).
+    """
+    app.dependency_overrides[get_engine] = lambda: banco_migrado
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def _prazo(dias: int) -> str:
+    return (datetime.now(UTC) + timedelta(days=dias)).isoformat()
+
+
+def _operacoes(session: Session, mission_id: int) -> int:
+    """Conta as operacoes registradas DESTA missao.
+
+    Contar a tabela inteira diria "o banco tem uma linha", que continuaria
+    verde se a linha fosse de outra missao.
+    """
+    return session.execute(
+        select(func.count())
+        .select_from(MissionOperation)
+        .where(MissionOperation.mission_id == mission_id)
+    ).scalar_one()
+
+
+def _logado(caplog: pytest.LogCaptureFixture) -> str:
+    """So o que a APLICACAO registrou, filtrado pelo nome do logger.
+
+    O filtro nao e capricho, e correcao de um teste que passava sem provar
+    nada: o `httpx` do TestClient registra cada requisicao em INFO, com a URL
+    inteira -- e a URL contem o id da missao. Procurar o id em
+    `caplog.messages` inteiro passava verde com o log da aplicacao REMOVIDO,
+    porque encontrava o id na linha do httpx. Medido, nao suposto.
+    """
+    return "\n".join(
+        registro.getMessage()
+        for registro in caplog.records
+        if registro.name.startswith("focusquest")
+    )
+
+
+def _corpo(**ajustes: Any) -> dict[str, Any]:
+    """O corpo de criacao valido, com os ajustes que cada teste precisa variar."""
+    corpo: dict[str, Any] = {
+        "instructions": "Ler o capitulo 3",
+        "completion_criterion": "Resumo de uma pagina entregue",
+        "difficulty": 2,
+        "estimated_minutes": 30,
+        "deadline": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+    }
+    return corpo | ajustes
+
+
+def _criar(client: TestClient, **ajustes: Any) -> dict[str, Any]:
+    """Cria pela API e devolve o corpo da resposta, exigindo 201."""
+    resposta = client.post("/api/missions", json=_corpo(**ajustes))
+    assert resposta.status_code == 201, resposta.text
+    corpo: dict[str, Any] = resposta.json()
+    return corpo
+
+
+def _registrar_outro_usuario(session: Session) -> None:
+    session.add(User(id=OUTRO, display_name="Outra pessoa"))
+    session.flush()
+
+
+def _missao_de_outro_usuario(session: Session) -> int:
+    """Uma missao cujo dono NAO e o usuario que a API assume.
+
+    Nasce e morre dentro da transacao da fixture `session`, entao nao vaza
+    para os outros testes nem para o banco depois da suite.
+    """
+    _registrar_outro_usuario(session)
+    missao = Mission(
+        user_id=OUTRO,
+        instructions="Missao alheia",
+        completion_criterion="Nao e da sua conta",
+        difficulty=1,
+        estimated_minutes=10,
+        deadline=datetime.now(UTC) + timedelta(days=1),
+        state=MissionState.PENDENTE,
+    )
+    session.add(missao)
+    session.flush()
+    assert missao.id is not None
+    return missao.id
+
+
+# ---------------------------------------------------------------------------
+# Criar
+# ---------------------------------------------------------------------------
+
+
+def test_criar_devolve_201_com_a_missao_pendente(client: TestClient) -> None:
+    prazo = datetime.now(UTC) + timedelta(days=2)
+    corpo = _criar(client, deadline=prazo.isoformat())
+
+    assert isinstance(corpo["id"], int)
+    assert corpo["instructions"] == "Ler o capitulo 3"
+    assert corpo["completion_criterion"] == "Resumo de uma pagina entregue"
+    assert corpo["difficulty"] == 2
+    assert corpo["estimated_minutes"] == 30
+    # Comparado como instante, nao como texto: o PostgreSQL devolve o
+    # `timestamptz` no fuso da conexao, e um teste que comparasse a string
+    # quebraria por causa do offset sem que nada estivesse errado.
+    assert datetime.fromisoformat(corpo["deadline"]) == prazo
+    assert corpo["state"] == MissionState.PENDENTE.value
+    assert corpo["started_at"] is None
+    assert corpo["completed_at"] is None
+    # Campo computado: sem inicio nem fim, nao existe duracao real.
+    assert corpo["duracao_real_minutos"] is None
+
+
+@pytest.mark.parametrize("dificuldade", [1, 2, DIFICULDADE_MAXIMA])
+def test_xp_no_corpo_e_derivado_da_dificuldade_enviada(
+    client: TestClient, dificuldade: int
+) -> None:
+    """O XP sai da dificuldade DAQUELA missao, nao de uma constante.
+
+    Tres dificuldades diferentes em vez de uma: com um caso unico, um `xp`
+    fixo no schema -- ou derivado do campo errado, como `estimated_minutes` --
+    passaria verde.
+
+    A expectativa vem de `xp_para_dificuldade`, e nao de numeros escritos
+    aqui, de proposito: a curva e decisao do usuario e mora no dominio, com
+    teste proprio em `tests/unit/test_missions_domain.py`. O que ESTE teste
+    promete e que o payload expoe o XP daquela dificuldade -- nao que a curva
+    seja esta.
+
+    O caso `DIFICULDADE_MAXIMA` fixa tambem a borda ACEITA do teto: se o
+    schema usasse `lt` em vez de `le`, este caso devolveria 422 e o teste
+    reprovaria.
+    """
+    corpo = _criar(client, difficulty=dificuldade)
+
+    assert corpo["xp"] == xp_para_dificuldade(dificuldade)
+
+
+@pytest.mark.parametrize("dificuldade", [0, DIFICULDADE_MAXIMA + 1])
+def test_dificuldade_fora_da_faixa_devolve_422(
+    client: TestClient, dificuldade: int
+) -> None:
+    """A faixa e recusada na BORDA, antes de qualquer caso de uso.
+
+    O dominio aceita qualquer inteiro >= 1, e dificuldade 100 produziria um XP
+    absurdo sem que nenhuma regra fosse violada. Quem responde "que
+    dificuldade eu aceito receber" e o contrato de entrada -- ver
+    `MissionCreate`.
+
+    A assercao olha o `loc` do erro, nao so o status: um 422 por qualquer
+    outro motivo (um campo obrigatorio que faltasse, por exemplo) satisfaria
+    um teste que checasse apenas `status_code == 422`.
+    """
+    resposta = client.post("/api/missions", json=_corpo(difficulty=dificuldade))
+
+    assert resposta.status_code == 422
+    locais = [erro["loc"] for erro in resposta.json()["detail"]]
+    assert ["body", "difficulty"] in locais
+
+
+# ---------------------------------------------------------------------------
+# Listar
+# ---------------------------------------------------------------------------
+
+
+def test_listar_devolve_as_missoes_criadas_em_ordem_de_prazo(
+    client: TestClient,
+) -> None:
+    """Criadas FORA de ordem de prazo de proposito: sem isso a ordem do
+    contrato passaria por acidente, na ordem de insercao."""
+    daqui_a_tres = _criar(client, deadline=_prazo(3))
+    amanha = _criar(client, deadline=_prazo(1))
+
+    resposta = client.get("/api/missions")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert [missao["id"] for missao in corpo] == [amanha["id"], daqui_a_tres["id"]]
+    # O item da lista tem o mesmo contrato do item criado, campos computados
+    # inclusive -- nao uma versao reduzida.
+    assert corpo[0] == amanha
+
+
+def test_listar_sem_missoes_devolve_lista_vazia(client: TestClient) -> None:
+    """Vazio e 200 com `[]`, nao 404: a colecao existe, so esta sem itens. E o
+    estado "vazio" que a tela do Quartel-General precisa distinguir de erro."""
+    resposta = client.get("/api/missions")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Concluir: sucesso, reenvio e os tres bloqueios
+# ---------------------------------------------------------------------------
+
+
+def test_concluir_devolve_200_com_o_estado_novo(client: TestClient) -> None:
+    criada = _criar(client)
+
+    resposta = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["id"] == criada["id"]
+    assert corpo["state"] == MissionState.CONCLUIDA.value
+    assert corpo["completed_at"] is not None
+    # E o estado novo tambem esta na listagem: a resposta nao e um objeto
+    # solto que ficou certo so na volta da requisicao.
+    listadas = client.get("/api/missions").json()
+    assert listadas[0]["state"] == MissionState.CONCLUIDA.value
+
+
+def test_duracao_real_no_corpo_vem_dos_instantes(
+    client: TestClient, session: Session
+) -> None:
+    """O outro lado do campo computado: com inicio E fim, ha duracao.
+
+    Nao existe caso de uso de INICIAR missao no incremento 1a, entao o
+    `started_at` e escrito direto na tabela -- e o unico jeito de alcancar
+    este ramo hoje. Sem este teste, o `else` de `duracao_real_minutos` ficaria
+    descoberto e a cobertura de ramificacoes reprovaria.
+    """
+    criada = _criar(client)
+    missao = session.get(Mission, criada["id"])
+    assert missao is not None
+    missao.started_at = datetime.now(UTC) - timedelta(minutes=25)
+    session.flush()
+
+    corpo = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": "op-abc"}
+    ).json()
+
+    assert corpo["duracao_real_minutos"] == 25
+
+
+def test_reenviar_a_mesma_operacao_devolve_o_mesmo_200(
+    client: TestClient, session: Session
+) -> None:
+    """Reenviar nao e erro -- e e a MESMA resposta, nao uma nova conclusao.
+
+    A igualdade dos dois corpos e o que carrega a promessa: uma implementacao
+    que concluisse de novo devolveria 200 com um `completed_at` diferente, e
+    um teste que so conferisse o status passaria.
+    """
+    criada = _criar(client)
+    caminho = f"/api/missions/{criada['id']}/complete"
+
+    primeira = client.post(caminho, json={"operation_id": "op-abc"})
+    segunda = client.post(caminho, json={"operation_id": "op-abc"})
+
+    assert primeira.status_code == 200
+    assert segunda.status_code == 200
+    assert segunda.json() == primeira.json()
+    assert _operacoes(session, criada["id"]) == 1
+
+
+def test_operacao_nova_sobre_missao_concluida_devolve_409(client: TestClient) -> None:
+    """Transicao ilegal e conflito de ESTADO do recurso -- 409 --, e a resposta
+    explica o bloqueio (README s8) em vez de um 500 generico."""
+    criada = _criar(client)
+    caminho = f"/api/missions/{criada['id']}/complete"
+    client.post(caminho, json={"operation_id": "op-abc"})
+
+    resposta = client.post(caminho, json={"operation_id": "op-xyz"})
+
+    assert resposta.status_code == 409
+    detalhe = resposta.json()["detail"]
+    # A mensagem diz de onde para onde nao se pode ir, e quais destinos
+    # sobram. Conferir so "409" deixaria passar um corpo vazio.
+    assert "concluida" in detalhe
+    assert "nenhum estado" in detalhe
+
+
+def test_chave_de_operacao_gasta_em_outra_missao_devolve_409(
+    client: TestClient,
+) -> None:
+    """Chave gasta tambem e conflito de estado, e nao entrada invalida: o corpo
+    esta perfeito e seria aceito com uma chave nova."""
+    primeira = _criar(client)
+    segunda = _criar(client)
+    client.post(
+        f"/api/missions/{primeira['id']}/complete", json={"operation_id": "op-abc"}
+    )
+
+    resposta = client.post(
+        f"/api/missions/{segunda['id']}/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert resposta.status_code == 409
+    detalhe = resposta.json()["detail"]
+    assert "op-abc" in detalhe
+    # A resposta nao revela nada da outra missao -- nem o id. A mensagem nao
+    # tem digito nenhum, entao esta assercao so falha se o id vazar mesmo.
+    assert str(primeira["id"]) not in detalhe
+    # E a segunda missao continua pendente: a recusa nao deixou rastro.
+    assert client.get("/api/missions").json()[1]["state"] == MissionState.PENDENTE.value
+
+
+def test_missao_inexistente_devolve_404(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """404 com corpo neutro -- e o id pedido registrado no log.
+
+    O corpo nao repete a mensagem do dominio (que nomeia a missao) porque ele
+    tem de ser identico ao do 404 de missao alheia. A assercao do log e o que
+    impede essa neutralizacao de virar perda de informacao: quem opera continua
+    sabendo qual identificador foi pedido.
+    """
+    with caplog.at_level(logging.INFO):
+        resposta = client.post(
+            "/api/missions/9999/complete", json={"operation_id": "op-abc"}
+        )
+
+    assert resposta.status_code == 404
+    assert resposta.json() == {"detail": "missao nao encontrada"}
+    assert "9999" in _logado(caplog)
+
+
+def test_missao_de_outro_usuario_responde_o_mesmo_que_missao_inexistente(
+    client: TestClient, session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """404, e 404 IDENTICO -- status e corpo.
+
+    Responder 403, ou um 404 com "nao pertence ao usuario" no corpo, contaria
+    ao cliente que o recurso existe. Com usuario unico isso e teorico; o
+    habito e que nao e.
+
+    A igualdade byte a byte das duas respostas e o que da dente ao teste: um
+    corpo que explicasse o motivo verdadeiro continuaria devolvendo 404 e
+    passaria em qualquer assercao que olhasse so o status.
+
+    E o motivo verdadeiro nao se perde: ele vai para o LOG, que e onde
+    `NaoPertenceAoUsuarioError` diz que a distincao precisa sobreviver -- quem
+    opera precisa saber se o id nunca existiu ou se foi negado.
+    """
+    alheia = _missao_de_outro_usuario(session)
+
+    with caplog.at_level(logging.WARNING):
+        negada = client.post(
+            f"/api/missions/{alheia}/complete", json={"operation_id": "op-abc"}
+        )
+    inexistente = client.post(
+        "/api/missions/9999/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert negada.status_code == inexistente.status_code == 404
+    assert negada.json() == inexistente.json()
+    assert str(alheia) not in negada.text
+    # O log, sim, diz exatamente o que aconteceu.
+    registrado = _logado(caplog)
+    assert str(alheia) in registrado
+    assert str(ESTUDANTE) in registrado
+
+
+# ---------------------------------------------------------------------------
+# A dependencia de sessao, exercitada de verdade
+# ---------------------------------------------------------------------------
+
+
+def test_a_requisicao_commita_de_verdade_e_devolve_a_conexao(
+    banco_migrado: Engine, cliente_real: TestClient
+) -> None:
+    """Com a dependencia REAL: a requisicao persiste, e nao vaza conexao.
+
+    Todo teste acima roda com a sessao do teste injetada, e por isso nenhum
+    deles consegue provar o `commit`: numa sessao compartilhada, o dado
+    aparece commitado ou nao. Aqui outra conexao vai buscar a missao -- e uma
+    conexao so ve o que foi commitado.
+
+    E este e tambem o unico teste que EXECUTA `get_session`. Substituir uma
+    dependencia nos testes nao a testa; sem este caso, o corpo dela ficaria
+    descoberto (a mesma licao do `get_engine` na Task 4).
+
+    A contagem de conexoes conferidas antes e depois cobre a outra metade do
+    contrato da dependencia: uma sessao que nao fechasse deixaria a conexao
+    fora do pool, e cinco requisicoes assim pendurariam a aplicacao inteira
+    num lugar sem relacao com a causa.
+
+    As DUAS rotas que escrevem sao exercitadas, e nao so a criacao: a promessa
+    de que "reenvios nao duplicam conclusoes" (README s8) depende da linha de
+    `mission_operations` estar COMMITADA -- se ela morresse com a requisicao,
+    o reenvio depois de uma queda concluiria a missao de novo, e o teste de
+    reenvio (que compartilha a sessao com o teste) nao veria diferenca nenhuma.
+
+    O fechamento da sessao NAO e verificado aqui, e a tentativa de verificar
+    contando conexoes conferidas do pool foi medida e descartada: depois da
+    requisicao a sessao fica sem referencia nenhuma, o coletor a recolhe e a
+    conexao volta para o pool mesmo com a dependencia mutada para nunca
+    fechar. A contagem voltava ao valor original nos dois casos -- assercao
+    que passaria sem provar nada. O fechamento tem teste proprio abaixo, com a
+    sessao presa numa variavel, que e onde a assercao discrimina.
+
+    O `finally` apaga o que este teste criou -- e obrigacao dele, porque
+    escreve fora da rede de protecao do rollback:
+    `test_missions_models.py` exige a tabela `missions` vazia, e uma missao
+    esquecida aqui o derrubaria a distancia. A linha de `mission_operations`
+    vai junto pelo `ondelete=CASCADE`.
+    """
+    resposta = cliente_real.post("/api/missions", json=_corpo())
+
+    assert resposta.status_code == 201, resposta.text
+    mission_id = resposta.json()["id"]
+    try:
+        with Session(bind=banco_migrado) as outra_conexao:
+            persistida = outra_conexao.get(Mission, mission_id)
+            assert persistida is not None
+            assert persistida.state is MissionState.PENDENTE
+            assert persistida.user_id == ESTUDANTE
+
+        conclusao = cliente_real.post(
+            f"/api/missions/{mission_id}/complete", json={"operation_id": "op-real"}
+        )
+        assert conclusao.status_code == 200, conclusao.text
+
+        with Session(bind=banco_migrado) as terceira_conexao:
+            concluida = terceira_conexao.get(Mission, mission_id)
+            assert concluida is not None
+            assert concluida.state is MissionState.CONCLUIDA
+            assert _operacoes(terceira_conexao, mission_id) == 1
+    finally:
+        with Session(bind=banco_migrado) as limpeza:
+            limpeza.execute(delete(Mission).where(Mission.id == mission_id))
+            limpeza.commit()
+
+
+def test_get_session_fecha_a_sessao_e_devolve_a_conexao(banco_migrado: Engine) -> None:
+    """A outra metade do contrato da dependencia: ela fecha o que abriu.
+
+    Uma sessao que nao fechasse manteria a conexao fora do pool enquanto
+    houvesse referencia a ela, e a transacao em aberto segurando travas no
+    banco. Poucas requisicoes assim esgotam o pool, e a suite -- ou a
+    aplicacao -- pendura em um lugar sem relacao com a causa.
+
+    O gerador e consumido a mao, e nao por uma requisicao, por um motivo
+    medido: e a variavel `sessao` que impede o coletor de recolher a sessao
+    abandonada. Dentro de uma requisicao ela fica sem referencia, o coletor
+    devolve a conexao sozinho, e a diferenca entre fechar e nao fechar
+    desaparece -- foi assim que a primeira versao deste teste passou verde com
+    a dependencia mutada para nunca fechar.
+
+    `get_transaction()` e a assercao que discrimina. `is_active` nao serve:
+    ele devolve True nos dois casos.
+    """
+    assert isinstance(banco_migrado.pool, QueuePool)
+    conferidas_antes = banco_migrado.pool.checkedout()
+
+    gerador = get_session(banco_migrado)
+    sessao = next(gerador)
+    # A sessao entregue e utilizavel e esta ligada a engine que a dependencia
+    # recebeu -- nao a uma engine que ela tenha criado por conta propria.
+    assert sessao.get_bind() is banco_migrado
+    assert sessao.scalar(select(1)) == 1
+    assert banco_migrado.pool.checkedout() == conferidas_antes + 1
+
+    # Esgotar o gerador e o que o FastAPI faz no teardown da requisicao. O
+    # StopIteration tambem afirma que a dependencia tem UM yield so: um
+    # segundo entregaria outra sessao na mesma requisicao.
+    with pytest.raises(StopIteration):
+        next(gerador)
+
+    assert sessao.get_transaction() is None
+    assert banco_migrado.pool.checkedout() == conferidas_antes

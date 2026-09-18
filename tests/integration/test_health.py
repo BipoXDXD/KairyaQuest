@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from focusquest import main
+from focusquest.core import database
 from focusquest.core.config import Settings
-from focusquest.core.database import create_engine_from_url
-from focusquest.main import app, get_engine
+from focusquest.core.database import create_engine_from_url, get_engine
+from focusquest.main import app
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_health_responde_sem_configuracao_de_banco(
     dependencia executaria `Settings()` e estouraria ValidationError. Com o
     /health limpo, 200.
     """
-    monkeypatch.setattr(main, "_engine", None)
+    monkeypatch.setattr(database, "_engine", None)
     monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
     monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     # Sem o chdir, o .env do repositorio supriria a configuracao e o teste
@@ -143,11 +143,17 @@ def test_get_engine_cria_uma_vez_e_reaproveita(
     so com o modulo em maos da para zerar e restaurar esse estado. O
     monkeypatch restaura no teardown, valendo a mesma regra da fixture
     override_engine.
+
+    O modulo em questao e `core/database.py`, e nao `main.py`: a dependencia
+    mudou de casa na Task 9, quando ganhou um segundo consumidor (o router das
+    missoes) -- um router que importasse `main.py` de volta fecharia um ciclo de
+    imports. O cache global, e a corrida que ele permite, continuam identicos ao
+    que a Task 4 registrou; so o arquivo e outro.
     """
-    monkeypatch.setattr(main, "_engine", None)
-    primeira = main.get_engine()
+    monkeypatch.setattr(database, "_engine", None)
+    primeira = database.get_engine()
     descartar_engines.append(primeira)
-    segunda = main.get_engine()
+    segunda = database.get_engine()
 
     assert primeira is segunda
     # De qual URL a engine nasce faz parte do contrato: sem esta assercao,

@@ -11,7 +11,21 @@ from focusquest.core.config import Settings
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` corrige um efeito colateral que o
+    # template do Alembic traz e que so aparece quando a migracao roda DENTRO
+    # de outro processo -- como na fixture `banco_migrado`, que chama
+    # `command.upgrade` na mesma interpretacao Python da suite.
+    #
+    # O padrao do `fileConfig` e True, e "existing" ali significa "todo logger
+    # que ja foi criado e nao esta nomeado neste arquivo". O alembic.ini nomeia
+    # root, sqlalchemy e alembic; `focusquest.*` nao esta la. Resultado
+    # medido: depois de um `upgrade`, `logging.getLogger("focusquest.main")`
+    # volta com `disabled = True`, e todo log da aplicacao desaparece em
+    # silencio pelo resto do processo. Foi assim que o teste do 404 de missao
+    # alheia descobriu o problema: o handler rodava e o log nao chegava.
+    #
+    # Configurar o log da FERRAMENTA nao e motivo para calar o da APLICACAO.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
