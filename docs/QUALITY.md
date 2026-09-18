@@ -444,6 +444,14 @@ Sem eufemismo:
   nele, e aprovou (cerca de 25 segundos; o worktree foi removido ao fim). O
   caminho das variáveis do framework `pre-commit`, disparado por um
   `git push` de verdade com o `check-api` no gate, ainda não aconteceu.
+  O **mecanismo** — a lista de permissão e a recusa — mora em
+  `scripts/push-env.sh`, que o `check-push.sh` carrega e chama, e tem teste
+  automatizado em `tests/integration/test_push_env.py`, sem push nem
+  worktree: a recusa nomeando a variável que falta, uma linha executável
+  do `.env` que não executa, um valor com `=` no meio que atravessa inteiro,
+  a precedência do ambiente, e uma cópia do `check-push.sh` rodada numa raiz
+  sem `.env` (com um `git` falso no `PATH`) para provar que ele passa pela
+  função. Cada um desses testes reprovou com a mutação correspondente.
 - **Sob o `pre-commit`, um push multi-ref valida só uma das refs.** O
   framework `pre-commit` consome toda a entrada padrão antes de chamar os
   hooks e repassa o que decidiu em variáveis de ambiente; em

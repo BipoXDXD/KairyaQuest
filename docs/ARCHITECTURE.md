@@ -283,23 +283,48 @@ concluir missão ou confirmar recompensa por conta própria.
 | `GET /api/missions` | `200` com a lista | Lista as missões do usuário único, em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
-| `GET /ready` | `200` ou `503` | Readiness. Executa `SELECT 1`; responde `{"status": "unavailable", "database": "unavailable"}` com 503 quando o banco não responde. |
+| `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
 
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
   nem token.
+- **Sem barra final.** As rotas são `/api/missions`, sem `/` no fim. Um
+  pedido a `/api/missions/` recebe **`307`** com `Location` apontando para
+  `/api/missions` (o redirecionamento automático do FastAPI/Starlette;
+  medido). O cliente do frontend chama sem a barra; um cliente que siga
+  redirecionamento funciona com um ida e volta a mais, e um que não siga vê
+  o 307.
+- **`mission_id` do caminho** é inteiro de `1` a `2**31 - 1`
+  (`MAIOR_INTEIRO_DA_COLUNA`, o maior valor da coluna `Integer`/int4). Fora
+  disso, `422` com `loc: ["path", "mission_id"]` — antes do teto, um id de
+  onze dígitos chegava ao banco e estourava o parâmetro com 500.
 - **Entrada de criação** (`MissionCreate`): `instructions` e
   `completion_criterion` (texto não vazio), `difficulty` (inteiro de 1 a
-  `DIFICULDADE_MAXIMA = 5`), `estimated_minutes` (inteiro maior que zero) e
-  `deadline`. O teto da dificuldade mora no schema, e não no domínio, de
-  propósito: o domínio responde quanto vale uma dificuldade, a borda
-  responde qual dificuldade aceita receber.
+  `DIFICULDADE_MAXIMA = 5`), `estimated_minutes` (inteiro de 1 a
+  `MAIOR_INTEIRO_DA_COLUNA = 2**31 - 1`) e `deadline`. O teto da dificuldade
+  mora no schema, e não no domínio, de propósito: o domínio responde quanto
+  vale uma dificuldade, a borda responde qual dificuldade aceita receber. O
+  teto de `estimated_minutes` é **técnico** — o maior valor da coluna int4,
+  para o excesso virar 422 e não 500 —, e não responde "quanto tempo cabe
+  numa missão", que é decisão de produto em aberto (`docs/HANDOFF.md`).
 - **`deadline` exige fuso.** O campo é `AwareDatetime`: um datetime sem fuso
   é recusado com 422, com `type: timezone_aware` no erro de validação.
   **O `/openapi.json` não expressa essa exigência** — o schema gerado diz
   apenas `{"type": "string", "format": "date-time"}`. A exigência é
   verificada em runtime, e um cliente gerado a partir do schema só a
   descobriria ao receber o 422.
+- **`deadline` precisa caber no `datetime` do Python depois de convertido
+  para UTC.** `9999-12-31T23:59:59-03:00` tem data local válida, mas em UTC
+  é o ano 10000: é recusado com 422 (`type: value_error`). Antes da guarda
+  ele era aceito com 201, o PostgreSQL o gravava, e a partir daí o
+  `GET /api/missions` respondia 500 para sempre. Não há janela de negócio
+  (prazo no passado, prazo longe demais) — decisão de produto em aberto.
+- **O offset do instante devolvido depende da sessão do PostgreSQL**, não de
+  uma regra da API: a coluna é `timestamptz`, e o banco converte o instante
+  para o `TimeZone` da sessão na leitura. Com a sessão em UTC (o padrão do
+  servidor deste projeto) sai `Z`; com a sessão em `America/Sao_Paulo`
+  sairia `-03:00` (medido). O instante é o mesmo nos dois casos; quem
+  consome compara instantes, não strings.
 - **Saída** (`MissionRead`): `id`, `instructions`, `completion_criterion`,
   `difficulty`, `estimated_minutes`, `deadline`, `state`, `started_at`,
   `completed_at`, mais dois campos **derivados, nunca gravados**: `xp`
@@ -322,7 +347,7 @@ concluir missão ou confirmar recompensa por conta própria.
 | Missão de outro usuário | `404`, não 403 | o **mesmo** corpo do 404 acima — responder diferente revelaria que o recurso existe |
 | Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
 | `operation_id` já gasto em outra operação | `409` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
-| Corpo inválido | `422` | lista de erros do FastAPI |
+| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | lista de erros do FastAPI |
 
 Os dois 409 **não têm um `code` legível por máquina**: só a mensagem em
 português os distingue, e a ação correta do cliente é oposta nos dois

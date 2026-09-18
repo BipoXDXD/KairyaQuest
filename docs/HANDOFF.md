@@ -47,6 +47,15 @@ com o motivo por extenso, está lá.
 | A7 | O PostgreSQL do container expõe uma porta do host **diferente de 5432** | Já existe na máquina de desenvolvimento um PostgreSQL local nessa porta, que não pertence ao projeto (README §10). A porta escolhida é 55432, configurável por `FOCUSQUEST_DB_PORT`. |
 | A8 | 1a inclui um endpoint que **muda estado** (concluir missão) | Um incremento só de leitura não exercitaria nada do que o README §8 mais cobra: transições, idempotência, concorrência. |
 
+> **Nota de implementação da A1 — como foi cumprida.** O texto acima é
+> transcrição fiel da spec e não foi reescrito. No código, **não existe seção
+> `[tool.uv]`** no `pyproject.toml`, e quem procurar a chave `package = true`
+> não a encontrará: o pacote é importável porque o `pyproject.toml` declara
+> `[build-system]` com `hatchling`, e nesse caso o uv trata o projeto como
+> pacote por padrão e o instala em modo editável. A linha `package = false`
+> da D2 foi **removida**, não trocada por `package = true` (commit `1ff982d`).
+> O efeito é o que a A1 pede; a forma é outra.
+
 ### Incremento 1a — decisões tomadas durante a execução
 
 Cada uma está no código, com o motivo no comentário do arquivo citado.
@@ -69,6 +78,9 @@ Cada uma está no código, com o motivo no comentário do arquivo citado.
 | Coleta do Vitest por **negação** (`exclude`), não por permissão (`include`) | Medido: com `include` estreito, um teste que reprovava fora de `src/` não era coletado e o gate aprovava. `docs/QUALITY.md` §3. |
 | `uv lock --check` como primeira receita do `check-api`; **nenhum** equivalente npm no `check-web` | Cumpre a validação do lockfile Python que o `docs/QUALITY.md` prometia. Do lado npm não existe comando barato e confiável que compare sem instalar; a assimetria está declarada no `docs/QUALITY.md` §4. |
 | O `pre-push` passa ao worktree as variáveis `FOCUSQUEST_*` do `.env`, por lista de permissão, nunca `source`, e recusa o push se faltarem | Sem isso, todo push seria recusado com `ValidationError`; degradar para "pular o `check-api`" seria gate cego. `docs/QUALITY.md` §6. |
+| Tetos **técnicos** na entrada: `estimated_minutes` e `mission_id` até `MAIOR_INTEIRO_DA_COLUNA = 2**31 - 1` (int4), `mission_id` a partir de 1, e `deadline` recusado se, convertido para UTC, sair da faixa do `datetime` do Python | Sem eles, entrada fora da faixa do armazenamento respondia 500 — e um prazo extremo deixava o `GET /api/missions` em 500 para sempre. São tetos do armazenamento, **não** de negócio: estes ficam para o dono (pendência 26). |
+| O prazo é **apresentado** em `America/Sao_Paulo` (`timeZone` fixo no `Intl.DateTimeFormat`), e os testes rodam com o fuso do processo fixado em `Asia/Tokyo` (`test.env.TZ` no `vite.config.ts`, `timezoneId` no Playwright) | O README §8 e a A3 mandam apresentar em São Paulo. O fuso dos testes é fixado **fora** de São Paulo porque a máquina do dono está em São Paulo: lá, um teste sem essa fixação passaria com o defeito (medido). |
+| A guarda de `.env` do `pre-push` mora em `scripts/push-env.sh`, carregada pelo `check-push.sh` | Extraída para ser testada (`tests/integration/test_push_env.py`) sem disparar push nem criar worktree; o `check-push.sh` chama a mesma função, e um teste roda uma cópia dele para provar que chama. |
 | `timeout-minutes` em todos os jobs do CI | O padrão do runner é seis horas; um job travado deixaria o pull request sem veredito nesse tempo. |
 
 ### Incrementos anteriores
@@ -144,6 +156,29 @@ Commits `1ff982d`..`96eaeba`:
 - **Documentação:** `docs/QUALITY.md`, `docs/ARCHITECTURE.md`, este arquivo
   e o `AGENTS.md` passaram a descrever o sistema como ele ficou.
 
+**Onda de correção final** (depois de `b531981`, a partir da revisão da
+branch inteira):
+
+- **Entrada fora da faixa não gera mais 500:** `mission_id` do caminho com
+  `Path(ge=1, le=2**31 - 1)`, `estimated_minutes` com `le=2**31 - 1` e
+  `deadline` recusado com 422 quando, em UTC, sai da faixa do `datetime`. Cada
+  guarda com teste de recusa e de borda aceita, e o teste de regressão que
+  importa: depois de um prazo extremo recusado, `GET /api/missions` continua
+  200. Cada guarda foi removida uma vez e o teste correspondente reprovou.
+- **Prazo em `America/Sao_Paulo`** na tela, com teste de unidade num instante
+  em que São Paulo e UTC caem em dias diferentes, o fuso dos testes fixado em
+  `Asia/Tokyo`, e asserção do **texto** do prazo no E2E.
+- **Guarda de `.env` do `pre-push` com teste automatizado:**
+  `scripts/push-env.sh` (extraído do `check-push.sh`) e
+  `tests/integration/test_push_env.py`.
+- **Comentários corrigidos:** o offset do instante devolvido depende do
+  `TimeZone` da sessão do PostgreSQL, não de uma regra da API; o motivo de o
+  `scripts/e2e-env.sh` não repetir a URL é fonte única, não sigilo; o "de 5"
+  do frontend nomeia a constante do backend que ele espelha.
+- **Documentação:** `docs/ARCHITECTURE.md` (os três casos do `/ready`, o 307
+  da barra final, as faixas novas), `docs/QUALITY.md` §6 (onde mora e como é
+  testada a guarda de `.env` do `pre-push`) e este arquivo.
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -179,6 +214,7 @@ incremento aplicada:
 | Comando | Resultado |
 |---|---|
 | `make check` | Aprovado, EXIT 0, cerca de 12 s de relógio com o PostgreSQL de pé. Frontend: 35 testes, cobertura de 100% nos quatro eixos (50/50 instruções, 22/22 ramificações, 18/18 funções, 48/48 linhas). `uv lock --check` aprovado. Ruff sem achados, 33 arquivos já formatados. mypy sem problemas em 29 arquivos. pytest: 91 testes, 2 avisos (as duas `DeprecationWarning` das pendências), cobertura total de 100%. E2E: 4 cenários aprovados em Chromium. Gitleaks sem achados. |
+| `make check` sobre a árvore da onda de correção final (a mesma que virou `8b75d69`) | Aprovado, EXIT 0. Frontend: 36 testes, cobertura de 100% nos quatro eixos (50/50 instruções, 22/22 ramificações, 18/18 funções, 48/48 linhas). `uv lock --check` aprovado. Ruff sem achados, 34 arquivos já formatados. mypy sem problemas em 30 arquivos. pytest: 110 testes, 2 avisos, cobertura total de 100%. E2E: 4 cenários aprovados em Chromium, com o navegador em `Asia/Tokyo`. Gitleaks sem achados. |
 | `scripts/check-push.sh`, executado à mão pela entrada padrão, sem push | Aprovado, EXIT 0, cerca de 25 s: `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env` nele, com as variáveis `FOCUSQUEST_*` vindas do repositório principal. O worktree foi removido ao fim. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` | 2 — as missões da última execução do E2E; as anteriores foram apagadas pelo `DROP SCHEMA` da suíte pytest. |
 | Jobs `check-api` e `check-e2e` no GitHub Actions | **Não executados.** A branch não foi empurrada. |
@@ -253,6 +289,14 @@ ninguém mexer.
    porque a tela do 1a só lista missões e nenhum dos dois 409 é alcançável
    por ela. **Quem construir o fluxo de concluir missão no frontend precisa
    resolver isto antes**, ou vai ramificar em texto de interface.
+   **E a prosa do `detail` também não está pronta para a tela**, ao contrário
+   do que o comentário de `frontend/src/shared/api/client.ts` afirma ("pode ir
+   direto para a tela"): as mensagens do backend não têm acento
+   (`"missao nao encontrada"`), e a de transição ilegal expõe o valor cru do
+   enum (`'em_andamento'`), o que contraria a regra do próprio frontend de
+   nunca mostrar estado cru. Hoje é inalcançável — a tela só faz GET —, mas
+   precisa ser resolvido junto com o `code`, antes de ligar o fluxo de
+   conclusão.
 2. **O `/openapi.json` não expressa a exigência de fuso em `deadline`.** O
    schema diz só `date-time`; a recusa do datetime sem fuso é verificada em
    runtime. Um cliente gerado do schema só a descobre ao receber o 422.
@@ -271,11 +315,16 @@ ninguém mexer.
 
 **Domínio e persistência**
 
-6. **O prazo é exibido no fuso de quem lê, não em `America/Sao_Paulo`.** O
+6. ~~**O prazo é exibido no fuso de quem lê, não em `America/Sao_Paulo`.** O
    `Intl.DateTimeFormat` de `MissionList.tsx` não fixa `timeZone`, e o
    README §8 manda apresentar em `America/Sao_Paulo`. O instante está certo
    (o atributo `dateTime` do `<time>` carrega a string ISO com fuso); o
-   texto visível muda com o fuso da máquina.
+   texto visível muda com o fuso da máquina.~~ **Resolvida na onda de
+   correção final:** `timeZone: 'America/Sao_Paulo'` no formatador; teste de
+   unidade com `2026-09-20T02:30:00Z` (19/09 às 23:30 em São Paulo, 20/09 em
+   UTC) rodando com o fuso do processo fixado em `Asia/Tokyo`; e o E2E, com o
+   navegador em `Asia/Tokyo`, confere o texto do prazo. Provado nas duas
+   direções: sem o `timeZone`, o teste de unidade e o E2E reprovam.
 7. **O relógio não é injetável.** `concluir_missao` usa `datetime.now(UTC)`
    direto, e o README §8 pede relógio injetado nos testes. Os testes
    compensam com asserção de janela de tempo.
@@ -356,6 +405,65 @@ ninguém mexer.
     mudança de código, fora do escopo da documentação.
 25. **Dependência do proxy do Vite.** No dia em que o frontend for servido por
     outra coisa que não o Vite, falta CORS ou um proxy reverso.
+
+**Registradas pela revisão final da branch** (diferidas durante a execução e
+que não tinham chegado aqui)
+
+26. **Decisões de produto em aberto: teto de negócio para `estimated_minutes`
+    e janela de negócio para `deadline`.** Hoje a API só recusa o que o
+    armazenamento não representa (int4 e a faixa do `datetime` em UTC). Uma
+    missão de um milhão de minutos, ou com prazo no passado, é aceita.
+    Ficou em aberto de propósito: quanto tempo cabe numa missão e que prazo
+    faz sentido são decisões de produto do dono, não correção. Se ninguém
+    decidir, o sistema aceita dado absurdo — não quebra. Pesa mais no 1b,
+    em que quem propõe a missão é um LLM.
+27. **A guarda da faixa do prazo supõe a sessão do PostgreSQL em UTC.** O
+    banco devolve o `timestamptz` no `TimeZone` da **sessão**, e o psycopg
+    não lê um instante que, nesse fuso, cai fora dos anos 1 a 9999. Medido:
+    `9999-12-31T23:59:59Z` é lido com a sessão em UTC e em
+    `America/Sao_Paulo`, mas estoura (`DataError`) com a sessão em
+    `Asia/Tokyo`; `0001-01-01T00:00:00Z` estoura com a sessão em São Paulo.
+    O servidor deste projeto usa UTC, e a guarda basta. Diferido porque
+    fixar o fuso da sessão (por exemplo `options=-c timezone=UTC` na engine)
+    muda também o offset que a API devolve, e ficou fora do escopo da onda.
+    Se ninguém mexer: num banco com outro fuso, um prazo a poucas horas das
+    bordas volta a deixar a listagem em 500 — o teste
+    `test_prazo_no_ultimo_instante_representavel_e_aceito_e_lido` reprova se
+    o fuso da sessão mudar para leste de UTC.
+28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
+    `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
+    `get_engine` estoura `ValidationError` antes do `try` que traduz a falha
+    do banco em 503 (medido). Diferido desde a Task 4, com decisão
+    registrada: 500 também reprova a probe, e a distinção
+    liveness/readiness foi a parte mais delicada da execução. Se ninguém
+    mexer: um orquestrador vê "não pronto" do mesmo jeito; quem ler só o
+    status não distingue "banco fora" de "implantação sem configuração". O
+    `docs/ARCHITECTURE.md` descreve os três casos.
+29. **Os comandos dependem de rodar da raiz do repositório.** O `Settings` lê
+    o `.env` do diretório **corrente**, e o `alembic.ini` também é achado
+    pelo diretório corrente. Medido fora da raiz: a aplicação estoura
+    `ValidationError` (campo obrigatório ausente) e o `alembic` reprova com
+    `No 'script_location' key found in configuration`. Falha alta, não
+    silenciosa. Diferido porque o `Makefile`, o CI e o `scripts/e2e-env.sh`
+    (que faz `cd` para a raiz) já rodam da raiz. Se ninguém mexer: quem
+    rodar `uv run uvicorn` ou `alembic` de outro diretório recebe o erro e
+    precisa voltar para a raiz.
+30. **`/api/missions/` com barra final responde `307`** para
+    `/api/missions` (redirecionamento automático do Starlette; medido). O
+    cliente do frontend chama sem a barra, então nada quebra hoje. Diferido
+    por ser informação de contrato, não defeito; está no
+    `docs/ARCHITECTURE.md`. Se ninguém mexer: um cliente que não siga
+    redirecionamento recebe 307, e um que siga faz um ida e volta a mais.
+31. **Dívida cosmética de teste e de editor.** (a) Um `monkeypatch`
+    redundante em `tests/integration/test_health.py`, apontado na revisão
+    da Task 4 — o registro da execução não diz qual linha; o candidato é um
+    dos dois `delenv` de `test_health_responde_sem_configuracao_de_banco`
+    (o `Settings` exige as duas URLs, e apagar uma já basta), e **não** o
+    `setattr(database, "_engine", None)`, que é o que dá dente ao teste. (b)
+    O Pyright do editor avisa sobre `@contextmanager` anotado com
+    `-> Iterator[int]` em vez de `-> Generator[...]` em
+    `tests/integration/test_missions_concorrencia.py`; o mypy e o gate não
+    acusam. Se ninguém mexer: nada muda no comportamento.
 
 ## Próximo incremento
 
