@@ -28,6 +28,43 @@ def test_migracao_cria_o_usuario_unico(banco_migrado: Engine) -> None:
     assert total == 1
 
 
+def test_alembic_cria_a_engine_pela_fabrica_da_aplicacao(
+    monkeypatch: pytest.MonkeyPatch, banco_migrado: Engine
+) -> None:
+    """`alembic/env.py` precisa criar a engine por `create_engine_from_url`,
+    e nao por `engine_from_config`: e so pela fabrica que a migracao herda o
+    `SET TIME ZONE 'UTC'` (ver `core/database.py`). Nenhuma migracao atual
+    depende do fuso da sessao, entao um `env.py` que voltasse a
+    `engine_from_config` continuaria migrando com sucesso -- so nao herdaria
+    a configuracao, e nada mais na suite denunciaria isso.
+
+    O Alembic reexecuta `env.py` do zero a cada comando (`load_module_py`
+    da o modulo do `env.py` a `exec_module` num objeto novo, nunca por
+    `sys.modules`), entao o `from focusquest.core.database import
+    create_engine_from_url` do `env.py` busca, a cada execucao, o atributo
+    ATUAL de `focusquest.core.database` -- e e por isso que o monkeypatch no
+    MODULO `focusquest.core.database`, e nao numa copia importada aqui, e
+    suficiente para o espiao ser visto pelo `env.py`.
+
+    `command.current` basta: ele passa pelo `run_migrations_online` do
+    `env.py` -- que e onde a engine nasce -- sem alterar o esquema, contra o
+    banco de TESTE (a `alembic_config` da fixture usa `-x test=true`).
+    """
+    chamadas: list[str] = []
+    original = create_engine_from_url
+
+    def espiao(url: str, poolclass: object = None) -> Engine:
+        chamadas.append(url)
+        return original(url, poolclass=poolclass)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("focusquest.core.database.create_engine_from_url", espiao)
+
+    command.current(alembic_config())
+
+    assert chamadas, "env.py nao chamou create_engine_from_url"
+    assert make_url(chamadas[0]) == banco_migrado.url
+
+
 def test_check_de_estado_rejeita_valor_invalido(banco_migrado: Engine) -> None:
     """Prova que a restricao vive no BANCO, e nao so no Python: este INSERT
     nao passa pelo dominio, e um UPDATE direto no psql seria rejeitado

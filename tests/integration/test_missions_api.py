@@ -178,9 +178,9 @@ def test_criar_devolve_201_com_a_missao_pendente(client: TestClient) -> None:
     assert corpo["completion_criterion"] == "Resumo de uma pagina entregue"
     assert corpo["difficulty"] == 2
     assert corpo["estimated_minutes"] == 30
-    # Comparado como instante, nao como texto: o PostgreSQL devolve o
-    # `timestamptz` no fuso da conexao, e um teste que comparasse a string
-    # quebraria por causa do offset sem que nada estivesse errado.
+    # Comparado como instante, nao como texto: o pedido sai do `isoformat()`
+    # com `+00:00`, e o 201 devolve o mesmo instante com `Z` (medido). A grafia
+    # nao faz parte do contrato -- so o momento no tempo faz.
     assert datetime.fromisoformat(corpo["deadline"]) == prazo
     assert corpo["state"] == MissionState.PENDENTE.value
     assert corpo["started_at"] is None
@@ -441,10 +441,11 @@ def test_prazo_no_ultimo_instante_representavel_e_aceito_e_lido(
     """A borda ACEITA do prazo, lida de volta: prova que a guarda nao recusa
     mais do que precisa, e que o que ela aceita a listagem consegue ler.
 
-    Vale com a sessao do PostgreSQL em UTC, que e o padrao do servidor deste
-    projeto. Com a sessao em outro fuso a leitura deste instante estouraria --
-    e o limite registrado no docs/HANDOFF.md, e este teste e o que avisaria se
-    o fuso da sessao mudasse.
+    Este teste NAO vigia o fuso da sessao. Sem o `SET TIME ZONE` de
+    `core/database.py`, ele so reprovaria com o ambiente a leste de UTC -- a
+    oeste esta borda e lida sem problema, e quem quebra e a outra. Quem vigia e
+    `test_sessao_em_utc.py`, que pede um fuso a leste e um a oeste por `PGTZ` e
+    le cada borda no lado em que ela estourava.
     """
     criada = _criar(client, deadline="9999-12-31T23:59:59Z")
 

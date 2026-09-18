@@ -80,10 +80,12 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `timestamptz` guarda. Nao ha janela de negocio aqui (prazo no passado, prazo
     longe demais): essa decisao e do dono e ficou aberta de proposito.
 
-    Limite conhecido, registrado no docs/HANDOFF.md: a leitura volta no fuso da
-    SESSAO do PostgreSQL. Com a sessao em UTC -- o padrao do servidor deste
-    projeto -- esta guarda basta; com a sessao em outro fuso, um instante a
-    poucas horas das bordas passaria aqui e ainda estouraria na leitura.
+    A guarda so basta porque a LEITURA tambem acontece em UTC: o `timestamptz`
+    volta no fuso da sessao do PostgreSQL, e `core/database.py` fixa essa
+    sessao em UTC em toda conexao. Sem isso, um instante a poucas horas das
+    bordas passaria aqui e ainda estouraria na leitura (medido com a sessao em
+    `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
+    test_sessao_em_utc.py`).
     """
     try:
         prazo.astimezone(UTC)
@@ -103,15 +105,14 @@ class MissionCreate(BaseModel):
 
     `deadline` exige FUSO (`AwareDatetime`): um datetime naive e recusado com
     422. O motivo e um defeito medido, nao purismo. A coluna e `timestamptz`,
-    entao a leitura seguinte sai com fuso -- no fuso da SESSAO do PostgreSQL,
-    que e quem converte o instante na leitura, e nao a API: com a sessao em UTC
-    (o padrao do servidor deste projeto) sai com `Z`, com a sessao em
-    `America/Sao_Paulo` sai com `-03:00` (medido). Com
+    entao a leitura seguinte sai com fuso -- sempre com `Z`, porque
+    `core/database.py` fixa a sessao do PostgreSQL em UTC. Com
     `expire_on_commit=False`, o 201 serializa o objeto como ele CHEGOU no
-    pedido. Aceitar naive fazia o mesmo prazo sair em duas serializacoes
-    diferentes -- `"...T10:00:00"` no 201 e `"...T10:00:00Z"` no GET --, e em
-    JavaScript `new Date("...T10:00:00")` e hora LOCAL enquanto
-    `new Date("...T10:00:00Z")` e UTC. O mesmo campo viraria dois instantes.
+    pedido, com o offset que o cliente mandou. Aceitar naive fazia o mesmo
+    prazo sair em duas serializacoes diferentes -- `"...T10:00:00"` no 201 e
+    `"...T10:00:00Z"` no GET --, e em JavaScript `new Date("...T10:00:00")` e
+    hora LOCAL enquanto `new Date("...T10:00:00Z")` e UTC. O mesmo campo
+    viraria dois instantes.
 
     A alternativa -- normalizar naive para UTC em silencio -- foi recusada: quem
     manda "10:00" sem dizer onde nao informou o instante, e assumir um fuso por

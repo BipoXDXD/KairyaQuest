@@ -14,20 +14,67 @@ pertence a camada que abre a conexao, nao a cada modulo que a usa.
 """
 
 from collections.abc import Iterator
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import ConnectionPoolEntry, Pool
 
 from focusquest.core.config import Settings
 
 
-def create_engine_from_url(url: str) -> Engine:
-    """Cria a engine. `pool_pre_ping` testa a `connection` antes de entrega-la:
-    sem isso o pool reaproveita uma que morreu quando o banco reiniciou, o que
-    acontece com frequencia em desenvolvimento."""
-    return create_engine(url, pool_pre_ping=True)
+def _fixar_sessao_em_utc(conexao_dbapi: Any, _registro: ConnectionPoolEntry) -> None:
+    """Poe a sessao do PostgreSQL em UTC, em toda conexao nova do pool.
+
+    O `timestamptz` volta no `TimeZone` da SESSAO, e o psycopg nao le um
+    instante que, nesse fuso, cai fora dos anos 1 a 9999: com a sessao em
+    `Asia/Tokyo`, `9999-12-31T23:59:59Z` vira ano 10000 na leitura, e com ela
+    em `America/Sao_Paulo`, `0001-01-01T00:00:00Z` cai antes do ano 1
+    (medido). A guarda do schema confere a faixa EM UTC; e esta funcao que
+    torna UTC o fuso em que a leitura de fato acontece -- e, de quebra, faz
+    todo instante lido do banco sair com `Z`.
+
+    Por que um `SET` depois de conectar, e nao `options=-c timezone=UTC` na
+    URL: a `libpq` manda a variavel `PGTZ` do ambiente no pacote de partida, e
+    o servidor a aplica DEPOIS das `options` -- com `PGTZ` definido, o
+    `options` perde (medido: `SHOW TimeZone` responde o fuso do `PGTZ`). O
+    `SET` roda depois de tudo que o ambiente, o `postgresql.conf`, o
+    `ALTER DATABASE` e o `ALTER ROLE` possam ter escolhido.
+
+    O `autocommit` ligado durante o `SET` nao e detalhe: sem ele o `SET` roda
+    na transacao implicita do psycopg, o pool faz rollback ao receber a
+    conexao de volta, e o rollback desfaz o `SET` -- a partir do segundo uso a
+    sessao voltava ao fuso do ambiente (medido).
+    """
+    autocommit_anterior = conexao_dbapi.autocommit
+    conexao_dbapi.autocommit = True
+    try:
+        with conexao_dbapi.cursor() as cursor:
+            cursor.execute("SET TIME ZONE 'UTC'")
+    finally:
+        conexao_dbapi.autocommit = autocommit_anterior
+
+
+def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Engine:
+    """Cria a engine -- e e o UNICO lugar onde uma engine desta base nasce: a
+    aplicacao, a suite de testes e o Alembic passam por aqui, e por isso
+    conectam todos com a mesma configuracao (sessao em UTC, ver
+    `_fixar_sessao_em_utc`). Uma engine montada por outro caminho seria uma
+    configuracao que os testes nao exercitam.
+
+    `pool_pre_ping` testa a `connection` antes de entrega-la: sem isso o pool
+    reaproveita uma que morreu quando o banco reiniciou, o que acontece com
+    frequencia em desenvolvimento. `poolclass` existe para o Alembic, que usa
+    `NullPool` -- um processo de migracao nao tem por que manter conexao
+    aberta; `None` fica com o pool padrao do dialeto.
+
+    O listener nao abre conexao: roda so quando o pool cria uma. A engine
+    continua preguicosa, e os testes que dependem disso (a guarda do banco de
+    teste so le `engine.url`) continuam valendo."""
+    engine = create_engine(url, pool_pre_ping=True, poolclass=poolclass)
+    event.listen(engine, "connect", _fixar_sessao_em_utc)
+    return engine
 
 
 _engine: Engine | None = None
