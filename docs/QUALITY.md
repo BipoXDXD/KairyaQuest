@@ -400,14 +400,17 @@ ambiente** (o job continua executando só `make check-secrets`):
   **só é seguro por causa da guarda do script**: antes de aceitar um
   binário que já está no diretório — do cache do Actions, do `.tools/`
   local ou do `FQ_TOOLS_DIR` do pre-push —, `install-gitleaks.sh` confere o
-  hash dele contra o `BIN_SHA256`; se não conferir, o binário é descartado
-  e baixado de novo. A guarda tem teste que a faz dizer não:
+  hash dele contra o `BIN_SHA256`; se não conferir, o binário **não é
+  usado**, e só é **substituído** quando o download verificado termina — se
+  o download falhar, o binário que não confere continua no disco e o script
+  reprova do mesmo jeito. A guarda tem teste que a faz dizer não:
   `tests/integration/test_install_gitleaks.py` planta um binário forjado e
   exige que o script vá à rede em vez de aceitá-lo.
 - **Nova tentativa no `curl`** do script, para quando o cache faltar:
   `--retry 5 --retry-delay 5 --retry-max-time 240 --retry-all-errors`, com
   `--connect-timeout 20 --max-time 120`. O `--retry-all-errors` é o que
-  importa: `--retry` sozinho só repete timeout e HTTP 408/429/5xx, e **não**
+  importa: `--retry` sozinho só repete timeout e HTTP 408, 429, 500, 502, 503
+  ou 504 (`man curl`, seção `--retry`), e **não**
   repete o erro 35 de handshake TLS medido (conferido: com `--retry 2` o
   curl tentou uma vez; com `--retry-all-errors`, três). Existe desde o curl
   7.71.0; o runner `ubuntu-24.04` tem 8.5.0 e o macOS local, 8.7.1.

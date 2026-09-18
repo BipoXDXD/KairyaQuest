@@ -184,8 +184,10 @@ jobs:
       # segunda copia da versao aqui que pudesse divergir.
       #
       # Seguro so porque o script confere o binario restaurado contra o
-      # BIN_SHA256 antes de aceita-lo; um binario que nao confere e descartado
-      # e baixado de novo. Esta guarda tem teste:
+      # BIN_SHA256 antes de aceita-lo; um binario que nao confere NAO E USADO
+      # e so e substituido quando o download verificado termina -- se o
+      # download falhar, o binario que nao confere fica no disco e o job
+      # reprova do mesmo jeito. Esta guarda tem teste:
       # tests/integration/test_install_gitleaks.py.
       - name: Cache do Gitleaks
         uses: actions/cache@v6

@@ -137,8 +137,10 @@ O `AGENTS.md` §4 exige motivo escrito para infraestrutura nova.
   e sem nova tentativa, então uma queda de rede do GitHub reprovava o gate
   com o código intacto.
 - **Por que é seguro:** o script só aceita um binário já presente se o
-  SHA-256 dele conferir com o `BIN_SHA256`; senão, descarta e baixa. A
-  guarda passou a ter teste que a faz dizer não
+  SHA-256 dele conferir com o `BIN_SHA256`; senão, não o usa e baixa de novo,
+  substituindo-o só quando o download verificado termina — se o download
+  falhar, o binário que não confere continua no disco e o script reprova do
+  mesmo jeito. A guarda passou a ter teste que a faz dizer não
   (`tests/integration/test_install_gitleaks.py`), e o mesmo arquivo prova
   que, esgotadas as tentativas, o script continua reprovando.
 - **O que ficou sem cache, e por quê:** o Chromium do Playwright no

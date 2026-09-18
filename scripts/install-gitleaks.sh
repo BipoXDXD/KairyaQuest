@@ -66,9 +66,12 @@ fi
 # A GUARDA que torna seguro qualquer cache deste diretorio -- o .tools/ local,
 # o FQ_TOOLS_DIR do pre-push e o `actions/cache` do job check-secrets no CI:
 # um binario so e aceito sem download se o hash dele conferir com BIN_SHA256.
-# Um binario que nao confere nao e usado: o script segue para o download, e o
-# binario verificado substitui o que estava la. Teste que a faz dizer nao:
-# tests/integration/test_install_gitleaks.py.
+# Um binario que nao confere NAO E USADO, mas tambem nao e removido aqui: o
+# script segue para o download, e so o `rm -rf "$BIN"` (mais abaixo, apos o
+# download verificado) o substitui. Se o download falhar antes disso, o
+# binario que nao confere continua no disco e o script reprova mesmo assim --
+# o `set -e` para no `curl`, antes de qualquer `mv`. Teste que a faz dizer
+# nao: tests/integration/test_install_gitleaks.py.
 if [ -f "$BIN" ] && [ -x "$BIN" ] && echo "${BIN_SHA256}  ${BIN}" | verifica_sha256 >/dev/null 2>&1; then
   exit 0
 fi
@@ -83,8 +86,9 @@ trap 'rm -rf "$TMP"' EXIT
 # rede do lado do GitHub, nao defeito do codigo.
 #
 # `--retry` SOZINHO nao cobre esse caso: ele so repete erros "transitorios"
-# (timeout e HTTP 408/429/5xx), e o erro 35 de handshake TLS nao esta na
-# lista -- medido com um servidor HTTP puro respondendo a um pedido HTTPS:
+# (timeout e HTTP 408, 429, 500, 502, 503 ou 504 -- man curl, secao --retry),
+# e o erro 35 de handshake TLS nao esta na lista -- medido com um servidor
+# HTTP puro respondendo a um pedido HTTPS:
 # com `--retry 2` o curl tentou uma vez; com `--retry-all-errors`, tres.
 # `--retry-connrefused` tambem nao serve, so cobre ECONNREFUSED. Por isso
 # `--retry-all-errors` (curl >= 7.71.0; o runner ubuntu-24.04 tem 8.5.0 e o
