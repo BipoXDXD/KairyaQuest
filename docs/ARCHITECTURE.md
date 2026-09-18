@@ -6,28 +6,37 @@ responsável.
 
 O documento é dividido em dois blocos rotulados, e a distinção é obrigatória:
 
-- **O que existe hoje** (§1) — descrição. Gerada do disco, verificável com
-  `find`.
-- **O que é alvo e ainda não foi implementado** (§2, §3 e as linhas marcadas
-  como contrato em §4) — **contrato**, não descrição. Nada nesses trechos
-  existe no repositório hoje.
+- **O que existe hoje** (§1, e as linhas marcadas como *existe* em §3 e §4)
+  — descrição. Gerada do disco, verificável com `git ls-files`.
+- **O que é alvo e ainda não foi implementado** (§2, e as linhas marcadas
+  como *contrato* em §3 e §4) — **contrato**, não descrição. Nada nesses
+  trechos existe no repositório hoje.
 
-Documentar um backend inexistente como se existisse seria afirmação falsa, e
-este projeto trata afirmação falsa em documentação como defeito grave. Por
-isso os dois blocos nunca se misturam.
+Documentar como existente algo que não existe seria afirmação falsa, e este
+projeto trata afirmação falsa em documentação como defeito grave. Por isso
+os dois blocos nunca se misturam.
 
 ## 1. O que existe hoje
 
-Árvore real, gerada do disco, sem `node_modules/`, `.venv/`, `.git/`,
-`.tools/`, `dist/`, `coverage/`, `.superpowers/` e `.idea/` — todos ignorados
-pelo git (os cinco últimos existem na máquina de desenvolvimento, mas não
-chegam a um clone).
+Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim do
+Incremento 1a. Ficam de fora os caminhos ignorados pelo git — dependências
+(`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
+e de teste (`frontend/dist/`, `frontend/coverage/`,
+`frontend/test-results/`, `htmlcov/`, `coverage.xml`), caches, estado de IDE
+(`.idea/`), os `.env` locais e `.superpowers/`. Eles existem na máquina de
+desenvolvimento, mas não chegam a um clone.
 
 ```text
 FocusQuest/
 ├── .github/
 │   └── workflows/
-│       └── quality.yml            # o gate no GitHub Actions: um job por alvo do Makefile
+│       └── quality.yml            # o gate no GitHub Actions: um job por alvo de verificação do Makefile
+├── alembic/                       # migrações do banco
+│   ├── versions/
+│   │   └── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
+│   ├── README
+│   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
+│   └── script.py.mako             # modelo de migração nova
 ├── docs/                          # documentação viva do projeto
 │   ├── ARCHITECTURE.md            # este arquivo
 │   ├── HANDOFF.md                 # estado corrente: decisões, alterações, pendências
@@ -40,15 +49,34 @@ FocusQuest/
 │   │   ├── favicon.svg
 │   │   └── icons.svg
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
-│   │   ├── assets/                # imagens e SVGs importados pelo código
+│   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
+│   │   ├── features/
+│   │   │   └── missions/          # a feature de missões: tipos, hook de dados e componente
+│   │   │       ├── MissionList.test.tsx
+│   │   │       ├── MissionList.tsx
+│   │   │       ├── types.ts
+│   │   │       ├── useMissions.test.tsx
+│   │   │       └── useMissions.ts
+│   │   ├── pages/
+│   │   │   ├── Headquarters.test.tsx
+│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe a tela, sem regra
+│   │   ├── shared/
+│   │   │   └── api/
+│   │   │       ├── client.test.ts
+│   │   │       └── client.ts      # o cliente HTTP único; componente nenhum chama fetch
 │   │   ├── test/                  # infraestrutura de teste, não código de aplicação
 │   │   │   └── setup.ts
-│   │   ├── App.css
+│   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
-│   │   ├── App.tsx
-│   │   ├── index.css
+│   │   ├── App.tsx                # escolhe a tela; hoje, só o Quartel-General
+│   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx
 │   │   ├── main.test.tsx
 │   │   └── main.tsx
+│   ├── tests/
+│   │   └── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
+│   │       ├── headquarters.spec.ts
+│   │       └── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273)
+│   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
 │   ├── .gitignore
 │   ├── .prettierignore
 │   ├── .prettierrc.json
@@ -57,22 +85,64 @@ FocusQuest/
 │   ├── index.html
 │   ├── package-lock.json
 │   ├── package.json               # também define os scripts que o Makefile chama
+│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa
 │   ├── tsconfig.json
 │   ├── tsconfig.app.json
+│   ├── tsconfig.e2e.json          # faz o `tsc -b` alcançar tests/e2e
 │   ├── tsconfig.node.json
-│   └── vite.config.ts             # build, plugins e limiares de cobertura do Vitest
+│   └── vite.config.ts             # build, proxy de /api, coleta de teste e limiares de cobertura
 ├── scripts/                       # lógica de shell do gate, compartilhada entre local e CI
 │   ├── check-push.sh              # valida o topo de cada ref enviada, em worktree isolado
+│   ├── e2e-env.sh                 # sobe a API do E2E apontada para o banco de teste
+│   ├── init-test-db.sql           # cria o focusquest_test (compose e CI usam o mesmo arquivo)
 │   └── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
+├── src/
+│   └── focusquest/                # o pacote Python da API, instalado em modo editável
+│       ├── core/                  # infraestrutura comum a todos os módulos
+│       │   ├── __init__.py
+│       │   ├── base.py            # base declarativa do SQLAlchemy
+│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
+│       │   ├── database.py        # engine e sessão por requisição
+│       │   └── errors.py          # erros de domínio comuns
+│       ├── modules/
+│       │   ├── __init__.py
+│       │   └── missions/
+│       │       ├── __init__.py
+│       │       ├── domain.py      # estados, transições, XP e duração real — sem FastAPI nem SQLAlchemy
+│       │       ├── models.py      # User, Mission e MissionOperation
+│       │       ├── router.py      # as três rotas de /api/missions
+│       │       ├── schemas.py     # contratos de entrada e saída
+│       │       └── service.py     # casos de uso: criar, listar, concluir
+│       ├── __init__.py
+│       └── main.py                # app FastAPI, tradução de erro em status, /health e /ready
+├── tests/
+│   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
+│   │   ├── __init__.py
+│   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA e migração
+│   │   ├── test_e2e_env.py
+│   │   ├── test_health.py
+│   │   ├── test_migrations.py
+│   │   ├── test_missions_api.py
+│   │   ├── test_missions_concorrencia.py
+│   │   ├── test_missions_models.py
+│   │   └── test_missions_service.py
+│   └── unit/                      # sem banco
+│       ├── __init__.py
+│       ├── test_config.py
+│       ├── test_missions_domain.py
+│       └── test_package.py
+├── .env.example                   # modelo do .env da raiz (banco); o .env é ignorado pelo git
 ├── .gitignore
 ├── .gitleaks.toml                 # configuração da varredura de segredos
 ├── .pre-commit-config.yaml        # declara os hooks pre-commit, pre-merge-commit e pre-push
 ├── .python-version
 ├── AGENTS.md                      # regras comuns a todos os agentes
 ├── CLAUDE.md                      # importa AGENTS.md e acrescenta o específico do Claude Code
-├── Makefile                       # a entrada única do gate: bootstrap, check, format
+├── Makefile                       # a entrada única do gate e do ambiente local
 ├── README.md                      # a especificação do produto; autoridade final
-├── pyproject.toml                 # raiz Python: só ferramentas (Ruff, mypy, pre-commit)
+├── alembic.ini
+├── compose.yaml                   # o PostgreSQL local: postgres:18.6-alpine na porta 55432 do host
+├── pyproject.toml                 # pacote focusquest, dependências e configuração de Ruff, mypy, pytest e coverage
 └── uv.lock
 ```
 
@@ -80,24 +150,33 @@ FocusQuest/
 
 Registrado explicitamente, para que ninguém leia ausência como descuido:
 
-- **Não existe backend.** Nenhum arquivo `.py` no repositório. `pyproject.toml`
-  e `uv.lock` existem, mas só declaram o grupo `dev` (Ruff, mypy,
-  pre-commit) — sem pacote, sem dependência de aplicação, sem módulo. Por
-  consequência, também não existem `alembic/`, `tests/`, `compose.yaml`,
-  `Dockerfile` nem `.env.example`.
+- **Não existe `Dockerfile`.** A aplicação roda direto da árvore (`uv run`,
+  `npm run`); só o PostgreSQL roda em container, pelo `compose.yaml`.
 - **Não existe `.run/`.** O README §4 manda versionar configuração de execução
   compartilhada, e o `.gitignore` já reserva o caminho (comentando que `.run/`
   **não** entra nele), mas o diretório ainda não foi criado.
-- **Não existem `features/`, `shared/`, `pages/` nem `app/` no frontend.** O
-  `src/` é plano hoje: um `App.tsx` de placeholder, o `main.tsx` que o monta,
-  os dois testes correspondentes e os estilos. Essas pastas são contrato (§2),
-  e cada uma nasce com o primeiro arquivo real que a justifique.
+- **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
+  do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
+  e nasce quando se justificar (README §3: "quando necessário").
+- **Não existem os módulos `tutoring` e `progress`, nem módulo `users`.** O
+  modelo `User` mora em `modules/missions/models.py` como dívida consciente
+  (ver `docs/HANDOFF.md`).
+- **No frontend, não existem `app/`, `styles/`, nem `shared/ui/`,
+  `shared/hooks/`, `shared/lib/` e `shared/types/`.** Nem as features
+  `tutoring` e `rewards`.
+- **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
+  arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
+  não são importados por nenhum módulo — conferido com `grep` em
+  `frontend/src` e `frontend/index.html`. São restos do scaffold do Vite. A
+  remoção é mudança de código, não deste documento; está registrada como
+  pendência em `docs/HANDOFF.md`.
 
 ## 2. Árvore-alvo — contrato, não descrição
 
 A árvore abaixo é a do README §3, reproduzida aqui como contrato. **Cada
 módulo nasce apenas quando houver implementação real**; criar a pasta vazia
-antes disso é a "camada vazia" que o README §3 proíbe.
+antes disso é a "camada vazia" que o README §3 proíbe. O que dela já existe
+está no §1; o restante continua contrato.
 
 ```text
 focusquest/
@@ -156,54 +235,182 @@ A árvore-alvo chama a pasta do frontend de `web/`; **neste repositório ela é
 `frontend/` e assim permanece**. Não é descuido nem pendência: o próprio §3
 manda "adaptar a árvore à localização atual do frontend" e "não mover arquivos
 só por estética". Renomear `web/` custaria ajustar imports, aliases, scripts
-do `package.json`, o `WEB := frontend` do Makefile, o
-`cache-dependency-path: frontend/package-lock.json` do workflow e os caminhos
-de cobertura — tudo isso para não mudar nenhum comportamento. A decisão já
-está registrada em `docs/HANDOFF.md`; esta seção é a versão arquitetural dela.
+do `package.json`, o `WEB := frontend` do Makefile, os
+`cache-dependency-path: frontend/package-lock.json` e os
+`working-directory: frontend` do workflow e os caminhos de cobertura — tudo
+isso para não mudar nenhum comportamento. A decisão já está registrada em
+`docs/HANDOFF.md`; esta seção é a versão arquitetural dela.
 
 Onde o restante deste documento cita um caminho da árvore-alvo sob `web/`,
 leia `frontend/`.
 
 ## 3. Responsabilidades por camada
 
-### Backend — **contrato**, nada disto existe hoje
+### Backend — `missions` existe; o resto é contrato
 
-Conforme o README §3:
+Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
+real no módulo `missions`.
 
-| Camada | Responsabilidade | O que **não** faz |
-|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição, valida o contrato, chama o serviço, traduz o resultado em resposta e código de status. | Não contém regra de negócio nem acesso ao banco. |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, controla a transação, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. |
-| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, ciclos de pré-requisito. | Não importa SQLAlchemy, FastAPI nem nada de I/O. |
-| `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. |
-| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. |
-| `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. |
+| Camada | Responsabilidade | O que **não** faz | Estado |
+|---|---|---|---|
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe |
+| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real. | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe |
+| `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
+| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe |
+| `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
+
+Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
+`commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
+está em `core/database.py` — um commit feito depois do `yield` rodaria com
+a resposta já montada, e uma falha ali não teria mais como mudar o status.
+A dependência `get_session` abre uma sessão por requisição e a fecha ao
+final, revertendo o que ficou pela metade.
 
 A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
 
+### O contrato HTTP que existe
+
+> **Fonte de verdade:** `src/focusquest/modules/missions/router.py`,
+> `src/focusquest/modules/missions/schemas.py` e `src/focusquest/main.py`.
+
+| Método e caminho | Sucesso | O que faz |
+|---|---|---|
+| `POST /api/missions` | `201` com a missão criada | Cria uma missão `pendente` para o usuário único. |
+| `GET /api/missions` | `200` com a lista | Lista as missões do usuário único, em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
+| `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
+| `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
+| `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
+
+- **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
+  constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
+  nem token.
+- **Sem barra final.** As rotas são `/api/missions`, sem `/` no fim. Um
+  pedido a `/api/missions/` recebe **`307`** com `Location` apontando para
+  `/api/missions` (o redirecionamento automático do FastAPI/Starlette;
+  medido). O cliente do frontend chama sem a barra; um cliente que siga
+  redirecionamento funciona com um ida e volta a mais, e um que não siga vê
+  o 307.
+- **`mission_id` do caminho** é inteiro de `1` a `2**31 - 1`
+  (`MAIOR_INTEIRO_DA_COLUNA`, o maior valor da coluna `Integer`/int4). Fora
+  disso, `422` com `loc: ["path", "mission_id"]` — antes do teto, um id de
+  onze dígitos chegava ao banco e estourava o parâmetro com 500.
+- **Entrada de criação** (`MissionCreate`): `instructions` e
+  `completion_criterion` (texto não vazio), `difficulty` (inteiro de 1 a
+  `DIFICULDADE_MAXIMA = 5`), `estimated_minutes` (inteiro de 1 a
+  `MAIOR_INTEIRO_DA_COLUNA = 2**31 - 1`) e `deadline`. O teto da dificuldade
+  mora no schema, e não no domínio, de propósito: o domínio responde quanto
+  vale uma dificuldade, a borda responde qual dificuldade aceita receber. O
+  teto de `estimated_minutes` é **técnico** — o maior valor da coluna int4,
+  para o excesso virar 422 e não 500 —, e não responde "quanto tempo cabe
+  numa missão", que é decisão de produto em aberto (`docs/HANDOFF.md`).
+- **`deadline` exige fuso.** O campo é `AwareDatetime`: um datetime sem fuso
+  é recusado com 422, com `type: timezone_aware` no erro de validação.
+  **O `/openapi.json` não expressa essa exigência** — o schema gerado diz
+  apenas `{"type": "string", "format": "date-time"}`. A exigência é
+  verificada em runtime, e um cliente gerado a partir do schema só a
+  descobriria ao receber o 422.
+- **`deadline` precisa caber no `datetime` do Python depois de convertido
+  para UTC.** `9999-12-31T23:59:59-03:00` tem data local válida, mas em UTC
+  é o ano 10000: é recusado com 422 (`type: value_error`). Antes da guarda
+  ele era aceito com 201, o PostgreSQL o gravava, e a partir daí o
+  `GET /api/missions` respondia 500 para sempre. Não há janela de negócio
+  (prazo no passado, prazo longe demais) — decisão de produto em aberto.
+- **O offset do instante devolvido depende da sessão do PostgreSQL**, não de
+  uma regra da API: a coluna é `timestamptz`, e o banco converte o instante
+  para o `TimeZone` da sessão na leitura. Com a sessão em UTC (o padrão do
+  servidor deste projeto) sai `Z`; com a sessão em `America/Sao_Paulo`
+  sairia `-03:00` (medido). O instante é o mesmo nos dois casos; quem
+  consome compara instantes, não strings.
+- **Saída** (`MissionRead`): `id`, `instructions`, `completion_criterion`,
+  `difficulty`, `estimated_minutes`, `deadline`, `state`, `started_at`,
+  `completed_at`, mais dois campos **derivados, nunca gravados**: `xp`
+  (calculado da dificuldade, decisão A4) e `actual_duration_minutes`
+  (minutos inteiros entre início e conclusão, ou `null`). Não publica
+  `user_id` nem `created_at`.
+- **Estados**: `pendente`, `em_andamento` e `concluida`, com `concluida`
+  terminal (decisão A5). Os valores ficam em português — são dados, não
+  chave de payload. Não existe endpoint de iniciar missão: `em_andamento` e
+  `started_at` existem no modelo e no domínio, mas as rotas atuais não os
+  alcançam, e por isso `actual_duration_minutes` sai sempre `null` por elas.
+- **Corpo de erro**: `{"detail": ...}`, com a **chave em inglês** (a mesma
+  que o FastAPI usa no 422 de validação) e a **prosa em pt-BR**. O 422 de
+  validação mantém o formato nativo do FastAPI, em que `detail` é uma
+  **lista** de erros, não um texto.
+
+| Situação | Status | `detail` |
+|---|---|---|
+| Missão inexistente | `404` | `"missao nao encontrada"` |
+| Missão de outro usuário | `404`, não 403 | o **mesmo** corpo do 404 acima — responder diferente revelaria que o recurso existe |
+| Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
+| `operation_id` já gasto em outra operação | `409` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
+| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | lista de erros do FastAPI |
+
+Os dois 409 **não têm um `code` legível por máquina**: só a mensagem em
+português os distingue, e a ação correta do cliente é oposta nos dois
+(transição ilegal: não há o que repetir; identificador gasto: gerar um
+`operation_id` novo e repetir o mesmo corpo). Registrado como pendência em
+`docs/HANDOFF.md`.
+
 ### Frontend — parte descrição, parte contrato
 
 - **`src/app/`** *(contrato)* — inicialização, rotas e providers. Hoje o papel
   é cumprido por `src/main.tsx`, que monta `App` em `#root` dentro de
-  `StrictMode`.
-- **`src/pages/`** *(contrato)* — **composição**: uma página junta features e
-  componentes reutilizáveis e decide o layout da tela. Não contém regra.
-- **`src/features/<feature>/`** *(contrato)* — a feature é a unidade real de
-  organização: componentes, hooks, contratos e testes **daquele** assunto,
-  agrupados. `tutoring`, `missions` e `rewards` são os três previstos.
-- **`src/shared/`** *(contrato)* — só o que é de fato compartilhado: `ui/`
-  (componentes visuais sem regra de negócio), `api/` (cliente HTTP e
-  tratamento de erros, centralizados), `hooks/`, `lib/`, `types/`.
+  `StrictMode`, e por `src/App.tsx`, que escolhe a tela (sem roteador, porque
+  só há uma).
+- **`src/pages/`** *(existe)* — **composição**: uma página junta features e
+  componentes reutilizáveis e decide o layout da tela. Não contém regra. Hoje
+  há uma: `Headquarters.tsx`, o Quartel-General.
+- **`src/features/<feature>/`** *(existe para `missions`; contrato para
+  `tutoring` e `rewards`)* — a feature é a unidade real de organização:
+  componentes, hooks, contratos e testes **daquele** assunto, agrupados. Em
+  `missions`, `useMissions.ts` busca os dados e expõe os quatro estados de
+  tela como união discriminada (carregando, vazio, erro, carregado), e
+  `MissionList.tsx` os desenha.
+- **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
+  a tradução de falha em `ApiError`. Os demais `shared/` (`ui/`, `hooks/`,
+  `lib/`, `types/`) continuam contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
-  globais estão em `src/index.css` e `src/App.css`.
+  globais estão em `src/index.css`.
 - **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
-  oposição a `public/`, servido sem passar pelo bundler.
+  oposição a `public/`, servido sem passar pelo bundler. Hoje nenhum dos três
+  arquivos da pasta é importado (§1).
 - **`src/test/`** *(existe)* — infraestrutura de teste (setup do jsdom).
   Está **fora** do denominador da cobertura de propósito; ver
   `docs/QUALITY.md` §3.
+- **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
+  fora da coleta do Vitest.
+
+### Como o frontend alcança a API
+
+**Por proxy do Vite, não por CORS.** O navegador pede `/api/...` para a
+própria origem do Vite, e o `server.proxy` do `frontend/vite.config.ts`
+encaminha ao backend — então não existe pedido cross-origin, e o backend não
+tem `CORSMiddleware`. O `vite preview`, que o E2E usa, herda o mesmo proxy
+(no Vite 8.3.0 instalado, `preview.proxy ?? server.proxy`).
+
+- **`VITE_API_URL`** é o caminho relativo `/api`, lido por
+  `src/shared/api/client.ts`. O cliente **lança no carregamento do módulo**
+  se a variável faltar ou estiver vazia, e a aplicação não chega a
+  renderizar. É falha alta deliberada, não bug: um padrão silencioso
+  transformaria "esqueci de configurar" num 404 três camadas adiante. Em
+  desenvolvimento ela vem de `frontend/.env` (modelo em
+  `frontend/.env.example`); nos testes, do `test.env` do `vite.config.ts`;
+  no build do E2E, da linha de comando do `make check-e2e`.
+- **`API_PROXY_TARGET`** é o alvo do proxy, com `http://127.0.0.1:8000` como
+  padrão. Ela é lida de `process.env` pelo `vite.config.ts`, e **o Vite não
+  injeta o `.env` em `process.env`** (ele carrega o `.env` só para
+  `import.meta.env`, e só as chaves com prefixo `VITE_`). Escrita num
+  `.env`, ela é ignorada em silêncio. A forma que funciona é na linha de
+  comando ou no ambiente do processo:
+  `API_PROXY_TARGET=http://127.0.0.1:8100 npm run dev`. É assim que o E2E a
+  passa, pelo `env` do `webServer` no `playwright.config.ts`.
+- **Consequência que precisa ser lembrada:** no dia em que o frontend for
+  servido por outra coisa que não o Vite, volta a faltar CORS ou um proxy
+  reverso.
 
 ## 4. Onde colocar cada tipo de arquivo
 
@@ -216,37 +423,36 @@ legitimamente pertence a ele — nunca antes.
 | Vou criar… | Vai em | Estado |
 |---|---|---|
 | Componente visual reutilizável, sem regra de negócio (botão, cartão, barra de progresso) | `frontend/src/shared/ui/<Componente>.tsx` | contrato |
-| Componente específico de uma feature (cartão de missão, painel da Tifa) | `frontend/src/features/<feature>/<Componente>.tsx` | contrato |
-| Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | contrato |
+| Componente específico de uma feature (cartão de missão, painel da Tifa) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`) |
+| Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | existe |
 | Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | contrato |
-| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | contrato |
+| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`) |
 | Hook genérico | `frontend/src/shared/hooks/` | contrato |
-| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | contrato |
+| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`) |
 | Token visual (cor, espaçamento, tipografia, foco, movimento) | `frontend/src/styles/` | contrato |
 | Estilo global | hoje `frontend/src/index.css`; migra para `frontend/src/styles/` quando a pasta nascer | existe |
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
-| Página (composição de features) | `frontend/src/pages/` | contrato |
-| Teste ponta a ponta | `frontend/tests/e2e/` — entra junto com o alvo `check-e2e` | contrato |
+| Página (composição de features) | `frontend/src/pages/` | existe |
+| Teste ponta a ponta | `frontend/tests/e2e/` | existe |
 | Imagem ou SVG importado pelo código | `frontend/src/assets/` | existe |
 | Arquivo servido cru, sem bundler (favicon) | `frontend/public/` | existe |
 
-### Backend — tudo contrato
+### Backend
 
-| Vou criar… | Vai em |
-|---|---|
-| Rota HTTP | `src/focusquest/modules/<módulo>/router.py` |
-| Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` |
-| Caso de uso | `src/focusquest/modules/<módulo>/service.py` |
-| Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` |
-| Modelo (tabela SQLAlchemy) | `src/focusquest/modules/<módulo>/models.py` |
-| Consulta ou gravação no banco | `src/focusquest/modules/<módulo>/repository.py` |
-| Migração | `alembic/versions/` |
-| Configuração, conexão, infraestrutura comum | `src/focusquest/core/` |
-| Teste unitário / de integração | `tests/unit/` / `tests/integration/` |
-
-**Lembrete de contrato:** o primeiro arquivo `.py` do repositório traz junto o
-alvo `check-api` do Makefile e o job correspondente do CI. Isso não é
-opcional; está em `docs/QUALITY.md` §4.
+| Vou criar… | Vai em | Estado |
+|---|---|---|
+| Rota HTTP | `src/focusquest/modules/<módulo>/router.py`, registrada em `src/focusquest/main.py` com `include_router` | existe (`missions`) |
+| Tradução de erro de domínio em status HTTP | `src/focusquest/main.py`, com `exception_handler` — em um lugar só, não por rota | existe |
+| Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` | existe (`missions`) |
+| Caso de uso | `src/focusquest/modules/<módulo>/service.py` | existe (`missions`) |
+| Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` | existe (`missions`) |
+| Erro de domínio comum a mais de um módulo | `src/focusquest/core/errors.py` | existe |
+| Modelo (tabela SQLAlchemy) | `src/focusquest/modules/<módulo>/models.py` | existe (`missions`) |
+| Consulta ou gravação no banco | `src/focusquest/modules/<módulo>/repository.py` | contrato |
+| Migração | `alembic/versions/` | existe |
+| Configuração, conexão, infraestrutura comum | `src/focusquest/core/` | existe |
+| Teste unitário (sem banco) / de integração (PostgreSQL real) | `tests/unit/` / `tests/integration/` | existe |
+| Módulo `tutoring`, `progress` ou outro do README §8 | `src/focusquest/modules/<módulo>/` | contrato |
 
 ### Fora da aplicação
 
@@ -254,6 +460,8 @@ opcional; está em `docs/QUALITY.md` §4.
 |---|---|
 | Lógica de shell com mais de duas linhas usada pelo gate | `scripts/` (decisão D6: o Make do macOS roda cada linha em sua própria shell) |
 | Job do CI | `.github/workflows/quality.yml`, **só depois** de existir o alvo do Makefile que ele executa |
+| Serviço de infraestrutura local (banco) | `compose.yaml` |
+| Variável de configuração do backend | um campo em `src/focusquest/core/config.py` **e** uma linha no `.env.example`. O `Settings` recusa **qualquer** chave do `.env` da raiz que não seja campo dele — com ou sem o prefixo `FOCUSQUEST_` —, então o `.env` da raiz não pode guardar variável de outro consumidor sem declará-la ali |
 | Documentação de arquitetura | este arquivo |
 | Configuração de execução compartilhada do PyCharm | `.run/` (ainda não existe; versionado de propósito) |
 
@@ -266,7 +474,9 @@ opcional; está em `docs/QUALITY.md` §4.
    acoplamento que a divisão por feature existe para impedir.
 2. **Nada de dependência circular.** Se A importa B e B importa A, o que as
    duas realmente compartilham é uma terceira coisa que ainda não foi
-   extraída. Extraia-a em vez de fechar o ciclo.
+   extraída. Extraia-a em vez de fechar o ciclo. Foi por isso que
+   `get_engine` e `get_session` moram em `core/database.py`, e não em
+   `main.py`: `main.py` importa o router, e o router precisa da sessão.
 3. **Só sobe para `shared/` o que é realmente compartilhado.** O critério é
    uso real por mais de uma feature, não expectativa de reúso futuro. Regra
    específica de uma feature fica na feature — mesmo que pareça genérica.
@@ -280,24 +490,28 @@ opcional; está em `docs/QUALITY.md` §4.
    em um lugar, não replicado por feature.
 6. **Os dois alertas explícitos do README §3**, repetidos porque são os dois
    defeitos que este projeto mais provavelmente cometeria:
-   - **Nada de `App.tsx` gigante.** Hoje `App.tsx` tem nove linhas. No momento
-     em que ele começar a acumular telas, estado e chamadas, o conteúdo se
-     divide em `pages/` e `features/` — o crescimento dele é o sinal, não a
-     consequência.
+   - **Nada de `App.tsx` gigante.** Hoje `App.tsx` só devolve
+     `<Headquarters />`. No dia em que houver mais de uma tela, o que entra
+     nele é um roteador, não o conteúdo da segunda tela.
    - **Nada de chamadas HTTP espalhadas por componentes.** Toda ida à rede
      passa pelo cliente de `shared/api/`, com tratamento de erro no mesmo
      lugar. Um `fetch` dentro de um componente é um defeito de arquitetura,
      não um atalho.
-7. **Interface em português do Brasil; identificadores em inglês.** O texto
-   que o usuário lê é pt-BR; nomes de variáveis, funções, tipos, arquivos e
-   rotas são em inglês.
+7. **Idioma: interface em português do Brasil; contratos externos em
+   inglês; identificadores internos podem ficar em português** (README §3).
+   Contrato externo são nomes de coluna, chaves de payload JSON e rotas —
+   o que atravessa o sistema. O texto que a pessoa lê é pt-BR, inclusive a
+   prosa dentro do `detail` de um erro. Nomes internos do código Python
+   (`criar_missao`, `xp_para_dificuldade`, `DIFICULDADE_MAXIMA`) estão em
+   português; os valores do estado da missão (`pendente`, `em_andamento`,
+   `concluida`) também, por serem dado e não chave de payload.
 
 ## 6. Qual documento responde o quê
 
 | Pergunta | Documento |
 |---|---|
 | O que o produto deve ser? Qual a regra da spec sobre isto? | `README.md` — autoridade final |
-| Onde vai este arquivo? De que este diretório é responsável? | **este documento** |
+| Onde vai este arquivo? De que este diretório é responsável? Qual é o contrato HTTP? | **este documento** |
 | Como rodo o gate? O que ele mede, o que não mede, e o que ele **não** protege? | `docs/QUALITY.md` |
 | O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` |
 | Como trabalho aqui sem quebrar nada? | `AGENTS.md` (e `CLAUDE.md`, que o importa) |

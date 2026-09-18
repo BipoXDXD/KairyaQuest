@@ -1,3 +1,17 @@
 dist
 coverage
 package-lock.json
+
+# Saida do Playwright. Nao e cosmetico: o `test-results/.last-run.json` e
+# escrito em TODA execucao (passando ou nao) e os artefatos de falha incluem
+# `error-context.md`. Sem estas duas linhas, o segundo `make check` seguido
+# reprovava no `prettier --check` do check-web -- por causa do arquivo que o
+# check-e2e do primeiro acabara de gravar. Medido, nao suposto.
+#
+# Ancorados com `/` inicial: na sintaxe de gitignore que o Prettier usa, um
+# padrao sem barra casa em QUALQUER profundidade. Sem a ancora, um
+# `src/features/test-results/` de codigo de verdade sairia do Prettier sem
+# ninguem notar. Com a ancora, as duas linhas dizem o que de fato sao: saida de
+# ferramenta na raiz do frontend.
+/test-results
+/playwright-report

@@ -50,7 +50,7 @@ será a Anthropic, com `claude-opus-5` como padrão configurável.
 
 | # | Decisão | Motivo |
 |---|---|---|
-| A1 | `[tool.uv] package = true`, com backend de build e instalação editável | **Corrige a decisão D2 do Incremento 2**, que fixou `package = false` justificando que "o backend será executado a partir da árvore". Com layout `src/`, isso torna `import focusquest` impossível sem manipular `sys.path` — e o README §4 proíbe por nome ("sem remendos em `sys.path`"). Instalação editável não é "instalar para distribuir": é como o Python torna o próprio projeto importável em pytest, uvicorn e Alembic ao mesmo tempo. |
+| A1 | O projeto é um **pacote**, com backend de build e instalação editável (emendada — ver [Emendas](#emendas)) | **Corrige a decisão D2 do Incremento 2**, que fixou `package = false` justificando que "o backend será executado a partir da árvore". Com layout `src/`, isso torna `import focusquest` impossível sem manipular `sys.path` — e o README §4 proíbe por nome ("sem remendos em `sys.path`"). Instalação editável não é "instalar para distribuir": é como o Python torna o próprio projeto importável em pytest, uvicorn e Alembic ao mesmo tempo. |
 | A2 | Usuário único local, **declarado** | README §8 permite explicitamente ("o recorte inicial pode ser local e de usuário único, explicitamente"). Sem login, sem sessão, sem token. Uma linha de usuário criada pela migração. Fica escrito na spec, no código e no `docs/HANDOFF.md` — é recorte, não omissão. Autenticação e autorização por recurso entram antes de existirem contas reais. |
 | A3 | Dificuldade é inteiro; prazo é instante com timezone | Decisão do usuário. README §8 exige persistir instantes com timezone e apresentar em `America/Sao_Paulo`. |
 | A4 | XP é **derivado** da dificuldade, não persistido | Decisão do usuário. Elimina o estado onde dificuldade e XP discordam. Consequência aceita: mudar a fórmula altera retroativamente o XP de missões antigas — aceitável porque XP de estudo é uma opinião atual sobre o dado, não o registro de um fato financeiro. |
@@ -77,11 +77,11 @@ incremento.
 
 ```text
 src/focusquest/
-  main.py                 # app FastAPI e wiring
+  main.py                 # app FastAPI, wiring e handlers HTTP
   core/
     config.py             # pydantic-settings
     database.py           # engine e sessão
-    errors.py             # erros de domínio e handlers HTTP
+    errors.py             # erros de domínio comuns
   modules/missions/
     router.py             # transporte HTTP
     schemas.py            # contratos de entrada e saída
@@ -137,10 +137,18 @@ erro que **explica o bloqueio** (§8), não um 500 genérico.
 
 ### XP
 
-Função pura no `domain.py`, derivando XP da dificuldade. **A fórmula é decisão
-do usuário** — linear, quadrática, com piso, cada uma muda como o jogo se sente.
-O plano de implementação entrega a assinatura e o teste que descreve o
-comportamento esperado, com o corpo marcado para ele escrever.
+Função pura no `domain.py`, derivando XP da dificuldade:
+`20 + 10 · d · (d − 1)`, com as constantes `XP_BASE = 20` e
+`XP_INCREMENTO = 10`. A dificuldade 1 vale 20 XP e a 5 vale 220.
+
+O piso impede que a missão fácil — a que destrava o hábito — valha quase nada.
+O termo quadrático faz encarar o difícil compensar sem explodir. Uma curva
+linear faria das missões fáceis a forma mais eficiente de ganhar XP por hora,
+que é o incentivo errado num app de estudos.
+
+A fórmula foi decidida pelo agente, durante uma ausência em que o dono
+autorizou todas as decisões, e não pelo dono como esta seção previa (emendada —
+ver [Emendas](#emendas)).
 
 ## Endpoints
 
@@ -174,10 +182,28 @@ verdadeira mesmo sob concorrência.
 
 ## Erros
 
-Erros de domínio são tipos próprios em `core/errors.py`, traduzidos para HTTP
-por handlers. Transição ilegal, missão inexistente e missão de outro usuário
-produzem respostas distintas e explicam o motivo. Nenhum caminho de erro retorna
-500 por omissão.
+Erros de domínio são tipos próprios. Os comuns moram em `core/errors.py`. O
+`TransicaoIlegalError` mora em `modules/missions/domain.py`, junto da máquina de
+estados que o produz. Os handlers que os traduzem para HTTP moram em `main.py`,
+num lugar só, e não em `core/`. Motivo: o `docs/ARCHITECTURE.md` define o
+`core/` como infraestrutura comum a todos os módulos. Um dos handlers traduz o
+erro de transição, que pertence ao módulo de missões. Com esse handler dentro do
+`core/`, o núcleo passaria a importar um módulo de funcionalidade e deixaria de
+ser comum.
+
+Os três erros são **tipos distintos**, mas só dois produzem **respostas**
+distintas:
+
+- **Transição ilegal** → 409, com o motivo do bloqueio.
+- **Missão inexistente** e **missão de outro usuário** → o **mesmo** 404, com o
+  **mesmo** corpo. Uma resposta distinta, seja um 403 ou um 404 com o motivo
+  verdadeiro, revelaria a quem está do outro lado da rede que o recurso existe.
+  O motivo verdadeiro vai para o log: `INFO` para inexistente, `WARNING` para
+  acesso negado.
+
+Nenhum caminho de erro da API de missões retorna 500 por omissão. A exceção
+declarada é o `/ready` sem configuração de banco, registrado como pendência no
+`docs/HANDOFF.md`. (Esta seção foi emendada — ver [Emendas](#emendas).)
 
 ## Testes
 
@@ -229,4 +255,19 @@ prevê. A pendência sobre validação do `uv.lock` também vence aqui: `uv sync
 | O arnês de E2E é infraestrutura nova e falha de formas confusas | É construído contra o menor cenário possível — uma lista — antes de existir chat |
 | A porta do PostgreSQL local pode mudar, ou outro serviço ocupar a porta escolhida | A porta do host vem de configuração, com o valor padrão registrado no `.env.example` |
 | Testar concorrência é propenso a teste instável | O teste usa barreira explícita em vez de tempo; se não for possível torná-lo determinístico, vira limitação registrada, não teste removido |
-| `package = true` muda o `pyproject.toml` do incremento anterior | A mudança é deliberada e justificada em A1; o `uv.lock` é regenerado e `uv sync --locked` passa a validá-lo |
+| Tornar o projeto um pacote muda o `pyproject.toml` do incremento anterior | A mudança é deliberada e justificada em A1; o `uv.lock` é regenerado e `uv sync --locked` passa a validá-lo |
+
+## Emendas
+
+Esta spec foi escrita antes da implementação. Em quatro pontos, o código se
+afastou do texto por um motivo que as revisões aprovaram. Em 2026-09-18 o dono
+do projeto delegou a resolução dessas divergências, e elas foram resolvidas
+emendando a spec. Nos quatro casos o código ficou como estava, porque a
+implementação era a escolha melhor ou a única correta.
+
+| Ponto | O que o texto original dizia | O que vale | Por quê |
+|---|---|---|---|
+| **A1** | `[tool.uv] package = true` | O projeto é pacote por declarar `[build-system]` com hatchling. O `pyproject.toml` não tem seção `[tool.uv]`: a linha `package = false` da D2 foi **removida**, não trocada. | Com um backend de build declarado, o uv já trata o projeto como pacote. Escrever `package = true` seria redundante. A instalação editável está no `.venv` (`_editable_impl_focusquest.pth`, apontando para `src`). |
+| **XP** | A fórmula seria escrita pelo dono | `20 + 10 · d · (d − 1)`, decidida pelo agente | O dono estava ausente e tinha autorizado todas as decisões. As duas constantes têm nome e mudam em uma linha. Como o XP é derivado (A4), mudar a curva recalcula as missões antigas. |
+| **Erros: respostas** | Missão inexistente e missão de outro usuário teriam respostas distintas | O **mesmo** 404, com o mesmo corpo; a distinção vai para o log | Uma resposta distinta revelaria que um recurso alheio existe. |
+| **Erros: lugar dos handlers** | Handlers HTTP em `core/errors.py` | Handlers em `main.py`; tipos comuns em `core/errors.py`; `TransicaoIlegalError` em `domain.py` | O `core/` é infraestrutura comum a todos os módulos. Um dos handlers traduz um erro do módulo de missões, e colocá-lo no `core/` faria o núcleo importar esse módulo. |

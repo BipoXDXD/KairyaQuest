@@ -31,6 +31,11 @@ test-results/
 .vscode/*
 !.vscode/extensions.json
 
+# Worktrees efemeros de agentes, criados dentro do proprio repo.
+# Apenas worktrees/: o resto de .claude/ pode conter configuracao de
+# projeto versionada de proposito.
+.claude/worktrees/
+
 # ---- macOS ----
 .DS_Store
 

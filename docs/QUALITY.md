@@ -2,22 +2,35 @@
 
 Este documento descreve o gate de qualidade do FocusQuest: os comandos que o
 compõem, a regra que governa quem chama quem, o que a cobertura mede (e o que
-deliberadamente não mede), o roadmap dos alvos que ainda faltam, as
-limitações conhecidas sem eufemismo, e o procedimento de atualização do
-Gitleaks.
+deliberadamente não mede), o que os alvos `check-api` e `check-e2e` fazem, a
+integração contínua, as limitações conhecidas sem eufemismo, e o
+procedimento de atualização do Gitleaks.
 
 ## Primeiro uso após clonar
 
-Em um clone novo (ou um worktree novo), rode os três comandos abaixo, **nesta
+Em um clone novo (ou um worktree novo), rode os comandos abaixo, **nesta
 ordem**:
 
 ```bash
-make bootstrap                                    # dependencias dos dois ecossistemas
+make bootstrap                                    # dependencias, Chromium do Playwright e Gitleaks
 uv run pre-commit install --install-hooks         # hooks de git (NAO vem do bootstrap)
+cp .env.example .env                              # configuracao local; o .env e ignorado pelo git
+make db-up                                        # PostgreSQL em container, porta 55432 do host
+make migrate-test                                 # esquema no banco de teste
 make check                                        # confirma que o gate passa
 ```
 
-O segundo comando é separado do primeiro **de propósito**, não por
+O `.env` é obrigatório para o gate, não para a aplicação apenas:
+`src/focusquest/core/config.py` exige `FOCUSQUEST_DATABASE_URL` e
+`FOCUSQUEST_TEST_DATABASE_URL` sem valor padrão, e sem elas o `check-api`
+reprova na partida. O `make db-up` precisa vir antes do `make check` porque
+a suíte de integração e o E2E falam com um PostgreSQL real. O
+`make migrate-test` à parte não é estritamente necessário — o `check-e2e`
+o declara como pré-requisito, e a fixture do pytest migra o banco de teste
+por conta própria —, mas rodá-lo sozinho mostra uma falha de migração
+isolada, antes de ela aparecer misturada ao resto do gate.
+
+O comando dos hooks é separado do `make bootstrap` **de propósito**, não por
 esquecimento: `make bootstrap` não instala hooks de git, e não vai passar a
 instalar. `scripts/check-push.sh` roda `make bootstrap` dentro de um
 worktree temporário a cada ref validada no `pre-push`; como um worktree
@@ -42,27 +55,46 @@ binário: `install-gitleaks.sh` sempre confere o binário contra o
 fica em `.tools/gitleaks` continua sendo exatamente o que aquele script
 esperava, nunca algo não verificado.
 
-Sem o segundo comando, `git commit` e `git push` funcionam normalmente —
+Sem o comando dos hooks, `git commit` e `git push` funcionam normalmente —
 sem nenhuma validação. Ver a limitação correspondente na seção 6.
 
 ## 1. Comandos
 
+> **Fonte de verdade:** o `Makefile`. A tabela abaixo descreve as receitas
+> como estão; se as duas divergirem, a receita está certa.
+
 | Comando | Descrição |
 |---|---|
 | `make help` | Lista os alvos disponíveis do Makefile, com a descrição de cada um. |
-| `make bootstrap` | Instala as dependências dos dois ecossistemas: `npm ci` no frontend, `uv sync --frozen` na raiz Python, e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
-| `make check` | Gate completo. Agrega `check-web` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
-| `make check-web` | ESLint, depois Prettier em modo verificação, depois TypeScript sem emissão, depois Vitest com cobertura exigida de 100%, nesta ordem. Cada etapa só roda se a anterior passar. |
+| `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
+| `make check` | Gate completo. Agrega `check-web`, `check-api`, `check-e2e` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
+| `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-e2e` | Pré-requisito `migrate-test`; depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
 | `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar arquivos **versionados**, e é manual. |
+| `make db-up` | `docker compose up -d --wait postgres`: sobe o PostgreSQL do `compose.yaml` e só devolve o controle com o healthcheck aprovado. |
+| `make db-down` | `docker compose down`: derruba o container **preservando** o volume (não usa `-v`). |
+| `make migrate` | `uv run alembic upgrade head` no banco de **desenvolvimento**. |
+| `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste**. |
+
+Os alvos de verificação são os quatro `check-*`. `bootstrap`, `format`,
+`db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
+ação manual — por isso nenhum deles tem job próprio no CI (seção 5).
+
+O `make` para no primeiro alvo que falha: `check` não chega ao `check-api`
+se o `check-web` reprovar, e dentro de cada alvo uma receita só roda se a
+anterior passar.
 
 Uma precisão sobre "só `make format` modifica": `make check` **escreve** em
-disco — `frontend/coverage/` (relatórios do Vitest) e
-`frontend/node_modules/.tmp/*.tsbuildinfo` (cache incremental do `tsc -b`).
-Os dois caminhos são ignorados pelo git, então `git status` continua limpo
-depois de um `make check` e nenhum arquivo versionado muda. A frase correta
-é "`make check` não modifica arquivos versionados", não "não modifica
-arquivo nenhum".
+disco — relatórios de cobertura (`frontend/coverage/`, `htmlcov/`,
+`coverage.xml`, `.coverage`), o build (`frontend/dist/`), a saída do
+Playwright (`frontend/test-results/`), os caches de `tsc -b`, pytest, mypy e
+Ruff. Todos esses caminhos são ignorados pelo git, então `git status`
+continua limpo depois de um `make check` e nenhum arquivo versionado muda. A
+frase correta é "`make check` não modifica arquivos versionados", não "não
+modifica nada". E há um estado fora do disco que ele muda de propósito: o
+**banco de teste** (seção 4).
 
 ## 2. A regra da direção única
 
@@ -81,7 +113,8 @@ O framework `pre-commit` instala os hooks (`pre-commit`, `pre-merge-commit`,
 Makefile (`make check` para os dois primeiros estágios;
 `scripts/check-push.sh`, que por sua vez chama `make bootstrap` e
 `make check`, no `pre-push`). O Makefile invoca as ferramentas de fato
-(ESLint, Prettier, `tsc`, Vitest, Gitleaks).
+(ESLint, Prettier, `tsc`, Vitest, `uv`, Ruff, mypy, pytest, Alembic, Vite,
+Playwright, Gitleaks).
 
 **Nenhum alvo do Makefile invoca `pre-commit`.** A dependência é estritamente
 descendente: hook chama `make`, `make` chama ferramenta. Se um alvo do
@@ -99,12 +132,16 @@ hook.
 
 ## 3. Denominador da cobertura
 
+Os dois ecossistemas exigem 100%, cada um com a sua fonte de verdade.
+
+### Frontend
+
 > **Fonte de verdade:** `frontend/vite.config.ts` — `test.coverage.thresholds`
-> para os limiares, `include`/`exclude` para o denominador. Esta seção e o
-> `AGENTS.md` §4 apenas **descrevem** o que aquela configuração impõe; nenhum
-> dos dois é dono dos números. Se um documento disser um valor e o
-> `vite.config.ts` disser outro, o `vite.config.ts` está certo e os dois
-> documentos precisam ser corrigidos.
+> para os limiares, `test.coverage.include`/`exclude` para o denominador.
+> Esta seção e o `AGENTS.md` §4 apenas **descrevem** o que aquela
+> configuração impõe; nenhum dos dois é dono dos números. Se um documento
+> disser um valor e o `vite.config.ts` disser outro, o `vite.config.ts` está
+> certo e os dois documentos precisam ser corrigidos.
 
 Cobertura de 100% (linhas, ramificações, funções e instruções) é exigida
 apenas sobre o que está **dentro** do denominador. O que está **fora** é
@@ -122,9 +159,56 @@ excluído deliberadamente, nunca por dificuldade de testar.
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
 | `frontend/src/test/**` | Infraestrutura de teste (setup do ambiente jsdom), não código de aplicação. |
 | `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
+| `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
 | Artefatos gerados (`frontend/dist/`, `frontend/coverage/`, `.tools/`) | Saída de build/instalação, recriada a cada execução; não é código-fonte. |
-| CSS e configuração de ferramentas (`vite.config.ts`, `eslint.config.js`, `.prettierrc.json`, `tsconfig*.json`) | Configuração declarativa, não lógica de aplicação testável por unidade. |
+| CSS e configuração de ferramentas (`vite.config.ts`, `playwright.config.ts`, `eslint.config.js`, `.prettierrc.json`, `tsconfig*.json`) | Configuração declarativa, não lógica de aplicação testável por unidade. |
+
+**Quem é coletado como teste é outra lista, e ela é de negação.** O
+denominador acima diz o que é *medido*; o `test.exclude` do
+`vite.config.ts` diz o que *roda*:
+`exclude: [...configDefaults.exclude, 'tests/e2e/**']` — o padrão do Vitest
+(`**/*.{test,spec}.*`) menos a pasta do Playwright. Não é um `include`
+estreito, de propósito: `include` é lista de permissão e falha **aberta**
+(o teste que ninguém pensou em listar não é coletado e o gate aprova),
+`exclude` é lista de negação e falha **fechada** (o que ninguém pensou em
+excluir é coletado e, no pior caso, reprova alto). Já aconteceu neste
+repositório: com `include: ['src/**/*.test.{ts,tsx}']`, um teste que
+reprovava, colocado fora de `src/`, não era coletado e o gate aprovava com
+exit 0. Corrigido antes do merge, com a medição registrada no comentário do
+próprio `vite.config.ts`.
+
+**Armadilha de leitura: dentro de uma sessão de agente, a tabela por arquivo
+sai vazia.** O Vitest 5.0.1 consulta o `isAgent` do `std-env` (4.2.0), que
+se liga por variável de ambiente (`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`,
+entre outras), e nesse caso força `skipFull: true` no reporter `text` e
+acrescenta o `text-summary`. Medido nesta base: o mesmo
+`npm run test:coverage` imprime a tabela com cabeçalho e **nenhuma linha**
+quando roda dentro de uma sessão do Claude Code, e a tabela completa, arquivo
+por arquivo, quando as variáveis são removidas do ambiente
+(`env -u CLAUDECODE -u AI_AGENT npm run test:coverage`). Consequência:
+**"tabela vazia" não é evidência de 100%** — ela não distingue "todo arquivo
+está completo" de "nenhum arquivo foi medido". O que reprova o gate é o
+limiar em `test.coverage.thresholds`, não a tabela; quem precisa afirmar
+cobertura lê o resumo (`Coverage summary`, com os quatro eixos e as
+contagens) e o código de saída.
+
+### Backend
+
+> **Fonte de verdade:** `pyproject.toml`, seções `[tool.coverage.run]` e
+> `[tool.coverage.report]`.
+
+- **Dentro:** `src/focusquest` (`source = ["src/focusquest"]`), com
+  cobertura de ramificação ligada (`branch = true`).
+- **Limiar:** `fail_under = 100`. O `coverage.py` calcula um único
+  percentual total, que combina instruções e ramificações; 100% no total
+  exige 100% em cada arquivo.
+- **Fora:** `tests/` (os próprios testes) e `alembic/` (as migrações e o
+  `env.py`). `alembic/` não fica sem verificação: o Ruff e o mypy estrito o
+  cobrem, e os testes de integração aplicam a migração, fazem o downgrade e
+  a aplicam de novo. O que fica sem exercício é o caminho
+  `run_migrations_offline()` do `alembic/env.py`, que o projeto não usa
+  (registrado em `docs/HANDOFF.md`).
 
 Esta lista segue o README §9: "Declare o denominador: testes, dependências,
 arquivos gerados, CSS e configuração de ferramentas não são código de
@@ -134,82 +218,114 @@ estados possíveis — apenas garante que nenhuma linha, ramo, função ou
 instrução do código de aplicação ficou sem exercício por pelo menos um
 teste.
 
-## 4. Roadmap dos alvos ausentes
+## 4. Os alvos `check-api` e `check-e2e`
 
-> **Fonte de verdade:** esta seção, **enquanto os alvos não existirem**. Um
-> contrato sobre algo que ainda não foi escrito só pode morar num documento, e
-> a tabela abaixo é o texto normativo — o `AGENTS.md` §4 a resume e aponta
-> para cá. No instante em que `check-api` (ou `check-e2e`) existir no
-> `Makefile`, a fonte de verdade passa a ser o `Makefile`, e os dois textos
-> viram descrição de um alvo real, não contrato.
+> **Fonte de verdade:** o `Makefile`. Até o Incremento 2 esta seção era o
+> contrato de dois alvos que não existiam — um contrato sobre algo ainda não
+> escrito só podia morar num documento. Os dois alvos nasceram no Incremento
+> 1a, e a fonte de verdade migrou para as receitas, como o próprio contrato
+> previa. O que segue é **descrição** do que elas fazem; se divergir do
+> `Makefile`, o `Makefile` está certo.
 
-Isto é um **contrato**, não uma lista de intenções: nenhum incremento que
-traga código de um ecossistema ainda não coberto pelo gate pode ser aceito
-sem trazer, no mesmo incremento, o alvo correspondente do Makefile.
+### `check-api`
 
-| Alvo | Conteúdo | Entra junto com |
-|---|---|---|
-| `check-api` | Ruff lint, Ruff `format --check`, mypy estrito, pytest com cobertura | O primeiro módulo Python |
-| `check-e2e` | Build, Playwright/Chromium, axe-core | O primeiro fluxo ponta a ponta real |
+Cinco receitas, nesta ordem:
 
-Hoje, Ruff, mypy e pre-commit já estão fixados no `uv.lock` (a raiz Python
-existe desde o commit `28c74e4`), mas **fora** do `check` — de propósito,
-porque não há nenhum arquivo `.py` no repositório ainda. Declarar uma
-ferramenta sem ter o que ela verifique criaria uma etapa que sempre passa
-vazia, o que o README §9 proíbe explicitamente ("sucesso com suíte vazia").
-O mesmo vale para `check-e2e`: sem um fluxo real de ponta a ponta, um
-`check-e2e` existiria apenas para navegar por uma tela estática, sem
-nenhuma asserção de negócio significativa.
+1. `uv lock --check` — compara o `uv.lock` com o `pyproject.toml` e reprova
+   se estiverem dessincronizados. Não sincroniza nem escreve nada. É a
+   **primeira** receita, e não a última: um lock defasado significa que as
+   linhas seguintes podem estar verificando versões diferentes das
+   declaradas.
+2. `uv run ruff check .` — lint, com as regras `E`, `F`, `I`, `UP`, `B` e
+   `SIM` (`[tool.ruff.lint]` do `pyproject.toml`). `docs/` fica fora do Ruff
+   (`extend-exclude`), porque a documentação mostra código deliberadamente
+   errado.
+3. `uv run ruff format --check .` — formatação, sem modificar arquivo.
+4. `uv run mypy src tests alembic` — mypy com `strict = true` e o plugin do
+   pydantic. `alembic/` entra junto porque as migrações escrevem DDL.
+5. `uv run pytest --cov ...` — a suíte `tests/unit` e `tests/integration`,
+   com o limiar da seção 3.
 
-### Divergência conhecida da spec: o `uv.lock` não é validado
+**O `check-api` precisa de banco.** Os testes de integração usam PostgreSQL
+real, nunca SQLite (README §10), no banco `focusquest_test` apontado por
+`FOCUSQUEST_TEST_DATABASE_URL`. A fixture `banco_migrado`
+(`tests/integration/conftest.py`) faz `DROP SCHEMA public CASCADE` e migra
+do zero uma vez por sessão do pytest — depois de uma guarda que recusa rodar
+se o alvo não for exatamente o banco de teste configurado **e** se o nome
+dele não terminar em `_test`. Quase todos os testes rodam dentro de uma
+transação revertida no teardown; os poucos que precisam provar um `commit`
+real ou concorrência escrevem de verdade e apagam, no `finally`, o que eles
+mesmos criaram.
 
-A spec de design previa `uv sync --frozen` no CI. O workflow só faz
-`npm ci`; `uv sync --frozen` existe apenas no alvo `bootstrap`, que o CI
-não chama. Consequência real, sem eufemismo: um `uv.lock` dessincronizado
-do `pyproject.toml` **não é detectado por nada** — nem localmente, nem no
-CI.
+### `check-e2e`
 
-E há um detalhe pior, que a spec não previa: **`--frozen` não valida nada**.
-No `uv`, `--frozen` significa "use o lockfile como está, sem atualizá-lo";
-ele não compara o lockfile com o `pyproject.toml`. Medido com
-`uv 0.12.13`, acrescentando uma dependência ao `pyproject.toml` sem
-regravar o lock:
+- **Pré-requisito `migrate-test`:** a API do cenário contra um banco sem
+  esquema responderia 500, com o sintoma longe da causa.
+- **Build de produção** (`VITE_API_URL=/api npm run build`): a variável vai
+  na própria linha porque é embutida no bundle em tempo de build, e o
+  `frontend/.env` não existe num clone novo nem no CI.
+- **`npx playwright test`**, com as regras de `frontend/playwright.config.ts`:
+  `forbidOnly: true` em qualquer ambiente, `retries: 0`, `workers: 1`,
+  projeto único em Chromium.
+- **Servidores dedicados, subidos pelo próprio Playwright**, com
+  `reuseExistingServer: false`: a API na porta **8100**
+  (`scripts/e2e-env.sh uv run uvicorn ...`, esperada pelo `/ready`, que
+  consulta o banco) e o frontend na **5273** (`vite preview` do build). As
+  portas de desenvolvimento são 8000 e 5173; nenhuma é reaproveitada
+  (README §10).
+- **`scripts/e2e-env.sh`** aponta `FOCUSQUEST_DATABASE_URL` da API do E2E
+  para o banco de **teste** (lido de `Settings().test_database_url`, sem
+  repetir a URL) e recusa subir se o nome do banco não terminar em `_test`.
+- **O proxy do `vite preview` recebe `API_PROXY_TARGET`** apontando para a
+  8100, pelo `env` do `webServer`. Sem isso o proxy cairia no padrão 8000 —
+  a API de desenvolvimento — e o cenário poderia **passar** contra o
+  servidor errado.
+- **axe-core** com o conjunto de regras padrão (sem `withTags` nem
+  `disableRules`), exigindo zero violações, em dois estados da tela: a lista
+  carregada e o estado de erro (forçado com `page.route(...).abort()`). O
+  estado de carregando **não** é auditado.
 
-```
-$ uv sync --frozen        # lockfile defasado
-Checked 17 packages in 0.27ms          # passa, sem reclamar
+**O E2E divide o banco `focusquest_test` com a suíte pytest.** É uma decisão
+deliberada, e duas exigências estruturais a tornam segura: o cenário semeia
+**pela API, por HTTP** (nunca por SQL), e afirma **só sobre as linhas que ele
+mesmo criou** — cada missão carrega um sufixo único da execução e é
+localizada pelo `id` que a API devolveu. Dado remanescente não aprova nem
+reprova o cenário. Duas consequências operacionais:
 
-$ uv sync --locked        # mesmo estado
-error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+- **Não rode `check-api` e `check-e2e` ao mesmo tempo na mesma máquina** —
+  nem dois `make check` simultâneos. A fixture do pytest faz `DROP SCHEMA`
+  no banco que a API do E2E está usando, e o E2E usa portas fixas
+  (8100, 5273). O resultado é falha alta (500, tabela inexistente, porta
+  ocupada), não aprovação silenciosa — mas é falha. No CI a corrida não
+  existe: cada job tem o próprio serviço PostgreSQL.
+- **Cada execução do E2E deixa linhas no `focusquest_test`.** Elas só somem
+  no próximo `DROP SCHEMA` da suíte pytest. Depois de um `make check`
+  completo sobram as duas missões da última execução do E2E (medido: 2
+  linhas); `make check-e2e` rodado repetidamente, sem o `check-api` no
+  meio, acumula.
 
-$ uv lock --check         # mesmo estado
-error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
-```
+### Validação dos lockfiles — assimetria declarada
 
-Ou seja: mesmo que `uv sync --frozen` estivesse no CI exatamente como a
-spec pedia, o `uv.lock` continuaria sem validação. A verificação que a spec
-queria se escreve `uv sync --locked` (ou `uv lock --check`). O `--frozen`
-do `bootstrap` está certo onde está — o papel dele é instalar sem mexer no
-lock, e é isso que se quer dentro do worktree do `pre-push`.
+**Python: validado localmente e no CI.** `uv lock --check` é a primeira
+receita do `check-api`, e `uv sync --locked` roda no `make bootstrap` e no
+preparo dos jobs `check-api` e `check-e2e`. Os dois reprovam lock defasado.
+O `--frozen`, que o Incremento 2 chegou a usar no `bootstrap`, **não**
+serviria: ele usa o lockfile como está, sem compará-lo ao `pyproject.toml`
+(medido no Incremento 2 com `uv 0.12.13`: com uma dependência acrescentada
+ao `pyproject.toml` sem regravar o lock, `uv sync --frozen` passou, e
+`uv sync --locked` e `uv lock --check` reprovaram com "The lockfile at
+`uv.lock` needs to be updated").
 
-A decisão é **não corrigir agora**, e o registro aqui é a correção. Um
-passo de verificação do `uv.lock` no CI que não existisse no `make check`
-quebraria a paridade 1:1 da seção 5 (decisão D5) logo no primeiro
-incremento em que ela foi escrita; e criar um alvo de Makefile só para isso
-significaria colocar uma etapa Python no gate quando nenhuma ferramenta
-Python está no gate e não há um único arquivo `.py` no repositório — perto
-demais do "sucesso com suíte vazia" que o README §9 proíbe.
-
-A validação do `uv.lock` entra junto com o alvo `check-api` da tabela
-acima, que vai precisar de `uv` de qualquer forma para instalar Ruff, mypy
-e pytest de maneira reproduzível — e aí a checagem correta (`--locked`, não
-`--frozen`) entra como parte do alvo, visível tanto localmente quanto no
-job correspondente, sem quebrar a paridade. Até lá, o risco
-aceito é: quem alterar o `pyproject.toml` sem rodar `uv lock` deixa o
-lockfile defasado e ninguém avisa — nem o `make bootstrap`, que usa
-`--frozen` e instala alegremente a partir do lock velho. O sintoma aparece
-depois, como uma dependência declarada que simplesmente não está instalada,
-possivelmente na máquina de outra pessoa.
+**npm: validado só no CI.** `npm ci` também reprova um `package-lock.json`
+defasado, mas ele roda apenas no `make bootstrap` e no preparo dos jobs
+`check-web` e `check-e2e` — o `check-web` local **não** valida o lockfile do
+npm. É deliberado: não existe comando barato e confiável que compare
+`package.json` com `package-lock.json` sem instalar, e forçar `npm ci`
+dentro do `check-web` faria o gate local reinstalar tudo a cada execução.
+Consequência, sem eufemismo: **um `package-lock.json` defasado passa no
+`make check` local e reprova no CI** — falha fechada, mas no lugar errado.
+Quem mexer no `frontend/package.json` roda `npm install` (que regrava o
+lock) antes de commitar.
 
 ## 5. Integração contínua
 
@@ -228,11 +344,13 @@ verificações anteriores.
 **Paridade 1:1 entre job e alvo do Makefile (decisão D5).** Cada job de
 verificação executa **um** alvo, e nada além dele:
 
-| Job | Executa |
-|---|---|
-| `check-web` | `make check-web` |
-| `check-secrets` | `make check-secrets` |
-| `quality-gate` | nenhum alvo: agrega o resultado dos dois acima |
+| Job | Executa | Preparo de ambiente antes do alvo | `timeout-minutes` |
+|---|---|---|---|
+| `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
+| `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
+| `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
+| `check-secrets` | `make check-secrets` | checkout | 10 |
+| `quality-gate` | nenhum alvo: agrega os quatro acima | — | 5 |
 
 A regra é o que impede o CI e a máquina local de divergirem. Um passo que
 existisse só no workflow (ou só no Makefile) criaria uma verificação que
@@ -240,36 +358,55 @@ ninguém consegue reproduzir do outro lado, e o primeiro efeito prático
 seria um CI vermelho que passa localmente — exatamente o que faz alguém
 procurar um jeito de pular o gate. Por isso, quando faltar uma verificação,
 ela entra primeiro como alvo do Makefile e só depois ganha um job; nunca o
-contrário. Ver a divergência conhecida sobre o `uv.lock` na seção 4.
+contrário.
 
 Os passos que o job faz além do alvo são de **preparação de ambiente**, não
-de verificação: `actions/checkout`, `actions/setup-node` (Node 24, cache de
-npm apontado para `frontend/package-lock.json`) e `npm ci`. O job
-`check-secrets` também roda `actions/checkout@v7` — todo job precisa dele
-para ter os arquivos em disco —, mas não precisa de preparo de **Node,
-Python nem instalação de nenhuma ferramenta**: `make check-secrets` já
-baixa o próprio binário do Gitleaks, fixado por checksum, e um checkout
-raso basta porque `gitleaks dir .` varre a árvore de arquivos em disco, não
-o histórico.
+de verificação. Há uma exceção de efeito, e ela está declarada na seção 4:
+`npm ci` reprova lockfile defasado, então o job verifica o
+`package-lock.json` e o gate local não. Três detalhes do preparo que não
+são óbvios:
 
-**O agregador `quality-gate` e o `if: always()`.** É o job único destinado a
-virar o status obrigatório da proteção de branch — a lista de `needs`
+- **Cada job com banco tem o próprio serviço PostgreSQL**, na mesma imagem
+  fixada do `compose.yaml` (`postgres:18.6-alpine`), com healthcheck
+  `pg_isready -h 127.0.0.1`. É isso que elimina, no CI, a corrida pelo
+  `focusquest_test` descrita na seção 4.
+- **O `focusquest_test` é criado pelo mesmo `scripts/init-test-db.sql`** que
+  o `compose.yaml` monta em `/docker-entrypoint-initdb.d/`: o `services:` do
+  Actions não monta esse volume, então o job executa o arquivo com `psql`.
+  A DDL do banco de teste tem um lugar só.
+- **As variáveis `FOCUSQUEST_DATABASE_URL` e `FOCUSQUEST_TEST_DATABASE_URL`
+  vêm do `env:` do job**, com a credencial local do container de serviço —
+  não há segredo do repositório envolvido.
+
+O job `check-secrets` não precisa de preparo de Node, Python nem instalação
+de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do
+Gitleaks, fixado por checksum, e um checkout raso basta porque
+`gitleaks dir .` varre a árvore de arquivos em disco, não o histórico.
+
+Os `timeout-minutes` existem porque o padrão do runner é seis horas: um job
+travado (o caso óbvio é o Playwright esperando um servidor que não subiu)
+deixaria o pull request sem veredito nesse tempo. Os números são uma a duas
+ordens de grandeza acima do tempo esperado; o critério de cada um está no
+comentário do próprio workflow.
+
+**O agregador `quality-gate` e o `if: always()`.** É o job único que a
+proteção da `main` exige como status obrigatório — a lista de `needs`
 cresce junto com os jobs, mas a proteção do remoto continua apontando para
 um nome só. Ele precisa de `if: always()` porque, sem isso, um `needs` que
 falha faz o job dependente ser **pulado**, e um check pulado não reprova
 nada: o status obrigatório simplesmente nunca reportaria, e um PR quebrado
 apareceria como "sem verificação pendente" em vez de vermelho. Com
-`always()`, o job roda sempre e exige o literal `success` de cada
-dependência — `failure`, `cancelled` e `skipped` reprovam do mesmo jeito.
-Aprovar por não ter conseguido olhar é o que o gate proíbe em todas as
-camadas, e aqui não é diferente.
+`always()`, o job roda sempre e exige o literal `success` de cada uma das
+quatro dependências, num laço — `failure`, `cancelled` e `skipped`
+reprovam do mesmo jeito. Aprovar por não ter conseguido olhar é o que o
+gate proíbe em todas as camadas, e aqui não é diferente.
 
-Limitação registrada e deliberadamente não corrigida agora: a lista de
-`needs` do `quality-gate` é estática, então um job novo que alguém esqueça
-de acrescentar ali passaria despercebido pelo agregador. O conserto (gerar
-a lista, ou usar uma action de agregação de terceiros) traz dependência ou
-metaprogramação de YAML que não se paga com dois jobs; revisar quando
-houver mais.
+Limitação registrada e deliberadamente não corrigida: a lista de `needs`
+do `quality-gate` e o laço que confere os resultados são estáticos, então
+um job novo que alguém esqueça de acrescentar nos dois lugares passaria
+despercebido pelo agregador. O conserto (gerar a lista, ou usar uma action
+de agregação de terceiros) traz dependência ou metaprogramação de YAML que
+não se paga com quatro jobs; revisar quando houver mais.
 
 ## 6. Limitações conhecidas
 
@@ -282,6 +419,39 @@ Sem eufemismo:
   topo da ref corrigir o problema, o `pre-push` aprova o push inteiro sem
   jamais ter validado o commit intermediário isoladamente. Um
   `git bisect` futuro pode pousar em um commit que nunca passou pelo gate.
+- **O worktree do `pre-push` recebe a configuração de banco do repositório
+  principal.** O worktree criado por `mktemp -d` só tem o que é versionado,
+  e o `.env` não é; sem configuração, o `check-api` morreria com
+  `ValidationError` e **todo push seria recusado**. Por isso o
+  `scripts/check-push.sh` lê o `.env` do repositório principal e exporta
+  para o worktree **somente** as linhas que casam
+  `^FOCUSQUEST_[A-Z0-9_]*=` — lista de permissão por regex, nunca `source`,
+  porque `source` executaria o arquivo. A divisão é no primeiro `=` (uma URL
+  com senha contém `=`), aspas envolventes são removidas, e uma variável já
+  exportada no shell vence a linha do `.env`. Se
+  `FOCUSQUEST_DATABASE_URL` ou `FOCUSQUEST_TEST_DATABASE_URL` continuar sem
+  valor, o push é **recusado** com a lista do que falta e as duas formas de
+  consertar — nunca degradado para "pular o `check-api`". Três
+  consequências: o gate do worktree depende de um arquivo fora dele; um push
+  que só **deleta** uma ref também é recusado sem essa configuração (aceito
+  de propósito, para não manter um segundo caminho de código quase nunca
+  exercitado); e o worktree usa o **mesmo** PostgreSQL, o mesmo
+  `focusquest_test` e as mesmas portas do E2E que a máquina local, então um
+  push não pode correr em paralelo com outro gate (seção 4). **O que foi e o
+  que não foi exercitado:** o `scripts/check-push.sh` executado à mão, pelo
+  caminho da entrada padrão, sobre a revisão `96eaeba`, rodou
+  `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env`
+  nele, e aprovou (cerca de 25 segundos; o worktree foi removido ao fim). O
+  caminho das variáveis do framework `pre-commit`, disparado por um
+  `git push` de verdade com o `check-api` no gate, ainda não aconteceu.
+  O **mecanismo** — a lista de permissão e a recusa — mora em
+  `scripts/push-env.sh`, que o `check-push.sh` carrega e chama, e tem teste
+  automatizado em `tests/integration/test_push_env.py`, sem push nem
+  worktree: a recusa nomeando a variável que falta, uma linha executável
+  do `.env` que não executa, um valor com `=` no meio que atravessa inteiro,
+  a precedência do ambiente, e uma cópia do `check-push.sh` rodada numa raiz
+  sem `.env` (com um `git` falso no `PATH`) para provar que ele passa pela
+  função. Cada um desses testes reprovou com a mutação correspondente.
 - **Sob o `pre-commit`, um push multi-ref valida só uma das refs.** O
   framework `pre-commit` consome toda a entrada padrão antes de chamar os
   hooks e repassa o que decidiu em variáveis de ambiente; em
@@ -321,34 +491,37 @@ Sem eufemismo:
   na branch por fast-forward ou rebase, o topo da ref é validado em
   worktree isolado antes de o conteúdo sair da máquina. O que escapa
   continua sendo o commit intermediário (primeira limitação desta lista).
-- **O gate roda inteiro a cada commit, e vai ficar lento conforme o
-  projeto cresce.** Hoje `make check` leva cerca de 2 segundos porque o
-  frontend é pequeno e não há backend. Isso é uma decisão deliberada do
-  README §11 ("Antes de cada commit, valide o conteúdo do índice" sem
-  filtro de arquivos alterados), não um descuido — mas o custo é real e
-  vai aumentar. Quando o tempo por commit se tornar proibitivo, a solução
-  não pode ser reduzir o que o gate verifica; é paralelizar, cachear ou
-  segmentar por escopo, mantendo a garantia de que todo o projeto continua
-  verificado antes de cada commit.
+- **O gate roda inteiro a cada commit, e fica mais lento conforme o
+  projeto cresce.** Medido nesta máquina, com o PostgreSQL já de pé e os
+  caches quentes: `make check` completo em cerca de 12 segundos de relógio
+  (eram cerca de 2 segundos no Incremento 2, antes do backend e do E2E). É
+  uma decisão deliberada do README §11 ("Antes de cada commit, valide o
+  conteúdo do índice" sem filtro de arquivos alterados), não um descuido —
+  mas o custo é real e vai aumentar. Quando o tempo por commit se tornar
+  proibitivo, a solução não pode ser reduzir o que o gate verifica; é
+  paralelizar, cachear ou segmentar por escopo, mantendo a garantia de que
+  todo o projeto continua verificado antes de cada commit.
+- **O gate local depende de Docker e de um PostgreSQL de pé.** Sem
+  `make db-up`, o `check-api` e o `check-e2e` reprovam — alto, por falha de
+  conexão, nunca por aprovação vazia. O `/ready` da API do E2E responde 503
+  enquanto não consegue consultar o banco, e o Playwright espera até
+  120 segundos por ele antes de desistir.
 - **Hooks não vêm no clone.** `make bootstrap` **não** instala hooks de git
-  — só dependências (npm, uv, Gitleaks). `uv run pre-commit install
-  --install-hooks` precisa ser executado à parte, uma vez por clone e uma
-  vez por cada worktree novo (inclusive no PyCharm), como descrito em
-  "Primeiro uso após clonar" no início deste documento. Enquanto isso não
-  for feito, `git commit` e `git push` funcionam sem nenhuma validação, sem
-  aviso nenhum de que o gate não está ativo.
+  — só dependências (npm, Chromium do Playwright, uv, Gitleaks).
+  `uv run pre-commit install --install-hooks` precisa ser executado à parte,
+  uma vez por clone e uma vez por cada worktree novo (inclusive no PyCharm),
+  como descrito em "Primeiro uso após clonar" no início deste documento.
+  Enquanto isso não for feito, `git commit` e `git push` funcionam sem
+  nenhuma validação, sem aviso nenhum de que o gate não está ativo.
 - **Hooks são contornáveis por quem controla o Git.** Mesmo instalados,
   quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,
   editar ou apagar `.pre-commit-config.yaml`, ou desinstalar os hooks.
-  Nada nesta camada impede isso: **a proteção real é a do remoto** (branch
-  protection e o status `quality-gate` obrigatório em CI, README §12). O
-  workflow que produz esse status já existe e está descrito na seção 5
-  (`.github/workflows/quality.yml`); o que falta é o outro lado — o
-  repositório ainda não tem remoto configurado, e sem remoto não há como
-  aplicar a proteção de branch que torna o `quality-gate` obrigatório (ver
-  `docs/HANDOFF.md`). Os hooks locais existem para dar feedback rápido e
-  reduzir o volume de commits quebrados que chegam ao CI, não para
-  substituir a proteção do remoto.
+  Nada nesta camada impede isso: **a proteção real é a do remoto**. A `main`
+  do GitHub é protegida e exige o status `quality-gate`, com base
+  atualizada, `enforce_admins` ativo e sem force-push nem deleção
+  (README §12; conferido com `gh api` na proteção da branch). Os hooks
+  locais existem para dar feedback rápido e reduzir o volume de commits
+  quebrados que chegam ao CI, não para substituir a proteção do remoto.
 
 ## 7. Como atualizar o Gitleaks
 

@@ -177,6 +177,44 @@ fi
 # compartilhamento seguro.
 export FQ_TOOLS_DIR="${ROOT}/.tools"
 
+# ---------------------------------------------------------------------------
+# A configuracao de banco, do repositorio principal para o worktree
+# ---------------------------------------------------------------------------
+# MESMO precedente do FQ_TOOLS_DIR acima: o worktree nasce de
+# "git worktree add", entao ele tem apenas o que esta VERSIONADO, e precisa de
+# um recurso que mora no repositorio principal e que o git nao carrega.
+#
+# O mecanismo. O .env e gitignored, logo NAO EXISTE no worktree; e o Settings()
+# (src/focusquest/core/config.py) exige FOCUSQUEST_DATABASE_URL e
+# FOCUSQUEST_TEST_DATABASE_URL SEM valor padrao. Sem este bloco, o check-api do
+# worktree morre com ValidationError e TODO push e recusado -- e o check-e2e
+# herda a mesma condicao. O buraco nunca apareceu porque os pull requests
+# anteriores sao todos anteriores ao alvo check-api existir: o primeiro push
+# desta branch seria o primeiro a exercitar este caminho.
+#
+# Por que nao enfraquece a verificacao, que e a pergunta que importa. Primeiro,
+# o que atravessa e ENDERECO de banco -- configuracao de ambiente --, nao
+# resultado de verificacao: o worktree continua rodando "make bootstrap" e
+# "make check" inteiros, sobre o codigo que esta sendo enviado, e nenhum alvo
+# e pulado. Segundo, a ausencia da configuracao RECUSA o push (a recusa
+# de scripts/push-env.sh) em vez de degradar para "pular o check-api": transformar
+# falha de configuracao em gate cego e o defeito oposto, e este projeto ja o
+# consertou no CI.
+#
+# O MECANISMO -- a lista de permissao que le o .env sem executa-lo e a recusa
+# que nomeia o que falta -- mora em scripts/push-env.sh, e nao aqui. Nao e
+# estetica: foi extraido para poder ser TESTADO sem disparar push nem criar
+# worktree (tests/integration/test_push_env.py). Este script chama a MESMA
+# funcao que o teste chama, e nada alem dela; nenhuma linha do mecanismo ficou
+# duplicada aqui.
+#
+# Chamada SEM "||" nem "if" em volta, de proposito: sob "set -e", o retorno
+# nao-zero da funcao derruba o script com codigo 1 -- a recusa. Qualquer
+# contexto condicional em volta desligaria o "set -e" DENTRO da funcao.
+# shellcheck source=scripts/push-env.sh
+. "${ROOT}/scripts/push-env.sh"
+exportar_env_focusquest "${ROOT}/.env"
+
 while read -r ref_local sha_local; do
   [ -n "$ref_local" ] || continue
 
