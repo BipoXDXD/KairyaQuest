@@ -282,13 +282,18 @@ ninguém mexer.
 
 **Contrato e API**
 
-1. **Os dois 409 não têm `code` legível por máquina.** Transição ilegal e
+1. ~~**Os dois 409 não têm `code` legível por máquina.** Transição ilegal e
    `operation_id` gasto só se distinguem pela mensagem em português, e a
    ação correta do cliente é oposta nos dois (não há o que repetir, contra
    gerar um identificador novo e repetir o mesmo corpo). Não entrou agora
    porque a tela do 1a só lista missões e nenhum dos dois 409 é alcançável
    por ela. **Quem construir o fluxo de concluir missão no frontend precisa
-   resolver isto antes**, ou vai ramificar em texto de interface.
+   resolver isto antes**, ou vai ramificar em texto de interface.~~
+   **Resolvida no Incremento A:** todo erro de domínio responde
+   `{"detail": ..., "code": ...}`. Os códigos são `missao_nao_encontrada`
+   (os dois 404, idênticos byte a byte), `transicao_ilegal` e
+   `operacao_reutilizada`, no enum `CodigoDeErro` de `main.py`. O 422 de
+   validação continua no formato do FastAPI, sem `code`.
    **E a prosa do `detail` também não está pronta para a tela**, ao contrário
    do que o comentário de `frontend/src/shared/api/client.ts` afirma ("pode ir
    direto para a tela"): as mensagens do backend não têm acento

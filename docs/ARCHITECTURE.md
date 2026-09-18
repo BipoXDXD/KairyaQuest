@@ -344,24 +344,24 @@ concluir missão ou confirmar recompensa por conta própria.
   chave de payload. Não existe endpoint de iniciar missão: `em_andamento` e
   `started_at` existem no modelo e no domínio, mas as rotas atuais não os
   alcançam, e por isso `actual_duration_minutes` sai sempre `null` por elas.
-- **Corpo de erro**: `{"detail": ...}`, com a **chave em inglês** (a mesma
-  que o FastAPI usa no 422 de validação) e a **prosa em pt-BR**. O 422 de
-  validação mantém o formato nativo do FastAPI, em que `detail` é uma
-  **lista** de erros, não um texto.
+- **Corpo de erro de domínio**: `{"detail": ..., "code": ...}`, com as
+  **chaves em inglês**. O `code` é o que o cliente lê para decidir; o
+  `detail` é prosa em pt-BR **sem acento**, para quem depura, e a tela nunca
+  o mostra. Os códigos estão no enum `CodigoDeErro` de `main.py` e são só os
+  que algum handler devolve. O 422 de validação mantém o formato nativo do
+  FastAPI, em que `detail` é uma **lista** de erros e não há `code`.
 
-| Situação | Status | `detail` |
-|---|---|---|
-| Missão inexistente | `404` | `"missao nao encontrada"` |
-| Missão de outro usuário | `404`, não 403 | o **mesmo** corpo do 404 acima — responder diferente revelaria que o recurso existe |
-| Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
-| `operation_id` já gasto em outra operação | `409` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
-| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | lista de erros do FastAPI |
+| Situação | Status | `code` | `detail` |
+|---|---|---|---|
+| Missão inexistente | `404` | `missao_nao_encontrada` | `"missao nao encontrada"` |
+| Missão de outro usuário | `404`, não 403 | `missao_nao_encontrada` | o **mesmo** corpo do 404 acima, byte a byte: responder diferente revelaria que o recurso existe |
+| Transição ilegal (ex.: operação nova sobre missão já concluída) | `409` | `transicao_ilegal` | a mensagem do domínio, dizendo de onde para onde não se pode ir |
+| `operation_id` já gasto em outra operação | `409` | `operacao_reutilizada` | a mensagem do serviço, sem revelar a missão nem o tipo da outra operação |
+| Corpo inválido, ou `mission_id` fora de `1..2**31 - 1` | `422` | — | lista de erros do FastAPI |
 
-Os dois 409 **não têm um `code` legível por máquina**: só a mensagem em
-português os distingue, e a ação correta do cliente é oposta nos dois
-(transição ilegal: não há o que repetir; identificador gasto: gerar um
-`operation_id` novo e repetir o mesmo corpo). Registrado como pendência em
-`docs/HANDOFF.md`.
+Os dois 409 pedem ações **opostas** do cliente, e é o `code` que os separa:
+na transição ilegal não há o que repetir; no identificador gasto, gera-se um
+`operation_id` novo e repete-se o mesmo corpo.
 
 ### Frontend — parte descrição, parte contrato
 
@@ -451,6 +451,7 @@ legitimamente pertence a ele — nunca antes.
 |---|---|---|
 | Rota HTTP | `src/focusquest/modules/<módulo>/router.py`, registrada em `src/focusquest/main.py` com `include_router` | existe (`missions`) |
 | Tradução de erro de domínio em status HTTP | `src/focusquest/main.py`, com `exception_handler` — em um lugar só, não por rota | existe |
+| Código de erro (`code`) do contrato HTTP | `src/focusquest/main.py`, enum `CodigoDeErro`, junto dos handlers — nunca nas exceções do domínio | existe |
 | Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` | existe (`missions`) |
 | Caso de uso | `src/focusquest/modules/<módulo>/service.py` | existe (`missions`) |
 | Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` | existe (`missions`) |
