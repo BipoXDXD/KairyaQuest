@@ -15,8 +15,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # -------------------------------------------------------------------------
+  # Sobre os `timeout-minutes` de todos os jobs
+  # -------------------------------------------------------------------------
+  # O padrao do runner e SEIS HORAS. Um job travado -- o caso obvio e o
+  # Playwright esperando um webServer que nao subiu -- queimaria seis horas de
+  # runner e, o que e pior, deixaria o pull request sem veredito nesse tempo:
+  # o `quality-gate` tem `if: always()`, mas ele so roda quando os `needs`
+  # TERMINAM. Um teto finito troca "sem resposta por seis horas" por "reprovou
+  # em N minutos", que e diagnostico.
+  #
+  # Como cada numero foi escolhido: tempo MEDIDO do alvo nesta maquina (com
+  # cache quente) + estimativa do preparo de ambiente do job + margem larga,
+  # arredondado para cima. Medido com `/usr/bin/time -p make <alvo>`:
+  #   check-web 2,9s | check-api 4,0s | check-e2e 4,0s | check-secrets 0,3s
+  # O preparo e que domina no CI, nao o alvo: `npm ci`, `uv sync`, subida do
+  # servico PostgreSQL e o download do Chromium com `--with-deps`. Os tetos
+  # abaixo sao de uma a duas ordens de grandeza acima do tempo esperado -- eles
+  # existem para pegar TRAVAMENTO, nao para apertar o caso normal. Se um job
+  # passar a bater no teto por crescimento legitimo, o conserto e subir o
+  # numero com a medicao nova, nunca remover a linha.
   check-web:
     runs-on: ubuntu-latest
+    # ~3s de alvo + checkout/setup-node/npm ci. Teto largo para um `npm ci`
+    # com cache frio.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -32,6 +55,10 @@ jobs:
 
   check-api:
     runs-on: ubuntu-latest
+    # ~4s de alvo + checkout/setup-uv/`uv sync --locked` + a subida do servico
+    # PostgreSQL (imagem baixada e 15 tentativas de healthcheck). Mais folga
+    # que o check-web porque aqui ha um servico para esperar.
+    timeout-minutes: 15
     services:
       postgres:
         # A MESMA versao fixada no compose.yaml. `latest` e proibido pelo
@@ -73,6 +100,14 @@ jobs:
 
   check-e2e:
     runs-on: ubuntu-latest
+    # O job mais caro, e por isso o teto mais alto: ele paga TODO o preparo dos
+    # outros dois (npm ci + uv sync + servico PostgreSQL) mais o
+    # `playwright install --with-deps chromium`, que instala bibliotecas de
+    # sistema por apt e baixa ~100 MB. E e aqui que vive o travamento que
+    # motivou estes tetos: cada `webServer` do playwright.config.ts espera ate
+    # 120s, mas um processo que sobe e nunca responde `/ready` deixaria o
+    # `npx playwright test` pendurado.
+    timeout-minutes: 25
     services:
       # Servico PROPRIO deste job, e nao compartilhado com o check-api. E o
       # que faz a corrida pelo focusquest_test nao existir no CI: cada job tem
@@ -121,6 +156,9 @@ jobs:
 
   check-secrets:
     runs-on: ubuntu-latest
+    # ~0,3s de alvo. O unico custo real e o download do Gitleaks (21 MB) feito
+    # pelo scripts/install-gitleaks.sh.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Varredura de segredos
@@ -128,6 +166,9 @@ jobs:
 
   quality-gate:
     runs-on: ubuntu-latest
+    # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
+    # de proposito -- se ELE travar, travou algo do proprio Actions.
+    timeout-minutes: 5
     # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
     # o agregador aprovaria sem te-lo verificado (limitacao registrada em
     # docs/QUALITY.md s5). Os quatro jobs de verificacao estao aqui, e o loop

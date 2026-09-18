@@ -177,6 +177,97 @@ fi
 # compartilhamento seguro.
 export FQ_TOOLS_DIR="${ROOT}/.tools"
 
+# ---------------------------------------------------------------------------
+# A configuracao de banco, do repositorio principal para o worktree
+# ---------------------------------------------------------------------------
+# MESMO precedente do FQ_TOOLS_DIR acima: o worktree nasce de
+# "git worktree add", entao ele tem apenas o que esta VERSIONADO, e precisa de
+# um recurso que mora no repositorio principal e que o git nao carrega.
+#
+# O mecanismo. O .env e gitignored, logo NAO EXISTE no worktree; e o Settings()
+# (src/focusquest/core/config.py) exige FOCUSQUEST_DATABASE_URL e
+# FOCUSQUEST_TEST_DATABASE_URL SEM valor padrao. Sem este bloco, o check-api do
+# worktree morre com ValidationError e TODO push e recusado -- e o check-e2e
+# herda a mesma condicao. O buraco nunca apareceu porque os pull requests
+# anteriores sao todos anteriores ao alvo check-api existir: o primeiro push
+# desta branch seria o primeiro a exercitar este caminho.
+#
+# Por que nao enfraquece a verificacao, que e a pergunta que importa. Primeiro,
+# o que atravessa e ENDERECO de banco -- configuracao de ambiente --, nao
+# resultado de verificacao: o worktree continua rodando "make bootstrap" e
+# "make check" inteiros, sobre o codigo que esta sendo enviado, e nenhum alvo
+# e pulado. Segundo, a ausencia da configuracao RECUSA o push (o bloco
+# "faltando" abaixo) em vez de degradar para "pular o check-api": transformar
+# falha de configuracao em gate cego e o defeito oposto, e este projeto ja o
+# consertou no CI.
+#
+# Lista de PERMISSAO por regex ancorada, e NUNCA "source". Um .env deveria ter
+# so pares chave=valor, mas "source" EXECUTA o arquivo: uma linha
+# "rm -rf ~" ou "$(curl ...)" que entrasse ali por acidente ou por malicia
+# rodaria com o shell de quem empurra, e num hook de push isso passaria
+# despercebido. Aqui somente "FOCUSQUEST_<MAIUSCULAS/DIGITOS/_>=" casa --
+# comentario, linha em branco, "export FOO=", nome minusculo e outro prefixo
+# simplesmente nao casam -- e nada e executado.
+#
+# Dois detalhes que quebram uma implementacao ingenua: a divisao e no PRIMEIRO
+# "=" (a classe de caracteres do nome nao inclui "=", e uma URL de banco com
+# senha contem "="), e aspas envolventes sao removidas, como o python-dotenv
+# faz, para o valor chegar ao Settings do mesmo jeito que chega no repositorio
+# principal.
+#
+# Uma variavel JA exportada no ambiente vence a linha do .env. E a mesma
+# precedencia do pydantic-settings (ambiente acima do .env), entao o worktree
+# se comporta como o repositorio principal se comportaria.
+ARQUIVO_ENV="${ROOT}/.env"
+
+if [ -f "$ARQUIVO_ENV" ]; then
+  while IFS= read -r linha || [ -n "$linha" ]; do
+    linha="${linha%$'\r'}"
+    [[ $linha =~ ^(FOCUSQUEST_[A-Z0-9_]*)=(.*)$ ]] || continue
+    nome="${BASH_REMATCH[1]}"
+    valor="${BASH_REMATCH[2]}"
+    case "$valor" in
+      \"*\")
+        valor="${valor#\"}"
+        valor="${valor%\"}"
+        ;;
+      \'*\')
+        valor="${valor#\'}"
+        valor="${valor%\'}"
+        ;;
+    esac
+    if [ -z "${!nome:-}" ]; then
+      export "${nome}=${valor}"
+    fi
+  done <"$ARQUIVO_ENV"
+fi
+
+# Falha FECHADA, nomeando o que falta. Uma mensagem "configure o .env" sem
+# dizer QUAL variavel obriga quem empurra a procurar; e a instrucao concreta
+# evita a reacao que a especificacao proibe (tentar "--no-verify" achando que
+# o gate esta quebrado).
+#
+# Isto recusa tambem um push que so DELETA ref, que nao carrega codigo nenhum.
+# Aceito de proposito: a alternativa e um segundo caminho de codigo, exercitado
+# quase nunca, para relaxar uma guarda -- e uma guarda com excecao que ninguem
+# testa e uma guarda que apodrece. Recusar com a instrucao na tela custa um
+# comando a quem deleta uma branch.
+faltando=""
+for nome in FOCUSQUEST_DATABASE_URL FOCUSQUEST_TEST_DATABASE_URL; do
+  [ -n "${!nome:-}" ] || faltando="${faltando} ${nome}"
+done
+
+if [ -n "$faltando" ]; then
+  echo "!! configuracao ausente: o gate nao pode rodar no worktree de validacao, push rejeitado" >&2
+  echo "!! variaveis obrigatorias sem valor:${faltando}" >&2
+  echo "!! elas nao tem default em src/focusquest/core/config.py, e o worktree temporario nao herda o .env (ele e gitignored)" >&2
+  echo "!! conserte de um dos dois jeitos, no repositorio principal (${ROOT}):" >&2
+  echo "!!   1. crie o .env a partir do modelo:  cp .env.example .env  (e ajuste o que precisar)" >&2
+  echo "!!   2. ou exporte as variaveis no shell que dispara o push" >&2
+  echo "!! NAO existe a opcao de pular o check-api: gate cego nao e gate" >&2
+  exit 1
+fi
+
 while read -r ref_local sha_local; do
   [ -n "$ref_local" ] || continue
 

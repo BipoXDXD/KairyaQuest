@@ -42,6 +42,23 @@ check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run test:coverage
 
 check-api: ## Ruff, mypy e pytest com cobertura no backend
+# PRIMEIRA receita do alvo, e nao a ultima: um lock defasado significa que as
+# versoes que as linhas seguintes verificam podem nao ser as versoes
+# declaradas. Nao faz sentido gastar o pytest inteiro para so depois descobrir
+# que ele rodou contra o ambiente errado.
+#
+# `uv lock --check` COMPARA, nao sincroniza: reprova com "The lockfile at
+# `uv.lock` needs to be updated" e nao escreve nada. Ate aqui a validacao do
+# lock so acontecia no `make bootstrap` (`uv sync --locked`) e no preparo dos
+# jobs do CI -- ou seja, quem roda `make check` num clone ja preparado nao
+# recebia aviso nenhum, e o `docs/QUALITY.md` §4 prometeu essa validacao
+# DENTRO do alvo.
+#
+# Nao ha equivalente npm no check-web, de proposito: nao existe comando barato
+# e confiavel que compare `package.json` com `package-lock.json` sem instalar,
+# e forcar `npm ci` no check-web faria o gate local reinstalar tudo a cada
+# execucao. A assimetria e declarada, nao consertada com verificacao fragil.
+	uv lock --check
 	uv run ruff check .
 	uv run ruff format --check .
 # alembic/ entra no mypy junto com src e tests: o env.py resolve a URL do

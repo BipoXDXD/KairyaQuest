@@ -201,3 +201,54 @@ test('a tela nao tem violacao de acessibilidade detectada pelo axe', async ({ pa
   // recebeu 3".
   expect(resultado.violations).toEqual([])
 })
+
+/**
+ * O estado de ERRO, auditado pelo axe -- e nao apenas o estado carregado.
+ *
+ * Por que vale um cenario proprio. Os outros tres cenarios rodam depois de a
+ * lista aparecer, entao a auditoria de acessibilidade nunca via o estado que a
+ * pessoa encontra quando esta sem rede: uma `role="alert"` (regiao viva, que
+ * anuncia sozinha) e um botao que precisa de nome acessivel e de foco visivel.
+ * E justamente ali que moram os defeitos, e era justamente ali que o axe nao
+ * chegava.
+ *
+ * O mecanismo e `page.route(...).abort()`, e nao derrubar a API: abortar no
+ * NAVEGADOR independe do proxy do Vite e do processo do uvicorn, entao o
+ * cenario nao precisa mexer em servidor nenhum para reproduzir "sem rede". O
+ * `fetch` rejeita com `TypeError`, que nao e `ApiError`, e o
+ * `controller.signal.aborted` do hook segue falso (quem abortou foi a rede,
+ * nao nos) -- entao o estado de erro e alcancado pelo caminho de verdade.
+ *
+ * De quebra, o cenario prova ponta a ponta o que nenhum teste de unidade cobre:
+ * que o "Tentar novamente" realmente refaz o pedido e a tela se recupera.
+ */
+test('o estado de erro e acessivel e o "Tentar novamente" recupera a tela', async ({ page }) => {
+  // Interceptado ANTES do goto: o pedido da montagem inicial ja tem de cair.
+  await page.route('**/api/missions', (rota) => rota.abort())
+
+  await page.goto('/')
+
+  const erro = page.getByTestId('missions-error')
+  await expect(erro).toBeVisible()
+  // A regiao viva pelo papel, nao pelo `data-testid`: e o `role="alert"` que
+  // faz o leitor de tela anunciar a falha sem a pessoa ir procurar.
+  await expect(page.getByRole('alert')).toContainText('Falha ao carregar as missões.')
+
+  // O botao pelo NOME ACESSIVEL. Um botao sem nome e a violacao classica deste
+  // estado, e `getByRole('button', { name })` reprova se o nome desaparecer.
+  const tentarNovamente = page.getByRole('button', { name: 'Tentar novamente' })
+  await expect(tentarNovamente).toBeVisible()
+
+  // Conjunto de regras PADRAO: sem `withTags` e sem `disableRules`. Reduzir o
+  // conjunto para caber no resultado seria baixar o limiar.
+  const resultado = await new AxeBuilder({ page }).analyze()
+  expect(resultado.violations).toEqual([])
+
+  // A recuperacao: solta a interceptacao e clica. Se o botao nao refizesse o
+  // pedido, a lista nunca apareceria e esta espera estouraria.
+  await page.unroute('**/api/missions')
+  await tentarNovamente.click()
+
+  await expect(page.getByTestId('missions-list')).toBeVisible()
+  await expect(erro).toHaveCount(0)
+})
