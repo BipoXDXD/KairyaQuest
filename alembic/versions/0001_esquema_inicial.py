@@ -53,6 +53,19 @@ def upgrade() -> None:
         [{"id": 1, "display_name": "Estudante"}],
     )
 
+    # Inserir com `id` explicito NAO avanca a sequence: ela continuaria em 1, e
+    # o proximo `INSERT INTO users (display_name)` -- sem id -- pediria 1 de
+    # novo e bateria na chave primaria. O defeito so apareceria no dia em que
+    # existisse um segundo usuario, meses depois, como violacao de PK e longe
+    # desta linha. `pg_get_serial_sequence` descobre o nome da sequence em vez
+    # de codificar "users_id_seq", que muda se a coluna for renomeada.
+    op.execute(
+        "SELECT setval("
+        "pg_get_serial_sequence('users', 'id'), "
+        "(SELECT max(id) FROM users)"
+        ")"
+    )
+
     op.create_table(
         "missions",
         sa.Column("id", sa.Integer, primary_key=True),
