@@ -353,7 +353,7 @@ verificação executa **um** alvo, e nada além dele:
 | `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
 | `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
-| `check-secrets` | `make check-secrets` | checkout | 10 |
+| `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `quality-gate` | nenhum alvo: agrega os quatro acima | — | 5 |
 
 A regra é o que impede o CI e a máquina local de divergirem. Um passo que
@@ -386,6 +386,51 @@ O job `check-secrets` não precisa de preparo de Node, Python nem instalação
 de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do
 Gitleaks, fixado por checksum, e um checkout raso basta porque
 `gitleaks dir .` varre a árvore de arquivos em disco, não o histórico.
+
+**Cache do Gitleaks e nova tentativa no download.** Até aqui o job baixava
+os 21 MB do Gitleaks do GitHub Releases a **cada** execução, sem cache e sem
+nova tentativa. No PR #5 uma das duas execuções sobre o mesmo commit
+reprovou só por isso — `curl: (35) OpenSSL SSL_connect: SSL_ERROR_SYSCALL`
+contra `release-assets.githubusercontent.com` —, e a reexecução passou. Era
+falha fechada, que é o comportamento certo, mas um gate que reprova por
+rede ensina a reexecutar sem ler. Duas mudanças, as duas de **preparo de
+ambiente** (o job continua executando só `make check-secrets`):
+
+- **`actions/cache` sobre o `.tools/`**, o diretório que o `Makefile` usa
+  quando `FQ_TOOLS_DIR` não está definido. A chave é
+  `gitleaks-<os>-<arch>-hashFiles('scripts/install-gitleaks.sh')`: trocar a
+  versão ou qualquer hash esperado muda o script e, com ele, a chave, sem
+  uma segunda cópia da versão no workflow que pudesse divergir. O cache
+  **só é seguro por causa da guarda do script**: antes de aceitar um
+  binário que já está no diretório — do cache do Actions, do `.tools/`
+  local ou do `FQ_TOOLS_DIR` do pre-push —, `install-gitleaks.sh` confere o
+  hash dele contra o `BIN_SHA256`; se não conferir, o binário **não é
+  usado**, e só é **substituído** quando o download verificado termina — se
+  o download falhar, o binário que não confere continua no disco e o script
+  reprova do mesmo jeito. A guarda tem teste que a faz dizer não:
+  `tests/integration/test_install_gitleaks.py` planta um binário forjado e
+  exige que o script vá à rede em vez de aceitá-lo.
+- **Nova tentativa no `curl`** do script, para quando o cache faltar:
+  `--retry 5 --retry-delay 5 --retry-max-time 240 --retry-all-errors`, com
+  `--connect-timeout 20 --max-time 120`. O `--retry-all-errors` é o que
+  importa: `--retry` sozinho só repete timeout e HTTP 408, 429, 500, 502, 503
+  ou 504 (`man curl`, seção `--retry`), e **não**
+  repete o erro 35 de handshake TLS medido (conferido: com `--retry 2` o
+  curl tentou uma vez; com `--retry-all-errors`, três). Existe desde o curl
+  7.71.0; o runner `ubuntu-24.04` tem 8.5.0 e o macOS local, 8.7.1.
+  Esgotadas as tentativas, o script **continua reprovando** com o código do
+  curl — o mesmo teste confere isso.
+
+**O Chromium do Playwright, no `check-e2e`, fica sem cache — de propósito.**
+Medido no log do CI: o passo `npx playwright install --with-deps chromium`
+faz `apt-get update` (12 MB) e instala pacotes de fonte por apt (21 MB), e
+baixa Chrome for Testing (187 MiB), FFmpeg (2 MiB) e Chrome Headless Shell
+(114 MiB) para `~/.cache/ms-playwright`. Um cache desse diretório não tira
+o apt da rede — a metade de sistema continuaria baixando a cada execução —,
+restauraria ~300 MB de outro serviço de rede, e o baixador do Playwright
+já repete sozinho (5 tentativas, alternando espelhos; conferido no
+`playwright-core` 1.63.0). A instabilidade residual desse passo está
+registrada nas limitações (seção 6).
 
 Os `timeout-minutes` existem porque o padrão do runner é seis horas: um job
 travado (o caso óbvio é o Playwright esperando um servidor que não subiu)
@@ -505,6 +550,13 @@ Sem eufemismo:
   proibitivo, a solução não pode ser reduzir o que o gate verifica; é
   paralelizar, cachear ou segmentar por escopo, mantendo a garantia de que
   todo o projeto continua verificado antes de cada commit.
+- **O CI ainda depende da rede em cada execução, fora o Gitleaks.** O
+  `check-e2e` roda `apt-get` e baixa o Chromium a cada execução (seção 5,
+  sem cache de propósito); os gerenciadores de pacote (npm, uv) e as
+  imagens de serviço também vão à rede, com os caches das próprias actions
+  de setup. Uma queda de rede ali reprova o gate — falha fechada, nunca
+  aprovação vazia —, e o conserto é reexecutar o job depois de ler o log,
+  não afrouxar o passo.
 - **O gate local depende de Docker e de um PostgreSQL de pé.** Sem
   `make db-up`, o `check-api` e o `check-e2e` reprovam — alto, por falha de
   conexão, nunca por aprovação vazia. O `/ready` da API do E2E responde 503
@@ -542,6 +594,12 @@ distintos, por plataforma — não apenas um:
    nada. Sem ele, o script teria que sempre baixar e reextrair para
    conferir o tarball, ou confiar cegamente no binário em cache sem
    verificação — as duas opções ruins que a checagem em dois níveis evita.
+   É também o que torna seguro o `actions/cache` do job `check-secrets`
+   (seção 5).
+
+A chave desse cache no CI é o hash do próprio `scripts/install-gitleaks.sh`,
+então atualizar a versão invalida o cache sozinho: não há nada a trocar no
+workflow.
 
 Para atualizar para uma nova versão `X.Y.Z`, os dois valores precisam ser
 obtidos e trocados juntos, por plataforma (`darwin_arm64` e `linux_x64`

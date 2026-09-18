@@ -18,9 +18,11 @@ aberta; quando ele for mesclado, a base passa a ser a `main`. Spec em
 decisões C12 e C13); plano em
 `docs/superpowers/plans/2026-09-18-incremento-a.md`. Relógio injetável,
 `code` nos erros de domínio e o botão Concluir para as missões avulsas.
-Fecha as pendências 1 e 7. **Estado de publicação: a branch não foi
-empurrada.** Ela não tem upstream, nenhum pull request foi aberto e,
-portanto, os jobs do CI **não rodaram** para ela.
+Fecha as pendências 1 e 7. **Estado de publicação: PR #8 aberto, merge
+pendente.** A branch foi empurrada com autorização do dono e o PR #8 foi
+aberto; os jobs do CI rodaram e passaram sobre `7a3d507` (`gh pr checks 8`).
+O merge espera a autorização do dono e deve ser por **merge commit**, para
+preservar os SHAs citados abaixo.
 **Integração da `main`:** o PR #6 foi mesclado à `main` em `4a9a2a4` (merge
 commit, `gh pr view 6`), e o PR #5 (`fix/sessao-em-utc`, sessão do
 PostgreSQL em UTC) entrou na `main` por rebase, em `2440515` e `c08c2a1`.
@@ -31,6 +33,12 @@ citados abaixo continuem válidos; desde então a base desta branch é a
 "Incrementos anteriores", é o registro histórico do Incremento 1a — vale
 como aconteceu, mas seu estado de publicação, descrito logo a seguir, foi
 superado pelo merge do PR #4.
+**Segunda integração da `main`:** o PR #7 (cache do Gitleaks no CI) entrou
+na `main` por rebase, de `eeae001` a `c2d0bf2`, e a `origin/main`
+(`c2d0bf2`) foi integrada nesta branch de novo por **merge**. Desta vez houve
+conflito de texto, só no `docs/HANDOFF.md`: as duas branches acrescentaram
+uma seção no mesmo ponto e pendências no fim da lista. As duas versões foram
+mantidas, a 39 depois da 38.
 
 **Incremento 1a — fatia vertical: missões persistidas.** Branch
 `feat/incremento-1a`, aberta a partir de `a869292` (a `main` naquele
@@ -161,6 +169,37 @@ serviço.
 - **Endpoints:** os três de `/api/missions`, `/health` e `/ready` — ver
   "O contrato HTTP que existe" em `docs/ARCHITECTURE.md` §3. O de concluir
   existe pela decisão A8.
+
+### Infraestrutura de CI: cache do Gitleaks (PR #7, mesclado por rebase)
+
+O `AGENTS.md` §4 exige motivo escrito para infraestrutura nova.
+
+- **O que entrou:** um passo `actions/cache@v6` no job `check-secrets`,
+  sobre o `.tools/`, com chave derivada de
+  `hashFiles('scripts/install-gitleaks.sh')`; e nova tentativa no `curl` do
+  `scripts/install-gitleaks.sh` (`--retry 5 --retry-all-errors`, com
+  intervalo e tetos de tempo).
+- **Motivo, medido:** no PR #5 uma das duas execuções do workflow sobre o
+  mesmo commit reprovou no `check-secrets` com
+  `curl: (35) OpenSSL SSL_connect: SSL_ERROR_SYSCALL` contra
+  `release-assets.githubusercontent.com`; o `quality-gate` reprovou junto e
+  a reexecução passou. O gate baixava o Gitleaks a cada execução, sem cache
+  e sem nova tentativa, então uma queda de rede do GitHub reprovava o gate
+  com o código intacto.
+- **Por que é seguro:** o script só aceita um binário já presente se o
+  SHA-256 dele conferir com o `BIN_SHA256`; senão, não o usa e baixa de novo,
+  substituindo-o só quando o download verificado termina — se o download
+  falhar, o binário que não confere continua no disco e o script reprova do
+  mesmo jeito. A guarda passou a ter teste que a faz dizer não
+  (`tests/integration/test_install_gitleaks.py`), e o mesmo arquivo prova
+  que, esgotadas as tentativas, o script continua reprovando.
+- **O que ficou sem cache, e por quê:** o Chromium do Playwright no
+  `check-e2e`. O `--with-deps` instala pacotes por `apt`, que cache de
+  diretório não cobre; o cache restauraria ~300 MB de outro serviço de rede;
+  e o baixador do Playwright já faz 5 tentativas. Ver pendência 39.
+- **Paridade 1:1 preservada:** cache e nova tentativa são preparo de
+  ambiente; cada job continua executando um alvo só. `docs/QUALITY.md` §5
+  descreve a mudança.
 
 ## Alterações do Incremento A
 
@@ -680,6 +719,19 @@ que não tinham chegado aqui)
     O crescimento é limitado — só cresce com falhas de resultado
     desconhecido, uma por missão — e não foi resolvido: fica registrado
     como limitação, não como bug esquecido.
+
+**Criada pela correção do cache do CI (PR #7)**
+
+39. **O `check-e2e` ainda vai à rede a cada execução, sem cache.** O passo
+    `npx playwright install --with-deps chromium` roda `apt-get update`,
+    instala pacotes de fonte por `apt` e baixa ~300 MB de navegador. Ficou
+    sem cache de propósito (ver "Infraestrutura de CI: cache do Gitleaks"):
+    o `apt` não é cacheável como diretório, e o baixador do Playwright já
+    repete 5 vezes. Se ninguém mexer: uma queda de rede nesse passo reprova
+    o gate (falha fechada), e o conserto é reexecutar o job depois de ler o
+    log. Se o passo passar a reprovar com frequência medida, a próxima
+    opção é uma imagem de contêiner com o navegador e as dependências já
+    instalados, não um cache parcial.
 
 ## Próximo incremento
 

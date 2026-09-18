@@ -103,8 +103,8 @@ jobs:
     # O job mais caro, e por isso o teto mais alto: ele paga TODO o preparo dos
     # outros dois (npm ci + uv sync + servico PostgreSQL) mais o
     # `playwright install --with-deps chromium`, que instala bibliotecas de
-    # sistema por apt e baixa ~100 MB. E e aqui que vive o travamento que
-    # motivou estes tetos: cada `webServer` do playwright.config.ts espera ate
+    # sistema por apt e baixa ~300 MB (medido em 2026-09-18). E e aqui que
+    # vive o travamento que motivou estes tetos: cada `webServer` do playwright.config.ts espera ate
     # 120s, mas um processo que sobe e nunca responde `/ready` deixaria o
     # `npx playwright test` pendurado.
     timeout-minutes: 25
@@ -148,6 +148,16 @@ jobs:
       # `--with-deps` AQUI, e nao no macOS: o installDeps() do Playwright so
       # trata win32 e linux. Em darwin ele e no-op; no runner ubuntu-latest e
       # ele que instala as bibliotecas de sistema do Chromium.
+      #
+      # SEM cache, de proposito (decisao registrada no docs/HANDOFF.md). Medido
+      # no CI: este passo faz `apt-get update` (12 MB) e instala 9 pacotes de
+      # fonte (21 MB) por apt, e baixa Chrome for Testing (187 MiB), FFmpeg
+      # (2 MiB) e Chrome Headless Shell (114 MiB) para ~/.cache/ms-playwright.
+      # Um cache desse diretorio nao tira o apt da rede -- a parte de sistema
+      # continuaria baixando a cada execucao --, restauraria ~300 MB de outro
+      # servico de rede, e o baixador do Playwright ja repete sozinho (5
+      # tentativas, alternando espelhos). O ganho de estabilidade seria
+      # parcial e o custo, uma chave a manter.
       - name: Instalar o Chromium do Playwright
         run: npx playwright install --with-deps chromium
         working-directory: frontend
@@ -157,10 +167,33 @@ jobs:
   check-secrets:
     runs-on: ubuntu-latest
     # ~0,3s de alvo. O unico custo real e o download do Gitleaks (21 MB) feito
-    # pelo scripts/install-gitleaks.sh.
+    # pelo scripts/install-gitleaks.sh -- que, com o cache abaixo, so acontece
+    # quando o cache falta. O pior caso das novas tentativas do curl no script
+    # e ~6 min, dentro deste teto.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      # PREPARO de ambiente, nao verificacao: o job continua executando so o
+      # `make check-secrets`. Motivo: no PR #5 o download do Gitleaks a cada
+      # execucao reprovou o gate por uma queda de rede do GitHub
+      # (curl 35, SSL_ERROR_SYSCALL), com o codigo intacto.
+      #
+      # O caminho e o `.tools/` que o Makefile usa (TOOLS sem FQ_TOOLS_DIR). A
+      # chave deriva do PROPRIO scripts/install-gitleaks.sh: mudar a versao ou
+      # qualquer hash esperado muda o arquivo e, portanto, a chave -- sem uma
+      # segunda copia da versao aqui que pudesse divergir.
+      #
+      # Seguro so porque o script confere o binario restaurado contra o
+      # BIN_SHA256 antes de aceita-lo; um binario que nao confere NAO E USADO
+      # e so e substituido quando o download verificado termina -- se o
+      # download falhar, o binario que nao confere fica no disco e o job
+      # reprova do mesmo jeito. Esta guarda tem teste:
+      # tests/integration/test_install_gitleaks.py.
+      - name: Cache do Gitleaks
+        uses: actions/cache@v6
+        with:
+          path: .tools
+          key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/install-gitleaks.sh') }}
       - name: Varredura de segredos
         run: make check-secrets
 
