@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import Engine, inspect, make_url, text
 from sqlalchemy.exc import IntegrityError
 
 from focusquest.core.config import Settings
@@ -18,22 +18,55 @@ TABELAS_DA_MIGRACAO = frozenset({"users", "missions", "mission_operations"})
 
 
 def _exigir_banco_de_teste(engine: Engine) -> None:
-    """Recusa-se a rodar se o alvo nao for o banco de teste.
+    """Recusa-se a rodar se o alvo nao for, comprovadamente, o banco de teste.
 
-    Os testes de migracao apagam o schema inteiro. Apontar isso para o banco
-    de desenvolvimento destroi dados, e a protecao do `-x test=true` e
-    convencao: qualquer modulo pode montar um Config sem ele, e quem estiver
-    com pressa monta. Esta guarda transforma a convencao em estrutura -- o
-    comando destrutivo passa a depender do NOME do alvo, nao da memoria de
-    quem escreve o teste.
+    Os testes de migracao apagam o schema inteiro. A protecao do
+    `-x test=true` e convencao: qualquer modulo pode montar um Config sem
+    ele, e quem estiver com pressa monta. Esta guarda transforma a convencao
+    em estrutura -- o comando destrutivo passa a depender do que se pode
+    verificar sobre o alvo, nao da memoria de quem escreve o teste.
 
-    O sufixo `_test` e a convencao que o .env.example ja estabelece.
+    Sao DUAS condicoes independentes, e as duas precisam valer. Elas cobrem
+    erros de configuracao diferentes, e por isso nenhuma substitui a outra:
+
+    1. **O alvo e exatamente o banco de teste configurado.** Esta e a
+       verificacao forte, e e ela que recusa *servidor* errado. Conferir so
+       o nome nao bastava: `...@127.0.0.1:5432/qualquer_test` termina em
+       `_test` e mesmo assim aponta para a instalacao local do PostgreSQL da
+       porta 5432, que NAO pertence a este projeto. Um
+       FOCUSQUEST_TEST_DATABASE_URL mal configurado levaria o
+       `DROP SCHEMA public CASCADE` para o banco de outra pessoa.
+
+    2. **O nome termina em `_test`.** A condicao 1 sozinha aprovaria alguem
+       que apontasse a propria FOCUSQUEST_TEST_DATABASE_URL para o banco de
+       desenvolvimento -- a URL bateria com a configuracao, porque a
+       configuracao e que esta errada. Esta segunda camada nao consulta a
+       configuracao; e a convencao de nome que o .env.example estabelece,
+       conferida por fora dela.
+
+    Juntas: a 1 impede apontar para outro servidor, a 2 impede apontar a
+    variavel de teste para o banco errado.
     """
+    esperado = make_url(Settings().test_database_url)
+
+    # Condicao 1: alvo igual ao configurado. A comparacao e entre objetos URL,
+    # nao entre strings, para nao depender de detalhe de formatacao. A
+    # mensagem mostra as duas URLs REDIGIDAS (`render_as_string()` esconde a
+    # senha por padrao): um traceback nao e lugar de credencial.
+    if engine.url != esperado:
+        raise RuntimeError(
+            "recusando rodar teste destrutivo: o alvo "
+            f"'{engine.url.render_as_string()}' nao e o banco de teste "
+            f"configurado ('{esperado.render_as_string()}')"
+        )
+
+    # Condicao 2: convencao de nome, conferida sem consultar a configuracao.
     nome = engine.url.database or ""
     if not nome.endswith("_test"):
         raise RuntimeError(
             f"recusando rodar teste destrutivo contra o banco '{nome}'; "
-            "esperado um banco cujo nome termine em '_test'"
+            "esperado um banco cujo nome termine em '_test' -- confira "
+            "FOCUSQUEST_TEST_DATABASE_URL"
         )
 
 
@@ -102,13 +135,57 @@ def engine_de_desenvolvimento(settings: Settings) -> Iterator[Engine]:
     """Engine apontada para o banco de DESENVOLVIMENTO, so para provar que a
     guarda a recusa.
 
-    Nenhuma conexao chega a ser aberta: `create_engine` e preguicoso e a
-    guarda so le `engine.url`. O `dispose()` vive na fixture pela mesma regra
-    de sempre -- escrito depois do assert, nao roda quando o assert cai.
+    ATENCAO a uma dependencia implicita: este teste e seguro APENAS porque a
+    guarda nunca abre conexao -- ela so le `engine.url`, e `create_engine` e
+    preguicoso. Se um dia alguem puser um `engine.connect()` dentro da
+    guarda, esta fixture passa a abrir conexao de verdade contra o banco de
+    DESENVOLVIMENTO, e nada na leitura do teste denunciaria isso. Quem mexer
+    na guarda precisa reler este paragrafo.
+
+    O `dispose()` vive na fixture pela mesma regra de sempre -- escrito
+    depois do assert, nao roda quando o assert cai.
     """
     engine = create_engine_from_url(settings.database_url)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture
+def engine_em_outro_servidor(settings: Settings) -> Iterator[Engine]:
+    """Engine com nome de banco aceitavel e SERVIDOR errado.
+
+    Derivada da URL de teste, trocando so a porta e o nome: mesma credencial,
+    nome terminando em `_test` -- e apontando para a 5432, a instalacao local
+    do PostgreSQL que nao pertence a este projeto. E exatamente a brecha que
+    a guarda antiga deixava passar.
+
+    Vale aqui a mesma ressalva da fixture acima, e com mais peso: nada nunca
+    deve conectar nesta URL. A guarda recusa antes, porque so le `engine.url`.
+    """
+    alvo = make_url(settings.test_database_url).set(port=5432, database="qualquer_test")
+    engine = create_engine_from_url(alvo.render_as_string(hide_password=False))
+    yield engine
+    engine.dispose()
+
+
+def test_guarda_recusa_servidor_diferente_do_configurado(
+    engine_em_outro_servidor: Engine,
+) -> None:
+    """Condicao 1: nome plausivel nao basta, o alvo precisa ser O configurado.
+
+    Este e o teste que a guarda antiga nao passaria: `qualquer_test` termina
+    em `_test`, e ela aprovava -- mandando o `DROP SCHEMA public CASCADE`
+    para um servidor alheio a uma porta de distancia.
+    """
+    with pytest.raises(RuntimeError) as excecao:
+        _exigir_banco_de_teste(engine_em_outro_servidor)
+
+    mensagem = str(excecao.value)
+    assert "nao e o banco de teste configurado" in mensagem
+    # A recusa precisa dizer QUAL alvo foi recusado -- inclusive a porta, que
+    # e o que difere aqui -- e nao pode vazar a senha no traceback.
+    assert ":5432/qualquer_test" in mensagem
+    assert "focusquest_local" not in mensagem
 
 
 def test_guarda_recusa_o_banco_de_desenvolvimento(
@@ -117,7 +194,7 @@ def test_guarda_recusa_o_banco_de_desenvolvimento(
     """A guarda precisa MORDER, e este e o teste que prova que ela morde.
 
     Sem esta assercao, `_exigir_banco_de_teste` poderia estar quebrada --
-    aceitando qualquer nome -- e a suite continuaria verde, porque o caminho
+    aceitando qualquer alvo -- e a suite continuaria verde, porque o caminho
     feliz nunca a exercita. Uma guarda sem teste do caso que ela bloqueia e
     uma guarda que so parece existir.
     """
@@ -126,10 +203,40 @@ def test_guarda_recusa_o_banco_de_desenvolvimento(
 
     mensagem = str(excecao.value)
     assert "recusando rodar teste destrutivo" in mensagem
-    # O nome do alvo recusado precisa aparecer: uma recusa que nao diz CONTRA
-    # QUE banco ela foi obriga quem le o traceback a adivinhar.
-    assert "'focusquest'" in mensagem
-    assert "'_test'" in mensagem
+    # O alvo recusado precisa aparecer: uma recusa que nao diz CONTRA QUE
+    # banco ela foi obriga quem le o traceback a adivinhar.
+    assert "/focusquest'" in mensagem
+
+
+def test_guarda_recusa_configuracao_de_teste_apontada_para_o_banco_errado(
+    monkeypatch: pytest.MonkeyPatch, engine_de_desenvolvimento: Engine
+) -> None:
+    """Condicao 2: a camada que sobrevive a uma configuracao errada.
+
+    Aqui a propria FOCUSQUEST_TEST_DATABASE_URL aponta para o banco de
+    desenvolvimento. A condicao 1 APROVA -- a URL bate com a configuracao,
+    porque quem esta errado e a configuracao. E a convencao de nome, conferida
+    sem consultar Settings, que pega o caso. Este teste e a razao de as duas
+    condicoes serem independentes em vez de uma so.
+    """
+    monkeypatch.setenv(
+        "FOCUSQUEST_TEST_DATABASE_URL",
+        engine_de_desenvolvimento.url.render_as_string(hide_password=False),
+    )
+
+    with pytest.raises(RuntimeError) as excecao:
+        _exigir_banco_de_teste(engine_de_desenvolvimento)
+
+    mensagem = str(excecao.value)
+    assert "termine em '_test'" in mensagem
+    assert "FOCUSQUEST_TEST_DATABASE_URL" in mensagem
+
+
+def test_guarda_permite_o_banco_de_teste_configurado(engine: Engine) -> None:
+    """O caso feliz tambem precisa de teste: uma guarda que recusa TUDO
+    deixaria a suite vermelha por um motivo certo e uma razao errada, e o
+    conserto obvio -- afrouxa-la -- desfaria a protecao."""
+    _exigir_banco_de_teste(engine)
 
 
 def test_sequence_de_users_avanca_apos_a_migracao(banco_migrado: Engine) -> None:
