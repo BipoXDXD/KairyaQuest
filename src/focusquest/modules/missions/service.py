@@ -7,12 +7,13 @@ banco atribuir identificadores e aplicar restricoes, e deixa a decisao de
 tornar tudo permanente para o dono da transacao.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from focusquest.core.clock import Clock
 from focusquest.core.errors import (
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
@@ -100,7 +101,12 @@ def listar_missoes(session: Session, user_id: int) -> list[Mission]:
 
 
 def concluir_missao(
-    session: Session, user_id: int, mission_id: int, operation_id: str
+    session: Session,
+    user_id: int,
+    mission_id: int,
+    operation_id: str,
+    *,
+    clock: Clock,
 ) -> Mission:
     """Conclui a missao, de forma idempotente pelo identificador de operacao.
 
@@ -136,6 +142,14 @@ def concluir_missao(
     """
     missao = _buscar(session, user_id, mission_id, travar=True)
 
+    # A hora e lida AQUI, com a linha ja travada, e nao antes do `_buscar`
+    # (decisao C13 da spec do ciclo diario). Lida antes, uma conclusao que
+    # esperasse a trava de outra carregaria um instante anterior a espera. No
+    # Incremento A so o `completed_at` usa a hora; no B, a regra do dia a le
+    # entre o reenvio e a transicao, e por isso a leitura ja fica neste ponto.
+    # Provado por `test_relogio_e_lido_com_a_linha_ja_travada`.
+    agora = clock()
+
     ja_feita = session.scalar(
         select(MissionOperation).where(MissionOperation.operation_id == operation_id)
     )
@@ -147,7 +161,7 @@ def concluir_missao(
 
     validar_transicao(missao.state, MissionState.CONCLUIDA)
     missao.state = MissionState.CONCLUIDA
-    missao.completed_at = datetime.now(UTC)
+    missao.completed_at = agora
     session.add(
         MissionOperation(
             operation_id=operation_id, mission_id=missao.id, kind=CONCLUSAO

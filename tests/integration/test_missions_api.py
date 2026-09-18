@@ -23,6 +23,7 @@ from sqlalchemy import Engine, delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
+from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, xp_para_dificuldade
@@ -39,6 +40,9 @@ ESTUDANTE = 1
 # dono diferente. Sem ele o handler de NaoPertenceAoUsuarioError seria
 # inalcancavel pela API, e um ramo inalcancavel e um ramo descoberto.
 OUTRO = 2
+
+# O instante que o relogio injetado devolve nos testes que o substituem.
+AGORA = datetime(2026, 9, 18, 15, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -82,6 +86,19 @@ def cliente_real(banco_migrado: Engine) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.pop(get_engine, None)
+
+
+@pytest.fixture
+def relogio_fixo() -> Iterator[datetime]:
+    """Substitui o relogio da API por um que devolve sempre `AGORA`.
+
+    O override devolve uma FUNCAO que devolve o instante -- `get_clock`
+    entrega um relogio, nao uma hora (ver `core/clock.py`). Remove a propria
+    chave no teardown, pelo motivo escrito em `client`.
+    """
+    app.dependency_overrides[get_clock] = lambda: lambda: AGORA
+    yield AGORA
+    app.dependency_overrides.pop(get_clock, None)
 
 
 def _prazo(dias: int) -> str:
@@ -507,6 +524,26 @@ def test_concluir_devolve_200_com_o_estado_novo(client: TestClient) -> None:
     # solto que ficou certo so na volta da requisicao.
     listadas = client.get("/api/missions").json()
     assert listadas[0]["state"] == MissionState.CONCLUIDA.value
+
+
+def test_concluir_grava_o_instante_do_relogio_injetado(
+    client: TestClient, relogio_fixo: datetime
+) -> None:
+    """A rota entrega ao servico o relogio da DEPENDENCIA, e nao outro.
+
+    E o teste que prova a ligacao entre `get_clock` e `concluir_missao`: se a
+    rota passasse `system_now` direto, ou o servico voltasse a chamar
+    `datetime.now(UTC)`, o `completed_at` seria a hora real, e nao o instante
+    fixo que o override instalou. Comparado como instante, nao como texto.
+    """
+    criada = _criar(client)
+
+    resposta = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": "op-abc"}
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    assert datetime.fromisoformat(resposta.json()["completed_at"]) == relogio_fixo
 
 
 def test_duracao_real_no_corpo_vem_dos_instantes(

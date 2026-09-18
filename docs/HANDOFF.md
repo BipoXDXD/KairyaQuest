@@ -325,9 +325,17 @@ ninguém mexer.
    UTC) rodando com o fuso do processo fixado em `Asia/Tokyo`; e o E2E, com o
    navegador em `Asia/Tokyo`, confere o texto do prazo. Provado nas duas
    direções: sem o `timeZone`, o teste de unidade e o E2E reprovam.
-7. **O relógio não é injetável.** `concluir_missao` usa `datetime.now(UTC)`
+7. ~~**O relógio não é injetável.** `concluir_missao` usa `datetime.now(UTC)`
    direto, e o README §8 pede relógio injetado nos testes. Os testes
-   compensam com asserção de janela de tempo.
+   compensam com asserção de janela de tempo.~~ **Resolvida no Incremento
+   A:** `core/clock.py` expõe a dependência `get_clock`, que entrega o
+   **relógio** (`Clock = Callable[[], datetime]`), e não o instante;
+   `concluir_missao` recebe o relógio como argumento obrigatório e o lê
+   **depois** do `SELECT ... FOR UPDATE` (decisão C13 da spec do ciclo
+   diário). `test_relogio_e_lido_com_a_linha_ja_travada` prova a ordem com
+   uma sonda `FOR KEY SHARE NOWAIT`, e os testes afirmam o `completed_at` por
+   igualdade com um instante fixo. A API troca o relógio por
+   `dependency_overrides`; não há gancho de teste no código de produção.
 8. **O modelo `User` mora em `modules/missions/models.py`**, como dívida
    consciente: criar um módulo `users` para uma tabela de uma linha seria a
    camada vazia que o README §3 proíbe. O módulo `users`, quando nascer,

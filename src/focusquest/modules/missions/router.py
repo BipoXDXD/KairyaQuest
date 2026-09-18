@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy.orm import Session
 
+from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import get_session
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
@@ -92,7 +93,10 @@ def listar(session: SessaoDaRequisicao) -> list[MissionRead]:
 
 @router.post("/{mission_id}/complete")
 def concluir(
-    mission_id: IdDaMissao, dados: MissionComplete, session: SessaoDaRequisicao
+    mission_id: IdDaMissao,
+    dados: MissionComplete,
+    session: SessaoDaRequisicao,
+    clock: Annotated[Clock, Depends(get_clock)],
 ) -> MissionRead:
     """Conclui a missao, de forma idempotente pelo identificador de operacao.
 
@@ -100,7 +104,13 @@ def concluir(
     E o reenvio do MESMO identificador devolve 200 de novo, com o mesmo corpo
     -- o servico e quem sustenta essa promessa; a rota so nao a estraga
     devolvendo um status diferente na segunda vez.
+
+    O relogio vem da dependencia e segue INTEIRO para o servico, que o le
+    depois de travar a linha. A rota nao le a hora: ler aqui seria ler antes
+    da trava (ver `core/clock.py`).
     """
-    missao = concluir_missao(session, USUARIO_UNICO, mission_id, dados.operation_id)
+    missao = concluir_missao(
+        session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock
+    )
     session.commit()
     return MissionRead.model_validate(missao)

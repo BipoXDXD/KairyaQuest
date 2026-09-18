@@ -101,6 +101,7 @@ FocusQuest/
 │       ├── core/                  # infraestrutura comum a todos os módulos
 │       │   ├── __init__.py
 │       │   ├── base.py            # base declarativa do SQLAlchemy
+│       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
 │       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
 │       │   ├── database.py        # engine e sessão por requisição
 │       │   └── errors.py          # erros de domínio comuns
@@ -128,6 +129,7 @@ FocusQuest/
 │   │   └── test_missions_service.py
 │   └── unit/                      # sem banco
 │       ├── __init__.py
+│       ├── test_clock.py
 │       ├── test_config.py
 │       ├── test_missions_domain.py
 │       └── test_package.py
@@ -288,6 +290,12 @@ concluir missão ou confirmar recompensa por conta própria.
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
   nem token.
+- **O instante da conclusão vem do relógio injetado.** A rota de concluir
+  recebe o relógio pela dependência `get_clock` (`core/clock.py`) e o repassa
+  ao serviço, que o lê **depois** de travar a linha (decisão C13 da spec do
+  ciclo diário). A dependência entrega o relógio, e não o instante: um
+  instante resolvido pelo FastAPI seria lido antes da trava. Os testes o
+  substituem por `dependency_overrides`.
 - **Sem barra final.** As rotas são `/api/missions`, sem `/` no fim. Um
   pedido a `/api/missions/` recebe **`307`** com `Location` apontando para
   `/api/missions` (o redirecionamento automático do FastAPI/Starlette;
