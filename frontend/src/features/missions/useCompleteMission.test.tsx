@@ -150,6 +150,52 @@ describe('useCompleteMission', () => {
     expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
   })
 
+  it.each<[string, () => Response]>([
+    ['500 sem code', () => Response.json({ detail: 'Erro interno.' }, { status: 500 })],
+    [
+      '422 com detail em lista, no formato do FastAPI',
+      () =>
+        Response.json(
+          {
+            detail: [{ loc: ['body', 'operation_id'], msg: 'campo obrigatório', type: 'missing' }],
+          },
+          { status: 422 },
+        ),
+    ],
+    [
+      "409 com code: 'codigo_futuro' (desconhecido deste frontend)",
+      () => Response.json({ detail: 'x', code: 'codigo_futuro' }, { status: 409 }),
+    ],
+  ])(
+    'mantem a MESMA chave depois de %s, seguido de sucesso',
+    async (_descricao, respostaDeFalha) => {
+      // README §7: nenhuma dessas respostas diz se o servidor concluiu. So a
+      // falha de rede reenviava a mesma chave antes desta rodada -- aqui a
+      // mesma garantia vale para qualquer resposta HTTP sem `code` conhecido.
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(respostaDeFalha())
+        .mockResolvedValueOnce(Response.json(concluida))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderHook(() => useCompleteMission(7))
+
+      act(() => {
+        result.current.complete()
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+      act(() => {
+        result.current.complete()
+      })
+
+      await waitFor(() => {
+        expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+      })
+      expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
+    },
+  )
+
   it('transicao_ilegal chega em failed pedindo para atualizar o quadro', async () => {
     vi.stubGlobal(
       'fetch',

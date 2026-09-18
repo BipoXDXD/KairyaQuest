@@ -262,6 +262,31 @@ describe('MissionList -- concluir', () => {
     expect(within(itemConcluida).queryByTestId('mission-complete')).not.toBeInTheDocument()
   })
 
+  it('a regiao viva ja existe, vazia, ANTES de qualquer clique', async () => {
+    // Um leitor de tela so anuncia mudancas numa regiao viva que ja estava no
+    // documento -- por isso ela precisa existir desde o primeiro render, e
+    // nao nascer so quando ha algo para anunciar.
+    stubFetchResolving([pendente])
+
+    render(<MissionList />)
+
+    const status = await screen.findByTestId('mission-completion-status')
+    expect(status).toHaveAttribute('role', 'status')
+    expect(status).toBeEmptyDOMElement()
+  })
+
+  it('a missao que ja vem concluida nao tem regiao viva nenhuma', async () => {
+    // `CompletionControls` devolve null de proposito para essa missao (o
+    // `return null` do inicio da funcao): nao ha nada a anunciar, e a regiao
+    // nao deveria existir no cartao dela.
+    stubFetchResolving([concluida])
+
+    render(<MissionList />)
+
+    await screen.findByTestId('missions-list')
+    expect(screen.queryByTestId('mission-completion-status')).not.toBeInTheDocument()
+  })
+
   it('da ao botao um nome acessivel que diz QUAL missao ele conclui', async () => {
     // Com varias missoes no quadro, "Concluir" sozinho seria o mesmo nome em
     // todos os botoes, e o leitor de tela nao teria como distingui-los.
@@ -332,6 +357,9 @@ describe('MissionList -- concluir', () => {
     expect(aviso).toHaveTextContent(
       'Não foi possível confirmar a conclusão. Tentar de novo é seguro: a missão não será concluída duas vezes.',
     )
+    // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
+    // completed, nunca do texto da falha (que ja esta no alert).
+    expect(screen.getByTestId('mission-completion-status')).toBeEmptyDOMElement()
     const tentarDeNovo = screen.getByRole('button', {
       name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
     })
@@ -341,6 +369,58 @@ describe('MissionList -- concluir', () => {
     expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
     const [primeiro, segundo] = completionBodies(fetchMock)
     expect(segundo).toEqual(primeiro)
+  })
+
+  it('em operacao_reutilizada, avisa e deixa tentar de novo com uma chave NOVA', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json([pendente]))
+      .mockResolvedValueOnce(
+        Response.json({ detail: 'x', code: 'operacao_reutilizada' }, { status: 409 }),
+      )
+      .mockResolvedValueOnce(Response.json(pendenteConcluida))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    const aviso = await screen.findByTestId('mission-completion-error')
+    expect(aviso).toHaveTextContent('Não foi possível registrar esta tentativa. Tente de novo.')
+    // O botao continua oferecido: e M12 que faz o "Tentar de novo" sumir aqui.
+    const tentarDeNovo = screen.getByRole('button', {
+      name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
+    })
+
+    fireEvent.click(tentarDeNovo)
+
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const [primeiro, segundo] = completionBodies(fetchMock)
+    expect(segundo).not.toEqual(primeiro)
+  })
+
+  it('em missao_nao_encontrada, tira o Concluir e oferece Atualizar o quadro', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json([pendente]))
+      .mockResolvedValueOnce(
+        Response.json(
+          { detail: 'PROSA-CRUA-DO-BACKEND', code: 'missao_nao_encontrada' },
+          { status: 404 },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    expect(await screen.findByTestId('mission-completion-error')).toHaveTextContent(
+      'Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais.',
+    )
+    expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Atualizar o quadro' })).toBeInTheDocument()
+    // Nem a prosa do backend nem o code cru chegam a tela.
+    expect(screen.getByTestId('missions')).not.toHaveTextContent('PROSA-CRUA-DO-BACKEND')
+    expect(screen.getByTestId('missions')).not.toHaveTextContent('missao_nao_encontrada')
   })
 
   it('na transicao ilegal, tira o Concluir e oferece Atualizar o quadro, que recarrega', async () => {
