@@ -63,6 +63,12 @@ else
   exit 1
 fi
 
+# A GUARDA que torna seguro qualquer cache deste diretorio -- o .tools/ local,
+# o FQ_TOOLS_DIR do pre-push e o `actions/cache` do job check-secrets no CI:
+# um binario so e aceito sem download se o hash dele conferir com BIN_SHA256.
+# Um binario que nao confere nao e usado: o script segue para o download, e o
+# binario verificado substitui o que estava la. Teste que a faz dizer nao:
+# tests/integration/test_install_gitleaks.py.
 if [ -f "$BIN" ] && [ -x "$BIN" ] && echo "${BIN_SHA256}  ${BIN}" | verifica_sha256 >/dev/null 2>&1; then
   exit 0
 fi
@@ -71,8 +77,32 @@ URL="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${ASSET}
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Nova tentativa no download. Motivo medido: no PR #5 uma execucao do CI
+# reprovou com "curl: (35) OpenSSL SSL_connect: SSL_ERROR_SYSCALL" ao falar
+# com release-assets.githubusercontent.com, e a reexecucao passou -- queda de
+# rede do lado do GitHub, nao defeito do codigo.
+#
+# `--retry` SOZINHO nao cobre esse caso: ele so repete erros "transitorios"
+# (timeout e HTTP 408/429/5xx), e o erro 35 de handshake TLS nao esta na
+# lista -- medido com um servidor HTTP puro respondendo a um pedido HTTPS:
+# com `--retry 2` o curl tentou uma vez; com `--retry-all-errors`, tres.
+# `--retry-connrefused` tambem nao serve, so cobre ECONNREFUSED. Por isso
+# `--retry-all-errors` (curl >= 7.71.0; o runner ubuntu-24.04 tem 8.5.0 e o
+# macOS, 8.7.1). Ele repete tambem um 404 do `--fail`, o que so gasta tempo:
+# o numero de tentativas e o teto de tempo sao finitos.
+#
+# Limites: 5 novas tentativas com 5s entre elas, dentro de uma janela de 240s;
+# cada tentativa com 20s para conectar e 120s para terminar (21 MB). Pior caso
+# ~6 min, abaixo do `timeout-minutes: 10` do job check-secrets.
+#
+# Esgotadas as tentativas, o curl sai com o codigo do ultimo erro e o
+# `set -e` reprova o script -- nova tentativa NAO transforma falha em
+# sucesso. O teste tests/integration/test_install_gitleaks.py confere isso.
 echo "baixando gitleaks ${VERSION}..."
-curl --fail --silent --show-error --location --output "${TMP}/${ASSET}" "$URL"
+curl --fail --silent --show-error --location \
+  --retry 5 --retry-delay 5 --retry-max-time 240 --retry-all-errors \
+  --connect-timeout 20 --max-time 120 \
+  --output "${TMP}/${ASSET}" "$URL"
 
 echo "${SHA256}  ${TMP}/${ASSET}" | verifica_sha256 >/dev/null || {
   echo "erro: checksum do gitleaks nao confere. Download abortado." >&2

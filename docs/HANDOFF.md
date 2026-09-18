@@ -120,6 +120,35 @@ serviço.
   "O contrato HTTP que existe" em `docs/ARCHITECTURE.md` §3. O de concluir
   existe pela decisão A8.
 
+### Infraestrutura de CI: cache do Gitleaks (branch `fix/ci-cache-de-ferramentas`)
+
+O `AGENTS.md` §4 exige motivo escrito para infraestrutura nova.
+
+- **O que entrou:** um passo `actions/cache@v6` no job `check-secrets`,
+  sobre o `.tools/`, com chave derivada de
+  `hashFiles('scripts/install-gitleaks.sh')`; e nova tentativa no `curl` do
+  `scripts/install-gitleaks.sh` (`--retry 5 --retry-all-errors`, com
+  intervalo e tetos de tempo).
+- **Motivo, medido:** no PR #5 uma das duas execuções do workflow sobre o
+  mesmo commit reprovou no `check-secrets` com
+  `curl: (35) OpenSSL SSL_connect: SSL_ERROR_SYSCALL` contra
+  `release-assets.githubusercontent.com`; o `quality-gate` reprovou junto e
+  a reexecução passou. O gate baixava o Gitleaks a cada execução, sem cache
+  e sem nova tentativa, então uma queda de rede do GitHub reprovava o gate
+  com o código intacto.
+- **Por que é seguro:** o script só aceita um binário já presente se o
+  SHA-256 dele conferir com o `BIN_SHA256`; senão, descarta e baixa. A
+  guarda passou a ter teste que a faz dizer não
+  (`tests/integration/test_install_gitleaks.py`), e o mesmo arquivo prova
+  que, esgotadas as tentativas, o script continua reprovando.
+- **O que ficou sem cache, e por quê:** o Chromium do Playwright no
+  `check-e2e`. O `--with-deps` instala pacotes por `apt`, que cache de
+  diretório não cobre; o cache restauraria ~300 MB de outro serviço de rede;
+  e o baixador do Playwright já faz 5 tentativas. Ver pendência 32.
+- **Paridade 1:1 preservada:** cache e nova tentativa são preparo de
+  ambiente; cada job continua executando um alvo só. `docs/QUALITY.md` §5
+  descreve a mudança.
+
 ## Alterações do Incremento 1a
 
 Commits `1ff982d`..`96eaeba`:
@@ -498,6 +527,17 @@ que não tinham chegado aqui)
     `-> Iterator[int]` em vez de `-> Generator[...]` em
     `tests/integration/test_missions_concorrencia.py`; o mypy e o gate não
     acusam. Se ninguém mexer: nada muda no comportamento.
+
+32. **O `check-e2e` ainda vai à rede a cada execução, sem cache.** O passo
+    `npx playwright install --with-deps chromium` roda `apt-get update`,
+    instala pacotes de fonte por `apt` e baixa ~300 MB de navegador. Ficou
+    sem cache de propósito (ver "Infraestrutura de CI: cache do Gitleaks"):
+    o `apt` não é cacheável como diretório, e o baixador do Playwright já
+    repete 5 vezes. Se ninguém mexer: uma queda de rede nesse passo reprova
+    o gate (falha fechada), e o conserto é reexecutar o job depois de ler o
+    log. Se o passo passar a reprovar com frequência medida, a próxima
+    opção é uma imagem de contêiner com o navegador e as dependências já
+    instalados, não um cache parcial.
 
 ## Próximo incremento
 
