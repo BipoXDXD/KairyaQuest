@@ -143,15 +143,25 @@ def session(banco_migrado: Engine) -> Iterator[Session]:
     todo teste que espera IntegrityError; o sintoma invisivel seria uma
     fixture que so PARECE estar revertendo. Com o savepoint, a falha volta
     ate ele e a transacao externa continua de pe.
+
+    O teardown e escrito em duas camadas de proposito. A `connection` e a
+    unica coisa aqui que precisa voltar para o pool aconteca o que acontecer
+    -- por isso ela fica num `with`, e nao numa linha solta no fim. Sem isso,
+    qualquer excecao no meio do teardown deixaria a conexao *checked out*, e
+    cinco testes assim esgotariam o pool: a suite travaria em um teste que
+    nao tem nada a ver com a causa. O `finally` interno cuida do par
+    sessao/transacao; se ate ele falhar, o `close()` da conexao ainda reverte
+    a transacao em aberto ao devolve-la ao pool.
     """
-    conexao = banco_migrado.connect()
-    transacao = conexao.begin()
-    sessao = Session(
-        bind=conexao,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
-    )
-    yield sessao
-    sessao.close()
-    transacao.rollback()
-    conexao.close()
+    with banco_migrado.connect() as conexao:
+        transacao = conexao.begin()
+        sessao = Session(
+            bind=conexao,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        try:
+            yield sessao
+        finally:
+            sessao.close()
+            transacao.rollback()
