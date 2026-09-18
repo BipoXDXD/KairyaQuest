@@ -461,10 +461,13 @@ ninguém mexer.
 
 **Gate e E2E**
 
-18. **Os jobs `check-api` e `check-e2e` nunca rodaram no GitHub Actions**, e
+18. ~~**Os jobs `check-api` e `check-e2e` nunca rodaram no GitHub Actions**, e
     o caminho do `pre-push` pelas variáveis do framework `pre-commit`, com o
-    `check-api` no gate, nunca foi exercitado por um `git push` real. O
-    primeiro push desta branch é o momento de observar, não de assumir.
+    `check-api` no gate, nunca foi exercitado por um `git push` real.~~
+    **Resolvida em 2026-09-18.** Os dois jobs rodaram e passaram no PR #4, junto
+    com `check-web`, `check-secrets` e o `quality-gate`. O `pre-push` validou,
+    com o `check-api` no gate, cada ref empurrada em worktree limpo: a do 1a e
+    as das branches dos PRs #5 e #6.
 19. **`check-api` e `check-e2e` não podem rodar ao mesmo tempo na mesma
     máquina** — nem dois `make check`, nem um `make check` e um push. A
     fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E usa, e o
