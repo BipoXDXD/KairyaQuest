@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-api check-secrets format
+.PHONY: help bootstrap check check-web check-api check-secrets format db-up db-down
 
 WEB := frontend
 
@@ -39,3 +39,9 @@ check-secrets: ## Varredura de segredos no projeto inteiro
 
 format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format
+
+db-up: ## Sobe o PostgreSQL e espera ficar saudavel
+	docker compose up -d --wait postgres
+
+db-down: ## Derruba o PostgreSQL, preservando o volume
+	docker compose down

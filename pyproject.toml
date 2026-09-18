@@ -47,6 +47,11 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.14"
 strict = true
 mypy_path = "src"
+# Sem o plugin, o mypy strict trata BaseSettings como um __init__ comum e
+# exige database_url/test_database_url como argumentos nomeados em toda
+# chamada a Settings() -- mesmo eles vindo do ambiente. O plugin ensina o
+# mypy a entender os campos do pydantic.
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
