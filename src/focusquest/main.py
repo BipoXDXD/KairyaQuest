@@ -1,9 +1,8 @@
 """Aplicacao FastAPI do FocusQuest."""
 
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import Depends, FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Response, status
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -35,15 +34,26 @@ def health() -> dict[str, str]:
 
 
 @app.get("/ready")
-def ready(engine: Annotated[Engine, Depends(get_engine)]) -> Any:
-    """Readiness. Abre conexao e consulta de verdade: um readiness que nao
-    consulta mente sobre estar pronto."""
+def ready(
+    engine: Annotated[Engine, Depends(get_engine)], response: Response
+) -> dict[str, str]:
+    """Readiness. Abre a `connection` e consulta de verdade: um readiness que
+    nao consulta mente sobre estar pronto.
+
+    O status sai por `response.status_code` em vez de um `JSONResponse`: o
+    tipo de retorno continua sendo `dict[str, str]`, que e o que o mypy
+    confere e o que o schema do OpenAPI publica. Anotar o retorno como
+    `JSONResponse | dict[str, str]` nao e opcao -- o FastAPI recusa a rota na
+    importacao, com "Invalid args for response field".
+
+    O corpo e em ingles de proposito. `/ready` e contrato de API, lido por
+    orquestrador e por monitoramento; o texto em portugues que a pessoa le
+    pertence ao frontend, que traduz o estado.
+    """
     try:
-        with engine.connect() as conexao:
-            conexao.execute(text("SELECT 1"))
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
     except SQLAlchemyError:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "indisponivel", "database": "indisponivel"},
-        )
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "database": "unavailable"}
     return {"status": "ok", "database": "ok"}
