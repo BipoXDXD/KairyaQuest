@@ -95,6 +95,24 @@ def _cru(session: Session, sql: str, **parametros: Any) -> None:
     session.flush()
 
 
+def _outro_usuario(session: Session) -> int:
+    """Um segundo usuario, so para isolar o caso `uma_gerando_por_usuario`.
+
+    Sem ele, as DUAS perguntas do caso (nascem `completa`, por forca do
+    `ck_tutor_messages_forma`) seriam do MESMO usuario -- e sob o predicado
+    mutado (`status = 'completa'` no lugar de `'gerando'`) a segunda pergunta
+    ja colidiria sozinha, antes de a resposta `gerando` ser alcancada. O
+    caso pegaria a mutacao pelo motivo errado.
+    """
+    return int(
+        session.execute(
+            text(
+                "INSERT INTO users (display_name) VALUES ('Outra pessoa') RETURNING id"
+            )
+        ).scalar_one()
+    )
+
+
 Caso = Callable[[Session], object]
 
 _VIOLACOES: list[tuple[str, Caso]] = [
@@ -144,10 +162,18 @@ _VIOLACOES: list[tuple[str, Caso]] = [
         lambda s: (lambda p: (_resposta(s, p), _resposta(s, p)))(_pergunta(s)),
     ),
     (
+        # As duas perguntas sao de usuarios DIFERENTES (ver `_outro_usuario`):
+        # a unica colisao possivel fica sendo a das duas RESPOSTAS `gerando`,
+        # que aqui sim sao do mesmo usuario (`_resposta` usa ESTUDANTE por
+        # padrao, independente de quem fez a pergunta).
         "uq_tutor_messages_uma_gerando_por_usuario",
         lambda s: (
             _resposta(s, _pergunta(s, "c-1"), status=StatusDaMensagem.GERANDO),
-            _resposta(s, _pergunta(s, "c-2"), status=StatusDaMensagem.GERANDO),
+            _resposta(
+                s,
+                _pergunta(s, "c-2", user_id=_outro_usuario(s)),
+                status=StatusDaMensagem.GERANDO,
+            ),
         ),
     ),
     (
