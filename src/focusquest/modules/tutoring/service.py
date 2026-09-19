@@ -19,21 +19,28 @@ from datetime import datetime, timedelta
 
 from pydantic import ValidationError
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from focusquest.core.clock import Clock
-from focusquest.core.errors import MensagemEmAndamentoError, OperacaoReutilizadaError
+from focusquest.core.errors import (
+    AcaoNaoEncontradaError,
+    MensagemEmAndamentoError,
+    OperacaoReutilizadaError,
+)
 from focusquest.modules.missions.domain import MissionState
-from focusquest.modules.missions.models import User
+from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.missions.schemas import MissionCreate
-from focusquest.modules.missions.service import listar_missoes
+from focusquest.modules.missions.service import criar_missao, listar_missoes
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import (
+    PRAZO_EXPIRADO,
     CodigoDoStream,
     EstadoDaAcao,
     Papel,
     StatusDaMensagem,
     TipoDeAcao,
+    validar_transicao_da_acao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.persona import PERSONA
@@ -262,6 +269,105 @@ def transmitir(
     yield RespostaConcluida(concluida)
 
 
+# O nome da restricao unica do identificador de confirmacao: e por ele que o
+# IntegrityError do conflito e reconhecido (o mesmo cuidado do `missions`).
+UNICIDADE_DA_CONFIRMACAO = "uq_tutor_actions_operation_id"
+
+
+@dataclass(frozen=True)
+class Executada:
+    acao: TutorAction
+    missao: Mission
+
+
+@dataclass(frozen=True)
+class PrazoExpirado:
+    """O prazo proposto ja passou. A acao foi GRAVADA como `falhou`: o
+    chamador commita e so depois traduz em 422."""
+
+    acao: TutorAction
+
+
+def confirmar_acao(
+    session: Session,
+    user_id: int,
+    action_id: int,
+    operation_id: str,
+    *,
+    clock: Clock,
+) -> Executada | PrazoExpirado:
+    """Confirma a proposta: cria a missao e executa a acao, na mesma transacao.
+
+    Mesma ordem da conclusao da missao: TRAVA primeiro, hora e idempotencia
+    depois. O reenvio do mesmo `operation_id` devolve o resultado de antes; um
+    `operation_id` gasto em outra acao e chave gasta; uma acao ja decidida,
+    com chave nova, e transicao ilegal.
+    """
+    acao = _buscar_acao(session, user_id, action_id)
+    agora = clock()
+
+    if acao.operation_id == operation_id:
+        return _resultado_anterior(session, acao)
+    if (
+        session.scalar(
+            select(TutorAction.id).where(TutorAction.operation_id == operation_id)
+        )
+        is not None
+    ):
+        raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id))
+
+    validar_transicao_da_acao(acao.state, EstadoDaAcao.EXECUTADA)
+    dados = MissionCreate.model_validate(acao.payload)
+    try:
+        if dados.deadline <= agora:
+            # `operation_id` e `decided_at` entram JUNTO com o `state`, nunca
+            # antes: gravar os dois com a acao ainda `proposta` violaria o
+            # CHECK `ck_tutor_actions_decisao_datada` no flush interno do
+            # `criar_missao`, que roda antes de `acao.state` mudar.
+            acao.state = EstadoDaAcao.FALHOU
+            acao.error_code = PRAZO_EXPIRADO
+            acao.operation_id = operation_id
+            acao.decided_at = agora
+            session.flush()
+            return PrazoExpirado(acao)
+        missao = criar_missao(
+            session,
+            user_id=user_id,
+            instructions=dados.instructions,
+            completion_criterion=dados.completion_criterion,
+            difficulty=dados.difficulty,
+            estimated_minutes=dados.estimated_minutes,
+            deadline=dados.deadline,
+        )
+        acao.state = EstadoDaAcao.EXECUTADA
+        acao.mission_id = missao.id
+        acao.operation_id = operation_id
+        acao.decided_at = agora
+        session.flush()
+    except IntegrityError as erro:
+        # A janela que a trava NAO fecha: duas acoes diferentes com a mesma
+        # chave nao disputam trava nenhuma. Quem recusa e a UNIQUE.
+        if UNICIDADE_DA_CONFIRMACAO not in str(erro.orig):
+            raise
+        raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id)) from erro
+    return Executada(acao, missao)
+
+
+def rejeitar_acao(
+    session: Session, user_id: int, action_id: int, *, clock: Clock
+) -> TutorAction:
+    """Recusa a proposta. Recusar de novo devolve a mesma recusa, com o
+    instante da primeira."""
+    acao = _buscar_acao(session, user_id, action_id)
+    if acao.state is EstadoDaAcao.RECUSADA:
+        return acao
+    validar_transicao_da_acao(acao.state, EstadoDaAcao.RECUSADA)
+    acao.state = EstadoDaAcao.RECUSADA
+    acao.decided_at = clock()
+    session.flush()
+    return acao
+
+
 def listar_mensagens(session: Session, user_id: int) -> list[TutorMessage]:
     """As ultimas `MENSAGENS_NA_TELA` mensagens, em ordem cronologica, com as
     acoes embutidas (`selectin` no relacionamento)."""
@@ -360,3 +466,36 @@ def _completar(
         session.commit()
         session.refresh(resposta)
         return resposta
+
+
+def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
+    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`."""
+    acao = session.get(TutorAction, action_id, with_for_update=True)
+    if acao is None:
+        raise AcaoNaoEncontradaError(f"acao {action_id} nao existe")
+    mensagem = session.get(TutorMessage, acao.message_id)
+    assert mensagem is not None
+    if mensagem.user_id != user_id:
+        raise AcaoNaoEncontradaError(
+            f"acao {action_id} pertence a outro usuario, nao ao {user_id}"
+        )
+    return acao
+
+
+def _resultado_anterior(
+    session: Session, acao: TutorAction
+) -> Executada | PrazoExpirado:
+    """O que a confirmacao com esta chave produziu da primeira vez. So
+    `executada` e `falhou` (prazo) gravam `operation_id`."""
+    if acao.state is EstadoDaAcao.EXECUTADA:
+        missao = session.get(Mission, acao.mission_id)
+        assert missao is not None
+        return Executada(acao, missao)
+    return PrazoExpirado(acao)
+
+
+def _reuso_da_confirmacao(operation_id: str) -> str:
+    return (
+        f"o identificador de operacao '{operation_id}' ja pertence a outra "
+        "confirmacao; envie um identificador novo"
+    )

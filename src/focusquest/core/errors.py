@@ -44,6 +44,16 @@ class MensagemEmAndamentoError(DomainError):
     """
 
 
+class AcaoNaoEncontradaError(DomainError):
+    """Nao existe acao da tutoria com o identificador pedido -- ou ela e de
+    outro usuario.
+
+    Um tipo so para os dois casos, ao contrario da missao: a distincao vai na
+    MENSAGEM, que o handler registra no log e nao devolve. A resposta e a
+    mesma, pelo mesmo motivo do 404 da missao alheia.
+    """
+
+
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
