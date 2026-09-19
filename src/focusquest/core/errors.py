@@ -36,6 +36,14 @@ class OperacaoReutilizadaError(DomainError):
     """
 
 
+class MensagemEmAndamentoError(DomainError):
+    """Ja existe uma resposta da Tifa sendo gerada.
+
+    A conversa e uma so: duas perguntas em paralelo intercalariam as
+    respostas. O cliente espera a atual terminar -- ou o prazo do orfao.
+    """
+
+
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
