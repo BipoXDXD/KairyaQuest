@@ -1,9 +1,36 @@
 """A desconexao do cliente no meio da resposta, com uvicorn DE VERDADE.
 
 O `TestClient` bufferiza a resposta inteira (medicao M9) e nao desconecta.
-So um servidor real reproduz o que a medicao M1 achou: sem o invoucro
-`fechando_ao_cancelar`, o gerador nunca e fechado e a resposta fica
-`gerando`.
+So um servidor real reproduz cenario da medicao M1: gerador sincrono cru no
+`StreamingResponse`, cliente desconecta, resposta fica pendurada.
+
+**O que este teste PROVA:** ponta a ponta, com um cliente real se
+desconectando no meio do stream, a resposta termina gravada como
+`interrompida` -- nunca fica presa em `gerando` para sempre.
+
+**O que este teste NAO PROVA (fix round 1/5 e 2/5 da Task 7):** ele nao
+isola QUAL guarda fecha a cadeia. Medido e instrumentado: nesta maquina, a
+resposta termina `interrompida` mesmo com o invoucro `fechando_ao_cancelar`
+e o `finally: eventos.close()` de `_em_sse` removidos ao mesmo tempo -- so
+que TARDE (3 a 11s depois da desconexao, contra os poucos milissegundos das
+duas guardas), porque a escrita do proximo evento no socket ja fechado
+acaba falhando, e essa falha aciona a finalizacao automatica de generator
+do CPython por conta propria (fecha um generator suspenso sem referencia,
+via refcounting, sem nenhum `close()` explicito no caminho). Ou seja: SEM as
+duas guardas, o fechamento existe mas depende do SO e de um detalhe de
+implementacao do CPython que a linguagem nao promete; COM elas, e imediato e
+portavel -- e e essa garantia que a spec pede (README, "sem perda destrutiva
+de progresso"), nao so o resultado eventual.
+
+A prova por mutacao de CADA guarda, isolada e deterministica (sem depender
+do SO nem do escalonador), esta em outro lugar:
+
+- o invoucro `fechando_ao_cancelar`:
+  `tests/unit/test_tutoring_sse.py::test_cancelar_o_consumo_fecha_o_gerador`
+  (a mutacao 2 do brief -- apagar o `close()` -- o faz reprovar);
+- o `finally: eventos.close()` de `_em_sse`:
+  `tests/unit/test_tutoring_router_sse.py::test_fechar_o_em_sse_fecha_o_gerador_de_eventos`
+  (apagar o `finally` o faz reprovar).
 """
 
 import threading
@@ -99,8 +126,9 @@ def test_desconectar_no_meio_grava_interrompida(
         # Com a resposta comprovadamente no meio, a pergunta ja esta
         # commitada e a resposta, `gerando`: a rota commita antes do stream.
         assert _status(banco_migrado, cid) == [StatusDaMensagem.GERANDO]
-    # O cliente fechou. O falso solta o resto, a thread do `next()` volta, e o
-    # cancelamento chega ao gerador.
+    # O cliente ja desconectou. O falso solta o resto para o SDK nao ficar
+    # bloqueado -- o invoucro fecha a cadeia em ~1ms (medido); sem ele, o
+    # fechamento so viria da falha (tardia) de escrever no socket morto.
     falso.liberar.set()
     _esperar(
         lambda: _status(banco_migrado, cid) == [StatusDaMensagem.INTERROMPIDA],
