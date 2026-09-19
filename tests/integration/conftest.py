@@ -11,11 +11,18 @@ from sqlalchemy.orm import Session
 
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url
+from integration.provedor_falso import ServidorAnthropicFalso, iniciar
 
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     return Settings()
+
+
+@pytest.fixture
+def falso() -> Iterator[ServidorAnthropicFalso]:
+    """Um servidor falso por teste: roteiro e contadores nunca vazam."""
+    yield from iniciar()
 
 
 @pytest.fixture(scope="session")
