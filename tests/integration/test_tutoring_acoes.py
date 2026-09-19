@@ -343,11 +343,124 @@ def test_dois_confirmar_com_chaves_diferentes_um_vence(
     assert sorted(resultados) == ["bloqueada", "executada"]
 
 
+def _confirmar_ou_recusar_em_paralelo(engine: Engine, acao_id: int) -> list[str]:
+    """A corrida confirmar-x-recusar sobre a MESMA acao.
+
+    Ao contrario de `_confirmar_em_paralelo` (duas confirmacoes, onde o
+    UPDATE final de qualquer uma das duas toca `operation_id` -- coluna
+    UNIQUE -- e por isso escala sozinho para uma trava forte o bastante
+    para serializar as duas), `rejeitar_acao` so grava `state` e
+    `decided_at`: nenhuma coluna indexada. Aqui quem serializa a decisao e
+    SO o `with_for_update=True` de `_buscar_acao`. Sem ele, as duas
+    threads leriam a acao ainda `proposta` ao mesmo tempo e as duas
+    aplicariam a propria decisao -- inclusive o `criar_missao` do lado que
+    confirma, que ficaria orfa se a recusa "vencesse" por ultimo no UPDATE.
+    """
+    barreira = threading.Barrier(2, timeout=30)
+    resultados: list[str | None] = [None, None]
+
+    def confirmar() -> None:
+        with Session(bind=engine) as sessao:
+            sessao.connection()  # largada real: ver test_missions_concorrencia.py
+            barreira.wait()
+            try:
+                confirmar_acao(
+                    sessao, ESTUDANTE, acao_id, "op-corrida", clock=lambda: AGORA
+                )
+                sessao.commit()
+                resultados[0] = "confirmada"
+            except TransicaoIlegalError:
+                sessao.rollback()
+                resultados[0] = "bloqueada"
+
+    def recusar() -> None:
+        with Session(bind=engine) as sessao:
+            sessao.connection()
+            barreira.wait()
+            try:
+                rejeitar_acao(sessao, ESTUDANTE, acao_id, clock=lambda: AGORA)
+                sessao.commit()
+                resultados[1] = "recusada"
+            except TransicaoIlegalError:
+                sessao.rollback()
+                resultados[1] = "bloqueada"
+
+    threads = [threading.Thread(target=confirmar), threading.Thread(target=recusar)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+        assert not thread.is_alive()
+    assert None not in resultados
+    return [r for r in resultados if r is not None]
+
+
+def _total_de_missoes_do_estudante(engine: Engine) -> int:
+    with Session(bind=engine) as sessao:
+        return sessao.execute(
+            select(func.count())
+            .select_from(Mission)
+            .where(Mission.user_id == ESTUDANTE)
+        ).scalar_one()
+
+
+def test_confirmar_e_recusar_em_paralelo_uma_decisao_vence(
+    banco_migrado: Engine, acao_commitada: int
+) -> None:
+    """A corrida mais forte sobre a acao: confirmar e recusar ao mesmo tempo.
+
+    Exatamente uma decisao vence, a outra recebe `TransicaoIlegalError`, e a
+    acao termina num estado SO -- coerente com o efeito colateral dele: se
+    `executada`, com `mission_id` apontando para uma missao que existe; se
+    `recusada`, sem `mission_id` nenhum e sem missao nenhuma criada (nao so
+    para esta acao -- para o estudante inteiro, o que descarta a missao
+    orfa que a confirmacao perdedora deixaria para tras se tivesse chegado a
+    criar a missao antes de descobrir que perdeu).
+    """
+    resultados = _confirmar_ou_recusar_em_paralelo(banco_migrado, acao_commitada)
+    assert sorted(resultados) in (
+        ["bloqueada", "confirmada"],
+        ["bloqueada", "recusada"],
+    )
+
+    with Session(bind=banco_migrado) as sessao:
+        acao = sessao.get(TutorAction, acao_commitada)
+        assert acao is not None
+        if acao.state is EstadoDaAcao.EXECUTADA:
+            assert resultados == ["confirmada", "bloqueada"]
+            assert acao.mission_id is not None
+            assert sessao.get(Mission, acao.mission_id) is not None
+            assert _total_de_missoes_do_estudante(banco_migrado) == 1
+        else:
+            assert acao.state is EstadoDaAcao.RECUSADA
+            assert resultados == ["bloqueada", "recusada"]
+            assert acao.mission_id is None
+            assert _total_de_missoes_do_estudante(banco_migrado) == 0
+
+
 def test_confirmar_trava_a_linha_da_acao(
     banco_migrado: Engine, acao_commitada: int
 ) -> None:
-    """O mecanismo, pedido ao PostgreSQL: FOR KEY SHARE conflita com o
-    FOR UPDATE do servico e nao com um UPDATE comum (ver o teste da missao)."""
+    """O mecanismo, pedido ao PostgreSQL: FOR KEY SHARE conflita com a trava
+    que o UPDATE final de `confirmar_acao` acaba pedindo.
+
+    Isto NAO isola o `with_for_update=True` do `SELECT` de `_buscar_acao`: o
+    UPDATE final grava `operation_id`, coluna coberta pela restricao UNICA
+    `uq_tutor_actions_operation_id`, e o PostgreSQL escala esse UPDATE para
+    uma trava forte o bastante para conflitar com `FOR KEY SHARE` de
+    qualquer jeito -- com ou sem o `with_for_update` do `SELECT` anterior
+    (medido: remover o `with_for_update=True` de `_buscar_acao` NAO faz
+    este teste reprovar; quem prova essa trava especifica e a corrida real
+    de `test_dois_confirmar_com_chaves_diferentes_um_vence` e, para o
+    caminho do recusar -- que nao grava nenhuma coluna indexada --,
+    `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence`. Ver
+    task-6-report.md, "Fix round 1", para a medicao completa.)
+
+    O que este teste prova, deterministicamente: que `confirmar_acao`
+    esbarra numa `FOR KEY SHARE` alheia -- o mecanismo de espera de fato
+    acontece, ainda que a trava exercitada por ele possa vir do UPDATE
+    final e nao do `SELECT` inicial.
+    """
     with banco_migrado.connect() as dono_da_trava:
         dono_da_trava.execute(
             text("SELECT id FROM tutor_actions WHERE id = :id FOR KEY SHARE"),
