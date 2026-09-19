@@ -17,21 +17,31 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from focusquest.core.database import get_engine
 from focusquest.core.errors import (
+    AcaoNaoEncontradaError,
+    MensagemEmAndamentoError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
+    PrazoExpiradoError,
+    ProvedorNaoConfiguradoError,
 )
 from focusquest.modules.missions.domain import TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
+from focusquest.modules.tutoring.router import router as tutoring_router
 
 _log = logging.getLogger(__name__)
 
 app = FastAPI(title="FocusQuest")
 app.include_router(missions_router)
+app.include_router(tutoring_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
 # proposito: ver `_nao_pertence`.
 NAO_ENCONTRADA = "missao nao encontrada"
+
+# O corpo do 404 de acao inexistente (ou alheia), pelo mesmo motivo do
+# `NAO_ENCONTRADA` da missao: um so lugar onde ele esta escrito.
+ACAO_NAO_ENCONTRADA = "acao nao encontrada"
 
 
 class CodigoDeErro(StrEnum):
@@ -57,6 +67,10 @@ class CodigoDeErro(StrEnum):
     MISSAO_NAO_ENCONTRADA = "missao_nao_encontrada"
     TRANSICAO_ILEGAL = "transicao_ilegal"
     OPERACAO_REUTILIZADA = "operacao_reutilizada"
+    PROVEDOR_NAO_CONFIGURADO = "provedor_nao_configurado"
+    MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
+    ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
+    PRAZO_EXPIRADO = "prazo_expirado"
 
 
 def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:
@@ -153,6 +167,41 @@ def _operacao_reutilizada(
     construcao, nao por sorte.
     """
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.OPERACAO_REUTILIZADA)
+
+
+@app.exception_handler(ProvedorNaoConfiguradoError)
+def _sem_provedor(request: Request, exc: ProvedorNaoConfiguradoError) -> JSONResponse:
+    """503: o servico existe e o resto do app funciona; falta configuracao."""
+    return _erro(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        str(exc),
+        CodigoDeErro.PROVEDOR_NAO_CONFIGURADO,
+    )
+
+
+@app.exception_handler(MensagemEmAndamentoError)
+def _em_andamento(request: Request, exc: MensagemEmAndamentoError) -> JSONResponse:
+    """409: a conversa ja esta gerando uma resposta. O cliente espera."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.MENSAGEM_EM_ANDAMENTO)
+
+
+@app.exception_handler(AcaoNaoEncontradaError)
+def _acao_nao_encontrada(request: Request, exc: AcaoNaoEncontradaError) -> JSONResponse:
+    """404 com corpo fixo, como a missao: o motivo verdadeiro (inexistente ou
+    alheia) vai para o log, nunca para a resposta."""
+    _log.info("acao nao encontrada: %s", exc)
+    return _erro(
+        status.HTTP_404_NOT_FOUND, ACAO_NAO_ENCONTRADA, CodigoDeErro.ACAO_NAO_ENCONTRADA
+    )
+
+
+@app.exception_handler(PrazoExpiradoError)
+def _prazo_expirado(request: Request, exc: PrazoExpiradoError) -> JSONResponse:
+    """422: o pedido e valido, mas o conteudo da proposta (o prazo) nao pode
+    mais ser executado. A falha ja foi gravada na acao."""
+    return _erro(
+        status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PRAZO_EXPIRADO
+    )
 
 
 @app.get("/health")

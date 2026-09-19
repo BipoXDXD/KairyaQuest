@@ -54,6 +54,14 @@ class AcaoNaoEncontradaError(DomainError):
     """
 
 
+class ProvedorNaoConfiguradoError(DomainError):
+    """Nao ha chave do provedor: a Tifa esta indisponivel (README s14)."""
+
+
+class PrazoExpiradoError(DomainError):
+    """O prazo proposto pela Tifa ja passou na hora de confirmar."""
+
+
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
