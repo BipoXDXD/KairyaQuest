@@ -96,8 +96,21 @@ def _em_sse(eventos: Generator[EventoDoTurno]) -> Generator[str]:
     """Traduz os eventos do servico para o formato do contrato.
 
     O `finally` repassa o fechamento: fechar este gerador (o que o invoucro
-    faz na desconexao) precisa chegar ao `transmitir`, que grava
-    `interrompida`. Um `for` sobre outro gerador nao faz isso sozinho.
+    `fechando_ao_cancelar` faz na desconexao) precisa chegar ao `transmitir`,
+    que grava `interrompida`. Um `for` sobre outro gerador nao faz isso
+    sozinho, de forma IMEDIATA e DETERMINISTICA -- sem este `finally`, o
+    fechamento so chegaria la se algo mais (o SO notando o socket do cliente
+    morto, ou o CPython destruindo um generator sem referencia) abandonasse a
+    cadeia primeiro.
+
+    MEDIDO (fix round 1/5 da Task 7): este `finally` e o invoucro
+    `fechando_ao_cancelar` se cobrem -- removendo UM dos dois isoladamente,
+    ou os DOIS juntos, `tests/integration/test_tutoring_desconexao.py`
+    continua passando nesta maquina, porque a falha da escrita no socket
+    morto (3 a 11s depois, medido) aciona sozinha a finalizacao automatica do
+    CPython. Ver a docstring de `fechando_ao_cancelar` em `sse.py` para a
+    medicao completa. Este `finally` fica mesmo assim: e a garantia que nao
+    depende de quanto tempo o SO leva para notar a desconexao.
     """
     try:
         for evento in eventos:
