@@ -66,11 +66,24 @@ def _texto(mensagem: TutorMessage) -> str:
 
 
 def _mensagens(historico: Sequence[TutorMessage]) -> tuple[MensagemDoTurno, ...]:
-    """Converte, funde papeis seguidos e descarta respostas no inicio."""
+    """Converte, funde papeis seguidos, descarta respostas no inicio e
+    mensagens sem texto nenhum.
+
+    Uma `completa` sem texto e sem acao existe: e o `message_stop` que chega
+    sem nunca emitir um bloco (a guarda M3 cobre o corte de transporte, nao o
+    esgotamento de `tutor_max_tokens` -- pendencia registrada no HANDOFF).
+    Deixar essa mensagem virar `MensagemDoTurno` de texto vazio quebraria TODA
+    resposta seguinte: a API da Anthropic rejeita mensagem sem conteudo, e a
+    linha vazia so sai da janela do historico quando o limite a empurra para
+    fora. Descartar aqui, e nao ao gravar, mantem a gravacao fiel ao que o
+    provedor de fato mandou.
+    """
     fundidas: list[MensagemDoTurno] = []
     for mensagem in historico:
-        papel = _PAPEL_NA_API[mensagem.role]
         texto = _texto(mensagem)
+        if not texto:
+            continue
+        papel = _PAPEL_NA_API[mensagem.role]
         if not fundidas and papel == "assistant":
             continue
         if fundidas and fundidas[-1].papel == papel:

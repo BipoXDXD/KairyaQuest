@@ -54,8 +54,10 @@ from focusquest.modules.tutoring.provider import (
 )
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
-# limite e total (medicao M5), entao uma geracao viva nunca passa dele; a
-# folga cobre a gravacao final e o relogio de maquinas diferentes.
+# limite total (medicao M5) so e conferido quando um evento chega: um
+# provedor que nao emite nada fica preso ao timeout POR ESPERA do SDK, nao a
+# este numero. A folga cobre a gravacao final e o relogio de maquinas
+# diferentes.
 FOLGA_DO_ORFAO = timedelta(seconds=30)
 
 # Quantas mensagens o GET devolve. Sem paginacao no 1b (spec, "Fora").
@@ -207,10 +209,13 @@ def transmitir(
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o
     stream do provedor. Um erro inesperado tem o mesmo destino: resultado
-    desconhecido, que o cliente resolve com "Tentar de novo".
+    desconhecido, que o cliente resolve com "Tentar de novo". A guarda cobre
+    desde o primeiro yield: fechar exatamente ali, antes de qualquer `Trecho`,
+    tambem grava `interrompida` -- nao fica pendurada como `gerando` ate o
+    recolhimento de orfaos.
     """
-    yield PerguntaGravada(preparo.pergunta)
     if isinstance(preparo, JaRespondida):
+        yield PerguntaGravada(preparo.pergunta)
         yield RespostaConcluida(preparo.resposta)
         return
 
@@ -218,9 +223,10 @@ def transmitir(
     proposta: dict[str, object] | None = None
     terminou = False
     codigo: CodigoDoStream | None = None
-    eventos = tutoria.provedor.responder(preparo.turno)
-    inicio = clock()
     try:
+        yield PerguntaGravada(preparo.pergunta)
+        eventos = tutoria.provedor.responder(preparo.turno)
+        inicio = clock()
         try:
             for evento in eventos:
                 if isinstance(evento, Delta):

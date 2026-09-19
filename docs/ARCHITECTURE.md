@@ -426,9 +426,12 @@ na transição ilegal não há o que repetir; no identificador gasto, gera-se um
 > `schemas.py`, `service.py` e `src/focusquest/main.py`.
 
 **As duas tabelas da migração `0002`** (nomes de coluna são contrato, em
-inglês; valores de `role`/`status`/`state` são dado, em inglês porque o
-README §6 os cita assim — ao contrário de `missions`, cujos estados são
-português):
+inglês). Dos três valores de enum, só `role` (`user`/`tutor`) é inglês —
+é contrato externo por si só (`Papel`, em `domain.py`: "valores em inglês:
+`role` é contrato"); `status` (`gerando`/`completa`/`interrompida`/`falhou`)
+e `state` (`proposta`/`executada`/`recusada`/`falhou`) são português, no
+mesmo padrão dos estados de `missions`
+(`pendente`/`em_andamento`/`concluida`):
 
 | Tabela | O que guarda | Restrições que o banco garante |
 |---|---|---|

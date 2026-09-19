@@ -64,8 +64,9 @@ chat (ver "Próximo incremento").
 aberta a partir de `c7a91a5` (a `main` naquele momento, com a spec do 1b já
 mesclada). A implementação vai de `023d251` a `880dd60` — 13 commits,
 contados com `git log c7a91a5..880dd60` — em oito tarefas, uma por commit
-de feature/teste mais os dois commits de correção de revisão; este
-documento é atualizado no commit que o registra, logo depois delas. Spec em
+de feature/teste mais cinco commits de correção de revisão (`1542a78`,
+`acfbb46`, `e208a7b`, `696a51d`, `880dd60`); este documento é atualizado no
+commit que o registra, logo depois delas. Spec em
 `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com a seção
 "Emendas (2026-09-19, execução do 1b-1)"; plano em
 `docs/superpowers/plans/2026-09-19-incremento-1b-1.md`.
@@ -185,6 +186,15 @@ seção "Emendas" da spec (`docs/superpowers/specs/2026-09-18-incremento-1b-desi
 | Em `confirmar_acao`, `state`, `mission_id`/`error_code`, `operation_id` e `decided_at` são gravados **juntos**, um flush por ramo — nunca `operation_id`/`decided_at` antes do `try` | O pseudocódigo original do plano (Task 6) violava `ck_tutor_actions_decisao_datada` no flush interno de `criar_missao`, descoberto por 9 dos 18 testes reprovando na primeira rodada. |
 | `ck_tutor_messages_forma` é um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec descrevia | Com o `OR`, um `role` inválido violava `forma` e `role` ao mesmo tempo, e o Postgres relata só uma (ordem alfabética do nome da restrição): `ck_tutor_messages_role` ficava impossível de isolar num `INSERT` de teste. Semanticamente equivalente para `role` válido, porque `ck_tutor_messages_role` já bloqueia qualquer outro valor. |
 | A trava `with_for_update=True` de `_buscar_acao` é provada por `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (caminho recusar) e por `test_dois_confirmar_com_chaves_diferentes_um_vence` (caminho confirmar), não pelo teste "mecanismo" isolado | Em `confirmar_acao`, o próprio `UPDATE` final grava `operation_id` (índice único) e o Postgres escala esse `UPDATE` para uma trava `FOR UPDATE` sozinho, com ou sem a trava do `SELECT` — o que mascara a mutação no teste `test_confirmar_trava_a_linha_da_acao`. Em `rejeitar_acao` isso não acontece, e a trava de `_buscar_acao` é a única coisa que serializa a decisão. |
+
+**Trailer `Co-Authored-By` dos commits deste branch.** Os commits do 1b-1
+terminam em `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`, não em
+`Claude Opus 5 (1M context)` como `constraints.md` especificava. A divergência
+foi mantida de propósito na revisão final de branch: o controlador decidiu
+que a atribuição verdadeira — o modelo que de fato escreveu o commit — vale
+mais que a uniformidade com o texto planejado, e o histórico não foi
+reescrito. Registrado aqui porque `AGENTS.md` §4 exige que fatos do
+incremento fiquem no HANDOFF, mesmo quando a decisão é não mudar nada.
 
 ### Dependências e infraestrutura que entraram no 1b-1
 
@@ -892,6 +902,30 @@ que não tinham chegado aqui)
     `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (Task 6, fix
     round 1/5) — discriminaram a mutação em **5 de 5** execuções cada, sem
     nenhuma passagem por acidente. Não há taxa parcial a acompanhar.
+45. **Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
+    `completa`, e não como cortada.** A guarda da medição M3 cobre o corte de
+    **transporte** (a conexão cai e a iteração termina em silêncio, sem
+    `Fim`); ela não distingue um `Fim` que chega porque o modelo terminou de
+    um `Fim` que chega porque o SDK bateu em `tutor_max_tokens`. Nos dois
+    casos o serviço recebe o mesmo evento e grava `completa` — uma resposta
+    truncada por falta de tokens parece inteira para o cliente e para o
+    histórico do turno seguinte.
+46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
+    o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
+    não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
+    caminho específico, a garantia "erro só depois de a falha estar gravada"
+    fica verdadeira com uma leitura diferente da usual: o que está gravado
+    quando o erro sai é `interrompida`, não `falhou`.
+47. **`confirmar_acao` revalida o `payload` já armazenado com `MissionCreate`
+    no momento da confirmação, não só no momento em que a proposta foi
+    criada.** Um endurecimento futuro desse schema (um campo novo
+    obrigatório, uma validação mais estrita) transformaria uma proposta já
+    gravada — válida quando nasceu — num 500 na hora de confirmar, em vez de
+    continuar aceita com as regras de quando foi criada.
+48. **A árvore de testes em `docs/ARCHITECTURE.md` não lista
+    `tests/integration/test_install_gitleaks.py` nem
+    `tests/integration/test_push_env.py`.** Os dois arquivos existem e rodam;
+    a lacuna é só na documentação, e é anterior ao 1b-1.
 
 ## Próximo incremento
 

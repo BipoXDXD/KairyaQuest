@@ -270,6 +270,26 @@ def test_fechar_o_gerador_grava_interrompida_sem_acao(
     assert vista.actions == []
 
 
+def test_fechar_no_primeiro_yield_tambem_grava_interrompida(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A desconexao mais cedo possivel: exatamente no `yield` da pergunta,
+    antes de qualquer `Trecho`. Sem a guarda cobrir esse ponto, a resposta
+    ficaria `gerando` ate o recolhimento de orfaos, em vez de `interrompida`
+    de uma vez."""
+    falso.roteiro = Roteiro(blocos=(Texto(("meio", "resto")),))
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("fechar-cedo")))
+    gerador = transmitir(fabrica, preparo, tutoria, clock=lambda: AGORA)
+    assert isinstance(next(gerador), PerguntaGravada)
+    gerador.close()
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content) == (StatusDaMensagem.INTERROMPIDA, "")
+    assert vista.actions == []
+
+
 # --- O reenvio -------------------------------------------------------------
 
 

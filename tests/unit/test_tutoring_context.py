@@ -89,6 +89,24 @@ def test_o_historico_nunca_comeca_pela_tutora() -> None:
     assert turno.mensagens == (MensagemDoTurno("user", "oi"),)
 
 
+def test_mensagem_sem_texto_nem_acao_e_descartada() -> None:
+    """Uma `completa` vazia (M3 nao cobre esgotamento de `tutor_max_tokens`)
+    nao pode chegar a API: ela rejeita mensagem sem texto. Descartada, as
+    duas perguntas do usuario ao redor ficam adjacentes e se fundem, como
+    qualquer par do mesmo papel."""
+    turno = montar_turno(
+        persona="P",
+        agora=AGORA,
+        pendentes=[],
+        historico=[
+            _msg(Papel.USUARIO, "oi"),
+            _msg(Papel.TUTORA, ""),
+            _msg(Papel.USUARIO, "ainda ai?"),
+        ],
+    )
+    assert turno.mensagens == (MensagemDoTurno("user", "oi\n\nainda ai?"),)
+
+
 def test_acoes_antigas_entram_como_texto_com_o_estado_real() -> None:
     """Sem `tool_result`, um `tool_use` antigo deixaria o historico mal
     formado; como texto, o modelo sabe o que foi confirmado ou recusado."""

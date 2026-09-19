@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url
-from focusquest.modules.missions.models import Mission
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.models import TutorMessage
 from focusquest.modules.tutoring.service import Tutoria
@@ -210,7 +209,6 @@ class Conversa:
 
     def __init__(self) -> None:
         self.client_message_ids: list[str] = []
-        self.mission_ids: list[int] = []
 
     def id(self, sufixo: str) -> str:
         """Um `client_message_id` registrado para a limpeza."""
@@ -221,9 +219,14 @@ class Conversa:
 
 @pytest.fixture
 def conversa(banco_migrado: Engine) -> Iterator[Conversa]:
-    """Limpa, no fim, as perguntas (respostas e acoes vao pelo CASCADE) e
-    depois as missoes que o teste registrou -- nesta ordem, porque a acao
-    `executada` segura a missao pela chave estrangeira."""
+    """Limpa, no fim, as perguntas que o teste registrou (respostas e acoes
+    vao pelo CASCADE).
+
+    So mensagens: nenhum teste que usa esta fixture confirma uma acao com
+    commit de verdade, e por isso nunca cria uma missao para apagar aqui. Os
+    testes que confirmam de verdade (`test_tutoring_acoes.py`, secao de
+    concorrencia) tem a propria limpeza, ao lado da propria trava real.
+    """
     registro = Conversa()
     try:
         yield registro
@@ -234,5 +237,4 @@ def conversa(banco_migrado: Engine) -> Iterator[Conversa]:
                     TutorMessage.client_message_id.in_(registro.client_message_ids)
                 )
             )
-            limpeza.execute(delete(Mission).where(Mission.id.in_(registro.mission_ids)))
             limpeza.commit()
