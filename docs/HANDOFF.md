@@ -60,6 +60,28 @@ missão persistida e o Quartel-General, e traz os alvos `check-api` e
 `check-e2e`; **1b** traz a Tifa, o fluxo de propor e confirmar uma missão e o
 chat (ver "Próximo incremento").
 
+**Incremento 1b-1 — o backend da Tifa.** Branch `feat/incremento-1b-1`,
+aberta a partir de `c7a91a5` (a `main` naquele momento, com a spec do 1b já
+mesclada). A implementação vai de `023d251` a `880dd60` — 13 commits,
+contados com `git log c7a91a5..880dd60` — em oito tarefas, uma por commit
+de feature/teste mais os dois commits de correção de revisão; este
+documento é atualizado no commit que o registra, logo depois delas. Spec em
+`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com a seção
+"Emendas (2026-09-19, execução do 1b-1)"; plano em
+`docs/superpowers/plans/2026-09-19-incremento-1b-1.md`.
+
+**Estado de publicação: não publicado.** Os 13 commits acima existem só
+localmente, no branch `feat/incremento-1b-1` deste clone — nenhum push, PR
+ou merge foi feito. Push, PR e merge exigem autorização do responsável pelo
+projeto (README §1, `AGENTS.md` §2), um passo de cada vez. Quando o PR for
+aberto e mesclado, esta linha deve ser substituída pelo padrão dos
+incrementos anteriores: "publicado pelo PR #N, mesclado por `<forma>`;
+estado atual em `gh pr view N`".
+
+O 1b-1 é só o backend: a tela, o E2E, a camada 3 do servidor falso (a
+referência de uma chamada real) e a chamada real em si são do **1b-2**, que
+ainda não começou.
+
 ## Decisões tomadas
 
 ### Incremento 1a — decisões A1 a A8 (da spec)
@@ -131,6 +153,67 @@ O motivo de cada uma está também no código citado.
 | As chaves moram num registro **por missão** no `MissionList` (`useCompletionRegistry`), e não num `useRef` do cartão (Task 6) | O reload remonta os cartões; a chave de uma tentativa com resultado desconhecido morria ali (pendência 35). A chave sai do registro no sucesso, em `transicao_ilegal` e em `missao_nao_encontrada`, para o registro não crescer sem limite. |
 | "Atualizar o quadro" com conclusão em voo **espera**, e recarrega uma vez quando a última termina (Task 6) | Pedido do dono. Sem a espera, o reload remontaria o cartão no meio do POST. A espera sozinha não bastaria: depois de uma falha de rede nada está em voo, e o reload remontaria o cartão do mesmo jeito — por isso as duas peças. |
 | O erro de carregamento da lista mostra a `message` do `ApiError` (`O servidor respondeu 503.`) | A leitura da lista não tem erro de domínio com `code`; o texto é do cliente, e não do backend. |
+
+### Incremento 1b-1 — decisões que a spec não fixava
+
+Transcritas da tabela "Decisões que a spec não fixava" do plano
+(`docs/superpowers/plans/2026-09-19-incremento-1b-1.md`); o motivo de cada
+uma está também no comentário do arquivo citado.
+
+| Decisão | Motivo |
+|---|---|
+| `env_ignore_empty=True` no `Settings` | O `.env.example` traz `FOCUSQUEST_ANTHROPIC_API_KEY=` vazio. Sem a opção, a chave vazia viraria `SecretStr("")` — "configurada" —, e a tela diria que a Tifa está disponível para, na primeira mensagem, receber 401. De quebra, uma URL de banco vazia passa a falhar como ausente, que é a verdade. |
+| **Exceção deliberada à docstring do `Settings`**: a chave da Anthropic é opcional, ao contrário de toda outra credencial | O README §6 manda mostrar indisponibilidade sem credencial: a ausência da chave é um **estado do produto**, não uma configuração esquecida. As URLs de banco continuam obrigatórias, sem exceção. A docstring do `Settings` registra a exceção e o motivo, em vez de o código divergir do texto em silêncio. |
+| `created_at` das mensagens da tutoria vem do **relógio injetável**, e não do `now()` do banco | Aqui ele não é só auditoria: é entrada da regra do órfão. Misturar o `now()` do banco com o relógio dos testes faria a regra comparar dois relógios. |
+| Pergunta limitada a `TAMANHO_MAXIMO_DA_PERGUNTA = 4000` caracteres | Teto **técnico** de custo (cada caractere vai ao modelo, e volta nos 20 turnos seguintes). O número é provisório e fica como pendência do dono, como a 26. |
+| `tutor_actions.mission_id` **sem** `ondelete` (o padrão, `NO ACTION`) | `SET NULL` violaria o `CHECK` de `executada`, e `CASCADE` apagaria o histórico da conversa junto com a missão. Não existe exclusão de missão no produto; se vier, decide o que fazer com a ação. |
+| `TransicaoIlegalError` do `missions.domain` é reusado pelas ações | O `code` e o sentido são os mesmos do A (spec, tabela "Confirmar e recusar"), e `tutoring` já depende de `missions`. A dependência nunca vai no sentido contrário (`docs/ARCHITECTURE.md` §3). |
+| O prazo expirado é **gravado** e só depois vira 422 | O serviço devolve o resultado, a rota commita e só então levanta `PrazoExpiradoError`. Levantar dentro do serviço desfaria a gravação do `falhou` junto com a transação. |
+| Uma dependência só para a tutoria, `get_tutoria() -> Tutoria \| None` | Agrupa o provedor e os dois números que o serviço usa (histórico e limite). Os testes trocam uma coisa só, e `None` é "sem chave". |
+| O histórico funde mensagens seguidas do mesmo papel | Uma pergunta cuja resposta falhou deixa duas perguntas seguidas. A fusão mantém a alternância usuário/assistente sem depender de a API tolerar papéis repetidos. |
+| Os códigos do stream (`provedor_indisponivel`, `tempo_esgotado`, `proposta_invalida`) moram em `tutoring/domain.py`, e não no `CodigoDeErro` | O `CodigoDeErro` tem só os códigos que algum handler HTTP devolve. Os do stream não passam por handler: viajam no evento `error` e na coluna `error_code`, dentro de um 200 já aberto. |
+| O servidor falso mora em `tests/integration/provedor_falso.py`, com as fixtures no `conftest.py` | Nenhum módulo de teste importa outro (dependência de ordem entre arquivos); o `conftest` é o ponto de encontro que o pytest já oferece. Detalhe em `docs/QUALITY.md` §9. |
+
+### Incremento 1b-1 — decisões tomadas durante a execução
+
+Três divergências entre o pseudocódigo do plano/spec e o que a execução
+exigiu; o texto completo, com a evidência de teste e de mutação, está na
+seção "Emendas" da spec (`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`).
+
+| Decisão | Motivo |
+|---|---|
+| Em `confirmar_acao`, `state`, `mission_id`/`error_code`, `operation_id` e `decided_at` são gravados **juntos**, um flush por ramo — nunca `operation_id`/`decided_at` antes do `try` | O pseudocódigo original do plano (Task 6) violava `ck_tutor_actions_decisao_datada` no flush interno de `criar_missao`, descoberto por 9 dos 18 testes reprovando na primeira rodada. |
+| `ck_tutor_messages_forma` é um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec descrevia | Com o `OR`, um `role` inválido violava `forma` e `role` ao mesmo tempo, e o Postgres relata só uma (ordem alfabética do nome da restrição): `ck_tutor_messages_role` ficava impossível de isolar num `INSERT` de teste. Semanticamente equivalente para `role` válido, porque `ck_tutor_messages_role` já bloqueia qualquer outro valor. |
+| A trava `with_for_update=True` de `_buscar_acao` é provada por `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (caminho recusar) e por `test_dois_confirmar_com_chaves_diferentes_um_vence` (caminho confirmar), não pelo teste "mecanismo" isolado | Em `confirmar_acao`, o próprio `UPDATE` final grava `operation_id` (índice único) e o Postgres escala esse `UPDATE` para uma trava `FOR UPDATE` sozinho, com ou sem a trava do `SELECT` — o que mascara a mutação no teste `test_confirmar_trava_a_linha_da_acao`. Em `rejeitar_acao` isso não acontece, e a trava de `_buscar_acao` é a única coisa que serializa a decisão. |
+
+### Dependências e infraestrutura que entraram no 1b-1
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço.
+
+- **`anthropic==1.7.0`** — o SDK oficial da Anthropic (README §6: "SDK
+  oficial ou HTTPX"). O adaptador (`tutoring/anthropic_provider.py`) é a
+  única peça que o importa; os tipos do stream dele (`RawMessageStartEvent`
+  e os demais) são a base sobre a qual o servidor falso é construído
+  (`docs/QUALITY.md` §9, camada 1).
+- **`httpx2==2.13.0`** — o transporte HTTP do próprio SDK `anthropic`, não
+  escolhido pelo projeto. Entrou como dependência **direta** (não só
+  transitiva) porque uma demora no meio do stream (medição M4 da spec)
+  surge como `httpx2.ReadTimeout` **cru** — uma exceção que não herda de
+  `TimeoutError` nem é reexportada pelo SDK —, e o adaptador precisa
+  importar o tipo para capturá-la.
+- **`anyio==4.15.1`** — a biblioteca de concorrência estruturada que o
+  Starlette já usa por baixo. Entrou como dependência direta porque o
+  invólucro `fechando_ao_cancelar` (`tutoring/sse.py`) usa
+  `anyio.to_thread.run_sync` e um `CancelScope(shield=True)` para fechar o
+  gerador síncrono de forma imediata e protegida do cancelamento em curso —
+  a peça central da correção da medição M1 (ver "Emendas" da spec).
+- **Endpoints:** as cinco rotas de `/api/tutoring` — ver "O modelo de dados
+  e o contrato HTTP da tutoria que existem" em `docs/ARCHITECTURE.md` §3.
+- **Nenhum serviço de infraestrutura novo.** A tutoria usa o mesmo
+  PostgreSQL do `missions` (migração `0002`, mesmo banco); não há Redis,
+  fila nem serviço externo além da própria API da Anthropic (chamada real
+  só no 1b-2).
 
 ### Incrementos anteriores
 
@@ -285,6 +368,48 @@ branch inteira):
   da barra final, as faixas novas), `docs/QUALITY.md` §6 (onde mora e como é
   testada a guarda de `.env` do `pre-push`) e este arquivo.
 
+## Alterações do Incremento 1b-1
+
+Commits `023d251`..`880dd60`, backend só (a tela e o E2E são do 1b-2):
+
+- **Configuração e guarda (Task 1):** seis campos novos em `Settings`
+  (`anthropic_api_key`, `anthropic_base_url`, `tutor_model`,
+  `tutor_max_tokens`, `tutor_timeout_seconds`, `tutor_history_messages`),
+  `env_ignore_empty=True`, seis linhas novas no `.env.example`; a fixture de
+  sessão `tests/conftest.py` que aponta o provedor para uma porta fechada
+  durante a suíte inteira.
+- **Domínio, migração e modelos (Task 2):** `tutoring/domain.py` (quatro
+  enums, `validar_transicao_da_acao`); a migração `0002` com
+  `tutor_messages` e `tutor_actions`, sete `CHECK`, dois índices únicos
+  parciais e duas `UniqueConstraint`; `tutoring/models.py` espelhando a
+  migração byte a byte (`test_o_modelo_descreve_os_mesmos_checks_que_a_migracao`).
+- **O servidor falso (Task 3):** `tests/integration/provedor_falso.py`,
+  construído com os tipos do SDK `anthropic`; o teste de contrato que roda o
+  SDK real contra ele; a fixture `falso`. Camadas 1 e 2 de `docs/QUALITY.md`
+  §9.
+- **O provedor e o adaptador (Task 4):** `tutoring/provider.py` (o
+  `Protocol`), `tutoring/anthropic_provider.py` (o adaptador, timeouts
+  duplos de M4, `input_schema` sem a docstring de M8), `tutoring/persona.py`
+  (o prompt da Tifa, testado contra as seis exigências do README §5/§6, não
+  só por cobertura), `tutoring/context.py` (monta o turno, funde histórico).
+- **O serviço da conversa (Task 5):** `tutoring/service.py` —
+  `preparar_turno`, `transmitir`, `listar_mensagens`, o recolhimento do
+  órfão, o limite total pelo relógio (M5), a trava do usuário antes de
+  gerar (`uq_tutor_messages_uma_gerando_por_usuario`, mutação 5/5).
+- **Confirmar e recusar (Task 6):** `confirmar_acao` e `rejeitar_acao`, com
+  `SELECT ... FOR UPDATE` na ação, o prazo expirado gravado antes do 422, e
+  a corrida confirmar-x-recusar provada por teste real (5/5 de detecção).
+- **As rotas e o SSE (Task 7):** as cinco rotas de `/api/tutoring`;
+  `tutoring/sse.py` (`evento_sse`, `fechando_ao_cancelar`); a desconexão
+  provada com uvicorn real (M9); os quatro `CodigoDeErro` e handlers novos
+  em `main.py`; `anyio` como dependência direta.
+- **Documentação (Task 8):** a seção "Emendas" da spec; `docs/ARCHITECTURE.md`
+  (o módulo `tutoring` de contrato para existente); `docs/QUALITY.md` §9 (o
+  servidor falso); este arquivo. As docstrings de produção de `sse.py` e
+  `router.py` perderam o histórico forense (números de rodada de correção,
+  datas de medição); o que elas mediam está registrado aqui, nas seções
+  acima e na emenda M1 da spec.
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -328,6 +453,7 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` duas vezes seguidas, sobre o merge da `main` (`b6f8c9d`) | Aprovado, EXIT 0 nas duas. Frontend: 68 testes em 8 arquivos, cobertura de 100% nos quatro eixos (86/86 instruções, 51/51 ramificações, 29/29 funções, 84/84 linhas). `uv lock --check` aprovado. Ruff sem achados, 37 arquivos já formatados. mypy sem problemas em 33 arquivos. Backend: 122 testes (os 115 do Incremento A, mais os 6 de `test_sessao_em_utc.py` e 1 de `test_migrations.py`, vindos do PR #5), 2 avisos, cobertura total de 100%. E2E: 6 cenários aprovados em Chromium — inclusive o da resposta perdida, que compara o `completed_at` do reenvio com o do primeiro 200 **como texto**, garantido agora pela sessão em UTC. Gitleaks sem achados. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A, remedida depois do merge) | 4, duas delas concluídas — as missões da última execução do E2E. |
 | `make check` duas vezes seguidas, sobre a Task 6 (`66160bd`) | Aprovado, EXIT 0 nas duas, cerca de 13 s de relógio cada. Frontend: 91 testes em 9 arquivos, cobertura de 100% nos quatro eixos (115/115 instruções, 63/63 ramificações, 37/37 funções, 113/113 linhas). `uv lock --check` aprovado. Ruff sem achados, 37 arquivos já formatados. mypy sem problemas em 33 arquivos. Backend: 122 testes, 2 avisos, cobertura total de 100%. E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
+| `make check` duas vezes seguidas, ao fim do Incremento 1b-1 (`880dd60`, documentação da Task 8 por cima) | Aprovado, EXIT 0 nas duas, cerca de 40 s de relógio cada (pytest). Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas) — inalterado pelo 1b-1, que é só backend. `uv lock --check` aprovado (`anthropic`, `httpx2`, `anyio` inclusos). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: **269 testes** (122 do fim do Incremento A/1a mais 147 da tutoria), 1 aviso, cobertura total de **100%** (739 instruções, 102 ramificações, todas cobertas). E2E: 6 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -731,6 +857,42 @@ que não tinham chegado aqui)
     opção é uma imagem de contêiner com o navegador e as dependências já
     instalados, não um cache parcial.
 
+**Criadas pelo Incremento 1b-1**
+
+40. **A camada 3 do servidor falso não existe ainda.** Ela grava a sequência
+    de tipos de evento de uma chamada real (sem conteúdo) e confere que o
+    falso emite a mesma sequência — o que as camadas 1 e 2 (`docs/QUALITY.md`
+    §9) não veem: o falso poderia ser válido para o SDK e ainda assim
+    diferente do que a API manda. Só existe depois de o dono fazer a chamada
+    real, uma vez, com a chave dele (roteiro na pendência 42). Até lá, o
+    1b-1 não afirma mais do que as camadas 1 e 2 provam.
+41. **O teto de `TAMANHO_MAXIMO_DA_PERGUNTA = 4000` caracteres é provisório e
+    é decisão do dono.** É um teto **técnico** de custo (cada caractere vai
+    ao modelo e volta nos turnos seguintes como histórico), não uma decisão
+    de produto sobre quanto texto uma pergunta deveria ter — no mesmo
+    espírito da pendência 26 (tetos técnicos de `missions` que esperam um
+    teto de negócio do dono).
+42. **Roteiro da chamada real (1b-2), para gravar a referência da camada 3
+    (pendência 40):** com a chave de verdade no `.env` local do dono e o
+    `anthropic_base_url` **sem** override, (a) pedir à Tifa uma proposta de
+    missão; (b) confirmar a proposta pelo cartão; (c) ver a missão nova no
+    Quartel-General; (d) gravar, sem o conteúdo do texto, a sequência de
+    tipos de evento do stream dessa resposta, no arquivo que a camada 3 vai
+    comparar. **O CI nunca chama a Anthropic** e nunca recebe a chave — a
+    chamada é sempre manual, local, do dono.
+43. **A porta do servidor falso para o E2E (1b-2) soma-se às pendências 19 e
+    20.** O E2E da tutoria precisa de um servidor falso de pé durante o
+    Playwright, numa porta própria, dedicada — as mesmas duas exigências
+    estruturais que já valem para a API e o frontend do E2E atual (portas
+    8100/5273, `check-api` e `check-e2e` não simultâneos na mesma máquina).
+44. **Nenhuma taxa de detecção de concorrência medida abaixo de 100% nos
+    passos de mutação do 1b-1.** Registrado porque o plano pedia o registro
+    de qualquer taxa parcial: as duas sondas de corrida real —
+    `test_duas_perguntas_simultaneas_uma_so_gera` (Task 5) e
+    `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (Task 6, fix
+    round 1/5) — discriminaram a mutação em **5 de 5** execuções cada, sem
+    nenhuma passagem por acidente. Não há taxa parcial a acompanhar.
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -741,38 +903,45 @@ B → C**. O desenho de A, B e C está em
   por máquina nos erros (pendência 1) e o botão Concluir, com o `operation_id`
   preservado entre tentativas. **Entregue** (ver "Alterações do Incremento
   A").
-- **1b — a Tifa**, descrito abaixo. **É o próximo.** Desenho aprovado pelo
-  dono em `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com
-  entrega em duas partes: 1b-1 (backend) e 1b-2 (frontend, E2E e a chamada
-  real).
+- **1b — a Tifa**, em duas partes. **1b-1 (backend) entregue** (ver
+  "Alterações do Incremento 1b-1"), não publicado ("Revisão-base"). **1b-2
+  (frontend, E2E e a chamada real) é o próximo.** Desenho aprovado pelo dono
+  em `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`.
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
   navegação lateral), depois do 1b.
 
-**Incremento 1b** — a Tifa, o fluxo de propor e confirmar uma missão, e o
-chat. Não traz alvo de gate novo; estende os existentes. O que já está
-decidido e registrado na spec do 1a, "para 1b, não usado aqui":
+**Incremento 1b-2** — a tela da Tifa, o painel expansível, o `postStream`,
+o E2E com o servidor falso e a chamada real que grava a camada 3
+(pendências 40 e 42). Não traz alvo de gate novo; estende os existentes
+(`check-web` e `check-e2e`). O que o 1b-1 já entregou e o 1b-2 encontra
+pronto:
 
+- **O backend inteiro da tutoria** — modelo de dados, as cinco rotas, o SSE,
+  o adaptador Anthropic e o servidor falso (camadas 1 e 2). Ver
+  `docs/ARCHITECTURE.md` §3 ("O modelo de dados e o contrato HTTP da
+  tutoria que existem") e `docs/QUALITY.md` §9.
 - **Provedor de IA: Anthropic**, com **`claude-opus-5`** como modelo padrão
-  **configurável**. O README §6 manda manter chamadas e credenciais no
-  backend, com limites, timeouts e modelo configuráveis, e testar a
-  integração sem chamadas pagas nem segredos reais.
-- **O módulo `tutoring` nasce no 1b** (`src/focusquest/modules/tutoring/` e
-  `frontend/src/features/tutoring/`, hoje contrato em
-  `docs/ARCHITECTURE.md`). Não existe nada dele neste incremento.
+  **configurável**, já em `Settings`. O README §6 manda manter chamadas e
+  credenciais no backend, com limites, timeouts e modelo configuráveis, e
+  testar a integração sem chamadas pagas nem segredos reais — cumprido pelo
+  servidor falso.
 
-O que o 1b vai encontrar e precisa saber, porque morde:
+O que o 1b-2 vai encontrar e precisa saber, porque morde:
 
-- Uma variável nova do backend (a credencial e o modelo do provedor, por
-  exemplo) precisa virar campo do `Settings` **e** linha do `.env.example`:
-  o `Settings` recusa qualquer chave desconhecida no `.env` da raiz
-  (pendência 12). E, pelo `AGENTS.md` §4, o SDK do provedor entra com
-  motivo escrito aqui.
+- **A feature `frontend/src/features/tutoring/` continua contrato** — nada
+  dela existe ainda (`docs/ARCHITECTURE.md` §3, "Frontend").
 - Propor e confirmar uma missão toca a criação e, provavelmente, a
   conclusão. A conclusão já responde `code` e a tela já conclui: o fluxo da
   Tifa deve reusar `postJson`, o `CodigoDeErro` e o mapa exaustivo de
-  `completionFailure.ts`, em vez de criar um caminho paralelo.
-- O E2E do chat divide o banco e as portas do E2E atual (pendências 19 e
-  20).
+  `completionFailure.ts`, em vez de criar um caminho paralelo. O
+  `EventSource` só faz GET; o stream de `POST /api/tutoring/messages` exige
+  uma função nova, `postStream`, com `fetch` e `ReadableStream`.
+- O E2E do chat precisa de uma porta própria para o servidor falso, e
+  divide o banco e as portas do E2E atual (pendências 19, 20 e 43).
+- A camada 3 do servidor falso e a chamada real que a grava são deste
+  incremento (pendências 40 e 42) — o roteiro está na pendência 42.
+- O teto de 4000 caracteres da pergunta (pendência 41) é decisão do dono,
+  não deste incremento, a menos que ele decida revisitá-lo aqui.
 
 ## Incrementos anteriores
 
