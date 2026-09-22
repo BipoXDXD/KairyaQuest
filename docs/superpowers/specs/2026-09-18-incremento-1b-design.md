@@ -442,6 +442,48 @@ chave.
   `interrompida` com mais frequência que no desktop. O reenvio é seguro e não
   custa uma chamada se a resposta tiver chegado a `completa`.
 
+## Emendas (2026-09-19, execução do 1b-1)
+
+Esta spec foi escrita antes da implementação, como a do 1a. O plano
+(`docs/superpowers/plans/2026-09-19-incremento-1b-1.md`) fez nove medições
+num projeto descartável antes de qualquer código de produção ("Medições que
+corrigem a spec") e registrou quatro decisões que a spec não fixava
+("Decisões que a spec não fixava"). A execução das oito tarefas, por sua
+vez, corrigiu uma das nove medições do próprio plano (M1) e encontrou três
+divergências que nem a spec nem o plano previam. Nos casos abaixo o texto
+original permanece intocado; a emenda fica ao lado.
+
+### As nove medições do plano (M1–M9)
+
+| # | O que a spec supunha | O que foi medido | Consequência |
+|---|---|---|---|
+| M1 | "Quando o cliente desconecta, o Starlette para de consumir o gerador; o `finally` fecha o stream do SDK e grava `interrompida`" (seção "O adaptador Anthropic"). O plano mediu que, com um gerador **síncrono** cru, o `finally` **nunca roda** numa janela de observação de **2 segundos**, e por isso desenhou o invólucro `fechando_ao_cancelar`. | A Task 7 mediu de novo, no código real e com uma janela de **15 segundos**: sem as duas guardas (`fechando_ao_cancelar` e o `finally: eventos.close()` de `router._em_sse`), a cadeia **fecha mesmo assim** — só que **tarde** (3 a 11 s, em 4 amostras) e por um mecanismo diferente do desenhado: a escrita do próximo evento no socket já morto falha, e essa falha aciona a finalização automática de generator do CPython (refcounting, sem depender do coletor de ciclos — confirmado com `gc.disable()`). O "nunca" do plano era um artefato da janela curta de observação, não uma propriedade do Starlette. | As duas guardas **ficam**: dão fechamento **imediato** (~1 ms medido) e **portável** — não dependem de quanto tempo o SO leva para notar o socket morto, nem de um detalhe de implementação do CPython que a linguagem não promete como contrato. Nenhuma das duas é discriminada pelo teste de desconexão ponta a ponta (mutação isolada ou combinada das duas); cada uma tem prova unitária determinística própria: o invólucro em `tests/unit/test_tutoring_sse.py::test_cancelar_o_consumo_fecha_o_gerador`, o `finally` em `tests/unit/test_tutoring_router_sse.py::test_fechar_o_em_sse_fecha_o_gerador_de_eventos`. Detalhe completo em `docs/QUALITY.md` §9 e `docs/HANDOFF.md`. |
+| M2 | (implícito) o stream poderia usar a sessão da requisição | Na desconexão, a dependência `get_session` sai **antes** do `finally` do gerador | Confirmado pela implementação: a transmissão abre sessões próprias pela engine (`get_engine`), nunca a da requisição. |
+| M3 | "o provedor recusou ou falhou" cobre o stream cortado | Um corte da conexão no meio do stream não levanta nada no SDK: a iteração termina em silêncio com o texto parcial | Confirmado: o provedor só emite `Fim` ao ver `message_stop`; o serviço trata um stream sem `Fim` como `provedor_indisponivel` (`test_stream_cortado_sem_fim_vira_provedor_indisponivel`, com mutação provando a guarda). |
+| M4 | `tempo_esgotado` vem do SDK | Demora antes dos cabeçalhos: `anthropic.APITimeoutError`. Demora no meio: `httpx2.ReadTimeout` cru, que não herda de `TimeoutError` nem é reexportado pelo SDK | Confirmado: o adaptador captura os dois; `httpx2` é dependência direta, fixada em `httpx2==2.13.0`. |
+| M5 | `tutor_timeout_seconds` é o limite da resposta | O `timeout` do SDK é por espera (conexão, leitura entre pedaços), não total | Confirmado: o serviço impõe também um limite **total**, lido pelo relógio injetável entre eventos (`FOLGA_DO_ORFAO`, `service.py`). |
+| M6 | `anthropic_base_url = None` "usa o endereço do SDK" | Com `None`, o SDK obedece a `ANTHROPIC_BASE_URL` do ambiente | Confirmado: o padrão em `Settings` é o literal `https://api.anthropic.com`. |
+| M7 | (não previsto) | O construtor do SDK 1.7.0 aceita `config`, `profile` e `credentials`, e procura credencial sozinho | Confirmado: a chave é sempre passada explicitamente (`ProvedorAnthropic`), e só a do `Settings`. |
+| M8 | O `input_schema` é "gerado do `MissionCreate`" | `MissionCreate.model_json_schema()` carrega a docstring de manutenção como `description` | Confirmado: `esquema_da_proposta()` remove `description` e `title` do topo do esquema (mutação provando a guarda em `test_a_requisicao_leva_o_que_a_spec_manda`). |
+| M9 | (não previsto) | O `TestClient` bufferiza a resposta inteira: o gerador roda até o fim mesmo com a leitura interrompida | Confirmado: a desconexão é provada com uvicorn real numa thread (`tests/integration/test_tutoring_desconexao.py`); a ordem "`done` depois do commit" é provada consumindo o gerador do serviço direto (`tests/integration/test_tutoring_service.py::test_done_so_depois_do_commit`). |
+
+### As quatro decisões que a spec não fixava
+
+| Decisão | Motivo |
+|---|---|
+| `env_ignore_empty=True` no `Settings` | O `.env.example` traz `FOCUSQUEST_ANTHROPIC_API_KEY=` vazio. Sem a opção, a chave vazia viraria `SecretStr("")` — "configurada" — e a tela diria a Tifa disponível para, na primeira mensagem, receber 401. |
+| `created_at` das mensagens da tutoria vem do **relógio injetável**, não do `now()` do banco | Aqui não é só auditoria: é entrada da regra do órfão. Misturar o `now()` do banco com o relógio dos testes faria a regra comparar dois relógios. |
+| `anthropic_base_url` padrão é o **literal** `https://api.anthropic.com`, não `None` | Consequência direta de M6: `None` deixaria uma variável solta do ambiente do shell (`ANTHROPIC_BASE_URL`, sem o prefixo `FOCUSQUEST_`) desviar a conversa em produção. |
+| Pergunta limitada a `TAMANHO_MAXIMO_DA_PERGUNTA = 4000` caracteres | Teto **técnico** de custo (cada caractere vai ao modelo, e volta nos turnos seguintes como histórico). Provisório; decisão de produto do dono (pendência em `docs/HANDOFF.md`). |
+
+### Três divergências que a execução encontrou, além do que o plano previu
+
+| Ponto | O que o plano ou a spec diziam | O que vale, e por quê |
+|---|---|---|
+| **Ordem de gravação em `confirmar_acao`** | O pseudocódigo do plano (Task 6) gravava `acao.operation_id` e `acao.decided_at` **antes** do `try`, mudando só `acao.state` dentro de cada ramo. | Isso viola `ck_tutor_actions_decisao_datada` (`(state = 'proposta') = (decided_at IS NULL)`): o `criar_missao` chamado dentro do `try` faz seu próprio `flush()` interno, que aconteceria com `operation_id`/`decided_at` já sujos e `state` ainda `'proposta'`. A implementação grava as quatro colunas (`state`, `mission_id`/`error_code`, `operation_id`, `decided_at`) **juntas**, uma vez por ramo, imediatamente antes do `flush()` daquele ramo — nunca antes do `try`. Descoberto pelos 9 dos 18 testes de `test_tutoring_acoes.py` que reprovaram na primeira rodada (RED real, não fabricado). |
+| **`ck_tutor_messages_forma` é um `CASE ... ELSE true`, não o `OR` original** | A spec e o plano descreviam a restrição como `(role = 'user' AND ...) OR (role = 'tutor' AND ...)`. | Com o `OR`, um `role` inválido (por exemplo `'admin'`) viola **as duas** restrições ao mesmo tempo (`forma` e `role`), e o PostgreSQL relata só uma — pela ordem alfabética do **nome** da restrição, não da declaração, e `forma` vem antes de `role`. Isso tornava `ck_tutor_messages_role` estruturalmente impossível de isolar num teste próprio: qualquer `INSERT` que devesse violar só `role` também violava `forma`. O `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END` delega a legalidade do valor de `role` inteiramente a `ck_tutor_messages_role`; `forma` passa a descrever só a forma **dado um papel já válido**. Não muda quais linhas são aceitas (as duas restrições continuam valendo juntas); muda só qual restrição o Postgres cita no erro. Fix idêntico no modelo e na migração `0002`. |
+| **A trava de `_buscar_acao` (`FOR UPDATE`) é provada pelo caminho recusar, não confirmar** | Nem a spec nem o plano anteciparam isto: a intuição natural seria que o teste-mecanismo do lado `confirmar_acao` bastasse para provar a trava. | Medido por mutação (Task 6): em `confirmar_acao`, o próprio `UPDATE` final grava `operation_id` — coluna com índice **único** — e o PostgreSQL escala esse `UPDATE` para uma trava `FOR UPDATE`, **com ou sem** o `with_for_update=True` do `SELECT` em `_buscar_acao`. Isso mascara a mutação no teste "mecanismo" do confirmar (`test_confirmar_trava_a_linha_da_acao`, que passa mesmo com a guarda removida). Em `rejeitar_acao` isso não acontece — nenhuma coluna única é escrita —, então a trava de `_buscar_acao` é a **única** coisa que serializa uma decisão ali. A guarda tem prova real, mas em dois lugares diferentes: `test_dois_confirmar_com_chaves_diferentes_um_vence` (o lado confirmar, por corrida real) e `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (o lado recusar, por corrida real, 5/5 de detecção medida). |
+
 ## Entregas de documentação
 
 - `docs/ARCHITECTURE.md`: o módulo `tutoring`, as tabelas, o contrato HTTP e o

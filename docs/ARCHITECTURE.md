@@ -19,7 +19,8 @@ os dois blocos nunca se misturam.
 ## 1. O que existe hoje
 
 Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim do
-Incremento 1a. Ficam de fora os caminhos ignorados pelo git — dependências
+backend do Incremento 1b-1 (`feat/incremento-1b-1`, ainda não publicado —
+ver `docs/HANDOFF.md`). Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
 `frontend/test-results/`, `htmlcov/`, `coverage.xml`), caches, estado de IDE
@@ -33,7 +34,8 @@ FocusQuest/
 │       └── quality.yml            # o gate no GitHub Actions: um job por alvo de verificação do Makefile
 ├── alembic/                       # migrações do banco
 │   ├── versions/
-│   │   └── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
+│   │   ├── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
+│   │   └── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
 │   ├── README
 │   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
 │   └── script.py.mako             # modelo de migração nova
@@ -113,19 +115,35 @@ FocusQuest/
 │       │   └── errors.py          # erros de domínio comuns
 │       ├── modules/
 │       │   ├── __init__.py
-│       │   └── missions/
+│       │   ├── missions/
+│       │   │   ├── __init__.py
+│       │   │   ├── domain.py      # estados, transições, XP e duração real — sem FastAPI nem SQLAlchemy
+│       │   │   ├── models.py      # User, Mission e MissionOperation
+│       │   │   ├── router.py      # as três rotas de /api/missions
+│       │   │   ├── schemas.py     # contratos de entrada e saída
+│       │   │   └── service.py     # casos de uso: criar, listar, concluir
+│       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
 │       │       ├── __init__.py
-│       │       ├── domain.py      # estados, transições, XP e duração real — sem FastAPI nem SQLAlchemy
-│       │       ├── models.py      # User, Mission e MissionOperation
-│       │       ├── router.py      # as três rotas de /api/missions
-│       │       ├── schemas.py     # contratos de entrada e saída
-│       │       └── service.py     # casos de uso: criar, listar, concluir
+│       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
+│       │       ├── models.py      # TutorMessage, TutorAction
+│       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`
+│       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
+│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido
+│       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
+│       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar
+│       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
+│       │       ├── dependencies.py  # get_tutoria() -> Tutoria | None ("sem chave" é None, não exceção)
+│       │       └── router.py      # as cinco rotas de /api/tutoring
 │       ├── __init__.py
-│       └── main.py                # app FastAPI, tradução de erro em status, /health e /ready
+│       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready e a tutoria
 ├── tests/
+│   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
 │   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
 │   │   ├── __init__.py
-│   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA e migração
+│   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA, migração, e as fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
+│   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável (não é teste)
+│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso
 │   │   ├── test_e2e_env.py
 │   │   ├── test_health.py
 │   │   ├── test_migrations.py
@@ -133,14 +151,25 @@ FocusQuest/
 │   │   ├── test_missions_concorrencia.py
 │   │   ├── test_missions_models.py
 │   │   ├── test_missions_service.py
-│   │   └── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
+│   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
+│   │   ├── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
+│   │   ├── test_tutoring_acoes.py # confirmar e recusar, inclusive concorrência real
+│   │   ├── test_tutoring_api.py   # rotas, códigos de erro, SSE, segredo
+│   │   ├── test_tutoring_desconexao.py  # desconexão com uvicorn real (M9: o TestClient não serve)
+│   │   ├── test_tutoring_models.py  # restrições do banco, uma por INSERT
+│   │   └── test_tutoring_service.py  # preparar e transmitir um turno
 │   └── unit/                      # sem banco
 │       ├── __init__.py
 │       ├── test_clock.py
 │       ├── test_config.py
 │       ├── test_missions_domain.py
-│       └── test_package.py
-├── .env.example                   # modelo do .env da raiz (banco); o .env é ignorado pelo git
+│       ├── test_package.py
+│       ├── test_tutoring_context.py  # montagem do turno
+│       ├── test_tutoring_domain.py   # enums e transição da ação
+│       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
+│       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
+│       └── test_tutoring_sse.py      # o invólucro `fechando_ao_cancelar`
+├── .env.example                   # modelo do .env da raiz (banco e, desde o 1b-1, a tutoria); o .env é ignorado pelo git
 ├── .gitignore
 ├── .gitleaks.toml                 # configuração da varredura de segredos
 ├── .pre-commit-config.yaml        # declara os hooks pre-commit, pre-merge-commit e pre-push
@@ -151,7 +180,7 @@ FocusQuest/
 ├── README.md                      # a especificação do produto; autoridade final
 ├── alembic.ini
 ├── compose.yaml                   # o PostgreSQL local: postgres:18.6-alpine na porta 55432 do host
-├── pyproject.toml                 # pacote focusquest, dependências e configuração de Ruff, mypy, pytest e coverage
+├── pyproject.toml                 # pacote focusquest, dependências (inclui anthropic, httpx2 e anyio, da tutoria) e configuração de Ruff, mypy, pytest e coverage
 └── uv.lock
 ```
 
@@ -167,9 +196,11 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
-- **Não existem os módulos `tutoring` e `progress`, nem módulo `users`.** O
-  modelo `User` mora em `modules/missions/models.py` como dívida consciente
-  (ver `docs/HANDOFF.md`).
+- **Não existe o módulo `progress`, nem módulo `users`.** O modelo `User`
+  mora em `modules/missions/models.py` como dívida consciente (ver
+  `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) — só o
+  lado do frontend (`frontend/src/features/tutoring/`) continua contrato,
+  para o 1b-2.
 - **No frontend, não existem `app/`, `styles/`, nem `shared/ui/`,
   `shared/hooks/`, `shared/lib/` e `shared/types/`.** Nem as features
   `tutoring` e `rewards`.
@@ -255,20 +286,30 @@ leia `frontend/`.
 
 ## 3. Responsabilidades por camada
 
-### Backend — `missions` existe; o resto é contrato
+### Backend — `missions` e `tutoring` existem; o resto é contrato
 
 Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
-real no módulo `missions`.
+real, e em qual módulo.
 
 | Camada | Responsabilidade | O que **não** faz | Estado |
 |---|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe |
-| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real. | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe |
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`) |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`) |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`) |
+| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
-| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe |
+| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`) |
+| `provider.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
+
+**A dependência é `tutoring → missions`, nunca o contrário.**
+`tutoring/service.py` importa `Mission` e `criar_missao` de
+`modules/missions/service.py`, e `tutoring/domain.py` reusa
+`TransicaoIlegalError` de `modules/missions/domain.py` (mesmo `code`, mesmo
+sentido — confirmar ou recusar uma ação segue o desenho de concluir uma
+missão). Nada em `modules/missions/` importa nada de `modules/tutoring/`; a
+convenção de fronteira 2 (§5, "nada de dependência circular") proíbe o
+sentido inverso.
 
 Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
 `commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
@@ -377,6 +418,64 @@ concluir missão ou confirmar recompensa por conta própria.
 Os dois 409 pedem ações **opostas** do cliente, e é o `code` que os separa:
 na transição ilegal não há o que repetir; no identificador gasto, gera-se um
 `operation_id` novo e repete-se o mesmo corpo.
+
+### O modelo de dados e o contrato HTTP da tutoria que existem
+
+> **Fonte de verdade:** `src/focusquest/modules/tutoring/models.py`,
+> `alembic/versions/0002_tutoria.py`, `src/focusquest/modules/tutoring/router.py`,
+> `schemas.py`, `service.py` e `src/focusquest/main.py`.
+
+**As duas tabelas da migração `0002`** (nomes de coluna são contrato, em
+inglês). Dos três valores de enum, só `role` (`user`/`tutor`) é inglês —
+é contrato externo por si só (`Papel`, em `domain.py`: "valores em inglês:
+`role` é contrato"); `status` (`gerando`/`completa`/`interrompida`/`falhou`)
+e `state` (`proposta`/`executada`/`recusada`/`falhou`) são português, no
+mesmo padrão dos estados de `missions`
+(`pendente`/`em_andamento`/`concluida`):
+
+| Tabela | O que guarda | Restrições que o banco garante |
+|---|---|---|
+| `tutor_messages` | Cada mensagem da conversa contínua (`role` `user`/`tutor`). | `ck_tutor_messages_role` (valor de `role`); `ck_tutor_messages_status` (valor de `status`); `ck_tutor_messages_forma` — um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec original descrevia (ver "Emendas" da spec) — a forma exigida de cada papel, com a legalidade do próprio `role` delegada só a `ck_tutor_messages_role`; um índice único parcial por `reply_to_id WHERE status = 'completa'` (uma resposta viva por pergunta) e por `user_id WHERE status = 'gerando'` (uma geração por vez); `client_message_id` único entre as mensagens do usuário. |
+| `tutor_actions` | Uma proposta de ação da Tifa (hoje só `create_mission`) e o seu ciclo de vida. | `ck_tutor_actions_kind`; `ck_tutor_actions_state`; `ck_tutor_actions_missao_so_quando_executada` (`(state = 'executada') = (mission_id IS NOT NULL)`); `ck_tutor_actions_decisao_datada` (`(state = 'proposta') = (decided_at IS NULL)`); `operation_id` único. `mission_id` **sem** `ondelete` (decisão registrada em `docs/HANDOFF.md`: nem `SET NULL` nem `CASCADE` servem, e não existe exclusão de missão no produto). |
+
+**As cinco rotas de `/api/tutoring`:**
+
+| Método e rota | Entrada | Saída |
+|---|---|---|
+| `GET /status` | — | `{"available": bool}` — `false` sem chave configurada (`get_tutoria()` devolve `None`) |
+| `GET /messages` | — | as últimas 50 mensagens, cronológicas, cada resposta da Tifa com as ações embutidas |
+| `POST /messages` | `{"client_message_id", "content"}` | `text/event-stream` (formato abaixo) |
+| `POST /actions/{action_id}/confirm` | `{"operation_id"}` | `{"action", "mission"}` |
+| `POST /actions/{action_id}/reject` | — | `{"action"}` |
+
+**O stream do `POST /messages`**, eventos SSE nesta ordem: `user_message`
+(a pergunta já gravada, com o `id` do banco) → `delta` zero ou mais vezes
+(`{"text": "…"}`) → um final, só um: `done` (a resposta completa e as ações
+dela, emitido **depois do commit**) ou `error` (`{"code": "…"}`, emitido
+**depois** de a falha estar gravada como `falhou`). Um stream sem `done` nem
+`error` é resultado desconhecido (a desconexão do cliente, provada com
+uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
+plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
+
+**Erros antes do stream** (a pergunta não é gravada): `503
+provedor_nao_configurado` (sem chave); `409 mensagem_em_andamento` (já há
+uma resposta `gerando`); `409 operacao_reutilizada` (`client_message_id`
+com outro `content`); `422` do Pydantic (corpo inválido).
+
+**Erros dentro do stream** (`event: error`, coluna `error_code`), do enum
+`CodigoDoStream` de `tutoring/domain.py` — fora do `CodigoDeErro` de
+`main.py` de propósito, porque não passam por handler HTTP:
+`provedor_indisponivel`, `tempo_esgotado`, `proposta_invalida`.
+
+**Confirmar e recusar**, os mesmos `code` e sentido de concluir uma missão
+(`missions`, decisão registrada acima): `200` ao confirmar uma `proposta`
+(cria a missão e grava `executada` na mesma transação, com `SELECT ... FOR
+UPDATE` na ação) ou ao reenviar a mesma confirmação; `409
+operacao_reutilizada` com `operation_id` já usado em outra ação; `409
+transicao_ilegal` fora dessas transições; `422 prazo_expirado` quando o
+prazo proposto já passou — a ação vira `falhou` com esse código **antes**
+de a rota levantar o 422 (o commit vem antes do `raise`, ou a gravação
+morreria com a transação); `404 acao_nao_encontrada`.
 
 ### Frontend — parte descrição, parte contrato
 
@@ -491,7 +590,8 @@ legitimamente pertence a ele — nunca antes.
 | Migração | `alembic/versions/` | existe |
 | Configuração, conexão, infraestrutura comum | `src/focusquest/core/` | existe |
 | Teste unitário (sem banco) / de integração (PostgreSQL real) | `tests/unit/` / `tests/integration/` | existe |
-| Módulo `tutoring`, `progress` ou outro do README §8 | `src/focusquest/modules/<módulo>/` | contrato |
+| Adaptador de um provedor externo (ex.: o SDK `anthropic`) | `src/focusquest/modules/<módulo>/<provedor>_provider.py`, atrás de um `Protocol` que o serviço consome | existe (`tutoring/anthropic_provider.py`) |
+| Módulo `progress` ou outro do README §8 ainda não iniciado | `src/focusquest/modules/<módulo>/` | contrato |
 
 ### Fora da aplicação
 

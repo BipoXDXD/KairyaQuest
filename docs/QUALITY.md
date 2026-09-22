@@ -687,3 +687,106 @@ restante do projeto continuam sendo varridos de verdade. Uma ressalva
 honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
 porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
 projeto, mas o efeito prático é o mesmo e vale estar escrito.
+
+## 9. O servidor falso da Anthropic (Incremento 1b-1)
+
+> **Fonte de verdade:** `tests/integration/provedor_falso.py`,
+> `tests/integration/conftest.py` (fixtures `falso`, `fabrica`, `tutoria`,
+> `conversa`) e `tests/conftest.py` (a guarda de sessão).
+
+### Onde mora, e por que não existe "modo falso" em `src/`
+
+O falso é um servidor HTTP de verdade (`ServidorAnthropicFalso`, em
+`tests/integration/provedor_falso.py`) que fala o formato SSE da API de
+Mensagens da Anthropic. Ele mora em `tests/`, nunca em `src/`: a decisão D8
+da spec do 1b (`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`)
+aponta o `anthropic_base_url` do SDK **real** para ele nos testes
+(`FOCUSQUEST_ANTHROPIC_BASE_URL`, via `dependency_overrides` de
+`get_tutoria`) — em vez de existir um `if modo_de_teste:` em
+`src/focusquest/modules/tutoring/anthropic_provider.py` que decidisse, em
+produção, se fala com a Anthropic de verdade ou com um dublê. Um `if` desses
+seria uma chave que alguém poderia deixar ligada em produção; sem ele, o
+código de produção não tem ideia de que o falso existe, e o adaptador
+inteiro — inclusive a leitura que o SDK oficial faz do stream — é o mesmo
+código nos dois lados.
+
+### Camadas 1 e 2: o que cada uma pega
+
+O risco do desenho acima é o falso divergir do formato real sem que nada
+acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1:
+
+1. **Construído com os tipos do SDK fixado.** Cada evento do roteiro
+   (`eventos_do_roteiro`) é uma instância dos tipos do próprio `anthropic`
+   (`RawMessageStartEvent`, `RawContentBlockStartEvent`,
+   `RawContentBlockDeltaEvent`, `RawContentBlockStopEvent`,
+   `RawMessageDeltaEvent`, `RawMessageStopEvent`), serializada pelo Pydantic
+   deles — não há JSON escrito à mão. Isso pega um campo com nome ou tipo
+   errado no momento em que o `mypy --strict` roda sobre `tests/`, antes de
+   qualquer teste executar.
+2. **Teste de contrato**
+   (`tests/integration/test_provedor_falso.py`), rodando o SDK **real**
+   (`anthropic==1.7.0`) contra o falso: confere que a `Message` que o SDK
+   monta do stream tem o texto e o `tool_use` esperados. Isso pega o que a
+   camada 1 não vê — um evento **estruturalmente válido**, mas fora da
+   sequência que o parser interno do SDK espera (por exemplo, um
+   `content_block_delta` sem o `content_block_start` correspondente antes).
+   **Visto reprovando por mutação** antes de valer: removido o
+   `content_block_start` do ramo de `ChamadaDeFerramenta`, o SDK real explode
+   com `IndexError` dentro do próprio
+   `anthropic/lib/streaming/_messages.py` — a guarda reprova o teste, não
+   silencia o defeito. Se uma atualização futura do `anthropic` no
+   `uv.lock` deixar de entender o falso, é esta camada que acusa no gate.
+
+### Camada 3: pendente
+
+A camada 3 — gravar a sequência de tipos de evento de uma chamada real (sem
+conteúdo) e comparar o falso contra ela — só existe depois de o dono fazer
+essa chamada, uma vez, com a chave dele. Isso é trabalho do **1b-2**; até lá
+é pendência registrada em `docs/HANDOFF.md`, e o 1b-1 não afirma mais do que
+as camadas 1 e 2 provam: que o falso é válido **para o SDK**, não que é
+idêntico à API real.
+
+### A guarda de `tests/conftest.py`: nenhum teste alcança a Anthropic
+
+`tests/conftest.py` declara uma fixture de sessão, `autouse=True`, que
+aponta `FOCUSQUEST_ANTHROPIC_BASE_URL` para `http://127.0.0.1:9` — a porta
+do serviço `discard`, fechada em qualquer máquina de desenvolvimento e no
+runner do CI — **antes** do primeiro teste da suíte inteira. O `.env` local
+do dono tem a chave de verdade (decisão D1 da spec), e o `pre-push` exporta
+toda variável `FOCUSQUEST_*` dele para o worktree do gate
+(`docs/QUALITY.md` §6); sem esta guarda, um teste que esquecesse de trocar o
+provedor pelo servidor falso faria uma chamada **paga** — e passaria, o que
+é pior que reprovar. Com a guarda, o esquecimento vira erro de conexão
+imediato. A variável de ambiente vence o `.env` na ordem de fontes do
+pydantic-settings, e o escopo de sessão a instala antes de qualquer teste,
+inclusive os que nunca tocam a tutoria.
+
+### Por que a desconexão precisa de um uvicorn real, e não do `TestClient`
+
+O contrato do 1b exige que uma resposta abandonada no meio vire
+`interrompida`, nunca fique presa em `gerando`. Medido (M9 do plano de
+implementação): o `TestClient` do Starlette **bufferiza a resposta
+inteira** — o gerador síncrono do `StreamingResponse` roda até o fim mesmo
+que o teste pare de ler no meio, porque não existe conexão TCP de verdade
+para cair. Testar a desconexão com `TestClient` teria passado sem exercitar
+nada do mecanismo real.
+
+Por isso `tests/integration/test_tutoring_desconexao.py` sobe um `uvicorn`
+de verdade numa thread, conecta um cliente HTTP real
+(`httpx.Client(...).stream(...)`) e fecha essa conexão no meio do stream. O
+que esse teste **prova**: ponta a ponta, com um socket real caindo, a
+resposta termina gravada como `interrompida`. O que ele **não prova**: qual
+das duas guardas (`fechando_ao_cancelar` em `sse.py`, ou o
+`finally: eventos.close()` de `router._em_sse`) fechou a cadeia — nesta
+máquina, medido, a cadeia fecha mesmo com as duas removidas, só que 3 a 11
+segundos depois, por um mecanismo diferente (a escrita do próximo evento no
+socket já morto falha, e essa falha aciona a finalização automática de
+generator do CPython). O detalhe completo dessa medição, e por que as duas
+guardas continuam no código mesmo assim, está na emenda correspondente de
+`docs/superpowers/specs/2026-09-18-incremento-1b-design.md` e em
+`docs/HANDOFF.md`. A prova de que **cada guarda**, isolada, faz o gerador
+fechar é determinística e não depende de rede nem de tempo:
+`tests/unit/test_tutoring_sse.py::test_cancelar_o_consumo_fecha_o_gerador`
+(o invólucro) e
+`tests/unit/test_tutoring_router_sse.py::test_fechar_o_em_sse_fecha_o_gerador_de_eventos`
+(o `finally`).

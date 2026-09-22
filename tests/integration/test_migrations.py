@@ -227,3 +227,19 @@ def test_downgrade_apaga_e_upgrade_devolve_o_esquema(banco_migrado: Engine) -> N
     command.upgrade(alembic_config(), "head")
     apos_upgrade = set(inspect(banco_migrado).get_table_names())
     assert apos_upgrade >= TABELAS_DA_MIGRACAO
+
+
+TABELAS_DA_TUTORIA = {"tutor_messages", "tutor_actions"}
+
+
+def test_downgrade_da_0002_leva_so_a_tutoria(banco_migrado: Engine) -> None:
+    """Voltar para a 0001 apaga a tutoria e preserva as missoes: um downgrade
+    que levasse junto o que nao criou destruiria dado alheio."""
+    command.downgrade(alembic_config(), "0001")
+    try:
+        tabelas = set(inspect(banco_migrado).get_table_names())
+        assert not (TABELAS_DA_TUTORIA & tabelas)
+        assert tabelas >= TABELAS_DA_MIGRACAO
+    finally:
+        command.upgrade(alembic_config(), "head")
+    assert set(inspect(banco_migrado).get_table_names()) >= TABELAS_DA_TUTORIA

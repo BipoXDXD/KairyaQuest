@@ -2,20 +2,35 @@
 
 from argparse import Namespace
 from collections.abc import Iterator
+from datetime import timedelta
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, make_url, text
-from sqlalchemy.orm import Session
+from sqlalchemy import Engine, delete, make_url, text
+from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url
+from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.models import TutorMessage
+from focusquest.modules.tutoring.service import Tutoria
+from integration.provedor_falso import ServidorAnthropicFalso, iniciar
+
+# O limite da resposta nos testes: curto o bastante para a demora do falso
+# esgota-lo em menos de um segundo.
+TIMEOUT_DE_TESTE = 0.3
 
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     return Settings()
+
+
+@pytest.fixture
+def falso() -> Iterator[ServidorAnthropicFalso]:
+    """Um servidor falso por teste: roteiro e contadores nunca vazam."""
+    yield from iniciar()
 
 
 @pytest.fixture(scope="session")
@@ -165,3 +180,61 @@ def session(banco_migrado: Engine) -> Iterator[Session]:
         finally:
             sessao.close()
             transacao.rollback()
+
+
+@pytest.fixture
+def fabrica(banco_migrado: Engine) -> sessionmaker[Session]:
+    """Sessoes que COMMITAM de verdade, como as da transmissao."""
+    return sessionmaker(bind=banco_migrado, expire_on_commit=False)
+
+
+@pytest.fixture
+def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
+    """A tutoria de producao inteira, com o SDK real apontado para o falso."""
+    return Tutoria(
+        provedor=ProvedorAnthropic(
+            chave="sk-ant-teste",
+            base_url=falso.url,
+            modelo="claude-opus-5",
+            max_tokens=256,
+            timeout_segundos=TIMEOUT_DE_TESTE,
+        ),
+        historico=20,
+        limite=timedelta(seconds=60),
+    )
+
+
+class Conversa:
+    """Registra o que um teste criou com commit, para a limpeza apagar SO isso."""
+
+    def __init__(self) -> None:
+        self.client_message_ids: list[str] = []
+
+    def id(self, sufixo: str) -> str:
+        """Um `client_message_id` registrado para a limpeza."""
+        cid = f"teste-{sufixo}"
+        self.client_message_ids.append(cid)
+        return cid
+
+
+@pytest.fixture
+def conversa(banco_migrado: Engine) -> Iterator[Conversa]:
+    """Limpa, no fim, as perguntas que o teste registrou (respostas e acoes
+    vao pelo CASCADE).
+
+    So mensagens: nenhum teste que usa esta fixture confirma uma acao com
+    commit de verdade, e por isso nunca cria uma missao para apagar aqui. Os
+    testes que confirmam de verdade (`test_tutoring_acoes.py`, secao de
+    concorrencia) tem a propria limpeza, ao lado da propria trava real.
+    """
+    registro = Conversa()
+    try:
+        yield registro
+    finally:
+        with Session(bind=banco_migrado) as limpeza:
+            limpeza.execute(
+                delete(TutorMessage).where(
+                    TutorMessage.client_message_id.in_(registro.client_message_ids)
+                )
+            )
+            limpeza.commit()

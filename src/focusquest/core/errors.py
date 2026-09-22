@@ -36,6 +36,32 @@ class OperacaoReutilizadaError(DomainError):
     """
 
 
+class MensagemEmAndamentoError(DomainError):
+    """Ja existe uma resposta da Tifa sendo gerada.
+
+    A conversa e uma so: duas perguntas em paralelo intercalariam as
+    respostas. O cliente espera a atual terminar -- ou o prazo do orfao.
+    """
+
+
+class AcaoNaoEncontradaError(DomainError):
+    """Nao existe acao da tutoria com o identificador pedido -- ou ela e de
+    outro usuario.
+
+    Um tipo so para os dois casos, ao contrario da missao: a distincao vai na
+    MENSAGEM, que o handler registra no log e nao devolve. A resposta e a
+    mesma, pelo mesmo motivo do 404 da missao alheia.
+    """
+
+
+class ProvedorNaoConfiguradoError(DomainError):
+    """Nao ha chave do provedor: a Tifa esta indisponivel (README s14)."""
+
+
+class PrazoExpiradoError(DomainError):
+    """O prazo proposto pela Tifa ja passou na hora de confirmar."""
+
+
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
