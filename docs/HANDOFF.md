@@ -256,6 +256,11 @@ tarefas as põem em código.
 | O estado de envio "desconhecido" é um membro próprio da união (`unknown`), separado de `failed` (Task 3) | Pedem textos diferentes: `failed` sabe o que houve (o `code`), `unknown` não sabe se a resposta chegou inteira. Os dois oferecem "Tentar de novo" com o mesmo id. |
 | Um evento SSE de nome desconhecido é **ignorado** pelo hook (Task 3) | O mesmo motivo da linha da Task 1: compatibilidade para frente, e o final continua decidido só por `done`/`error` — sem final, o resultado é `unknown`, então ignorar não esconde nada. |
 | O histórico tem um **contador de geração** interno (`useTutorConversation`), acrescentado na revisão da Task 3 | Sem ele, a atualização silenciosa (depois de uma falha) e a recarga sobrescreviam a lista sem saber qual resposta era mais nova: um GET lento que chegasse depois do `done` voltava a lista para a versão sem a resposta, ou com a linha `gerando` vazia. Cada recarga pega um número novo e só grava se ainda for o mais recente; a atualização silenciosa usa o número corrente (uma recarga em voo continua sendo a fonte); o `done` pega um número novo, invalidando o que saiu antes dele, e, se a lista não está carregada (recarga em voo ou em erro), pede outra recarga — a que estava em voo saiu antes do `done`. Não cobre duas atualizações silenciosas fora de ordem nem o `updateAction` (pendência 49). |
+| O retrato da Tifa é `bg-emerald-700` com as iniciais "TL", `aria-hidden` (Task 4) | É decoração: o nome dela já está no texto acessível ao redor: marcá-lo lido duas vezes seria ruído para leitor de tela. |
+| O layout (lateral × folha) é decidido por `matchMedia` (`useIsDesktop`), e não só por CSS/Tailwind responsivo (Task 4) | A semântica muda junto com o breakpoint, não só a posição: no celular a conversa é um diálogo modal (foco preso, `Esc` fecha); no desktop é uma região da página. Atributo ARIA não tem media query — só JavaScript decide o `role` e o comportamento de foco corretos. |
+| A folha modal do celular prende o `Tab` dentro de si, e `Esc`/"Fechar a conversa" saem (Task 4) | É o contrato de um diálogo modal (padrão WAI-ARIA): o foco não pode escapar para o conteúdo atrás, e há sempre uma saída pelo teclado. |
+| O `main` ganhou `pb-24` de folga (Task 4) | O botão fixo do painel (celular) não podia cobrir os botões "Confirmar"/"Recusar" do quadro de missões quando a página rola até o fim. |
+| Com o campo de pergunta desabilitado, o foco de reserva ao abrir a folha vai para "Fechar a conversa" (Task 4) | O alvo natural do foco (o campo) não aceita foco enquanto desabilitado; sem reserva, o foco cairia fora do diálogo modal, quebrando o contrato de foco preso. |
 
 ### Incrementos anteriores
 
@@ -477,7 +482,7 @@ Criada na Task 1 e completada na Task 9 (plano
   sao event nem data, como comentario e id do SSE" — foi acrescentado para
   fechar a ramificação do `parseFrame` que descarta essas linhas.
 - **Task 2** — tipos da tutoria e os dois mapas exaustivos de falha (commit
-  deste registro, o que traz os cinco arquivos de
+  `3cee94d`, o que traz os cinco arquivos de
   `frontend/src/features/tutoring/`): `types.ts` com o contrato da API e os
   três tipos de `code` — `PreStreamErrorCode` (falha antes de o stream
   abrir), `StreamErrorCode` (evento `error` do stream) e `ActionErrorCode`
@@ -494,8 +499,7 @@ Criada na Task 1 e completada na Task 9 (plano
   teste extra da Task 1 deixou de sugerir que um `: keepalive` isolado é
   aceito; e os comentários de `client.ts` e `src/test/sse.ts` citam o
   caminho completo `src/focusquest/modules/tutoring/sse.py`.
-- **Task 3** — hooks da tutoria (commit deste registro; o sha é o do
-  próprio commit, que o registro não pode conter). Em
+- **Task 3** — hooks da tutoria (commit `1f41dde`). Em
   `frontend/src/features/tutoring/`: `useTutorStatus.ts` (disponibilidade da
   Tifa, com `error` separado de `unavailable`); `useTutorConversation.ts`
   (histórico, rascunho, envio pelo `postStream`, reenvio idempotente e a
@@ -549,6 +553,44 @@ Criada na Task 1 e completada na Task 9 (plano
   sem a conferência da geração na recarga (reprova o caso da recarga em
   voo); sem o espelho do status (reprova seis casos); e sem o retorno
   `aborted` do `runTurn` (reprova o S17 pela contagem do histórico).
+- **Task 4** — o painel da Tifa (commit deste registro). Em
+  `frontend/src/features/tutoring/`: `TutorPanel.tsx` e
+  `TutorConversation.tsx`, com dois contêineres — lateral expansível no
+  desktop e folha modal no celular — e a região viva **fora** dos dois
+  contêineres, existindo desde o primeiro render (padrão do A e do 1a: uma
+  região viva que só nasce quando algo teria que anunciar chegaria tarde
+  demais para o primeiro anúncio). `useIsDesktop.ts`
+  (`useSyncExternalStore` sobre `(min-width: 1024px)`, o breakpoint `lg` do
+  Tailwind — e não `useState`/`useEffect`, que piscaria o layout errado no
+  primeiro render antes de corrigir) e `panelPreference.ts`
+  (`PANEL_OPEN_KEY = 'focusquest.tutor-panel.open'`, `readPanelOpen` e
+  `writePanelOpen` tolerantes a um `localStorage` que lança — navegação
+  privada, armazenamento bloqueado, cota estourada — degradando para painel
+  sempre aberto sem quebrar a página). `frontend/src/test/viewport.ts`,
+  infraestrutura de teste para simular desktop/celular via `matchMedia`.
+  `frontend/index.html` ganhou `lang="pt-BR"` e
+  `interactive-widget=resizes-content` na viewport (o campo não fica atrás
+  do teclado virtual no celular). O teste da página (`Headquarters.test.tsx`)
+  mudou de "1 chamada" para "uma chamada por recurso, 3 no total" —
+  justificado porque o painel busca o próprio recurso (disponibilidade da
+  Tifa) na montagem, além dos dois que a página já buscava. `App.test.tsx` e
+  `main.test.tsx` passaram a usar `routeFetch` (de
+  `frontend/src/test/fetchRoutes.ts`, criado na Task 3) e `stubViewport`,
+  porque a página com o painel monta mais de um recurso e mais de um layout.
+  **Comportamento:** o filtro `visibleMessages` descarta a linha `gerando`
+  da resposta em voo quando o histórico recarrega (evita bolha duplicada
+  depois da recarga, teste P31); com o campo desabilitado ao abrir a folha,
+  o foco de reserva vai para "Fechar a conversa" (P22b); e o P30b prova a
+  guarda `|| !canRetry` montando `TutorConversation` sozinho, direto, porque
+  esse estado não é alcançável pelo painel — o dono pode decidir remover a
+  guarda por redundante. **Mutações vistas reprovando no worktree:** região
+  viva dentro do corpo do painel (P21); `liveText` só com o texto final, sem
+  o parcial em voo (P10/P11); `readPanelOpen` sem o `try/catch` (o teste que
+  simula `localStorage` lançando); sem tratador de `Escape` na folha (P23);
+  textarea sempre habilitado, nunca desabilitado (P6-P8, P22b); a marca do
+  resultado `unknown` (P14); `|| !canRetry` (P30b); `&& canRetry` (P30); o
+  filtro da linha `gerando` (P31); e o foco de reserva em "Fechar a
+  conversa" (P22b).
 - **Task 6** — infraestrutura do E2E da tutoria (commit `342a6e3`). **O falso
   configurável:** em `tests/integration/provedor_falso.py`, `_Tratador`
   virou `TratadorDoFalso` (público, porque outro módulo o estende), a
@@ -592,8 +634,7 @@ Criada na Task 1 e completada na Task 9 (plano
   reprova `test_rota_desconhecida_responde_404` (`200 == 404`); (6) sem o
   `liberar.set()` do reset, reprova `test_reset_solta_uma_resposta_presa`
   (`terminou.wait` devolve `False`).
-- **Correções da revisão da Task 6** (commit deste registro; o sha é o do
-  próprio commit, que o registro não pode conter). **A corrida do reset:**
+- **Correções da revisão da Task 6** (commit `d8461e7`). **A corrida do reset:**
   o tratador do falso lia o `falso.liberar` só na hora de esperar, e o
   roteiro no início; um `POST /_control/reset` entre as duas leituras o
   deixava esperando no `Event` novo, com o roteiro velho mandando segurar —
@@ -680,7 +721,7 @@ e de revisões diferentes, e a mais recente fica por último:
 | `gh pr checks 10` (PR do 1b-1, topo `9fb9a8e`), lido em 2026-09-22 | PR `MERGED` em 2026-09-22T02:51:09Z, merge commit `a795ee7`, `headRefOid` `9fb9a8e` (`gh pr view 10`). Duas execuções do workflow `quality`, ambas sobre `9fb9a8e` e com conclusão `success` (`gh run view`): a do evento `push` (run 35478605980) e a do `pull_request` (run 35478623302). Em cada uma, `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` com `pass`. É a evidência de que `9fb9a8e` passou no CI; não há `make check` local registrado sobre ele. |
 | `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 | `make check` sobre a Task 6 do 1b-2 (árvore do `342a6e3`, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
-| `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do commit deste registro, antes desta linha e antes do commit) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
+| `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do `d8461e7`) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -1176,6 +1217,12 @@ que não tinham chegado aqui)
     raros e sem medição: duas atualizações silenciosas em voo que chegam
     fora de ordem (a de uma falha anterior pode gravar por último), e o
     `updateAction`, que não invalida um GET mais velho que a confirmação.
+50. **O campo acima do teclado virtual no celular
+    (`interactive-widget=resizes-content`, folha ancorada em `bottom-0` com
+    `max-h-[85dvh]`) não é medido por teste nenhum** (1b-2, Task 4): o
+    Playwright não abre teclado virtual. O E2E (Task 7, cenário (e)) mede só
+    a ausência de rolagem horizontal e o Enviar visível na folha aberta.
+    Conferir num aparelho de verdade antes de afirmar.
 
 ## Próximo incremento
 
