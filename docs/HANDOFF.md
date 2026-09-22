@@ -243,6 +243,11 @@ tarefas as põem em código.
 |---|---|
 | `postStream` aceita `AbortSignal`, ao contrário do `postJson` (Task 1) | Abortar o stream é o que acontece quando o painel desmonta (troca de tela no futuro, fechamento da aba); para o servidor, é a desconexão que o 1b-1 grava como `interrompida`, e o reenvio é seguro. O argumento do `postJson` ("cancelar não desfaz a mudança") não se aplica: aqui o cancelamento é parte do contrato. |
 | Um quadro SSE malformado (sem `event:`/`data:` ou `data` que não é JSON) **reprova** o stream; um evento de nome desconhecido é **ignorado** pelo hook (Task 1) | O quadro malformado é defeito de protocolo, e continuar lendo depois dele seria adivinhar. O nome desconhecido é compatibilidade para frente (um backend mais novo pode acrescentar evento), e o final continua decidido só por `done`/`error`, então ignorar não esconde resultado: sem final, é `unknown`. Linhas que não são `event` nem `data` (comentário, `id:`) **dentro** de um quadro que tem as duas são ignoradas; um quadro só de comentário reprova. |
+| Porta **8150** para o servidor falso do E2E (Task 6) | Fica na faixa 81xx, a mesma da API do E2E (8100), o que a identifica como porta de teste ponta a ponta à primeira vista; não colide com 8000/5173 (desenvolvimento), 8100/5273 (E2E) nem 55432 (PostgreSQL); e não é 8101, que seria o "próximo número" que alguém escolheria por reflexo para outro servidor e confundiria com a API. Não é porta de nenhuma ferramenta comum da máquina de desenvolvimento (8080, 8081, 8443, 8888). Fonte única: `frontend/tests/e2e/servers.ts` (`FALSO_URL`). |
+| A guarda do E2E é uma **lista de permissão** (host do `anthropic_base_url` em `127.0.0.1`, `localhost` ou `::1`), e não uma recusa de `api.anthropic.com` (Task 6) | Recusar só o host da Anthropic falha **aberto**: um `https://api.anthropic.com.` com ponto final, um IP da Anthropic ou um proxy qualquer passariam. Exigir loopback falha **fechado**: o que não é a máquina local não sobe. O host é lido por `urlsplit(...).hostname`, o que desarma `http://127.0.0.1@api.anthropic.com` (o host é o que vem depois do `@`). A mensagem de recusa mostra só o host, nunca o endereço inteiro (uma URL com credencial iria para o log). |
+| O `scripts/e2e-env.sh` **impõe** a chave fictícia (`FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia`), e o URL do falso vem do Playwright (`env` do `webServer` da API) (Task 6) | A chave de verdade chega ao ambiente do E2E por dois caminhos — o `.env` local e o `pre-push`, que exporta toda `FOCUSQUEST_*` do `.env` para o worktree (`docs/QUALITY.md` §6) —, e impor no script que já é o único caminho de subida da API do E2E fecha os dois. O valor não começa com `sk-ant-`: não imita uma chave real. O URL, ao contrário, **não** é escrito no script: a porta mora em `servers.ts`, que o cenário também lê; o script só **valida** o que recebeu. |
+| O controle do falso usa rotas sob `/_control/` e chaves JSON em inglês (Task 6) | É um contrato HTTP entre o cenário TypeScript e o falso Python, e contrato de payload é em inglês (README §3). O prefixo não colide com `/v1/messages`, a única rota que o SDK usa; qualquer outra rota responde 404, para um SDK mal apontado reprovar alto. O roteiro é validado estritamente (chave desconhecida é `400`), para um erro de digitação no cenário não virar um roteiro que passa pelo motivo errado. |
+| O falso do E2E ganha **segurar e liberar** pelo controle (`hold_after_events` + `POST /_control/release`) (Task 6) | É o único jeito determinístico de o axe auditar o estado "escrevendo" com a resposta comprovadamente no meio. O `Roteiro.segurar_apos_eventos` e o `liberar` já existiam no falso (1b-1, desconexão); o controle só os expõe. O `POST /_control/reset` solta uma resposta presa antes de trocar o `Event`, para um cenário que reprovou no meio não prender o seguinte. |
 
 ### Incrementos anteriores
 
@@ -481,6 +486,49 @@ Criada na Task 1 e completada na Task 9 (plano
   teste extra da Task 1 deixou de sugerir que um `: keepalive` isolado é
   aceito; e os comentários de `client.ts` e `src/test/sse.ts` citam o
   caminho completo `src/focusquest/modules/tutoring/sse.py`.
+- **Task 6** — infraestrutura do E2E da tutoria (commit deste registro; o
+  sha é o do próprio commit, que o registro não pode conter). **O falso
+  configurável:** em `tests/integration/provedor_falso.py`, `_Tratador`
+  virou `TratadorDoFalso` (público, porque outro módulo o estende), a
+  função `falso_do_tratador` substituiu o `assert` inline do `do_POST`, e o
+  `ServidorAnthropicFalso` ganhou `porta` (padrão 0) e `tratador` (padrão
+  `TratadorDoFalso`) — com os padrões, o pytest não muda, o que os testes do
+  1b-1 em `test_provedor_falso.py` confirmam. **O processo e o controle:**
+  `tests/integration/falso_do_e2e.py` (`python -m integration.falso_do_e2e
+  --porta N`, com `PYTHONPATH=tests`) sobe o **mesmo** falso com as rotas
+  `PUT /_control/script`, `POST /_control/release`, `POST /_control/reset` e
+  `GET /_control/requests`, e 404 em qualquer outra rota que não seja
+  `/v1/messages`; `roteiro_do_json` traduz o roteiro JSON do cenário e
+  recusa, com o motivo, chave desconhecida e tipo errado. O contrato é
+  provado do lado Python por `tests/integration/test_falso_do_e2e.py` (18
+  testes, dois deles subindo o processo de verdade). **A guarda e a
+  chave:** `scripts/e2e-env.sh` recusa subir a API do E2E se o host do
+  `anthropic_base_url` não for loopback, e exporta
+  `FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia` por cima de qualquer
+  chave do ambiente ou do `.env`; `tests/integration/test_e2e_env.py` ganhou
+  10 testes (cinco endereços recusados, o padrão sem variável recusado, três
+  loopbacks aceitos, a chave imposta). **O terceiro `webServer`:**
+  `frontend/playwright.config.ts` sobe o falso na 8150 antes da API e passa
+  `FOCUSQUEST_ANTHROPIC_BASE_URL: FALSO_URL` ao `webServer` da API;
+  `FALSO_URL` mora em `frontend/tests/e2e/servers.ts`; o cliente do
+  controle, `frontend/tests/e2e/falso.ts` (`definirRoteiro`, `liberar`,
+  `reiniciar`, `requisicoes`), ainda não tem consumidor — os cenários são a
+  Task 7. **Mutações vistas reprovando**, as seis do plano: (1) guarda por
+  nome (`host == "api.anthropic.com"`) reprova em `https://api.anthropic.com.`,
+  `http://127.0.0.1.nip.io:8150` e `http://192.168.0.10:8150`; (2) a API do
+  E2E apontada para `'https://api.anthropic.com'` no `playwright.config.ts`
+  faz o `make check-e2e` sair com erro antes de qualquer cenário, com o texto
+  exato `[WebServer] recusando subir a API do E2E com o provedor em
+  'api.anthropic.com'; o E2E so fala com o servidor falso em loopback --
+  confira FOCUSQUEST_ANTHROPIC_BASE_URL (o playwright.config.ts a define)`
+  seguido de `Error: Process from config.webServer was not able to start.
+  Exit code: 1`; (3) sem o `export` da chave, reprova
+  `test_impoe_a_chave_ficticia_mesmo_com_uma_chave_no_ambiente`; (4) sem a
+  checagem de chaves desconhecidas, reprova o caso `chave desconhecida:
+  fantasia` (`DID NOT RAISE`); (5) com `super().do_POST()` no lugar do 404,
+  reprova `test_rota_desconhecida_responde_404` (`200 == 404`); (6) sem o
+  `liberar.set()` do reset, reprova `test_reset_solta_uma_resposta_presa`
+  (`terminou.wait` devolve `False`).
 
 ## Comandos
 
@@ -528,6 +576,7 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` duas vezes seguidas, ao fim do Incremento 1b-1 (`880dd60`, documentação da Task 8 por cima) | Aprovado, EXIT 0 nas duas, cerca de 40 s de relógio cada (pytest). Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas) — inalterado pelo 1b-1, que é só backend. `uv lock --check` aprovado (`anthropic`, `httpx2`, `anyio` inclusos). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: **269 testes** (122 do fim do Incremento A/1a mais 147 da tutoria), 1 aviso, cobertura total de **100%** (739 instruções, 102 ramificações, todas cobertas). E2E: 6 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
 | `gh pr checks 10` (PR do 1b-1, topo `9fb9a8e`), lido em 2026-09-22 | PR `MERGED` em 2026-09-22T02:51:09Z, merge commit `a795ee7`, `headRefOid` `9fb9a8e` (`gh pr view 10`). Duas execuções do workflow `quality`, ambas sobre `9fb9a8e` e com conclusão `success` (`gh run view`): a do evento `push` (run 35478605980) e a do `pull_request` (run 35478623302). Em cada uma, `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` com `pass`. É a evidência de que `9fb9a8e` passou no CI; não há `make check` local registrado sobre ele. |
 | `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
+| `make check` sobre a Task 6 do 1b-2 (árvore do commit deste registro, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -725,8 +774,9 @@ ninguém mexer.
 19. **`check-api` e `check-e2e` não podem rodar ao mesmo tempo na mesma
     máquina** — nem dois `make check`, nem um `make check` e um push. A
     fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E usa, e o
-    E2E usa portas fixas (8100, 5273). No CI não há corrida: cada job tem o
-    seu PostgreSQL.
+    E2E usa portas fixas. O E2E usa agora **três** portas fixas: 8100 (API),
+    5273 (frontend) e 8150 (servidor falso, desde a Task 6 do 1b-2). No CI
+    não há corrida: cada job tem o seu PostgreSQL.
 20. **Cada execução do E2E deixa quatro missões no `focusquest_test`** (duas
     desde o Incremento A são concluídas), que só somem no próximo
     `DROP SCHEMA` da suíte pytest. `make check-e2e` rodado repetidamente,
@@ -965,11 +1015,13 @@ que não tinham chegado aqui)
     tipos de evento do stream dessa resposta, no arquivo que a camada 3 vai
     comparar. **O CI nunca chama a Anthropic** e nunca recebe a chave — a
     chamada é sempre manual, local, do dono.
-43. **A porta do servidor falso para o E2E (1b-2) soma-se às pendências 19 e
+43. ~~**A porta do servidor falso para o E2E (1b-2) soma-se às pendências 19 e
     20.** O E2E da tutoria precisa de um servidor falso de pé durante o
     Playwright, numa porta própria, dedicada — as mesmas duas exigências
     estruturais que já valem para a API e o frontend do E2E atual (portas
-    8100/5273, `check-api` e `check-e2e` não simultâneos na mesma máquina).
+    8100/5273, `check-api` e `check-e2e` não simultâneos na mesma máquina).~~
+    **Resolvida na Task 6 do 1b-2:** o falso sobe como `webServer` do
+    Playwright na 8150 (`frontend/tests/e2e/servers.ts`), sem reuso.
 44. **Nenhuma taxa de detecção de concorrência medida abaixo de 100% nos
     passos de mutação do 1b-1.** Registrado porque o plano pedia o registro
     de qualquer taxa parcial: as duas sondas de corrida real —
