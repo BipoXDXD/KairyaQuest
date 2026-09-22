@@ -5090,7 +5090,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Antes do Step 6, rode só os testes que não dependem da referência: `uv run pytest tests/integration/test_camada3.py -q -k "sequencia or comparavel or ping or recusa"`. Expected: PASS nos quatro.
+Antes do Step 6, rode só os testes que não dependem da referência: `uv run pytest tests/integration/test_camada3.py -q -k "sequencia or comparavel or ping or recusa"`. Expected: PASS nos quatro. **Correção da execução:** o `-k` seleciona **cinco**, e não quatro — `sequencia` casa também `test_o_falso_emite_a_sequencia_da_api_real` (medido com `--collect-only`: `test_camada3.py: 5`); antes da referência, esse quinto reprova, e é o vermelho esperado.
 
 - [ ] **Step 6: A captura real (uma vez)**
 
@@ -5113,7 +5113,7 @@ uv run pytest tests/integration/test_camada3.py -q
 - [ ] **Step 7: Mutações**
 
 1. Em `test_o_falso_emite...`, a guarda é a comparação: edite `referencia_da_api_real.json` trocando `"message_delta"` por `"message_deltaX"` (cópia de segurança pelo protocolo de mutação). Expected: FAIL. Restaure pelo `cp` do protocolo (o arquivo ainda não está commitado).
-2. Em `camada3.main`, apague o bloco da checagem de `_API_REAL`. Expected: FAIL em `test_a_captura_recusa...` — sem a guarda, o `main()` tenta falar com `127.0.0.1:9` e sai com "falha ao falar com a API: APIConnectionError", que não casa com `so grava a API real`. Restaure.
+2. Em `camada3.main`, apague o bloco da checagem de `_API_REAL`. Expected: FAIL em `test_a_captura_recusa...` — sem a guarda, o `main()` tenta falar com `127.0.0.1:9` e sai com "falha ao falar com a API: APIConnectionError", que não casa com `so grava a API real`. Restaure. **Correção da execução:** reprova, mas por outro caminho — sem a chave no ambiente (o caso do gate), o `main()` para antes, na checagem da chave: `sem FOCUSQUEST_ANTHROPIC_API_KEY no ambiente; nada foi gravado`, que também não casa. Só com a chave exportada no shell ele chegaria ao `APIConnectionError` (a guarda de `tests/conftest.py` aponta para `127.0.0.1:9`).
 3. Em `sequencia_de_tipos`, troque `if not tipos or tipos[-1] != tipo:` por `if True:`. Expected: FAIL em `test_sequencia_de_tipos_guarda_so_nomes_e_colapsa_repeticoes` **e** em `test_o_falso_emite...` (o falso manda dois `text_delta`; a real, outro número). Restaure.
 
 - [ ] **Step 8: Gate e commit**

@@ -270,8 +270,8 @@ tarefas as põem em código.
 | `prazo_expirado` é espelhado como `state: 'falhou'` direto no `changed`, sem nova ida à rede (Task 5) | O backend já grava a ação como `falhou` **antes** de responder 422 (spec, "Confirmar e recusar"): a tela só precisa repetir o que já é verdade, e uma recarga para confirmar seria uma chamada a mais sem informação nova. |
 | O `boardHref` é passado pela página ao `TutorPanel`, e não conhecido pela feature `tutoring` (Task 5) | A página é quem conhece as duas features (`missions` e `tutoring`) e o `id` do título do quadro; `tutoring` continua sem saber que `missions` existe, o mesmo contrato que já valia para `onMissionCreated`. |
 
-As cinco emendas à spec (E1–E5, decisão do dono sobre a chave no Keychain e
-mais quatro pontos que a execução mudou) **não** entram nesta tabela: vivem
+As seis emendas à spec (E1–E6, decisão do dono sobre a chave no Keychain,
+o thinking no falso e mais quatro pontos que a execução mudou) **não** entram nesta tabela: vivem
 na seção "Emendas (2026-09-22, 1b-2)" da spec
 (`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`), no mesmo
 formato da emenda do 1b-1, com o motivo medido e o teste que prova cada uma.
@@ -280,13 +280,15 @@ formato da emenda do 1b-1, com o motivo medido e o teste que prova cada uma.
 
 Quatro divergências entre o pseudocódigo/texto do plano e o que a execução
 exigiu, descobertas nas correções de revisão da Task 6 e nas mutações da
-Task 7.
+Task 7, e duas decisões da Task 8 que nasceram do achado da camada 3.
 
 | Decisão | Motivo |
 |---|---|
 | Em `TratadorDoFalso.do_POST`, `liberar` e `roteiro` são capturados **juntos** no início do tratamento (`liberar` primeiro), e o `/_control/reset` troca o roteiro **antes** de trocar o `Event` (Task 6, commit `d8461e7`) | O plano previa ler `roteiro` no início e `liberar` só na hora de esperar. Entre as duas leituras, um `POST /_control/reset` trocava o `Event`: o tratador esperava no `Event` novo com o roteiro **velho** mandando segurar, preso até o teto de 30 s. Reproduzido de forma determinística por `test_reset_entre_o_registro_e_a_espera_solta_o_tratador` (com o `time` do falso trocado por monkeypatch); a ordem "roteiro antes do `Event`" no reset não tem teste próprio — a janela fica entre duas atribuições consecutivas, sem gancho possível no código, e o motivo está no comentário do reset. |
 | `PUT /_control/script` sem `content-length` responde `400` com `{"error": ...}`, e a conexão fecha depois de qualquer `400` (Task 6, commit `d8461e7`) | O plano não previa o caso: sem a checagem, faltar o cabeçalho levantava `TypeError` fora do `try` e a conexão caía sem resposta nenhuma (`RemoteDisconnected` do lado do cliente), em vez de um erro alto e legível. |
 | Os textos que o falso devolve no cenário (c) do E2E carregam o sufixo `EXECUCAO` (Task 7) | A conversa da tutoria é uma só no `focusquest_test`, e a tela mostra até 50 mensagens: sem o sufixo, a segunda execução seguida de `make check-e2e` reprova com `strict mode violation` (o localizador por texto resolve para a linha desta execução **e** da anterior) — medido com o texto original do plano. Pior, a execução seguinte do dia poderia **aprovar** por acidente, casando com as linhas velhas antes do reenvio desta execução. |
+| **O servidor falso emite, por padrão, o bloco de thinking que a API real manda** (Task 8; decisão do **dono** no ponto de parada 3; emenda E6 da spec) | A camada 3 reprovou na primeira execução: a referência gravada pela chamada real (`claude-opus-5`) tem `content_block_start:thinking`, `thinking_delta`, `signature_delta` e `content_block_stop` entre o `message_start` e o texto, sem a requisição pedir thinking, e o falso não os emitia. O plano mandava parar e não mudar nem o falso nem a referência; o dono decidiu "o falso emite thinking", para o falso se parecer com a API real. `Roteiro(pensar=False)` desliga. O adaptador de produção não mudou: ele já descartava o bloco, e um teste novo prova isso. |
+| As contagens de eventos dos testes existentes passam a `APOS_O_PRIMEIRO_PEDACO` (7), e a expectativa de 3 testes da camada 2 passa a incluir o bloco `thinking` (Task 8; decisão do coordenador, opção (A)) | Consequência direta da linha acima, não acomodação de defeito: as contagens contam todos os eventos, e o 3 que queria dizer "depois do primeiro pedaço de texto" cairia dentro do thinking; e a `Message` que o SDK monta do falso padrão agora tem o bloco `thinking` na frente. A alternativa (B), `pensar=False` nesses testes, deixaria a camada 2 sem exercitar o falso padrão. Lista em "Alterações", Task 8. |
 | Duas mutações do plano (Task 7) precisaram de forma ajustada para reprovar pelo motivo certo | (1) desligar a recarga do quadro com `onMissionCreated={() => undefined}` não compila (`TS6133`, `noUnusedLocals`); a mutação aplicada foi o corpo do `reloadBoard` sem `board.current!.reload()`, mesma semântica, reprovando o cenário (a) em `toHaveCount(1)`. (2) um filho `<div style={{ width: 600 }} />` no `<main>` **passou** por engano (EXIT 0): a div tinha 600 px de largura, mas altura zero não entra no `scrollWidth`/overflow rolável do Chromium; com `{ width: 600, height: 10 }` o cenário (e) reprova em `semRolagemHorizontal()`. O defeito era da mutação, não do cenário. |
 
 **Registro da decisão D-a: a chave real mora no Keychain do macOS, nunca no
@@ -867,10 +869,75 @@ Criada na Task 1 e completada na Task 9 (plano
   (e também `test_a_suite_nunca_aponta_para_a_anthropic`) em
   `AssertionError: assert 'https://api.anthropic.com' ==
   'http://127.0.0.1:9'` — o endereço real volta a vazar do `.env` assim
-  que a guarda para de sobrescrevê-lo. Os Steps 2–4 da Task 8 (a chave no
-  Keychain, o roteiro manual pela tela e a camada 3 do servidor falso)
-  ficam para depois desta rodada, por decisão do dono (2026-09-22); ver
-  pendências 40 e 42.
+  que a guarda para de sobrescrevê-lo.
+- **Task 8, Steps 2–8** — a chave no Keychain, a chamada real e a camada 3
+  do servidor falso:
+  - **`tests/integration/camada3.py`** (novo): `sequencia_de_tipos`,
+    `comparavel`, `DESCARTADOS_PELO_SDK` (`ping`), `capturar` e `main`, que
+    recusa gravar se o `anthropic_base_url` não for `api.anthropic.com` ou
+    se não houver chave. **Desvio do plano:** o sistema da requisição é o
+    de `montar_turno(persona=PERSONA, agora=..., pendentes=[],
+    historico=[]).sistema` — persona e contexto, com o quadro vazio —, e
+    não o `f"{PERSONA}\n\nAgora (UTC): ..."` do pseudocódigo: é o texto que
+    a produção de fato manda, e a captura quer se parecer com ela.
+  - **`tests/integration/test_camada3.py`** (novo): os seis testes do
+    plano, sem mudança de expectativa.
+  - **`tests/integration/referencia_da_api_real.json`** (novo): gravado
+    pelo script, uma vez, pela chamada real; nunca editado à mão.
+  - **`tests/integration/provedor_falso.py`**: `Roteiro.pensar: bool = True`
+    e o bloco de thinking antes dos blocos do roteiro, no índice 0, com os
+    tipos do SDK fixado (`ThinkingBlock(thinking="", signature="")`,
+    `ThinkingDelta`, `SignatureDelta`, `content_block_stop`); os blocos do
+    roteiro passam a começar no índice 1. Constantes novas: `PENSAMENTO`
+    (o texto do thinking, para o teste de vazamento),
+    `EVENTOS_DO_PENSAMENTO` (calculado, 4) e `APOS_O_PRIMEIRO_PEDACO`
+    (`EVENTOS_DO_PENSAMENTO + 3`, isto é, 7). O controle do E2E
+    (`roteiro_do_json`) **não** expõe a opção: nenhum cenário precisa dela.
+  - **Teste novo** `test_o_thinking_da_api_nao_chega_ao_dominio`
+    (`tests/integration/test_anthropic_provider.py`, parametrizado com só
+    texto e com texto e proposta): o adaptador de produção entrega
+    exatamente os mesmos `Delta`/`Proposta`/`Fim` com e sem o thinking, e o
+    `PENSAMENTO` não aparece no que ele entrega; uma checagem prova que o
+    falso padrão emitiu mesmo o thinking, para o teste não passar vazio.
+  - **Guarda nova** `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`
+    (`tests/integration/test_falso_do_e2e.py`): o spec TypeScript escreve o
+    7 literal (não importa Python), e a guarda confere que ele é igual a
+    `APOS_O_PRIMEIRO_PEDACO`.
+  - **Índices ajustados** (de 3 para `APOS_O_PRIMEIRO_PEDACO`, 7, cada um
+    com comentário). O 3 queria dizer "depois do primeiro pedaço de
+    texto" (`message_start`, `content_block_start`, primeiro delta); com os
+    4 eventos do thinking na frente, cairia dentro do thinking. Consequência
+    direta de o falso ficar mais fiel, não acomodação de defeito:
+    `test_anthropic_provider.py::test_stream_cortado_termina_sem_fim_e_sem_erro`
+    (corte) e `::test_demora_no_meio_vira_tempo_esgotado` (atraso);
+    `test_tutoring_service.py::test_stream_cortado_sem_fim_vira_provedor_indisponivel`
+    (corte) e `::test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial`
+    (atraso);
+    `test_tutoring_desconexao.py::test_desconectar_no_meio_grava_interrompida`
+    (segurar); `test_falso_do_e2e.py::test_reset_solta_uma_resposta_presa`
+    e `::test_segurar_e_liberar_pelo_controle` (`hold_after_events`);
+    `::test_reset_entre_o_registro_e_a_espera_solta_o_tratador` — este não
+    reprovava (o 3 ainda segurava, só que dentro do thinking), ajustado
+    para o mesmo ponto dos outros; e `frontend/tests/e2e/tutoring.spec.ts`,
+    `hold_after_events: 7` no cenário (a) e `cut_after_events: 7` no (c).
+    Os números de `test_roteiro_do_json_*` e `test_as_bordas_*` não mudam:
+    ali eles só testam a validação, não uma posição no stream.
+  - **Expectativa da camada 2 atualizada** em 3 testes, porque a `Message`
+    que o SDK monta do falso padrão agora tem o bloco `thinking` na frente
+    (decisão do coordenador, opção (A); ver "Decisões"):
+    `test_provedor_falso.py::test_o_sdk_monta_texto_e_tool_use_do_stream_do_falso`
+    e `test_falso_do_e2e.py::test_o_roteiro_definido_pelo_controle_chega_ao_sdk`
+    (`pensamento, texto, ferramenta = final.content`, com
+    `pensamento.type == "thinking"`), e
+    `test_provedor_falso.py::test_sem_ferramenta_a_resposta_termina_em_end_turn`
+    (`["thinking", "text"]`). Sem essa mudança, os três reprovavam com
+    `too many values to unpack (expected 2, got 3)` e
+    `['thinking', 'text'] != ['text']`.
+  - **`src/focusquest/` não mudou.**
+  - Documentação: a spec (E2/E3 feitas, emenda nova E6), `docs/QUALITY.md`
+    §9 ("Camada 3" existente), a árvore de testes do `docs/ARCHITECTURE.md`,
+    e duas correções no plano (a contagem do `-k` do Step 5 e o motivo real
+    da mutação 2 do Step 7).
 
 ## Comandos
 
@@ -887,13 +954,6 @@ incremento:
 | `make check-e2e` | `migrate-test`, build do frontend e Playwright com axe-core. |
 | `PYTHONPATH=tests uv run python -m integration.falso_do_e2e --porta 8150` | Sobe o servidor falso do E2E à mão, fora do Playwright (que o sobe sozinho no `make check-e2e`). Não precisa de chave nenhuma. |
 
-**Ainda não documentado aqui:** o comando que sobe a API local com a chave do
-Keychain e o comando que grava a referência da camada 3
-(`PYTHONPATH=tests uv run python -m integration.camada3`) — os dois
-dependem dos Steps 2–4 da Task 8 (o roteiro manual pela tela com a chave
-real), que ficaram para depois desta rodada (pendências 40 e 42). O módulo
-`tests/integration/camada3.py` **não existe ainda**.
-
 Para rodar a aplicação em desenvolvimento (não faz parte do gate):
 
 ```bash
@@ -902,6 +962,33 @@ make migrate
 uv run uvicorn focusquest.main:app --host 127.0.0.1 --port 8000
 cd frontend && npm run dev            # com frontend/.env copiado do frontend/.env.example
 ```
+
+Para subir a API local **com a Tifa** (a chave real mora no item
+`focusquest-anthropic` do Keychain do macOS), troque a linha do `uvicorn`
+acima por:
+
+```bash
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  uv run uvicorn focusquest.main:app --host 127.0.0.1 --port 8000
+```
+
+A chave vem do Keychain só para este processo; não a exporte no shell nem a
+escreva no `.env` (o Gitleaks do gate a acusaria, e o `pre-push` a levaria ao
+gate — ver as emendas do 1b-2 na spec). Sem alvo no Makefile, de propósito:
+seria um comando só de macOS no arquivo que o CI usa, sem ser verificação, e
+a paridade 1:1 (`AGENTS.md` §4) não tem job para ele.
+
+Para gravar a referência da camada 3 (`tests/integration/referencia_da_api_real.json`),
+uma vez, com a chave do mesmo jeito e o `anthropic_base_url` sem override — o
+script recusa gravar se o endereço não for `api.anthropic.com`:
+
+```bash
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  PYTHONPATH=tests uv run python -m integration.camada3
+```
+
+Ele imprime só a lista de tipos de evento e grava o mesmo no arquivo, sem
+texto, sem ids e sem a chave. Nunca crie esse arquivo à mão.
 
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
@@ -933,6 +1020,11 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre a Task 8 Step 1 do 1b-2 (árvore do commit `605b24e`), rodado duas vezes seguidas | Aprovado, EXIT 0 nas duas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 8 Step 1 só toca `tests/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: **313 testes** (312 da Task 7 mais o novo `test_a_guarda_vale_com_a_chave_exportada_no_ambiente`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 11 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
 | `grep -rn "features/missions" frontend/src/features/tutoring/` e `grep -rn "features/tutoring" frontend/src/features/missions/` (Task 9, §5 regra 1 do `docs/ARCHITECTURE.md`) | Nenhum dos dois saiu vazio, mas nenhum é **import**: o primeiro casa duas linhas de comentário em `tutoring/types.ts` ("Esta feature nao importa nada de `features/missions/`..."); o segundo casa uma linha de comentário em `missions/MissionList.tsx` que cita `features/tutoring/ProposalCard.tsx` num JSX comment. Conferido à parte, sem achado: `grep -rn "^import.*features/missions\|from ['\"].*features/missions" frontend/src/features/tutoring/` e o equivalente para `tutoring` dentro de `missions/` — os dois EXIT 1 (nenhum `import`). A regra 1 vale: nenhuma feature importa a outra. |
 | `make check`, duas vezes seguidas, sobre a Task 9 do 1b-2 (documentação: `docs/HANDOFF.md`, `docs/QUALITY.md`, `docs/ARCHITECTURE.md`, a spec) | Aprovado, EXIT 0 nas duas, sem divergência entre elas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 9 só toca `docs/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 313 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações) nas duas execuções. E2E: 11 cenários aprovados em Chromium nas duas. Gitleaks sem achados nas duas. |
+| Sequência gravada pela chamada real da Task 8 (`tests/integration/referencia_da_api_real.json`, `claude-opus-5`, `anthropic==1.7.0`, 2026-09-22) — lista de tipos, não é conteúdo | `message_start`, `content_block_start:thinking`, `ping`, `content_block_delta:thinking_delta`, `content_block_delta:signature_delta`, `content_block_stop`, `content_block_start:text`, `content_block_delta:text_delta`, `content_block_stop`, `content_block_start:tool_use`, `content_block_delta:input_json_delta`, `content_block_stop`, `message_delta`, `message_stop`. Arquivo lido inteiro (21 linhas): só as chaves `capturada_em`, `sdk`, `modelo`, `eventos`; `grep` por `msg_`, `toolu_`, `sk-ant` e `"text":` deu 0; `make check-secrets` EXIT 0, `no leaks found`. |
+| `uv run pytest tests/integration/test_camada3.py` (Task 8) | Com o falso do 1b-1: **reprovou** em `test_o_falso_emite_a_sequencia_da_api_real` — o bloco de thinking da API real (ponto de parada 3; decisão do dono, emenda E6). Com o thinking no falso: os seis testes verdes. O `-k "sequencia or comparavel or ping or recusa"` do Step 5 seleciona **5**, não 4 (`--collect-only`: `test_camada3.py: 5`), porque `sequencia` casa também `test_o_falso_emite_a_sequencia_da_api_real`. |
+| Efeito cascata do thinking no falso, antes dos ajustes (suíte pytest, `--no-cov`) | 10 reprovações: 7 de índice (as contagens de 3 caíam dentro do thinking) e 3 da camada 2 (a `Message` do SDK com o bloco `thinking` na frente). Depois dos ajustes de índice e da expectativa da camada 2 (opção (A)), nenhuma. Lista em "Alterações", Task 8. |
+| Mutações da Task 8 (backup em `/tmp/fq-mutacao-t8c.bak`, restaurado por `cp`) | **Mutação 1 do plano:** `message_delta` → `message_deltaX` na referência reprova `test_o_falso_emite_a_sequencia_da_api_real` (diferença no índice 11) e `test_a_referencia_gravada_nao_tem_conteudo` (o regex recusa o `X`). **Mutação 2 do plano:** sem a checagem de `_API_REAL`, `test_a_captura_recusa_gravar_o_que_nao_e_a_api_real` reprova, mas **não** pelo motivo que o plano previa: sem a chave no ambiente (o caso do gate), o `main()` para antes, na checagem da chave (`sem FOCUSQUEST_ANTHROPIC_API_KEY no ambiente; nada foi gravado`); só com a chave exportada no shell ele chegaria ao `APIConnectionError` de `127.0.0.1:9`. Nos dois casos a mensagem não casa com `so grava a API real`. **Adaptador tratando thinking como texto** (mutação temporária em `src/`, restaurada): `test_o_thinking_da_api_nao_chega_ao_dominio` reprova nos dois casos, `Delta('raciocinio interno do falso…') != Delta('Bora, ')`. **Falso emitindo o thinking como `text_delta`:** reprova só a camada 3 (`'content_block_delta:text_delta' != 'content_block_delta:thinking_delta'`); o teste do adaptador passa, porque o próprio SDK ignora um `text_delta` dentro de um bloco `thinking`. **`pensar` desligado por padrão:** reprovam a checagem de não vacuidade do teste novo e a camada 3. **E2E com `cut_after_events: 3`:** reprova `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`. |
+| `make check`, duas vezes seguidas, sobre a Task 8 Steps 2–8 do 1b-2 (árvore antes do commit; esta linha escrita entre as duas) | Aprovado, EXIT 0 nas duas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 8 não toca `frontend/src/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 69 arquivos já formatados. mypy sem problemas em 65 arquivos. Backend: **322 testes** (313 da Task 8 Step 1, mais os 6 de `test_camada3.py`, os 2 casos de `test_o_thinking_da_api_nao_chega_ao_dominio` e `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 11 cenários aprovados em Chromium, com os índices 7. Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -1378,13 +1470,22 @@ que não tinham chegado aqui)
 
 **Criadas pelo Incremento 1b-1**
 
-40. **A camada 3 do servidor falso não existe ainda.** Ela grava a sequência
+40. ~~**A camada 3 do servidor falso não existe ainda.** Ela grava a sequência
     de tipos de evento de uma chamada real (sem conteúdo) e confere que o
     falso emite a mesma sequência — o que as camadas 1 e 2 (`docs/QUALITY.md`
     §9) não veem: o falso poderia ser válido para o SDK e ainda assim
     diferente do que a API manda. Só existe depois de o dono fazer a chamada
     real, uma vez, com a chave dele (roteiro na pendência 42). Até lá, o
-    1b-1 não afirma mais do que as camadas 1 e 2 provam.
+    1b-1 não afirma mais do que as camadas 1 e 2 provam.~~
+    **Resolvida na Task 8 do 1b-2:** a referência foi gravada pela chamada
+    real (`claude-opus-5`, `anthropic==1.7.0`, 2026-09-22) em
+    `tests/integration/referencia_da_api_real.json`, e
+    `tests/integration/test_camada3.py` compara o falso contra ela. **O que
+    foi medido:** a primeira comparação **reprovou** — a API real manda um
+    bloco de thinking antes do texto, e o falso não. O dono decidiu que o
+    falso o emite (emenda E6 da spec); com isso, `test_camada3.py` ficou
+    inteiro verde, e a troca de `message_delta` por `message_deltaX` na
+    referência o faz reprovar. Sequência e resultados em "Resultados".
 41. **O teto de `TAMANHO_MAXIMO_DA_PERGUNTA = 4000` caracteres é provisório e
     é decisão do dono.** É um teto **técnico** de custo (cada caractere vai
     ao modelo e volta nos turnos seguintes como histórico), não uma decisão
@@ -1394,7 +1495,7 @@ que não tinham chegado aqui)
     Desde o 1b-2 o teto é aplicado também na tela (`MAX_QUESTION_LENGTH`,
     `features/tutoring/questionLimit.ts`), espelhado à mão; mudar o número
     é mudar os dois lados.
-42. **Roteiro da chamada real (1b-2), para gravar a referência da camada 3
+42. ~~**Roteiro da chamada real (1b-2), para gravar a referência da camada 3
     (pendência 40):** com a chave de verdade vinda do Keychain do macOS **só**
     para o processo da API (decisão D-a, emenda E1; nunca no `.env`) e o
     `anthropic_base_url` **sem** override, (a) pedir à Tifa uma proposta de
@@ -1402,7 +1503,24 @@ que não tinham chegado aqui)
     Quartel-General; (d) gravar, sem o conteúdo do texto, a sequência de
     tipos de evento do stream dessa resposta, no arquivo que a camada 3 vai
     comparar. **O CI nunca chama a Anthropic** e nunca recebe a chave — a
-    chamada é sempre manual, local, do dono.
+    chamada é sempre manual, local, do dono.~~
+    **Resolvida na Task 8 do 1b-2 (2026-09-22).** (d): a referência foi
+    gravada pelo script `tests/integration/camada3.py`, uma vez (pendência
+    40). (a)–(c): feitos pela tela em `http://127.0.0.1:5173`, com a API
+    local subida com a chave do Keychain só para o processo e o
+    `anthropic_base_url` padrão, modelo `claude-opus-5` (padrão do
+    `Settings`). **Quem executou:** o agente, pelo navegador automatizado
+    (Playwright), a pedido do dono — duas tentativas do dono pela tela não
+    chegaram à API (o log de acesso mostrou só GETs e o banco ficou com 0
+    mensagens), e a causa não foi diagnosticada. Medido, sem conteúdo:
+    (a) `POST /api/tutoring/messages` 200, a resposta chegou pelo stream e
+    o cartão da proposta apareceu; no banco, 1 mensagem `user` e 1 `tutor`,
+    ambas `completa`; (b) `POST /api/tutoring/actions/{id}/confirm` 200, a
+    tela mostrou "Missão criada" e a ação ficou `executada`; (c) a missão
+    apareceu no Quartel-General (1 linha em `missions`) sem recarregar a
+    página. No total o 1b-2 fez **duas** chamadas reais, as duas da emenda
+    E2: a captura da camada 3 e esta, pela tela; as tentativas anteriores
+    pela tela não chegaram à API e não geraram chamada.
 43. ~~**A porta do servidor falso para o E2E (1b-2) soma-se às pendências 19 e
     20.** O E2E da tutoria precisa de um servidor falso de pé durante o
     Playwright, numa porta própria, dedicada — as mesmas duas exigências
@@ -1497,14 +1615,16 @@ B → C**. O desenho de A, B e C está em
   A").
 - **1b — a Tifa**, em duas partes. **1b-1 (backend) entregue e publicado
   pelo PR #10** (ver "Revisão-base"). **1b-2 (frontend, E2E e a chamada
-  real) entregue, não publicado**, na branch `feat/incremento-1b-2`, pelo
+  real) entregue**: Tasks 0–7, o Step 1 da Task 8 e a Task 9 publicados
+  pelo PR #11 (merge `598f96b`); o resto da Task 8 na branch
+  `feat/incremento-1b-2-camada3`, pelo
   plano `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. Desenho
   aprovado pelo dono em
   `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com a seção
-  "Emendas (2026-09-22, 1b-2)". **A parte da Task 8 que usa a chave real**
-  (Keychain, roteiro manual pela tela, captura da camada 3) ficou para
-  depois desta rodada, por decisão do dono de 2026-09-22 — pendências 40 e
-  42 continuam abertas.
+  "Emendas (2026-09-22, 1b-2)". A parte da Task 8 que usa a chave real
+  (Keychain, roteiro manual pela tela, captura da camada 3) foi feita; a
+  camada 3 existe (pendência 40 resolvida), e o registro do roteiro
+  (a)–(c) está na pendência 42.
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
   navegação lateral), depois do 1b. **B começa por design próprio**
   (pendência 26: teto de negócio para `estimated_minutes`, janela de negócio
@@ -1514,8 +1634,7 @@ B → C**. O desenho de A, B e C está em
 **O que o B encontra pronto do 1b:**
 
 - **O backend inteiro da tutoria** — modelo de dados, as cinco rotas, o SSE,
-  o adaptador Anthropic e o servidor falso (camadas 1 e 2, e a 3 quando a
-  Task 8 terminar). Ver `docs/ARCHITECTURE.md` §3 ("O modelo de dados e o
+  o adaptador Anthropic e o servidor falso (camadas 1, 2 e 3). Ver `docs/ARCHITECTURE.md` §3 ("O modelo de dados e o
   contrato HTTP da tutoria que existem") e `docs/QUALITY.md` §9.
 - **O painel da Tifa na tela**, lateral no desktop e folha no celular
   (`frontend/src/features/tutoring/`), com o cartão de proposta, a recarga
@@ -1540,9 +1659,15 @@ B → C**. O desenho de A, B e C está em
 
 **O que o B (ou quem retomar a Task 8) precisa saber, porque morde:**
 
-- **A camada 3 do servidor falso ainda não existe** (pendência 40); a
-  referência (`tests/integration/referencia_da_api_real.json`) só nasce da
-  chamada real, manual, do dono, com o roteiro da pendência 42.
+- **O servidor falso emite um bloco de thinking por padrão** (emenda E6):
+  as contagens `cortar_apos_eventos`/`segurar_apos_eventos`/`atrasar_evento`
+  (e `cut_after_events`/`hold_after_events` do E2E) contam esses 4 eventos.
+  "Depois do primeiro pedaço de texto" é `APOS_O_PRIMEIRO_PEDACO` (7), não
+  3; o E2E escreve o 7 literal, amarrado por uma guarda do pytest.
+- **A referência da camada 3 é uma fotografia datada**
+  (`tests/integration/referencia_da_api_real.json`): se a API mudar o
+  formato, só uma nova chamada real, manual, do dono, a regrava — nunca o
+  gate, nunca à mão.
 - **O teto de 4000 caracteres da pergunta** (pendência 41) é decisão do
   dono, provisória, espelhada à mão em `MAX_QUESTION_LENGTH` — mudar o
   número é mudar os dois lados.

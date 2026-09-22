@@ -79,9 +79,11 @@ test('(a) perguntar, ver o texto chegar, confirmar e ver a missao no quadro', as
   const pedido = proposta('Revisar recursão')
   await definirRoteiro({
     blocks: [{ text: ['Bora ', 'estudar ', 'recursão!'] }, { tool_input: pedido }],
-    // Presa depois do primeiro pedaco: message_start, content_block_start e o
-    // primeiro delta saem; o resto espera o `liberar()`.
-    hold_after_events: 3,
+    // Presa depois do primeiro pedaco: message_start, os 4 eventos do bloco
+    // de thinking que o falso emite por padrao, content_block_start e o
+    // primeiro delta saem; o resto espera o `liberar()`. E o
+    // `APOS_O_PRIMEIRO_PEDACO` de `tests/integration/provedor_falso.py`.
+    hold_after_events: 7,
   })
   await abrirPainel(page)
 
@@ -158,7 +160,9 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   // `provedor_indisponivel` (medicao M3 do 1b-1).
   await definirRoteiro({
     blocks: [{ text: [comeco, 'do meio', ' e fim.'] }],
-    cut_after_events: 3,
+    // 7: o primeiro pedaco depois do thinking (`APOS_O_PRIMEIRO_PEDACO` de
+    // `tests/integration/provedor_falso.py`).
+    cut_after_events: 7,
   })
   await abrirPainel(page)
 

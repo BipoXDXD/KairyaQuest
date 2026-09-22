@@ -30,13 +30,61 @@ from anthropic.types import (
     RawMessageStartEvent,
     RawMessageStopEvent,
     RawMessageStreamEvent,
+    SignatureDelta,
     TextBlock,
     TextDelta,
+    ThinkingBlock,
+    ThinkingDelta,
     ToolUseBlock,
     Usage,
 )
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.raw_message_delta_event import Delta as DeltaDaMensagem
+
+# O texto do bloco de thinking que o falso emite. Exportado para um teste
+# provar que ele NUNCA chega ao dominio (`test_anthropic_provider.py`).
+PENSAMENTO = "raciocinio interno do falso, que a tela nunca mostra"
+
+
+def _eventos_do_pensamento() -> list[RawMessageStreamEvent]:
+    """O bloco de thinking, sempre o indice 0, na forma que a API real mandou
+    (referencia da camada 3, 1b-2): `content_block_start` de um `thinking`
+    vazio, um `thinking_delta`, um `signature_delta` e o `content_block_stop`.
+    O `ping` que a API manda no meio fica de fora: o SDK o descarta."""
+    return [
+        RawContentBlockStartEvent(
+            type="content_block_start",
+            index=0,
+            content_block=ThinkingBlock(type="thinking", thinking="", signature=""),
+        ),
+        RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=0,
+            delta=ThinkingDelta(type="thinking_delta", thinking=PENSAMENTO),
+        ),
+        RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=0,
+            delta=SignatureDelta(type="signature_delta", signature="assinatura-falsa"),
+        ),
+        RawContentBlockStopEvent(type="content_block_stop", index=0),
+    ]
+
+
+# Quantos eventos o thinking poe na frente dos blocos do roteiro. As contagens
+# (`cortar_apos_eventos`, `segurar_apos_eventos`, `atrasar_evento`) contam
+# TODOS os eventos: com o thinking ligado, "depois do primeiro pedaco de
+# texto" deixou de ser 3 (message_start, content_block_start, delta) e passou
+# a ser `EVENTOS_DO_PENSAMENTO + 3`.
+EVENTOS_DO_PENSAMENTO = len(_eventos_do_pensamento())
+
+# O indice do evento logo DEPOIS do primeiro pedaco de texto, com o roteiro
+# comecando por um `Texto` e o thinking ligado: message_start, os eventos do
+# thinking, o content_block_start do texto e o primeiro text_delta ja sairam.
+# E o ponto que os testes de corte, demora e espera usam para ter "a resposta
+# comprovadamente no meio". O E2E (TypeScript) nao importa Python e escreve o
+# mesmo numero literal, 7 (`frontend/tests/e2e/tutoring.spec.ts`).
+APOS_O_PRIMEIRO_PEDACO = EVENTOS_DO_PENSAMENTO + 3
 
 
 @dataclass(frozen=True)
@@ -66,6 +114,10 @@ class Roteiro:
     - `segurar_apos_eventos`: depois de N eventos, espera `liberar` antes de
       continuar. E o que deixa um teste desconectar o cliente com a resposta
       comprovadamente no meio.
+    - `pensar`: emite, antes dos `blocos`, o bloco de thinking que a API real
+      manda (`EVENTOS_DO_PENSAMENTO` eventos, que entram nas contagens
+      acima). Ligado por padrao, para o falso se parecer com a API real
+      (decisao do dono no ponto de parada 3 do 1b-2).
     """
 
     blocos: tuple[Texto | ChamadaDeFerramenta, ...] = ()
@@ -74,6 +126,7 @@ class Roteiro:
     atrasar_evento: tuple[int, float] | None = None
     atrasar_cabecalhos: float = 0.0
     segurar_apos_eventos: int | None = None
+    pensar: bool = True
 
 
 @dataclass(frozen=True)
@@ -100,7 +153,10 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[RawMessageStreamEvent]:
             ),
         )
     ]
-    for indice, bloco in enumerate(roteiro.blocos):
+    if roteiro.pensar:
+        eventos.extend(_eventos_do_pensamento())
+    # Com o thinking no indice 0, os blocos do roteiro comecam no 1.
+    for indice, bloco in enumerate(roteiro.blocos, start=int(roteiro.pensar)):
         if isinstance(bloco, Texto):
             eventos.append(
                 RawContentBlockStartEvent(

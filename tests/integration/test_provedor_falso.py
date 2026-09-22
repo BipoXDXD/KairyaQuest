@@ -40,7 +40,9 @@ def test_o_sdk_monta_texto_e_tool_use_do_stream_do_falso(
         final = stream.get_final_message()
 
     assert final.stop_reason == "tool_use"
-    texto, ferramenta = final.content
+    # O falso padrao emite o bloco de thinking da API real na frente (1b-2).
+    pensamento, texto, ferramenta = final.content
+    assert pensamento.type == "thinking"
     assert texto.type == "text"
     assert texto.text == "Bora, vamos estudar!"
     assert ferramenta.type == "tool_use"
@@ -59,7 +61,8 @@ def test_sem_ferramenta_a_resposta_termina_em_end_turn(
     ) as stream:
         final = stream.get_final_message()
     assert final.stop_reason == "end_turn"
-    assert [bloco.type for bloco in final.content] == ["text"]
+    # O falso padrao emite o bloco de thinking da API real na frente (1b-2).
+    assert [bloco.type for bloco in final.content] == ["thinking", "text"]
 
 
 def test_o_falso_registra_corpo_e_cabecalhos(falso: ServidorAnthropicFalso) -> None:

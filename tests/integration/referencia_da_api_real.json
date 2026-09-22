@@ -1,0 +1,21 @@
+{
+  "capturada_em": "2026-09-22",
+  "sdk": "anthropic==1.7.0",
+  "modelo": "claude-opus-5",
+  "eventos": [
+    "message_start",
+    "content_block_start:thinking",
+    "ping",
+    "content_block_delta:thinking_delta",
+    "content_block_delta:signature_delta",
+    "content_block_stop",
+    "content_block_start:text",
+    "content_block_delta:text_delta",
+    "content_block_stop",
+    "content_block_start:tool_use",
+    "content_block_delta:input_json_delta",
+    "content_block_stop",
+    "message_delta",
+    "message_stop"
+  ]
+}
