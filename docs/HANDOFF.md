@@ -248,6 +248,14 @@ tarefas as põem em código.
 | O `scripts/e2e-env.sh` **impõe** a chave fictícia (`FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia`), e o URL do falso vem do Playwright (`env` do `webServer` da API) (Task 6) | A chave de verdade chega ao ambiente do E2E por dois caminhos — o `.env` local e o `pre-push`, que exporta toda `FOCUSQUEST_*` do `.env` para o worktree (`docs/QUALITY.md` §6) —, e impor no script que já é o único caminho de subida da API do E2E fecha os dois. O valor não começa com `sk-ant-`: não imita uma chave real. O URL, ao contrário, **não** é escrito no script: a porta mora em `servers.ts`, que o cenário também lê; o script só **valida** o que recebeu. |
 | O controle do falso usa rotas sob `/_control/` e chaves JSON em inglês (Task 6) | É um contrato HTTP entre o cenário TypeScript e o falso Python, e contrato de payload é em inglês (README §3). O prefixo não colide com `/v1/messages`, a única rota que o SDK usa; qualquer outra rota responde 404, para um SDK mal apontado reprovar alto. O roteiro é validado estritamente (chave desconhecida é `400`), para um erro de digitação no cenário não virar um roteiro que passa pelo motivo errado. |
 | O falso do E2E ganha **segurar e liberar** pelo controle (`hold_after_events` + `POST /_control/release`) (Task 6) | É o único jeito determinístico de o axe auditar o estado "escrevendo" com a resposta comprovadamente no meio. O `Roteiro.segurar_apos_eventos` e o `liberar` já existiam no falso (1b-1, desconexão); o controle só os expõe. O `POST /_control/reset` solta uma resposta presa antes de trocar o `Event`, para um cenário que reprovou no meio não prender o seguinte. |
+| O limite de 4000 caracteres é contado em **pontos de código do texto sem espaços nas pontas** (`Array.from(text.trim()).length`), e não em `text.length` (Task 3) | O backend conta com `len()` do Python depois do `strip_whitespace` (`MessageCreate.content`): pontos de código, não unidades UTF-16. Com `text.length`, um emoji contaria 2 no navegador e 1 no servidor, e a tela recusaria perguntas que o servidor aceita. `MAX_QUESTION_LENGTH` (`features/tutoring/questionLimit.ts`) espelha `TAMANHO_MAXIMO_DA_PERGUNTA` à mão (pendências 32 e 41). |
+| O contador de restantes aparece a partir de **3600** caracteres, 90% do limite (Task 3) | "Perto do limite" precisava de um número. 90% dá 400 caracteres de aviso — umas cinco linhas — sem poluir a tela na pergunta comum. `COUNTER_VISIBLE_FROM` é derivada do limite, não escrita por extenso. |
+| O `client_message_id` de um reenvio é o da pergunta pendente **se o texto não mudou**; texto editado vira pergunta nova (Task 3) | Quem, depois de uma falha, clica em **Enviar** com o mesmo texto está fazendo a mesma pergunta — com um id novo, uma pergunta já gravada (resultado desconhecido) seria duplicada. Texto diferente é outra pergunta, e ganha outro id. A exceção é `operacao_reutilizada`, que pede id novo por definição, também no **Enviar** (e não só no "Tentar de novo"). |
+| O campo só é limpo se, ao chegar o `user_message`, ele ainda contém a pergunta enviada (Task 3) | A regra do dono é limpar no `user_message`. Se a pessoa começou a digitar a próxima pergunta enquanto a anterior estava "Enviando…", limpar apagaria esse texto novo — o README §7 proíbe perder texto digitado. |
+| "Tentar de novo" também é derivado do **histórico**: se a última pergunta não tem resposta `completa` nem `gerando` depois dela (Task 3) | A spec diz que recarregar no meio de uma resposta a deixa `interrompida` "e a tela oferece Tentar de novo". Sem derivar do histórico, depois de recarregar a página não haveria botão nenhum. |
+| O estado de envio "desconhecido" é um membro próprio da união (`unknown`), separado de `failed` (Task 3) | Pedem textos diferentes: `failed` sabe o que houve (o `code`), `unknown` não sabe se a resposta chegou inteira. Os dois oferecem "Tentar de novo" com o mesmo id. |
+| Um evento SSE de nome desconhecido é **ignorado** pelo hook (Task 3) | O mesmo motivo da linha da Task 1: compatibilidade para frente, e o final continua decidido só por `done`/`error` — sem final, o resultado é `unknown`, então ignorar não esconde nada. |
+| O histórico tem um **contador de geração** interno (`useTutorConversation`), acrescentado na revisão da Task 3 | Sem ele, a atualização silenciosa (depois de uma falha) e a recarga sobrescreviam a lista sem saber qual resposta era mais nova: um GET lento que chegasse depois do `done` voltava a lista para a versão sem a resposta, ou com a linha `gerando` vazia. Cada recarga pega um número novo e só grava se ainda for o mais recente; a atualização silenciosa usa o número corrente (uma recarga em voo continua sendo a fonte); o `done` pega um número novo, invalidando o que saiu antes dele, e, se a lista não está carregada (recarga em voo ou em erro), pede outra recarga — a que estava em voo saiu antes do `done`. Não cobre duas atualizações silenciosas fora de ordem nem o `updateAction` (pendência 49). |
 
 ### Incrementos anteriores
 
@@ -486,6 +494,61 @@ Criada na Task 1 e completada na Task 9 (plano
   teste extra da Task 1 deixou de sugerir que um `: keepalive` isolado é
   aceito; e os comentários de `client.ts` e `src/test/sse.ts` citam o
   caminho completo `src/focusquest/modules/tutoring/sse.py`.
+- **Task 3** — hooks da tutoria (commit deste registro; o sha é o do
+  próprio commit, que o registro não pode conter). Em
+  `frontend/src/features/tutoring/`: `useTutorStatus.ts` (disponibilidade da
+  Tifa, com `error` separado de `unavailable`); `useTutorConversation.ts`
+  (histórico, rascunho, envio pelo `postStream`, reenvio idempotente e a
+  união `SendState` com `idle`/`sending`/`writing`/`failed`/`unknown`);
+  `conversationHistory.ts` (`appendTurn`, `settleInterrupted`,
+  `pendingFromHistory`, `replaceAction`); `questionLimit.ts`
+  (`MAX_QUESTION_LENGTH`, `COUNTER_VISIBLE_FROM`, `describeQuestionLength`);
+  e os testes de cada um. **`frontend/src/test/fetchRoutes.ts`** (`routeFetch`,
+  `requestsTo`, `jsonBody`): um `fetch` falso roteado por método e URL que
+  constrói um `Response` **novo** a cada chamada — existe porque um
+  `Response` não serve duas chamadas (o corpo é consumido na primeira
+  leitura, e a segunda explode com "Body is unusable"), e com o painel a
+  página busca três recursos na montagem; uma chamada sem rota rejeita com
+  a chave na mensagem. **Ajustes feitos no worktree, relatados como
+  necessários para chegar a 100% sem exclusão** (descritos aqui pela
+  diferença entre a tabela de casos do plano e o teste final): o S2 parte de
+  um histórico não vazio (`[q1, a1]`) e confere `messages` igual a
+  `[q1, a1, q10]` com o `history` intacto; o S17 confere também que o
+  histórico não é pedido de novo depois do abort; e o caso novo **S27**
+  (`o error que chega com a conversa recarregando nao inventa lista`)
+  cobre a falha no meio do stream com uma recarga em curso — nem a resposta
+  provisória nem a atualização silenciosa escrevem por cima dela.
+  **Correções da revisão:** (1) caso novo para o `&& !needsNewId` do
+  `submit` (depois de um 409 `operacao_reutilizada`, o **Enviar** com o
+  mesmo texto manda id novo); (2) caso novo para o `history.status ===
+  'loaded'` do `canSubmit` (histórico em erro não envia); (3) as guardas
+  `!controller.signal.aborted` dos dois hooks ganharam um caso sob
+  `StrictMode` (padrão de `useMissions.test.tsx`), com o segundo pedido
+  segurado para o `error` aparecer se fosse escrito — as asserções de
+  `result.current` depois do `unmount()` (H3, S17 e o caso de desmontagem
+  do `useTutorStatus`) foram retiradas, porque o React descarta o setState
+  de um componente desmontado e elas não podiam dizer NÃO; (4) o contador
+  de geração do histórico (Decisões), com dois casos novos — a atualização
+  silenciosa lenta que chega depois do `done`, e o `done` com uma recarga
+  em voo — e o comentário do `done`, que afirmava que a recarga em voo "já
+  traz esta pergunta e esta resposta" (ela saiu antes do `done`), corrigido;
+  (5) o `code` desconhecido no evento `error` **não** foi mudado: o
+  `describeStreamFailure` devolve o próprio `UNKNOWN_RESULT` para ele, e o
+  `messageFailure.ts` não tem texto genérico de falha — ficou como
+  pendência 49; (6) um caso sob `StrictMode` prova que o envio sai com o
+  sinal **não** abortado (o controlador é um por montagem). **Mutações
+  vistas reprovando nesta revisão:** sem `&& !needsNewId` (reprova o caso
+  do `operacao_reutilizada` no Enviar); sem o termo `history.status ===
+  'loaded'` (reprova "com o historico em erro, nao envia"); sem a guarda
+  `aborted`, em cada hook (reprova o caso do StrictMode com `error` no lugar
+  de `loading`); controlador criado uma vez com `??=` (reprova "no
+  StrictMode, o envio sai com o sinal vivo"); sem o incremento da geração
+  no `done` e sem a conferência da geração na atualização silenciosa
+  (reprova o GET lento, `[10, 11]` no lugar de `[10, -1, 12]`); sem a
+  recarga pedida pelo `done` (reprova o S21 e o caso da recarga em voo);
+  sem a conferência da geração na recarga (reprova o caso da recarga em
+  voo); sem o espelho do status (reprova seis casos); e sem o retorno
+  `aborted` do `runTurn` (reprova o S17 pela contagem do histórico).
 - **Task 6** — infraestrutura do E2E da tutoria (commit deste registro; o
   sha é o do próprio commit, que o registro não pode conter). **O falso
   configurável:** em `tests/integration/provedor_falso.py`, `_Tratador`
@@ -923,6 +986,10 @@ que não tinham chegado aqui)
     a função, e o clique em Concluir lançaria `TypeError` antes de o pedido
     sair. **Não medido**; é o que a especificação da Web Crypto diz. Se
     ninguém mexer, o botão parece não fazer nada nesse cenário.
+    Desde o 1b-2, o `crypto.randomUUID` gera também o `client_message_id`
+    da pergunta à Tifa (Task 3) e, na Task 5, o `operation_id` da
+    confirmação da proposta: no mesmo cenário, o Enviar lançaria
+    `TypeError` antes do pedido. Continua **não medido**.
 34. **`useCompleteMission` não se protege sozinho contra envio duplo.** A
     única guarda é o `disabled` do botão, que é testada; o hook em si aceita
     dois `complete()` no mesmo tick. Medido pela revisão final: dois
@@ -1007,6 +1074,9 @@ que não tinham chegado aqui)
     de produto sobre quanto texto uma pergunta deveria ter — no mesmo
     espírito da pendência 26 (tetos técnicos de `missions` que esperam um
     teto de negócio do dono).
+    Desde o 1b-2 o teto é aplicado também na tela (`MAX_QUESTION_LENGTH`,
+    `features/tutoring/questionLimit.ts`), espelhado à mão; mudar o número
+    é mudar os dois lados.
 42. **Roteiro da chamada real (1b-2), para gravar a referência da camada 3
     (pendência 40):** com a chave de verdade no `.env` local do dono e o
     `anthropic_base_url` **sem** override, (a) pedir à Tifa uma proposta de
@@ -1053,6 +1123,18 @@ que não tinham chegado aqui)
     `tests/integration/test_install_gitleaks.py` nem
     `tests/integration/test_push_env.py`.** Os dois arquivos existem e rodam;
     a lacuna é só na documentação, e é anterior ao 1b-1.
+49. **Um evento `error` com `code` desconhecido mostra o texto do resultado
+    desconhecido (1b-2, Task 3).** O `useTutorConversation` o trata como
+    `failed` com o `UNKNOWN_RESULT` ("Não deu para saber se a resposta
+    chegou inteira…"), que é o que o `describeStreamFailure` devolve para um
+    `code` fora do mapa — mas o backend já gravou a resposta como `falhou`,
+    então a frase diz menos do que se sabe. Não há texto genérico de falha
+    no `messageFailure.ts`, e inventar um é decisão de texto de interface:
+    fica para o dono. O "Tentar de novo" continua certo (mesmo id). Na mesma
+    revisão, o contador de geração do histórico deixou dois casos de fora,
+    raros e sem medição: duas atualizações silenciosas em voo que chegam
+    fora de ordem (a de uma falha anterior pode gravar por último), e o
+    `updateAction`, que não invalida um GET mais velho que a confirmação.
 
 ## Próximo incremento
 
