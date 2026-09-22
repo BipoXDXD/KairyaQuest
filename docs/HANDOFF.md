@@ -15,10 +15,13 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 PR #10, o 1b-1). Spec em
 `docs/superpowers/specs/2026-09-18-incremento-1b-design.md` (seções "A tela
 (1b-2)", "E2E", "A chamada real" e a camada 3 do servidor falso); plano em
-`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. **Estado de
-publicação: não publicado.** Push, PR e merge exigem autorização do dono, um
-passo de cada vez; quando mesclado, esta linha passa ao padrão "publicado
-pelo PR #N, mesclado por `<forma>`; estado atual em `gh pr view N`".
+`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. A branch soma, até
+este registro (Task 9), **10 commits** contados com
+`git log --oneline a795ee7..HEAD | wc -l`, medido nesta sessão — mais este
+commit de documentação. **Estado de publicação: não publicado.** Push, PR e
+merge exigem autorização do dono, um passo de cada vez; quando mesclado,
+esta linha passa ao padrão "publicado pelo PR #N, mesclado por `<forma>`;
+estado atual em `gh pr view N`".
 
 **Incremento A — conclusão na tela.** Branch `feat/incremento-a`, aberta a
 partir de `49c17ac`, **empilhada sobre `docs/spec-ciclo-diario`** — o PR #6
@@ -267,6 +270,63 @@ tarefas as põem em código.
 | `prazo_expirado` é espelhado como `state: 'falhou'` direto no `changed`, sem nova ida à rede (Task 5) | O backend já grava a ação como `falhou` **antes** de responder 422 (spec, "Confirmar e recusar"): a tela só precisa repetir o que já é verdade, e uma recarga para confirmar seria uma chamada a mais sem informação nova. |
 | O `boardHref` é passado pela página ao `TutorPanel`, e não conhecido pela feature `tutoring` (Task 5) | A página é quem conhece as duas features (`missions` e `tutoring`) e o `id` do título do quadro; `tutoring` continua sem saber que `missions` existe, o mesmo contrato que já valia para `onMissionCreated`. |
 
+As cinco emendas à spec (E1–E5, decisão do dono sobre a chave no Keychain e
+mais quatro pontos que a execução mudou) **não** entram nesta tabela: vivem
+na seção "Emendas (2026-09-22, 1b-2)" da spec
+(`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`), no mesmo
+formato da emenda do 1b-1, com o motivo medido e o teste que prova cada uma.
+
+### Incremento 1b-2 — decisões tomadas durante a execução
+
+Quatro divergências entre o pseudocódigo/texto do plano e o que a execução
+exigiu, descobertas nas correções de revisão da Task 6 e nas mutações da
+Task 7.
+
+| Decisão | Motivo |
+|---|---|
+| Em `TratadorDoFalso.do_POST`, `liberar` e `roteiro` são capturados **juntos** no início do tratamento (`liberar` primeiro), e o `/_control/reset` troca o roteiro **antes** de trocar o `Event` (Task 6, commit `d8461e7`) | O plano previa ler `roteiro` no início e `liberar` só na hora de esperar. Entre as duas leituras, um `POST /_control/reset` trocava o `Event`: o tratador esperava no `Event` novo com o roteiro **velho** mandando segurar, preso até o teto de 30 s. Reproduzido de forma determinística por `test_reset_entre_o_registro_e_a_espera_solta_o_tratador` (com o `time` do falso trocado por monkeypatch); a ordem "roteiro antes do `Event`" no reset não tem teste próprio — a janela fica entre duas atribuições consecutivas, sem gancho possível no código, e o motivo está no comentário do reset. |
+| `PUT /_control/script` sem `content-length` responde `400` com `{"error": ...}`, e a conexão fecha depois de qualquer `400` (Task 6, commit `d8461e7`) | O plano não previa o caso: sem a checagem, faltar o cabeçalho levantava `TypeError` fora do `try` e a conexão caía sem resposta nenhuma (`RemoteDisconnected` do lado do cliente), em vez de um erro alto e legível. |
+| Os textos que o falso devolve no cenário (c) do E2E carregam o sufixo `EXECUCAO` (Task 7) | A conversa da tutoria é uma só no `focusquest_test`, e a tela mostra até 50 mensagens: sem o sufixo, a segunda execução seguida de `make check-e2e` reprova com `strict mode violation` (o localizador por texto resolve para a linha desta execução **e** da anterior) — medido com o texto original do plano. Pior, a execução seguinte do dia poderia **aprovar** por acidente, casando com as linhas velhas antes do reenvio desta execução. |
+| Duas mutações do plano (Task 7) precisaram de forma ajustada para reprovar pelo motivo certo | (1) desligar a recarga do quadro com `onMissionCreated={() => undefined}` não compila (`TS6133`, `noUnusedLocals`); a mutação aplicada foi o corpo do `reloadBoard` sem `board.current!.reload()`, mesma semântica, reprovando o cenário (a) em `toHaveCount(1)`. (2) um filho `<div style={{ width: 600 }} />` no `<main>` **passou** por engano (EXIT 0): a div tinha 600 px de largura, mas altura zero não entra no `scrollWidth`/overflow rolável do Chromium; com `{ width: 600, height: 10 }` o cenário (e) reprova em `semRolagemHorizontal()`. O defeito era da mutação, não do cenário. |
+
+**Registro da decisão D-a: a chave real mora no Keychain do macOS, nunca no
+`.env`.** Duas exposições medidas (registradas na emenda E1 da spec,
+`docs/superpowers/specs/2026-09-18-incremento-1b-design.md`): (1) o
+`check-secrets` roda `gitleaks dir .`, que varre também arquivos ignorados
+pelo git — medido em 2026-09-22 num repositório descartável, com `.env` no
+`.gitignore` e uma chave fictícia `sk-ant-api03-...` dentro dele, o Gitleaks
+8.30.1 com o `.gitleaks.toml` deste projeto deu `leaks found: 1`, EXIT 1: com
+a chave no `.env`, todo commit reprovaria; (2) o `pre-push` exporta toda
+`FOCUSQUEST_*` do `.env` para o worktree do gate (`scripts/push-env.sh`,
+`docs/QUALITY.md` §6) — a chave iria para o ambiente do gate inteiro a cada
+push. **Resíduo:** uma variável já exportada no shell de quem empurra também
+passa ao worktree ("uma variável já exportada vence" — `push-env.sh` só
+exporta o que está no `.env`, mas não apaga o que já está no ambiente); é
+por isso que a recomendação é nunca exportar a chave no perfil do shell, só
+no comando, e as duas guardas
+(`test_a_guarda_vale_com_a_chave_exportada_no_ambiente`, Task 8 Step 1, e
+`test_impoe_a_chave_ficticia_mesmo_com_uma_chave_no_ambiente`, Task 6) provam
+que esse resíduo não alcança nem a suíte nem o E2E. Ver também "Setup"
+abaixo.
+
+### Dependências e infraestrutura que entraram no 1b-2
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço. **Nenhuma dependência npm ou Python nova** — conferido:
+`git diff a795ee7 -- frontend/package.json pyproject.toml` vazio (medido
+nesta sessão).
+
+- **Infraestrutura:** o servidor falso do E2E como processo próprio, na
+  porta 8150, é o terceiro `webServer` do Playwright
+  (`frontend/tests/e2e/servers.ts`, `frontend/playwright.config.ts`); o
+  controle HTTP dele (`/_control/*`) mora inteiramente em `tests/`, nunca em
+  `src/focusquest/`. A chave real da Anthropic mora no Keychain do macOS
+  (item `focusquest-anthropic`, decisão D-a, emenda E1), **fora** do
+  repositório; o `.gitleaks.toml` não mudou.
+- **Endpoints:** nenhum novo na aplicação. O `/_control/*` do falso não é
+  endpoint de produto — é infraestrutura de teste, exposta só pelo processo
+  `tests/integration/falso_do_e2e.py`.
+
 ### Incrementos anteriores
 
 | Decisão | Motivo |
@@ -477,6 +537,13 @@ Commits `023d251`..`9fb9a8e` (15), backend só (a tela e o E2E são do 1b-2):
 Criada na Task 1 e completada na Task 9 (plano
 `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`):
 
+- **Task 0** — correção do registro do 1b-1 e abertura da revisão-base do
+  1b-2 (commit `3cc176a`): o parágrafo do 1b-1 em "Revisão-base" passou a
+  contar os **15** commits reais (`023d251`..`9fb9a8e`, medidos com
+  `git log --oneline c7a91a5..9fb9a8e`) e o estado "publicado pelo PR #10,
+  mesclado por merge commit em `a795ee7`" (registro anterior dizia "não
+  publicado" e contava 13, até `880dd60`); a revisão-base do 1b-2 foi aberta
+  a partir de `a795ee7`; e o plano deste incremento entrou no repositório.
 - **Task 1** — `postStream` (commit `44e7ab2`): as três formas de terminar
   (erro antes do stream como `ApiError` idêntico ao do `postJson`, eventos
   entregues um a um, e falha de leitura no meio como `ApiError` com o
@@ -818,6 +885,14 @@ incremento:
 | `make migrate-test` | Aplica as migrações no banco de teste. |
 | `make check-api` | `uv lock --check`, Ruff, mypy estrito e pytest com cobertura de 100%. |
 | `make check-e2e` | `migrate-test`, build do frontend e Playwright com axe-core. |
+| `PYTHONPATH=tests uv run python -m integration.falso_do_e2e --porta 8150` | Sobe o servidor falso do E2E à mão, fora do Playwright (que o sobe sozinho no `make check-e2e`). Não precisa de chave nenhuma. |
+
+**Ainda não documentado aqui:** o comando que sobe a API local com a chave do
+Keychain e o comando que grava a referência da camada 3
+(`PYTHONPATH=tests uv run python -m integration.camada3`) — os dois
+dependem dos Steps 2–4 da Task 8 (o roteiro manual pela tela com a chave
+real), que ficaram para depois desta rodada (pendências 40 e 42). O módulo
+`tests/integration/camada3.py` **não existe ainda**.
 
 Para rodar a aplicação em desenvolvimento (não faz parte do gate):
 
@@ -855,6 +930,9 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do `d8461e7`) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 | `make check` sobre a Task 7 do 1b-2 (árvore do commit `73b6e17`) | Aprovado, EXIT 0. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado pela Task 7, que só acrescenta o cenário E2E. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: **11 cenários** aprovados em Chromium (os 6 do quadro e os 5 da tutoria). Gitleaks sem achados. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Task 7 do 1b-2) | 6 missões, 7 mensagens da tutoria, 2 ações — o esperado pelo desenho. Depois de mais um `make check-e2e` sem o pytest no meio: 12, 14 e 4. |
+| `make check` sobre a Task 8 Step 1 do 1b-2 (árvore do commit `605b24e`), rodado duas vezes seguidas | Aprovado, EXIT 0 nas duas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 8 Step 1 só toca `tests/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: **313 testes** (312 da Task 7 mais o novo `test_a_guarda_vale_com_a_chave_exportada_no_ambiente`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 11 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
+| `grep -rn "features/missions" frontend/src/features/tutoring/` e `grep -rn "features/tutoring" frontend/src/features/missions/` (Task 9, §5 regra 1 do `docs/ARCHITECTURE.md`) | Nenhum dos dois saiu vazio, mas nenhum é **import**: o primeiro casa duas linhas de comentário em `tutoring/types.ts` ("Esta feature nao importa nada de `features/missions/`..."); o segundo casa uma linha de comentário em `missions/MissionList.tsx` que cita `features/tutoring/ProposalCard.tsx` num JSX comment. Conferido à parte, sem achado: `grep -rn "^import.*features/missions\|from ['\"].*features/missions" frontend/src/features/tutoring/` e o equivalente para `tutoring` dentro de `missions/` — os dois EXIT 1 (nenhum `import`). A regra 1 vale: nenhuma feature importa a outra. |
+| `make check`, duas vezes seguidas, sobre a Task 9 do 1b-2 (documentação: `docs/HANDOFF.md`, `docs/QUALITY.md`, `docs/ARCHITECTURE.md`, a spec) | Aprovado, EXIT 0 nas duas, sem divergência entre elas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 9 só toca `docs/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 313 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações) nas duas execuções. E2E: 11 cenários aprovados em Chromium nas duas. Gitleaks sem achados nas duas. |
 
 ## Ambiente verificado
 
@@ -888,6 +966,12 @@ make check
 Sem o comando dos hooks, commits e pushes não passam por nenhuma validação
 local, sem aviso. Sem o `.env` e o `make db-up`, o `check-api` e o
 `check-e2e` reprovam.
+
+**A chave real da Anthropic não entra neste roteiro.** O `.env` deste passo
+fica com `FOCUSQUEST_ANTHROPIC_API_KEY=` vazio (decisão D-a, 1b-2): a chave
+mora só no Keychain do macOS, e só quem for fazer a chamada real (Task 8 do
+1b-2, `docs/HANDOFF.md` "Comandos") precisa dela, no ambiente do processo da
+API, nunca no `.env` nem exportada no perfil do shell.
 
 ## Pendências
 
@@ -1340,7 +1424,13 @@ que não tinham chegado aqui)
     um `Fim` que chega porque o SDK bateu em `tutor_max_tokens`. Nos dois
     casos o serviço recebe o mesmo evento e grava `completa` — uma resposta
     truncada por falta de tokens parece inteira para o cliente e para o
-    histórico do turno seguinte.
+    histórico do turno seguinte. **Continua aberta.** Desde o 1b-2 a
+    consequência é visível: uma resposta cortada por `max_tokens` chega à
+    tela como `completa`, sem marca, e o cartão de proposta não aparece se o
+    corte veio antes do `tool_use`. A tela não tem como distinguir: o
+    `MessageRead` não carrega o `stop_reason`. Resolver pede mudar o backend
+    (gravar o `stop_reason`, ou tratar `max_tokens` como `interrompida`) —
+    fora do escopo do 1b-2, que não muda `src/focusquest/`.
 46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
     o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
     não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
@@ -1353,10 +1443,16 @@ que não tinham chegado aqui)
     obrigatório, uma validação mais estrita) transformaria uma proposta já
     gravada — válida quando nasceu — num 500 na hora de confirmar, em vez de
     continuar aceita com as regras de quando foi criada.
-48. **A árvore de testes em `docs/ARCHITECTURE.md` não lista
+48. ~~**A árvore de testes em `docs/ARCHITECTURE.md` não lista
     `tests/integration/test_install_gitleaks.py` nem
     `tests/integration/test_push_env.py`.** Os dois arquivos existem e rodam;
-    a lacuna é só na documentação, e é anterior ao 1b-1.
+    a lacuna é só na documentação, e é anterior ao 1b-1.~~ **Resolvida na
+    Task 9 do 1b-2:** a árvore de `docs/ARCHITECTURE.md` §1 foi regerada com
+    `git ls-files` e lista os dois arquivos, junto com todo o resto de
+    `tests/integration/`.
+
+**Criadas pelo Incremento 1b-2**
+
 49. **Um evento `error` com `code` desconhecido mostra o texto do resultado
     desconhecido (1b-2, Task 3).** O `useTutorConversation` o trata como
     `failed` com o `UNKNOWN_RESULT` ("Não deu para saber se a resposta
@@ -1401,44 +1497,58 @@ B → C**. O desenho de A, B e C está em
   A").
 - **1b — a Tifa**, em duas partes. **1b-1 (backend) entregue e publicado
   pelo PR #10** (ver "Revisão-base"). **1b-2 (frontend, E2E e a chamada
-  real) em andamento** na branch `feat/incremento-1b-2`, pelo plano
-  `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. Desenho aprovado pelo dono
-  em `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`.
+  real) entregue, não publicado**, na branch `feat/incremento-1b-2`, pelo
+  plano `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. Desenho
+  aprovado pelo dono em
+  `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com a seção
+  "Emendas (2026-09-22, 1b-2)". **A parte da Task 8 que usa a chave real**
+  (Keychain, roteiro manual pela tela, captura da camada 3) ficou para
+  depois desta rodada, por decisão do dono de 2026-09-22 — pendências 40 e
+  42 continuam abertas.
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
-  navegação lateral), depois do 1b.
+  navegação lateral), depois do 1b. **B começa por design próprio**
+  (pendência 26: teto de negócio para `estimated_minutes`, janela de negócio
+  para `deadline`, missões diárias reveladas semanalmente e a missão especial
+  com bônus de XP).
 
-**Incremento 1b-2** — a tela da Tifa, o painel expansível, o `postStream`,
-o E2E com o servidor falso e a chamada real que grava a camada 3
-(pendências 40 e 42). Não traz alvo de gate novo; estende os existentes
-(`check-web` e `check-e2e`). Começou em `a795ee7`; o plano fixa as decisões
-que a spec não fixava. O que o 1b-1 já entregou e o 1b-2 encontra pronto:
+**O que o B encontra pronto do 1b:**
 
 - **O backend inteiro da tutoria** — modelo de dados, as cinco rotas, o SSE,
-  o adaptador Anthropic e o servidor falso (camadas 1 e 2). Ver
-  `docs/ARCHITECTURE.md` §3 ("O modelo de dados e o contrato HTTP da
-  tutoria que existem") e `docs/QUALITY.md` §9.
+  o adaptador Anthropic e o servidor falso (camadas 1 e 2, e a 3 quando a
+  Task 8 terminar). Ver `docs/ARCHITECTURE.md` §3 ("O modelo de dados e o
+  contrato HTTP da tutoria que existem") e `docs/QUALITY.md` §9.
+- **O painel da Tifa na tela**, lateral no desktop e folha no celular
+  (`frontend/src/features/tutoring/`), com o cartão de proposta, a recarga
+  do quadro pela página (`ref`) e as chaves de confirmação por ação.
+- **`postStream`** (`frontend/src/shared/api/client.ts`) — `fetch` +
+  `ReadableStream` + `TextDecoder`, com `AbortSignal`, pronto para qualquer
+  fluxo futuro que precise de um stream SSE do backend.
+- **`formatDeadline`** em `frontend/src/shared/lib/deadline.ts` — primeiro
+  arquivo de `shared/lib/`, já com dois usuários (o cartão da missão e o da
+  proposta).
+- **O servidor falso como processo** (`tests/integration/falso_do_e2e.py`),
+  com controle HTTP por `/_control/*` — qualquer E2E futuro que precise de
+  uma segunda API falsa de pé tem o padrão pronto (porta própria, guarda de
+  loopback em `scripts/e2e-env.sh`, `webServer` dedicado no
+  `playwright.config.ts`).
 - **Provedor de IA: Anthropic**, com **`claude-opus-5`** como modelo padrão
   **configurável**, já em `Settings`. O README §6 manda manter chamadas e
   credenciais no backend, com limites, timeouts e modelo configuráveis, e
   testar a integração sem chamadas pagas nem segredos reais — cumprido pelo
-  servidor falso.
+  servidor falso; a chave real mora no Keychain do macOS (decisão D-a),
+  nunca no repositório.
 
-O que o 1b-2 vai encontrar e precisa saber, porque morde:
+**O que o B (ou quem retomar a Task 8) precisa saber, porque morde:**
 
-- **A feature `frontend/src/features/tutoring/` continua contrato** — nada
-  dela existe ainda (`docs/ARCHITECTURE.md` §3, "Frontend").
-- Propor e confirmar uma missão toca a criação e, provavelmente, a
-  conclusão. A conclusão já responde `code` e a tela já conclui: o fluxo da
-  Tifa deve reusar `postJson`, o `CodigoDeErro` e o mapa exaustivo de
-  `completionFailure.ts`, em vez de criar um caminho paralelo. O
-  `EventSource` só faz GET; o stream de `POST /api/tutoring/messages` exige
-  uma função nova, `postStream`, com `fetch` e `ReadableStream`.
-- O E2E do chat precisa de uma porta própria para o servidor falso, e
-  divide o banco e as portas do E2E atual (pendências 19, 20 e 43).
-- A camada 3 do servidor falso e a chamada real que a grava são deste
-  incremento (pendências 40 e 42) — o roteiro está na pendência 42.
-- O teto de 4000 caracteres da pergunta (pendência 41) é decisão do dono,
-  não deste incremento, a menos que ele decida revisitá-lo aqui.
+- **A camada 3 do servidor falso ainda não existe** (pendência 40); a
+  referência (`tests/integration/referencia_da_api_real.json`) só nasce da
+  chamada real, manual, do dono, com o roteiro da pendência 42.
+- **O teto de 4000 caracteres da pergunta** (pendência 41) é decisão do
+  dono, provisória, espelhada à mão em `MAX_QUESTION_LENGTH` — mudar o
+  número é mudar os dois lados.
+- **A pendência 45** (`max_tokens` grava `completa`) agora tem consequência
+  visível na tela: resolver pede mudar `src/focusquest/`, fora do escopo do
+  1b.
 
 ## Incrementos anteriores
 

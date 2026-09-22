@@ -157,7 +157,7 @@ excluído deliberadamente, nunca por dificuldade de testar.
 | Exclusão | Justificativa |
 |---|---|
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
-| `frontend/src/test/**` | Infraestrutura de teste (setup do ambiente jsdom), não código de aplicação. |
+| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes quatro arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Tifa busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. |
 | `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
 | `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
@@ -268,45 +268,70 @@ mesmos criaram.
   `forbidOnly: true` em qualquer ambiente, `retries: 0`, `workers: 1`,
   projeto único em Chromium.
 - **Servidores dedicados, subidos pelo próprio Playwright**, com
-  `reuseExistingServer: false`: a API na porta **8100**
+  `reuseExistingServer: false`: desde o 1b-2 são **três**. O servidor falso
+  da Anthropic sobe primeiro, na porta **8150**
+  (`PYTHONPATH=tests uv run python -m integration.falso_do_e2e --porta 8150`,
+  `frontend/tests/e2e/servers.ts`); a API sobe na porta **8100**
   (`scripts/e2e-env.sh uv run uvicorn ...`, esperada pelo `/ready`, que
-  consulta o banco) e o frontend na **5273** (`vite preview` do build). As
-  portas de desenvolvimento são 8000 e 5173; nenhuma é reaproveitada
-  (README §10).
+  consulta o banco) com `FOCUSQUEST_ANTHROPIC_BASE_URL` apontada para o
+  falso; e o frontend na **5273** (`vite preview` do build). As portas de
+  desenvolvimento são 8000 e 5173; nenhuma é reaproveitada (README §10).
 - **`scripts/e2e-env.sh`** aponta `FOCUSQUEST_DATABASE_URL` da API do E2E
   para o banco de **teste** (lido de `Settings().test_database_url`, sem
   repetir a URL) e recusa subir se o nome do banco não terminar em `_test`.
+  Desde o 1b-2, o script ganhou duas guardas a mais (Task 6): recusa subir a
+  API se o host de `anthropic_base_url` não for loopback (`127.0.0.1`,
+  `localhost` ou `::1`) — medido: apontar para
+  `'https://api.anthropic.com'` no `playwright.config.ts` faz o
+  `make check-e2e` sair **antes de qualquer cenário**, com o texto exato
+  `[WebServer] recusando subir a API do E2E com o provedor em
+  'api.anthropic.com'; o E2E so fala com o servidor falso em loopback --
+  confira FOCUSQUEST_ANTHROPIC_BASE_URL (o playwright.config.ts a define)`
+  seguido de `Error: Process from config.webServer was not able to start.
+  Exit code: 1` — e **impõe** `FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia`
+  por cima de qualquer chave do ambiente ou do `.env` (a chave real mora no
+  Keychain, D-a; ver `docs/HANDOFF.md`).
 - **O proxy do `vite preview` recebe `API_PROXY_TARGET`** apontando para a
   8100, pelo `env` do `webServer`. Sem isso o proxy cairia no padrão 8000 —
   a API de desenvolvimento — e o cenário poderia **passar** contra o
   servidor errado.
 - **axe-core** com o conjunto de regras padrão (sem `withTags` nem
-  `disableRules`), exigindo zero violações, em quatro estados da tela: a
-  lista carregada; o erro de carregamento (forçado com
-  `page.route(...).abort()`); a missão recém-concluída pelo botão; e o aviso
-  de falha da conclusão (a resposta do POST descartada com `route.fetch()` e
-  `route.abort()`, depois de o servidor concluir). O estado de carregando e
-  o de envio **não** são auditados.
+  `disableRules`), exigindo zero violações. No quadro de missões: a lista
+  carregada; o erro de carregamento (forçado com `page.route(...).abort()`);
+  a missão recém-concluída pelo botão; e o aviso de falha da conclusão (a
+  resposta do POST descartada com `route.fetch()` e `route.abort()`, depois
+  de o servidor concluir). **Desde o 1b-2** (Task 7), também na tutoria: o
+  estado "escrevendo" (resposta presa no meio pelo falso, região viva em
+  "Tifa está escrevendo…"), o cartão de proposta, o indisponível (campo e
+  Enviar desabilitados) e a folha aberta no celular. **Continuam fora**,
+  cobertos só no Vitest: o carregando do painel (esqueleto), o "Enviando…"
+  antes do `user_message`, os estados do cartão depois da decisão (executada,
+  recusada, falhou) e o aviso de falha do envio.
 
 **O E2E divide o banco `focusquest_test` com a suíte pytest.** É uma decisão
 deliberada, e duas exigências estruturais a tornam segura: o cenário semeia
 **pela API, por HTTP** (nunca por SQL), e afirma **só sobre as linhas que ele
 mesmo criou** — cada missão carrega um sufixo único da execução e é
-localizada pelo `id` que a API devolveu. Dado remanescente não aprova nem
-reprova o cenário. Duas consequências operacionais:
+localizada pelo `id` que a API devolveu; desde o 1b-2, todo texto que um
+cenário da tutoria localiza — inclusive o que o falso devolve — carrega o
+mesmo sufixo `EXECUCAO` (a conversa é uma só, e a tela mostra as últimas 50
+mensagens). Dado remanescente não aprova nem reprova o cenário. Duas
+consequências operacionais:
 
 - **Não rode `check-api` e `check-e2e` ao mesmo tempo na mesma máquina** —
   nem dois `make check` simultâneos. A fixture do pytest faz `DROP SCHEMA`
-  no banco que a API do E2E está usando, e o E2E usa portas fixas
-  (8100, 5273). O resultado é falha alta (500, tabela inexistente, porta
-  ocupada), não aprovação silenciosa — mas é falha. No CI a corrida não
-  existe: cada job tem o próprio serviço PostgreSQL.
+  no banco que a API do E2E está usando, e o E2E usa **três** portas fixas
+  (8100, 5273, 8150 desde o 1b-2). O resultado é falha alta (500, tabela
+  inexistente, porta ocupada), não aprovação silenciosa — mas é falha. No CI
+  a corrida não existe: cada job tem o próprio serviço PostgreSQL.
 - **Cada execução do E2E deixa linhas no `focusquest_test`.** Elas só somem
-  no próximo `DROP SCHEMA` da suíte pytest. Cada execução cria quatro
-  missões: as duas que o `beforeAll` semeia e uma por cenário de conclusão.
-  Depois de um `make check` completo sobram as quatro da última execução do
-  E2E (medido no Incremento A: 4 linhas); `make check-e2e` rodado
-  repetidamente, sem o `check-api` no meio, acumula quatro por execução.
+  no próximo `DROP SCHEMA` da suíte pytest. Medido depois de um `make check`
+  completo, na Task 7 do 1b-2 (substitui a medição "4 linhas" do
+  Incremento A, que só contava missões): **6 missões** (as 4 do quadro, duas
+  concluídas, mais a confirmada e a semeada pela tutoria), **7 mensagens**
+  da tutoria e **2 ações**. `make check-e2e` rodado repetidamente, sem o
+  `check-api` no meio, acumula por execução — medido: +6/+7/+2 (12/14/4
+  depois da segunda).
 
 ### Validação dos lockfiles — assimetria declarada
 
@@ -578,6 +603,15 @@ Sem eufemismo:
   (README §12; conferido com `gh api` na proteção da branch). Os hooks
   locais existem para dar feedback rápido e reduzir o volume de commits
   quebrados que chegam ao CI, não para substituir a proteção do remoto.
+- **O `gitleaks dir .` do `check-secrets` varre também arquivos ignorados
+  pelo git** (1b-2, decisão D-a) — `.env` incluído, mesmo com ele no
+  `.gitignore`. Medido em 2026-09-22, num repositório descartável: com uma
+  chave fictícia `sk-ant-api03-...` dentro de um `.env` ignorado, o Gitleaks
+  8.30.1 com o `.gitleaks.toml` deste projeto deu `leaks found: 1`, EXIT 1.
+  É por isso que a chave real da Anthropic **não** mora no `.env` — mora no
+  Keychain do macOS, fora do repositório (ver `docs/HANDOFF.md`). O
+  `.gitleaks.toml` **não** mudou para acomodar isso: nenhuma exceção nova
+  foi aberta.
 
 ## 7. Como atualizar o Gitleaks
 
@@ -688,11 +722,13 @@ honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
 porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
 projeto, mas o efeito prático é o mesmo e vale estar escrito.
 
-## 9. O servidor falso da Anthropic (Incremento 1b-1)
+## 9. O servidor falso da Anthropic (Incrementos 1b-1 e 1b-2)
 
 > **Fonte de verdade:** `tests/integration/provedor_falso.py`,
 > `tests/integration/conftest.py` (fixtures `falso`, `fabrica`, `tutoria`,
-> `conversa`) e `tests/conftest.py` (a guarda de sessão).
+> `conversa`), `tests/conftest.py` (a guarda de sessão) e, desde o 1b-2,
+> `tests/integration/falso_do_e2e.py` (o processo e o controle) e
+> `scripts/e2e-env.sh` (a guarda de loopback e a chave imposta).
 
 ### Onde mora, e por que não existe "modo falso" em `src/`
 
@@ -741,25 +777,61 @@ acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1:
 
 A camada 3 — gravar a sequência de tipos de evento de uma chamada real (sem
 conteúdo) e comparar o falso contra ela — só existe depois de o dono fazer
-essa chamada, uma vez, com a chave dele. Isso é trabalho do **1b-2**; até lá
-é pendência registrada em `docs/HANDOFF.md`, e o 1b-1 não afirma mais do que
-as camadas 1 e 2 provam: que o falso é válido **para o SDK**, não que é
-idêntico à API real.
+essa chamada, uma vez, com a chave dele. Isso é trabalho da **Task 8 do
+1b-2** (Steps 2–4: a chave no Keychain, o roteiro manual pela tela, o script
+`tests/integration/camada3.py` e o arquivo de referência), e ficou para
+depois desta rodada por decisão do dono de 2026-09-22 — pendências 40 e 42
+em `docs/HANDOFF.md` continuam abertas. Até lá, nem o 1b-1 nem o 1b-2 afirmam
+mais do que as camadas 1 e 2 provam: que o falso é válido **para o SDK**, não
+que é idêntico à API real. Quando a Task 8 terminar, esta subseção passa a
+descrever: como a referência foi gravada (script próprio, segunda chamada,
+linhas cruas via `with_streaming_response`, sem conteúdo); o que a
+comparação retira (`DESCARTADOS_PELO_SDK`, hoje só `ping`, com um teste que
+lê a fonte do `anthropic` instalado e reprova se ele deixar de descartar); o
+que ela **não** prova (que a API não mude amanhã — a referência é uma
+fotografia datada, com a versão do SDK e o modelo registrados no próprio
+JSON); e como regravar (comando na tabela "Comandos" do
+`docs/HANDOFF.md`, só pelo dono, nunca no gate).
+
+### O falso como processo (E2E)
+
+Desde o 1b-2 (Task 6), o E2E do Playwright precisa do falso **fora** do
+processo do pytest — como um servidor de verdade, na porta 8150, com o
+tempo de vida da suíte inteira do `check-e2e`. `tests/integration/falso_do_e2e.py`
+(`python -m integration.falso_do_e2e --porta N`, `PYTHONPATH=tests`) sobe o
+**mesmo** `ServidorAnthropicFalso` das camadas 1 e 2, com um `TratadorComControle`
+que estende `TratadorDoFalso` e acrescenta rotas sob `/_control/` (definir o
+roteiro, liberar uma resposta presa, reiniciar, listar requisições recebidas)
+— um contrato HTTP entre o cenário TypeScript (`frontend/tests/e2e/falso.ts`)
+e o falso Python, com chaves de payload em inglês. Isso **não** é um "modo
+falso" novo: o controle mora inteiramente em `tests/`, nunca em
+`src/focusquest/`, e a API do E2E continua sendo a de produção
+(`focusquest.main:app`), só apontada para o falso por
+`FOCUSQUEST_ANTHROPIC_BASE_URL` — a mesma peça (`dependency_overrides` de
+`get_tutoria`) que já existia desde o 1b-1 para o pytest. O contrato do
+controle é provado do lado Python por `tests/integration/test_falso_do_e2e.py`
+(18 testes, dois deles subindo o processo de verdade).
 
 ### A guarda de `tests/conftest.py`: nenhum teste alcança a Anthropic
 
 `tests/conftest.py` declara uma fixture de sessão, `autouse=True`, que
 aponta `FOCUSQUEST_ANTHROPIC_BASE_URL` para `http://127.0.0.1:9` — a porta
 do serviço `discard`, fechada em qualquer máquina de desenvolvimento e no
-runner do CI — **antes** do primeiro teste da suíte inteira. O `.env` local
-do dono tem a chave de verdade (decisão D1 da spec), e o `pre-push` exporta
-toda variável `FOCUSQUEST_*` dele para o worktree do gate
-(`docs/QUALITY.md` §6); sem esta guarda, um teste que esquecesse de trocar o
-provedor pelo servidor falso faria uma chamada **paga** — e passaria, o que
-é pior que reprovar. Com a guarda, o esquecimento vira erro de conexão
-imediato. A variável de ambiente vence o `.env` na ordem de fontes do
-pydantic-settings, e o escopo de sessão a instala antes de qualquer teste,
-inclusive os que nunca tocam a tutoria.
+runner do CI — **antes** do primeiro teste da suíte inteira. A chave de
+verdade mora no Keychain do macOS (decisão D-a, 1b-2), nunca no `.env`; a
+guarda protege contra o erro — uma chave posta por engano no ambiente ou no
+`.env` local do dono, e contra o `pre-push`, que exporta toda variável
+`FOCUSQUEST_*` do `.env` para o worktree do gate (`docs/QUALITY.md` §6).
+Sem esta guarda, um teste que esquecesse de trocar o provedor pelo servidor
+falso faria uma chamada **paga** — e passaria, o que é pior que reprovar.
+Com a guarda, o esquecimento vira erro de conexão imediato. A variável de
+ambiente vence o `.env` na ordem de fontes do pydantic-settings, e o escopo
+de sessão a instala antes de qualquer teste, inclusive os que nunca tocam a
+tutoria. **Provado com a chave exportada no ambiente** (Task 8 Step 1 do
+1b-2, regressão): `tests/unit/test_config.py::test_a_guarda_vale_com_a_chave_exportada_no_ambiente`
+põe `FOCUSQUEST_ANTHROPIC_API_KEY` no ambiente do processo e confere que o
+`anthropic_base_url` continua `http://127.0.0.1:9` — a guarda não depende de
+a chave estar ausente, só do endereço.
 
 ### Por que a desconexão precisa de um uvicorn real, e não do `TestClient`
 

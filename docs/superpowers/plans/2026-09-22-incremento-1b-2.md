@@ -3684,7 +3684,8 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 | `POST /_control/reset` | — | `204`; roteiro vazio, requisições apagadas, `liberar` rearmado |
 | `GET /_control/requests` | — | `200` `{"requests": [{"api_key": "...", "body": {...}}]}` |
 | `POST /v1/messages` | o do SDK | o stream do roteiro (o `do_POST` herdado) |
-| qualquer outra rota | — | `404` |
+| qualquer outra rota em `GET`, `PUT` ou `POST` | — | `404` |
+| qualquer rota com outro método (`DELETE`, `PATCH`…) | — | `501` (o `http.server` não tem tratador; correção da revisão da Task 6, ver `docs/HANDOFF.md`) |
 
   - `frontend/tests/e2e/servers.ts`: `export const FALSO_URL = 'http://127.0.0.1:8150'`.
   - `frontend/tests/e2e/falso.ts`: `interface Bloco = { text: string[] } | { tool_input: Record<string, unknown> }`; `interface RoteiroDoFalso { blocks: Bloco[]; http_status?: number; cut_after_events?: number; hold_after_events?: number }`; `definirRoteiro(roteiro: RoteiroDoFalso): Promise<void>`; `liberar(): Promise<void>`; `reiniciar(): Promise<void>`; `requisicoes(): Promise<{ api_key: string; body: unknown }[]>`.
