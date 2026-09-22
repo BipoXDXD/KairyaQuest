@@ -62,10 +62,13 @@ if not nome.endswith("_test"):
     )
 
 # O provedor da API do E2E tem de ser a MAQUINA LOCAL (o servidor falso).
-# Lista de permissao, e nao recusa de um nome: o .env do dono tem a chave de
-# verdade (spec do 1b, D1), e qualquer endereco de fora -- a Anthropic, um
-# proxy, um IP -- levaria a chave e o gasto para longe do teste. So o HOST vai
-# para a mensagem: uma URL com credencial embutida iria inteira para o log.
+# Lista de permissao, e nao recusa de um nome. A chave real mora no Keychain
+# do macOS, nunca no .env (decisao D-a, emenda E1 do 1b-2) -- mas uma chave
+# posta no ambiente do shell ou no .env por engano chegaria aqui, e o
+# pre-push exporta toda FOCUSQUEST_* do .env para o worktree do gate. Com o
+# provedor fora da maquina -- a Anthropic, um proxy, um IP --, essa chave e o
+# gasto iriam para longe do teste. So o HOST vai para a mensagem: uma URL com
+# credencial embutida iria inteira para o log.
 endereco = Settings().anthropic_base_url
 host = urlsplit(endereco).hostname
 if host not in {"127.0.0.1", "localhost", "::1"}:
@@ -82,9 +85,11 @@ PY
 )"
 
 export FOCUSQUEST_DATABASE_URL="$url"
-# A chave da API do E2E e SEMPRE a ficticia. A de verdade chega a este
-# ambiente pelo .env (o Settings o le) e pelo pre-push (que exporta toda
-# FOCUSQUEST_* do .env para o worktree): impor aqui, no unico caminho de subida
-# da API do E2E, fecha os dois. O valor nao imita o formato de uma chave real.
+# A chave da API do E2E e SEMPRE a ficticia. A real mora no Keychain e nao
+# deveria estar em lugar nenhum daqui, mas uma chave posta por engano chegaria
+# a este ambiente pelo shell, pelo .env (o Settings o le) ou pelo pre-push
+# (que exporta toda FOCUSQUEST_* do .env para o worktree): impor aqui, no
+# unico caminho de subida da API do E2E, fecha os tres. O valor nao imita o
+# formato de uma chave real.
 export FOCUSQUEST_ANTHROPIC_API_KEY="e2e-chave-ficticia"
 exec "$@"

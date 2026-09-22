@@ -168,6 +168,16 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
                 corpo=corpo, cabecalhos={k.lower(): v for k, v in self.headers.items()}
             )
         )
+        # `liberar` e `roteiro` sao capturados JUNTOS, aqui, e o tratador
+        # espera no `liberar` capturado -- nunca no `falso.liberar` do momento
+        # da espera. O reset do E2E (`falso_do_e2e`) troca o `Event` por um
+        # novo; um tratador que o lesse depois do reset esperaria no novo, que
+        # ninguem aciona, com o roteiro velho mandando segurar: preso ate o
+        # teto de 30 s. A ordem importa: `liberar` ANTES de `roteiro`, e o
+        # reset troca o roteiro ANTES do `Event` -- quem capturar o `Event`
+        # novo captura tambem o roteiro novo, que nao segura. No pytest do
+        # 1b-1 o `Event` nunca e trocado, e nada muda.
+        liberar = falso.liberar
         roteiro = falso.roteiro
         if roteiro.atrasar_cabecalhos:
             time.sleep(roteiro.atrasar_cabecalhos)
@@ -190,7 +200,7 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
                 self.close_connection = True
                 return
             if roteiro.segurar_apos_eventos == indice:
-                falso.liberar.wait(timeout=30)
+                liberar.wait(timeout=30)
             if roteiro.atrasar_evento and roteiro.atrasar_evento[0] == indice:
                 time.sleep(roteiro.atrasar_evento[1])
             self.wfile.write(

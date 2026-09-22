@@ -87,9 +87,12 @@ FALSO_LOCAL = "http://127.0.0.1:8150"
 def test_recusa_provedor_fora_do_loopback(url: str) -> None:
     """A guarda diz NAO, e a API do E2E nem sobe.
 
-    E uma lista de PERMISSAO (loopback), e nao a recusa de um nome: o .env do
-    dono tem a chave de verdade, e qualquer endereco de fora da maquina --
-    nao so o da Anthropic -- levaria a chave e o gasto para longe do teste.
+    E uma lista de PERMISSAO (loopback), e nao a recusa de um nome. A chave
+    real mora no Keychain do macOS, nunca no .env (D-a); a guarda protege
+    contra uma chave posta no ambiente ou no .env por engano, e contra o
+    `pre-push`, que exporta toda FOCUSQUEST_* do .env para o worktree do
+    gate: com qualquer endereco de fora da maquina -- nao so o da Anthropic --
+    essa chave e o gasto iriam para longe do teste.
     """
     resultado = _rodar(
         ["sh", "-c", "echo A GUARDA DEIXOU PASSAR"],
@@ -139,8 +142,9 @@ def test_aceita_o_falso_local(url: str) -> None:
 
 
 def test_impoe_a_chave_ficticia_mesmo_com_uma_chave_no_ambiente() -> None:
-    """A chave de verdade chega ao ambiente do E2E pelo .env e pelo `pre-push`
-    (que exporta toda FOCUSQUEST_* do .env). O script a SUBSTITUI."""
+    """A chave real mora no Keychain (D-a), mas uma posta por engano no
+    ambiente ou no .env chegaria ao E2E -- tambem pelo `pre-push`, que exporta
+    toda FOCUSQUEST_* do .env. O script a SUBSTITUI."""
     resultado = _rodar(
         ["printenv", "FOCUSQUEST_ANTHROPIC_API_KEY"],
         {

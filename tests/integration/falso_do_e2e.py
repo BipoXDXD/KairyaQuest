@@ -28,14 +28,31 @@ from integration.provedor_falso import (
 _OPCOES = frozenset({"blocks", "http_status", "cut_after_events", "hold_after_events"})
 
 
-def _inteiro(dados: dict[str, object], chave: str) -> int | None:
-    """A opcao inteira `chave`, ou `None` se ausente. `bool` nao conta como
-    inteiro (em Python, `True` e um `int`)."""
+# Teto das contagens de eventos: nenhuma resposta do falso chega perto, e um
+# numero maior so pode ser erro de digitacao no cenario.
+_MAX_EVENTOS = 1000
+
+
+def _inteiro(
+    dados: dict[str, object], chave: str, minimo: int, maximo: int
+) -> int | None:
+    """A opcao inteira `chave`, entre `minimo` e `maximo`, ou `None` se
+    ausente. `bool` nao conta como inteiro (em Python, `True` e um `int`).
+
+    A faixa e parte da validacao: um `cut_after_events` negativo nunca casa
+    com um indice e vira um roteiro SEM corte, e um `http_status` fora de
+    100-599 nem e status HTTP -- nos dois casos o cenario passaria pelo
+    motivo errado, em vez de reprovar no PUT.
+    """
     if chave not in dados:
         return None
     valor = dados[chave]
-    if not isinstance(valor, int) or isinstance(valor, bool):
-        raise ValueError(f"{chave} precisa ser inteiro")
+    if (
+        not isinstance(valor, int)
+        or isinstance(valor, bool)
+        or not minimo <= valor <= maximo
+    ):
+        raise ValueError(f"{chave} precisa ser inteiro entre {minimo} e {maximo}")
     return valor
 
 
@@ -74,12 +91,12 @@ def roteiro_do_json(dados: object) -> Roteiro:
     # desempacotado, o mypy strict confere o dict contra TODOS os campos do
     # `Roteiro` e reprova no `atrasar_evento: tuple[int, float] | None`
     # (medido na revisao do plano).
-    status = _inteiro(dados, "http_status")
+    status = _inteiro(dados, "http_status", 100, 599)
     return Roteiro(
         blocos=tuple(_bloco(b) for b in blocos),
         status_http=200 if status is None else status,
-        cortar_apos_eventos=_inteiro(dados, "cut_after_events"),
-        segurar_apos_eventos=_inteiro(dados, "hold_after_events"),
+        cortar_apos_eventos=_inteiro(dados, "cut_after_events", 0, _MAX_EVENTOS),
+        segurar_apos_eventos=_inteiro(dados, "hold_after_events", 0, _MAX_EVENTOS),
     )
 
 
@@ -97,14 +114,26 @@ class TratadorComControle(TratadorDoFalso):
         self.end_headers()
         self.wfile.write(dados)
 
+    def _tamanho(self) -> int:
+        """O tamanho do corpo, pelo `content-length`, ou `ValueError`. Sem o
+        cabecalho, `int(None)` levantaria `TypeError` FORA da recusa, e o
+        cliente veria so a conexao caindo, sem o motivo."""
+        cabecalho = self.headers["content-length"]
+        if cabecalho is None:
+            raise ValueError("content-length obrigatorio")
+        return int(cabecalho)
+
     def do_PUT(self) -> None:
         if self.path != "/_control/script":
             self._responder(404)
             return
-        tamanho = int(self.headers["content-length"])
         try:
-            roteiro = roteiro_do_json(json.loads(self.rfile.read(tamanho)))
-        except (ValueError, json.JSONDecodeError) as erro:
+            roteiro = roteiro_do_json(json.loads(self.rfile.read(self._tamanho())))
+        except ValueError as erro:
+            # `json.JSONDecodeError` e subclasse de `ValueError`.
+            # Um corpo que nao foi lido inteiro deixaria lixo na conexao
+            # persistente (HTTP/1.1): depois de um 400, ela fecha.
+            self.close_connection = True
             self._responder(400, {"error": str(erro)})
             return
         self._falso().roteiro = roteiro
@@ -129,13 +158,22 @@ class TratadorComControle(TratadorDoFalso):
             self._responder(204)
         elif self.path == "/_control/reset":
             # Solta uma resposta presa por `hold_after_events` de um cenario
-            # anterior ANTES de trocar tudo: o tratador preso espera no `Event`
-            # que ele leu, e so este `set` o acorda. Depois, um `Event` NOVO
-            # para o proximo roteiro -- `clear()` no mesmo objeto poderia
-            # reprender o tratador que ainda nao acordou.
+            # anterior e rearma o `liberar` para o proximo roteiro.
+            #
+            # O tratador espera no `Event` que CAPTUROU no inicio da
+            # requisicao, junto com o roteiro (`TratadorDoFalso.do_POST`) --
+            # nao no `falso.liberar` do momento da espera. Por isso este
+            # `set` acorda tanto quem ja esta esperando quanto quem ainda nao
+            # chegou ao ponto de espera: os dois vao esperar no `Event` velho,
+            # que fica acionado para sempre. `clear()` no mesmo objeto, em vez
+            # de um `Event` novo, reprenderia quem ainda nao acordou.
+            #
+            # O roteiro e trocado PRIMEIRO: o tratador captura `liberar` e
+            # depois `roteiro`, e assim quem capturar o `Event` novo (que
+            # ninguem aciona) captura tambem o roteiro vazio, que nao segura.
+            falso.roteiro = Roteiro()
             falso.liberar.set()
             falso.liberar = threading.Event()
-            falso.roteiro = Roteiro()
             falso.recebidas.clear()
             self._responder(204)
         else:

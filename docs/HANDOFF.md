@@ -245,8 +245,8 @@ tarefas as põem em código.
 | Um quadro SSE malformado (sem `event:`/`data:` ou `data` que não é JSON) **reprova** o stream; um evento de nome desconhecido é **ignorado** pelo hook (Task 1) | O quadro malformado é defeito de protocolo, e continuar lendo depois dele seria adivinhar. O nome desconhecido é compatibilidade para frente (um backend mais novo pode acrescentar evento), e o final continua decidido só por `done`/`error`, então ignorar não esconde resultado: sem final, é `unknown`. Linhas que não são `event` nem `data` (comentário, `id:`) **dentro** de um quadro que tem as duas são ignoradas; um quadro só de comentário reprova. |
 | Porta **8150** para o servidor falso do E2E (Task 6) | Fica na faixa 81xx, a mesma da API do E2E (8100), o que a identifica como porta de teste ponta a ponta à primeira vista; não colide com 8000/5173 (desenvolvimento), 8100/5273 (E2E) nem 55432 (PostgreSQL); e não é 8101, que seria o "próximo número" que alguém escolheria por reflexo para outro servidor e confundiria com a API. Não é porta de nenhuma ferramenta comum da máquina de desenvolvimento (8080, 8081, 8443, 8888). Fonte única: `frontend/tests/e2e/servers.ts` (`FALSO_URL`). |
 | A guarda do E2E é uma **lista de permissão** (host do `anthropic_base_url` em `127.0.0.1`, `localhost` ou `::1`), e não uma recusa de `api.anthropic.com` (Task 6) | Recusar só o host da Anthropic falha **aberto**: um `https://api.anthropic.com.` com ponto final, um IP da Anthropic ou um proxy qualquer passariam. Exigir loopback falha **fechado**: o que não é a máquina local não sobe. O host é lido por `urlsplit(...).hostname`, o que desarma `http://127.0.0.1@api.anthropic.com` (o host é o que vem depois do `@`). A mensagem de recusa mostra só o host, nunca o endereço inteiro (uma URL com credencial iria para o log). |
-| O `scripts/e2e-env.sh` **impõe** a chave fictícia (`FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia`), e o URL do falso vem do Playwright (`env` do `webServer` da API) (Task 6) | A chave de verdade chega ao ambiente do E2E por dois caminhos — o `.env` local e o `pre-push`, que exporta toda `FOCUSQUEST_*` do `.env` para o worktree (`docs/QUALITY.md` §6) —, e impor no script que já é o único caminho de subida da API do E2E fecha os dois. O valor não começa com `sk-ant-`: não imita uma chave real. O URL, ao contrário, **não** é escrito no script: a porta mora em `servers.ts`, que o cenário também lê; o script só **valida** o que recebeu. |
-| O controle do falso usa rotas sob `/_control/` e chaves JSON em inglês (Task 6) | É um contrato HTTP entre o cenário TypeScript e o falso Python, e contrato de payload é em inglês (README §3). O prefixo não colide com `/v1/messages`, a única rota que o SDK usa; qualquer outra rota responde 404, para um SDK mal apontado reprovar alto. O roteiro é validado estritamente (chave desconhecida é `400`), para um erro de digitação no cenário não virar um roteiro que passa pelo motivo errado. |
+| O `scripts/e2e-env.sh` **impõe** a chave fictícia (`FOCUSQUEST_ANTHROPIC_API_KEY=e2e-chave-ficticia`), e o URL do falso vem do Playwright (`env` do `webServer` da API) (Task 6) | A chave real mora no Keychain do macOS, nunca no `.env` (D-a, emenda E1). A guarda existe contra o erro: uma chave posta por engano no ambiente do shell ou no `.env` chegaria ao E2E, também pelo `pre-push`, que exporta toda `FOCUSQUEST_*` do `.env` para o worktree (`docs/QUALITY.md` §6) — e impor no script que já é o único caminho de subida da API do E2E fecha os três caminhos. O valor não começa com `sk-ant-`: não imita uma chave real. O URL, ao contrário, **não** é escrito no script: a porta mora em `servers.ts`, que o cenário também lê; o script só **valida** o que recebeu. |
+| O controle do falso usa rotas sob `/_control/` e chaves JSON em inglês (Task 6) | É um contrato HTTP entre o cenário TypeScript e o falso Python, e contrato de payload é em inglês (README §3). O prefixo não colide com `/v1/messages`, a única rota que o SDK usa; qualquer outra rota em `GET`, `PUT` ou `POST` responde 404, para um SDK mal apontado reprovar alto. Outro método (`DELETE`, `PATCH`…) recebe o 501 do `http.server` ("método não implementado"), que também é alto — responder 404 a **todo** método exigiria interceptar o despacho do `BaseHTTPRequestHandler`, código a mais sem ganho para o cenário (correção da revisão da Task 6, provado por `test_metodo_sem_tratador_responde_501`). O roteiro é validado estritamente (chave desconhecida é `400`), para um erro de digitação no cenário não virar um roteiro que passa pelo motivo errado. |
 | O falso do E2E ganha **segurar e liberar** pelo controle (`hold_after_events` + `POST /_control/release`) (Task 6) | É o único jeito determinístico de o axe auditar o estado "escrevendo" com a resposta comprovadamente no meio. O `Roteiro.segurar_apos_eventos` e o `liberar` já existiam no falso (1b-1, desconexão); o controle só os expõe. O `POST /_control/reset` solta uma resposta presa antes de trocar o `Event`, para um cenário que reprovou no meio não prender o seguinte. |
 | O limite de 4000 caracteres é contado em **pontos de código do texto sem espaços nas pontas** (`Array.from(text.trim()).length`), e não em `text.length` (Task 3) | O backend conta com `len()` do Python depois do `strip_whitespace` (`MessageCreate.content`): pontos de código, não unidades UTF-16. Com `text.length`, um emoji contaria 2 no navegador e 1 no servidor, e a tela recusaria perguntas que o servidor aceita. `MAX_QUESTION_LENGTH` (`features/tutoring/questionLimit.ts`) espelha `TAMANHO_MAXIMO_DA_PERGUNTA` à mão (pendências 32 e 41). |
 | O contador de restantes aparece a partir de **3600** caracteres, 90% do limite (Task 3) | "Perto do limite" precisava de um número. 90% dá 400 caracteres de aviso — umas cinco linhas — sem poluir a tela na pergunta comum. `COUNTER_VISIBLE_FROM` é derivada do limite, não escrita por extenso. |
@@ -549,8 +549,7 @@ Criada na Task 1 e completada na Task 9 (plano
   sem a conferência da geração na recarga (reprova o caso da recarga em
   voo); sem o espelho do status (reprova seis casos); e sem o retorno
   `aborted` do `runTurn` (reprova o S17 pela contagem do histórico).
-- **Task 6** — infraestrutura do E2E da tutoria (commit deste registro; o
-  sha é o do próprio commit, que o registro não pode conter). **O falso
+- **Task 6** — infraestrutura do E2E da tutoria (commit `342a6e3`). **O falso
   configurável:** em `tests/integration/provedor_falso.py`, `_Tratador`
   virou `TratadorDoFalso` (público, porque outro módulo o estende), a
   função `falso_do_tratador` substituiu o `assert` inline do `do_POST`, e o
@@ -560,8 +559,9 @@ Criada na Task 1 e completada na Task 9 (plano
   `tests/integration/falso_do_e2e.py` (`python -m integration.falso_do_e2e
   --porta N`, com `PYTHONPATH=tests`) sobe o **mesmo** falso com as rotas
   `PUT /_control/script`, `POST /_control/release`, `POST /_control/reset` e
-  `GET /_control/requests`, e 404 em qualquer outra rota que não seja
-  `/v1/messages`; `roteiro_do_json` traduz o roteiro JSON do cenário e
+  `GET /_control/requests`, e 404 em qualquer outra rota de `GET`, `PUT`
+  ou `POST` que não seja `/v1/messages` (outro método: 501, ver a correção
+  abaixo); `roteiro_do_json` traduz o roteiro JSON do cenário e
   recusa, com o motivo, chave desconhecida e tipo errado. O contrato é
   provado do lado Python por `tests/integration/test_falso_do_e2e.py` (18
   testes, dois deles subindo o processo de verdade). **A guarda e a
@@ -592,6 +592,46 @@ Criada na Task 1 e completada na Task 9 (plano
   reprova `test_rota_desconhecida_responde_404` (`200 == 404`); (6) sem o
   `liberar.set()` do reset, reprova `test_reset_solta_uma_resposta_presa`
   (`terminou.wait` devolve `False`).
+- **Correções da revisão da Task 6** (commit deste registro; o sha é o do
+  próprio commit, que o registro não pode conter). **A corrida do reset:**
+  o tratador do falso lia o `falso.liberar` só na hora de esperar, e o
+  roteiro no início; um `POST /_control/reset` entre as duas leituras o
+  deixava esperando no `Event` novo, com o roteiro velho mandando segurar —
+  preso até o teto de 30 s. Agora `TratadorDoFalso.do_POST` captura
+  `liberar` e `roteiro` juntos (`liberar` primeiro) e espera no capturado, e
+  o reset troca o roteiro **antes** do `Event` (quem capturar o `Event` novo
+  captura também o roteiro vazio); no pytest do 1b-1 o `Event` nunca é
+  trocado. Reproduzida de forma determinística por
+  `test_reset_entre_o_registro_e_a_espera_solta_o_tratador`: o roteiro pede
+  `atrasar_cabecalhos` e o `time` do falso é trocado (monkeypatch) por um que
+  segura o tratador na janela até o teste fazer o reset — vermelho no código
+  anterior, verde com a correção. `test_reset_solta_uma_resposta_presa`
+  passou a esperar o **primeiro pedaço de texto** no cliente, e não
+  `recebidas` (registrada antes do ponto de espera).
+  `test_segurar_e_liberar_pelo_controle` agora **prova** que o stream estava
+  preso: o pedaço seguinte não chega em 0,5 s antes do `release`. **O
+  controle:** `PUT` sem `content-length` responde 400 com `{"error": ...}`
+  (antes, `TypeError` fora do `try` e a conexão caindo sem resposta), e a
+  conexão fecha depois de qualquer 400; `PUT` em rota errada tem teste do
+  404; `cut_after_events`/`hold_after_events` fora de 0–1000 e `http_status`
+  fora de 100–599 são recusados com 400 (bordas aceitas também testadas).
+  **Texto:** o motivo das guardas no `scripts/e2e-env.sh`, nas docstrings de
+  `test_e2e_env.py` e na decisão acima diz agora que a chave real mora no
+  Keychain (D-a) e que a guarda protege contra uma chave no ambiente ou no
+  `.env` por engano e contra o `pre-push`. **Mutações vistas reprovando**
+  (backup em `/tmp`, restauradas por `cp`): esperar no `falso.liberar` do
+  momento reprova o teste da corrida (`terminou.wait` devolve `False`);
+  trocar o `liberar.wait` por `pass` reprova
+  `test_segurar_e_liberar_pelo_controle` (`DID NOT RAISE Empty`); tirar o
+  `liberar.set()` do reset reprova `test_reset_solta_uma_resposta_presa`;
+  tirar a conferência do `content-length` reprova o teste do 400
+  (`RemoteDisconnected`); tirar a conferência de rota do `PUT` reprova o do
+  404 (`204 == 404`); tirar a faixa de `_inteiro` reprova os cinco casos
+  fora da faixa (`DID NOT RAISE`); teto exclusivo (`<` no lugar de `<=`)
+  reprova as duas bordas; um `do_DELETE` com 404 reprova o teste do 501.
+  **Não coberto por teste:** a ordem "roteiro antes do `Event`" no reset —
+  a janela fica entre duas atribuições consecutivas e não há como segurá-la
+  sem gancho no código; o motivo está no comentário do reset.
 
 ## Comandos
 
@@ -639,7 +679,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` duas vezes seguidas, ao fim do Incremento 1b-1 (`880dd60`, documentação da Task 8 por cima) | Aprovado, EXIT 0 nas duas, cerca de 40 s de relógio cada (pytest). Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas) — inalterado pelo 1b-1, que é só backend. `uv lock --check` aprovado (`anthropic`, `httpx2`, `anyio` inclusos). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: **269 testes** (122 do fim do Incremento A/1a mais 147 da tutoria), 1 aviso, cobertura total de **100%** (739 instruções, 102 ramificações, todas cobertas). E2E: 6 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
 | `gh pr checks 10` (PR do 1b-1, topo `9fb9a8e`), lido em 2026-09-22 | PR `MERGED` em 2026-09-22T02:51:09Z, merge commit `a795ee7`, `headRefOid` `9fb9a8e` (`gh pr view 10`). Duas execuções do workflow `quality`, ambas sobre `9fb9a8e` e com conclusão `success` (`gh run view`): a do evento `push` (run 35478605980) e a do `pull_request` (run 35478623302). Em cada uma, `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` com `pass`. É a evidência de que `9fb9a8e` passou no CI; não há `make check` local registrado sobre ele. |
 | `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
-| `make check` sobre a Task 6 do 1b-2 (árvore do commit deste registro, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
+| `make check` sobre a Task 6 do 1b-2 (árvore do `342a6e3`, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
+| `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do commit deste registro, antes desta linha e antes do commit) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -837,9 +878,9 @@ ninguém mexer.
 19. **`check-api` e `check-e2e` não podem rodar ao mesmo tempo na mesma
     máquina** — nem dois `make check`, nem um `make check` e um push. A
     fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E usa, e o
-    E2E usa portas fixas. O E2E usa agora **três** portas fixas: 8100 (API),
-    5273 (frontend) e 8150 (servidor falso, desde a Task 6 do 1b-2). No CI
-    não há corrida: cada job tem o seu PostgreSQL.
+    E2E usa **três** portas fixas: 8100 (API), 5273 (frontend) e 8150
+    (servidor falso, desde a Task 6 do 1b-2). No CI não há corrida: cada job
+    tem o seu PostgreSQL.
 20. **Cada execução do E2E deixa quatro missões no `focusquest_test`** (duas
     desde o Incremento A são concluídas), que só somem no próximo
     `DROP SCHEMA` da suíte pytest. `make check-e2e` rodado repetidamente,

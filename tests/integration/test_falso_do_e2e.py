@@ -7,6 +7,9 @@ falso NA MESMA thread do pytest (porta 0) para o controle, e como PROCESSO
 `playwright.config.ts` usa.
 """
 
+import http.client
+import json
+import queue
 import socket
 import subprocess
 import sys
@@ -14,11 +17,13 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import anthropic
 import httpx
 import pytest
 
+from integration import provedor_falso
 from integration.falso_do_e2e import TratadorComControle, roteiro_do_json
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -60,6 +65,23 @@ def test_roteiro_do_json_monta_texto_ferramenta_e_opcoes() -> None:
 
 
 @pytest.mark.parametrize(
+    ("dados", "roteiro"),
+    [
+        (
+            {"http_status": 100, "cut_after_events": 0, "hold_after_events": 1000},
+            Roteiro(status_http=100, cortar_apos_eventos=0, segurar_apos_eventos=1000),
+        ),
+        (
+            {"http_status": 599, "cut_after_events": 1000, "hold_after_events": 0},
+            Roteiro(status_http=599, cortar_apos_eventos=1000, segurar_apos_eventos=0),
+        ),
+    ],
+)
+def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None:
+    assert roteiro_do_json(dados) == roteiro
+
+
+@pytest.mark.parametrize(
     ("dados", "motivo"),
     [
         ([], "o roteiro precisa ser um objeto"),
@@ -72,7 +94,34 @@ def test_roteiro_do_json_monta_texto_ferramenta_e_opcoes() -> None:
             {"blocks": [], "cut_after_events": "3"},
             "cut_after_events precisa ser inteiro",
         ),
+        (
+            {"blocks": [], "hold_after_events": True},
+            "hold_after_events precisa ser inteiro",
+        ),
         ({"blocks": [], "fantasia": 1}, "chave desconhecida: fantasia"),
+        # Um numero fora da faixa viraria um roteiro que nunca corta, nunca
+        # segura, ou um status que o `http.server` nem sabe mandar -- e o
+        # cenario passaria pelo motivo errado.
+        (
+            {"blocks": [], "cut_after_events": -1},
+            "cut_after_events precisa ser inteiro entre 0 e",
+        ),
+        (
+            {"blocks": [], "hold_after_events": -1},
+            "hold_after_events precisa ser inteiro entre 0 e",
+        ),
+        (
+            {"blocks": [], "hold_after_events": 1001},
+            "hold_after_events precisa ser inteiro entre 0 e 1000",
+        ),
+        (
+            {"blocks": [], "http_status": 99},
+            "http_status precisa ser inteiro entre 100 e 599",
+        ),
+        (
+            {"blocks": [], "http_status": 600},
+            "http_status precisa ser inteiro entre 100 e 599",
+        ),
     ],
 )
 def test_roteiro_invalido_e_recusado_com_o_motivo(dados: object, motivo: str) -> None:
@@ -118,11 +167,44 @@ def test_roteiro_invalido_responde_400_com_o_motivo(
     assert "bloco desconhecido" in resposta.json()["error"]
 
 
+def test_put_sem_content_length_responde_400_com_o_motivo(
+    controlado: ServidorAnthropicFalso,
+) -> None:
+    """Sem `content-length` o tamanho do corpo e desconhecido: o controle
+    responde 400 com o motivo, e nao derruba o tratador com um `TypeError`
+    (que o cliente veria como conexao fechada, sem explicacao)."""
+    conexao = http.client.HTTPConnection(
+        "127.0.0.1", int(controlado.url.rsplit(":", 1)[1])
+    )
+    try:
+        # `putrequest` + `endheaders`, e nao `request`: o `request` acrescenta
+        # `Content-Length: 0` sozinho num PUT sem corpo.
+        conexao.putrequest("PUT", "/_control/script")
+        conexao.endheaders()
+        resposta = conexao.getresponse()
+        assert resposta.status == 400
+        assert "content-length" in json.loads(resposta.read())["error"]
+    finally:
+        conexao.close()
+    assert controlado.roteiro == Roteiro()
+
+
+def test_put_em_rota_errada_responde_404_e_nao_troca_o_roteiro(
+    controlado: ServidorAnthropicFalso,
+) -> None:
+    resposta = httpx.put(
+        f"{controlado.url}/_control/scripts", json={"blocks": [{"text": ["x"]}]}
+    )
+    assert resposta.status_code == 404
+    assert controlado.roteiro == Roteiro()
+
+
 def test_as_requisicoes_recebidas_sao_lidas_pelo_controle_com_a_chave(
     controlado: ServidorAnthropicFalso,
 ) -> None:
     """E o que deixa o cenario provar que a API do E2E falou com o FALSO, e
-    com a chave FICTICIA -- nao com a Anthropic, nem com a chave do .env."""
+    com a chave FICTICIA -- nao com a Anthropic, nem com uma chave de verdade
+    que estivesse no ambiente por engano."""
     with _sdk(controlado).messages.stream(
         model="claude-opus-5",
         max_tokens=7,
@@ -160,6 +242,63 @@ def test_reset_solta_uma_resposta_presa(controlado: ServidorAnthropicFalso) -> N
         f"{controlado.url}/_control/script",
         json={"blocks": [{"text": ["um", "dois"]}], "hold_after_events": 3},
     )
+    primeiro = threading.Event()
+    terminou = threading.Event()
+
+    def consumir() -> None:
+        with _sdk(controlado).messages.stream(
+            model="claude-opus-5",
+            max_tokens=7,
+            messages=[{"role": "user", "content": "oi"}],
+        ) as stream:
+            pedacos = stream.text_stream
+            assert next(pedacos) == "um"
+            primeiro.set()
+            for _ in pedacos:
+                pass
+        terminou.set()
+
+    threading.Thread(target=consumir, daemon=True).start()
+    # O primeiro pedaco no cliente: o tratador ja escreveu o evento 2 e segue
+    # para o ponto de espera (antes do evento 3). `recebidas` nao serviria:
+    # a requisicao e registrada ANTES de o tratador chegar la.
+    assert primeiro.wait(timeout=5)
+
+    httpx.post(f"{controlado.url}/_control/reset")
+
+    # Solto na hora, e nao pelo teto de 30 s do `liberar.wait`.
+    assert terminou.wait(timeout=5)
+    assert not controlado.liberar.is_set()
+
+
+def test_reset_entre_o_registro_e_a_espera_solta_o_tratador(
+    controlado: ServidorAnthropicFalso, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A corrida do reset, reproduzida sem depender de sorte.
+
+    O tratador captura o roteiro no inicio da requisicao. Se ele lesse o
+    `liberar` so na hora de esperar, um reset que chegasse ENTRE as duas
+    leituras o deixaria esperando no `Event` NOVO -- que ninguem aciona --
+    com o roteiro VELHO, que manda segurar: preso ate o teto de 30 s.
+
+    Para segurar o tratador exatamente nessa janela, o roteiro pede
+    `atrasar_cabecalhos` (a pausa fica depois do registro e antes de qualquer
+    evento) e o `time` do falso e trocado por um que, em vez de dormir,
+    avisa o teste e espera ele fazer o reset.
+    """
+    na_janela = threading.Event()
+    seguir = threading.Event()
+
+    def segurar(_segundos: float) -> None:
+        na_janela.set()
+        assert seguir.wait(timeout=5)
+
+    monkeypatch.setattr(provedor_falso, "time", SimpleNamespace(sleep=segurar))
+    controlado.roteiro = Roteiro(
+        blocos=(Texto(("um", "dois")),),
+        segurar_apos_eventos=3,
+        atrasar_cabecalhos=1.0,
+    )
     terminou = threading.Event()
 
     def consumir() -> None:
@@ -172,17 +311,11 @@ def test_reset_solta_uma_resposta_presa(controlado: ServidorAnthropicFalso) -> N
         terminou.set()
 
     threading.Thread(target=consumir, daemon=True).start()
-    # Espera a resposta chegar ao ponto de espera (a requisicao foi registrada).
-    prazo = time.monotonic() + 5
-    while not controlado.recebidas:
-        assert time.monotonic() < prazo
-        time.sleep(0.05)
-
+    assert na_janela.wait(timeout=5)
     httpx.post(f"{controlado.url}/_control/reset")
+    seguir.set()
 
-    # Solto na hora, e nao pelo teto de 30 s do `liberar.wait`.
     assert terminou.wait(timeout=5)
-    assert not controlado.liberar.is_set()
 
 
 def test_segurar_e_liberar_pelo_controle(controlado: ServidorAnthropicFalso) -> None:
@@ -199,9 +332,16 @@ def test_segurar_e_liberar_pelo_controle(controlado: ServidorAnthropicFalso) -> 
     ) as stream:
         pedacos = stream.text_stream
         assert next(pedacos) == "um"
+        # O proximo pedaco e lido noutra thread, para o teste poder provar
+        # que ele NAO chega antes do release: sem essa prova, um falso que
+        # ignorasse o `hold_after_events` passaria aqui do mesmo jeito.
+        proximo: queue.Queue[str] = queue.Queue()
+        threading.Thread(target=lambda: proximo.put(next(pedacos)), daemon=True).start()
+        with pytest.raises(queue.Empty):
+            proximo.get(timeout=0.5)
         antes = time.monotonic()
         httpx.post(f"{controlado.url}/_control/release")
-        assert next(pedacos) == "dois"
+        assert proximo.get(timeout=5) == "dois"
     # O release destravou na hora, e nao pelo teto de 30 s do `liberar.wait`.
     assert time.monotonic() - antes < 5
 
@@ -210,6 +350,17 @@ def test_rota_desconhecida_responde_404(controlado: ServidorAnthropicFalso) -> N
     """Um SDK apontado para o caminho errado precisa reprovar alto."""
     assert httpx.post(f"{controlado.url}/v1/complete", json={}).status_code == 404
     assert httpx.get(f"{controlado.url}/qualquer").status_code == 404
+
+
+@pytest.mark.parametrize("metodo", ["DELETE", "PATCH"])
+def test_metodo_sem_tratador_responde_501(
+    controlado: ServidorAnthropicFalso, metodo: str
+) -> None:
+    """O falso so trata GET, PUT e POST. Outro metodo recebe o 501 padrao do
+    `http.server` ("metodo nao implementado") -- tambem um erro alto, que e o
+    que importa para um cliente mal apontado; o HANDOFF registra assim."""
+    resposta = httpx.request(metodo, f"{controlado.url}/_control/script")
+    assert resposta.status_code == 501
 
 
 def _porta_livre() -> int:
