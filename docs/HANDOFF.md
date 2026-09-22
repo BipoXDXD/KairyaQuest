@@ -723,7 +723,7 @@ Criada na Task 1 e completada na Task 9 (plano
   **Não coberto por teste:** a ordem "roteiro antes do `Event`" no reset —
   a janela fica entre duas atribuições consecutivas e não há como segurá-la
   sem gancho no código; o motivo está no comentário do reset.
-- **Task 7** — cenários E2E da tutoria (commit deste registro):
+- **Task 7** — cenários E2E da tutoria (commit `73b6e17`):
   `frontend/tests/e2e/tutoring.spec.ts`, cinco cenários contra o navegador
   real, a API real, o banco real e o servidor falso como processo, com o
   falso reiniciado antes de cada um. **(a)** perguntar, ver o texto chegar,
@@ -781,6 +781,29 @@ Criada na Task 1 e completada na Task 9 (plano
   continuava 390, porque uma caixa de altura zero não entra no overflow
   rolável do Chromium. Com `{ width: 600, height: 10 }` o cenário reprova.
   O defeito era da mutação, não do cenário.
+- **Task 8, Step 1** — regressão: as guardas contra a Anthropic valem mesmo
+  com a chave exportada no ambiente do shell (commit deste registro). Em
+  `tests/unit/test_config.py`,
+  `test_a_guarda_vale_com_a_chave_exportada_no_ambiente` põe
+  `FOCUSQUEST_ANTHROPIC_API_KEY` no ambiente (via `monkeypatch.setenv`) e
+  confere que `Settings().anthropic_base_url` continua
+  `http://127.0.0.1:9` — a guarda de sessão de `tests/conftest.py` não
+  depende de a chave estar ausente, só do `base_url`. Aproveitado para
+  corrigir a documentação que ainda dizia que a chave real mora no `.env`
+  do dono, contradizendo a decisão D-a (Keychain do macOS, emenda E1): os
+  docstrings de `tests/conftest.py` e de
+  `test_a_suite_nunca_aponta_para_a_anthropic` em
+  `tests/unit/test_config.py`, e a pendência 42 abaixo. **Mutação vista
+  reprovando** (backup em `/tmp/fq-mutacao-t8a.bak`, restaurado por `cp`):
+  trocar o `ambiente.setenv(...)` da guarda de sessão por `pass` (mantendo
+  o `yield`) reprova `test_a_guarda_vale_com_a_chave_exportada_no_ambiente`
+  (e também `test_a_suite_nunca_aponta_para_a_anthropic`) em
+  `AssertionError: assert 'https://api.anthropic.com' ==
+  'http://127.0.0.1:9'` — o endereço real volta a vazar do `.env` assim
+  que a guarda para de sobrescrevê-lo. Os Steps 2–4 da Task 8 (a chave no
+  Keychain, o roteiro manual pela tela e a camada 3 do servidor falso)
+  ficam para depois desta rodada, por decisão do dono (2026-09-22); ver
+  pendências 40 e 42.
 
 ## Comandos
 
@@ -830,7 +853,7 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 | `make check` sobre a Task 6 do 1b-2 (árvore do `342a6e3`, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
 | `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do `d8461e7`) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
-| `make check` sobre a Task 7 do 1b-2 (árvore do commit deste registro) | Aprovado, EXIT 0. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado pela Task 7, que só acrescenta o cenário E2E. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: **11 cenários** aprovados em Chromium (os 6 do quadro e os 5 da tutoria). Gitleaks sem achados. |
+| `make check` sobre a Task 7 do 1b-2 (árvore do commit `73b6e17`) | Aprovado, EXIT 0. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado pela Task 7, que só acrescenta o cenário E2E. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: **11 cenários** aprovados em Chromium (os 6 do quadro e os 5 da tutoria). Gitleaks sem achados. |
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Task 7 do 1b-2) | 6 missões, 7 mensagens da tutoria, 2 ações — o esperado pelo desenho. Depois de mais um `make check-e2e` sem o pytest no meio: 12, 14 e 4. |
 
 ## Ambiente verificado
@@ -1288,7 +1311,8 @@ que não tinham chegado aqui)
     `features/tutoring/questionLimit.ts`), espelhado à mão; mudar o número
     é mudar os dois lados.
 42. **Roteiro da chamada real (1b-2), para gravar a referência da camada 3
-    (pendência 40):** com a chave de verdade no `.env` local do dono e o
+    (pendência 40):** com a chave de verdade vinda do Keychain do macOS **só**
+    para o processo da API (decisão D-a, emenda E1; nunca no `.env`) e o
     `anthropic_base_url` **sem** override, (a) pedir à Tifa uma proposta de
     missão; (b) confirmar a proposta pelo cartão; (c) ver a missão nova no
     Quartel-General; (d) gravar, sem o conteúdo do texto, a sequência de
