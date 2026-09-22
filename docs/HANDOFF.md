@@ -10,6 +10,16 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento 1b-2 — a tela da Tifa, o E2E e a chamada real.** Branch
+`feat/incremento-1b-2`, aberta a partir de `a795ee7` (a `main`: o merge do
+PR #10, o 1b-1). Spec em
+`docs/superpowers/specs/2026-09-18-incremento-1b-design.md` (seções "A tela
+(1b-2)", "E2E", "A chamada real" e a camada 3 do servidor falso); plano em
+`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. **Estado de
+publicação: não publicado.** Push, PR e merge exigem autorização do dono, um
+passo de cada vez; quando mesclado, esta linha passa ao padrão "publicado
+pelo PR #N, mesclado por `<forma>`; estado atual em `gh pr view N`".
+
 **Incremento A — conclusão na tela.** Branch `feat/incremento-a`, aberta a
 partir de `49c17ac`, **empilhada sobre `docs/spec-ciclo-diario`** — o PR #6
 (spec e plano) ainda não estava mesclado à `main` quando esta branch foi
@@ -62,26 +72,24 @@ chat (ver "Próximo incremento").
 
 **Incremento 1b-1 — o backend da Tifa.** Branch `feat/incremento-1b-1`,
 aberta a partir de `c7a91a5` (a `main` naquele momento, com a spec do 1b já
-mesclada). A implementação vai de `023d251` a `880dd60` — 13 commits,
-contados com `git log c7a91a5..880dd60` — em oito tarefas, uma por commit
-de feature/teste mais cinco commits de correção de revisão (`1542a78`,
-`acfbb46`, `e208a7b`, `696a51d`, `880dd60`); este documento é atualizado no
-commit que o registra, logo depois delas. Spec em
+mesclada). A branch vai de `023d251` a `9fb9a8e` — **15 commits**, contados
+com `git log c7a91a5..9fb9a8e`: o plano (`023d251`), sete commits de
+feature/teste das Tasks 1 a 7, cinco commits de correção de revisão
+(`1542a78`, `acfbb46`, `e208a7b`, `696a51d`, `880dd60`), a documentação da
+Task 8 (`130958c`) e a onda final de correção da revisão da branch
+(`9fb9a8e`). Spec em
 `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`, com a seção
 "Emendas (2026-09-19, execução do 1b-1)"; plano em
 `docs/superpowers/plans/2026-09-19-incremento-1b-1.md`.
 
-**Estado de publicação: não publicado.** Os 13 commits acima existem só
-localmente, no branch `feat/incremento-1b-1` deste clone — nenhum push, PR
-ou merge foi feito. Push, PR e merge exigem autorização do responsável pelo
-projeto (README §1, `AGENTS.md` §2), um passo de cada vez. Quando o PR for
-aberto e mesclado, esta linha deve ser substituída pelo padrão dos
-incrementos anteriores: "publicado pelo PR #N, mesclado por `<forma>`;
-estado atual em `gh pr view N`".
+**Estado de publicação: publicado pelo PR #10, mesclado por merge commit em
+`a795ee7`; estado atual em `gh pr view 10`.** (Registro anterior, corrigido
+no 1b-2: este parágrafo dizia "não publicado" e contava 13 commits até
+`880dd60`; os dois últimos commits da branch não tinham entrado na conta.)
 
 O 1b-1 é só o backend: a tela, o E2E, a camada 3 do servidor falso (a
 referência de uma chamada real) e a chamada real em si são do **1b-2**, que
-ainda não começou.
+começou em `a795ee7` (ver abaixo).
 
 ## Decisões tomadas
 
@@ -380,7 +388,7 @@ branch inteira):
 
 ## Alterações do Incremento 1b-1
 
-Commits `023d251`..`880dd60`, backend só (a tela e o E2E são do 1b-2):
+Commits `023d251`..`9fb9a8e` (15), backend só (a tela e o E2E são do 1b-2):
 
 - **Configuração e guarda (Task 1):** seis campos novos em `Settings`
   (`anthropic_api_key`, `anthropic_base_url`, `tutor_model`,
@@ -418,7 +426,17 @@ Commits `023d251`..`880dd60`, backend só (a tela e o E2E são do 1b-2):
   servidor falso); este arquivo. As docstrings de produção de `sse.py` e
   `router.py` perderam o histórico forense (números de rodada de correção,
   datas de medição); o que elas mediam está registrado aqui, nas seções
-  acima e na emenda M1 da spec.
+  acima e na emenda M1 da spec. Commit `130958c`.
+- **Onda final de correção da revisão da branch (`9fb9a8e`):**
+  `context._mensagens` descarta a mensagem sem texto antes de fundir papéis
+  (uma `completa` vazia quebraria toda resposta seguinte: a API recusa
+  mensagem sem conteúdo); `service.transmitir` move o `yield PerguntaGravada`
+  para dentro do bloco guardado, e fechar o gerador nesse `yield` passa a
+  gravar `interrompida`; comentário de `FOLGA_DO_ORFAO` corrigido;
+  `Conversa.mission_ids` removido do `conftest` (morto); a frase do
+  `docs/ARCHITECTURE.md` §3 sobre os valores de `role`/`status`/`state`
+  corrigida; a contagem de commits de correção (cinco), o trailer
+  `Co-Authored-By` e as pendências 45 a 48 registrados aqui.
 
 ## Comandos
 
@@ -464,6 +482,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Incremento A, remedida depois do merge) | 4, duas delas concluídas — as missões da última execução do E2E. |
 | `make check` duas vezes seguidas, sobre a Task 6 (`66160bd`) | Aprovado, EXIT 0 nas duas, cerca de 13 s de relógio cada. Frontend: 91 testes em 9 arquivos, cobertura de 100% nos quatro eixos (115/115 instruções, 63/63 ramificações, 37/37 funções, 113/113 linhas). `uv lock --check` aprovado. Ruff sem achados, 37 arquivos já formatados. mypy sem problemas em 33 arquivos. Backend: 122 testes, 2 avisos, cobertura total de 100%. E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 | `make check` duas vezes seguidas, ao fim do Incremento 1b-1 (`880dd60`, documentação da Task 8 por cima) | Aprovado, EXIT 0 nas duas, cerca de 40 s de relógio cada (pytest). Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas) — inalterado pelo 1b-1, que é só backend. `uv lock --check` aprovado (`anthropic`, `httpx2`, `anyio` inclusos). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: **269 testes** (122 do fim do Incremento A/1a mais 147 da tutoria), 1 aviso, cobertura total de **100%** (739 instruções, 102 ramificações, todas cobertas). E2E: 6 cenários aprovados em Chromium (inalterado). Gitleaks sem achados. |
+| `gh pr checks 10` (PR do 1b-1, topo `9fb9a8e`), lido em 2026-09-22 | PR `MERGED` em 2026-09-22T02:51:09Z, merge commit `a795ee7`, `headRefOid` `9fb9a8e` (`gh pr view 10`). Duas execuções do workflow `quality`, ambas sobre `9fb9a8e` e com conclusão `success` (`gh run view`): a do evento `push` (run 35478605980) e a do `pull_request` (run 35478623302). Em cada uma, `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` com `pass`. É a evidência de que `9fb9a8e` passou no CI; não há `make check` local registrado sobre ele. |
+| `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -937,9 +957,10 @@ B → C**. O desenho de A, B e C está em
   por máquina nos erros (pendência 1) e o botão Concluir, com o `operation_id`
   preservado entre tentativas. **Entregue** (ver "Alterações do Incremento
   A").
-- **1b — a Tifa**, em duas partes. **1b-1 (backend) entregue** (ver
-  "Alterações do Incremento 1b-1"), não publicado ("Revisão-base"). **1b-2
-  (frontend, E2E e a chamada real) é o próximo.** Desenho aprovado pelo dono
+- **1b — a Tifa**, em duas partes. **1b-1 (backend) entregue e publicado
+  pelo PR #10** (ver "Revisão-base"). **1b-2 (frontend, E2E e a chamada
+  real) em andamento** na branch `feat/incremento-1b-2`, pelo plano
+  `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. Desenho aprovado pelo dono
   em `docs/superpowers/specs/2026-09-18-incremento-1b-design.md`.
 - **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
   navegação lateral), depois do 1b.
@@ -947,8 +968,8 @@ B → C**. O desenho de A, B e C está em
 **Incremento 1b-2** — a tela da Tifa, o painel expansível, o `postStream`,
 o E2E com o servidor falso e a chamada real que grava a camada 3
 (pendências 40 e 42). Não traz alvo de gate novo; estende os existentes
-(`check-web` e `check-e2e`). O que o 1b-1 já entregou e o 1b-2 encontra
-pronto:
+(`check-web` e `check-e2e`). Começou em `a795ee7`; o plano fixa as decisões
+que a spec não fixava. O que o 1b-1 já entregou e o 1b-2 encontra pronto:
 
 - **O backend inteiro da tutoria** — modelo de dados, as cinco rotas, o SSE,
   o adaptador Anthropic e o servidor falso (camadas 1 e 2). Ver
