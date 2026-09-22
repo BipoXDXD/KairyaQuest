@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { bytesOf, controlledStream, sseFrame, streamResponse } from '../../test/sse'
+
 // O cliente resolve a URL base no CARREGAMENTO do modulo e lanca quando a
 // variavel falta -- ver a justificativa em client.ts. E por isso que todo
 // teste daqui usa import() dinamico depois de vi.resetModules(): um import
@@ -223,6 +225,262 @@ describe('client', () => {
       expect(erro).toBeInstanceOf(ApiError)
       expect((erro as Error).message).toBe('O servidor respondeu 503.')
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+    })
+  })
+
+  describe('postStream', () => {
+    /** Consome o gerador inteiro e devolve os eventos. */
+    async function collect(events: AsyncIterable<unknown>): Promise<unknown[]> {
+      const all: unknown[] = []
+      for await (const event of events) {
+        all.push(event)
+      }
+      return all
+    }
+
+    it('faz POST em JSON, pede text/event-stream e repassa o AbortSignal', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(streamResponse([]))
+      vi.stubGlobal('fetch', fetchMock)
+      const { postStream } = await loadClient()
+      const controller = new AbortController()
+
+      await collect(postStream('/tutoring/messages', { content: 'oi' }, controller.signal))
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+      expect(url).toBe('/api/tutoring/messages')
+      expect(init.method).toBe('POST')
+      expect(init.body).toBe('{"content":"oi"}')
+      expect(new Headers(init.headers).get('Accept')).toBe('text/event-stream')
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json')
+      expect(init.signal).toBe(controller.signal)
+    })
+
+    it('entrega varios eventos que chegam num pedaco so, na ordem', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            streamResponse([sseFrame('delta', { text: 'a' }) + sseFrame('delta', { text: 'b' })]),
+          ),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([
+        { event: 'delta', data: { text: 'a' } },
+        { event: 'delta', data: { text: 'b' } },
+      ])
+    })
+
+    it('remonta um evento partido entre pedacos, inclusive no meio do separador', async () => {
+      const frame = sseFrame('done', { id: 7 })
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            streamResponse([frame.slice(0, 5), frame.slice(5, -1), frame.slice(-1)]),
+          ),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([{ event: 'done', data: { id: 7 } }])
+    })
+
+    it('remonta um caractere de varios bytes partido entre pedacos', async () => {
+      // `é` e dois bytes em UTF-8. Um `TextDecoder` sem `{ stream: true }`
+      // trocaria as duas metades por U+FFFD.
+      const bytes = bytesOf(sseFrame('delta', { text: 'é' }))
+      const corte = bytes.indexOf(0xc3) + 1
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(bytes.slice(0, corte))
+          c.enqueue(bytes.slice(corte))
+          c.close()
+        },
+      })
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([{ event: 'delta', data: { text: 'é' } }])
+    })
+
+    it('termina sem erro quando o stream acaba sem done nem error', async () => {
+      // Resultado desconhecido: o cliente nao sabe o que e `done`. Quem decide
+      // que faltou o final e o hook da tutoria (spec, "O stream").
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(streamResponse([sseFrame('user_message', { id: 1 })])),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([
+        { event: 'user_message', data: { id: 1 } },
+      ])
+    })
+
+    it('descarta o quadro incompleto no fim do stream', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            streamResponse([sseFrame('delta', { text: 'a' }), 'event: delta\ndata: {"te']),
+          ),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([{ event: 'delta', data: { text: 'a' } }])
+    })
+
+    it.each([
+      [503, 'provedor_nao_configurado'],
+      [409, 'mensagem_em_andamento'],
+      [409, 'operacao_reutilizada'],
+    ])('um %i antes do stream vira ApiError com o code %s', async (status, code) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: 'x', code }, { status })),
+      )
+      const { ApiError, postStream } = await loadClient()
+
+      const error = await failureOf(collect(postStream('/x', {})))
+
+      expect(error).toBeInstanceOf(ApiError)
+      expect(error).toMatchObject({
+        status,
+        code,
+        message: `O servidor respondeu ${String(status)}.`,
+      })
+    })
+
+    it('um 422 sem code vira ApiError com code null', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: [] }, { status: 422 })),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        status: 422,
+        code: null,
+      })
+    })
+
+    it('a falha de rede vira ApiError sem status', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+      const { postStream } = await loadClient()
+
+      expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        status: null,
+        code: null,
+        message: 'Não foi possível falar com o servidor.',
+      })
+    })
+
+    it('o AbortSignal cancela o pedido, e o erro carrega a causa', async () => {
+      // O `fetch` de verdade rejeita com AbortError quando o sinal aborta.
+      // O stub reproduz isso, e o teste confere que a causa nao se perde: o
+      // hook decide por `signal.aborted`, e nao pelo tipo do erro.
+      const abortError = new DOMException('Aborted', 'AbortError')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+          expect(init.signal?.aborted).toBe(true)
+          return Promise.reject(abortError)
+        }),
+      )
+      const { postStream } = await loadClient()
+      const controller = new AbortController()
+      controller.abort()
+
+      const error = await failureOf(collect(postStream('/x', {}, controller.signal)))
+
+      expect(error).toMatchObject({ status: null, cause: abortError })
+    })
+
+    it('a queda no meio do stream vira ApiError com o status da resposta', async () => {
+      const stream = controlledStream()
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(stream.response))
+      const { postStream } = await loadClient()
+      const events = postStream('/x', {})
+
+      stream.push(sseFrame('user_message', { id: 1 }))
+      expect(await events.next()).toEqual({
+        done: false,
+        value: { event: 'user_message', data: { id: 1 } },
+      })
+      stream.fail(new TypeError('network error'))
+
+      expect(await failureOf(events.next())).toMatchObject({
+        status: 200,
+        code: null,
+        message: 'A resposta foi interrompida no caminho.',
+      })
+    })
+
+    it.each([
+      ['sem a linha event', 'data: {}\n\n'],
+      ['sem a linha data', 'event: delta\n\n'],
+      ['com data que nao e JSON', 'event: delta\ndata: {nao e json\n\n'],
+    ])('um quadro %s reprova o stream', async (_caso, quadro) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([quadro])))
+      const { postStream } = await loadClient()
+
+      expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        status: 200,
+        message: 'A resposta chegou num formato inesperado.',
+      })
+    })
+
+    it('ignora linhas que nao sao event nem data, como comentario e id do SSE', async () => {
+      // O backend nao as escreve, mas o formato SSE as permite: aqui, uma linha
+      // de comentario e uma `id:` DENTRO de um quadro que tem `event` e `data`.
+      // Estrito e exigir `event` e `data` em cada quadro; as outras linhas sao
+      // ignoradas. Um quadro so de comentario (`: keepalive\n\n`) reprova no
+      // `parseFrame`, pela decisao do plano do 1b-2 (quadro malformado reprova).
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            streamResponse([': comentario\nevent: delta\ndata: {"text":"a"}\nid: 1\n\n']),
+          ),
+      )
+      const { postStream } = await loadClient()
+
+      expect(await collect(postStream('/x', {}))).toEqual([{ event: 'delta', data: { text: 'a' } }])
+    })
+
+    it('uma resposta 200 sem corpo reprova como formato inesperado', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 200 })))
+      const { postStream } = await loadClient()
+
+      expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        status: 200,
+        message: 'A resposta chegou num formato inesperado.',
+      })
+    })
+
+    it('parar de consumir no meio cancela a leitura do corpo', async () => {
+      // Sem o cancelamento, a conexao ficaria aberta ate o servidor terminar
+      // -- e o servidor so grava `interrompida` quando a conexao cai.
+      const onCancel = vi.fn()
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(bytesOf(sseFrame('delta', { text: 'a' })))
+        },
+        cancel: onCancel,
+      })
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
+      const { postStream } = await loadClient()
+
+      for await (const event of postStream('/x', {})) {
+        expect(event).toEqual({ event: 'delta', data: { text: 'a' } })
+        break
+      }
+
+      expect(onCancel).toHaveBeenCalledTimes(1)
     })
   })
 })

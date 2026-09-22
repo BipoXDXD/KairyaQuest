@@ -153,13 +153,14 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[RawMessageStreamEvent]:
     return eventos
 
 
-class _Tratador(BaseHTTPRequestHandler):
+class TratadorDoFalso(BaseHTTPRequestHandler):
+    """O tratador do falso: `POST` em qualquer caminho responde o roteiro. O do
+    E2E (`falso_do_e2e.TratadorComControle`) o estende com o controle HTTP."""
+
     protocol_version = "HTTP/1.1"
 
     def do_POST(self) -> None:
-        servidor = self.server
-        assert isinstance(servidor, _Servidor)
-        falso = servidor.falso
+        falso = falso_do_tratador(self)
         tamanho = int(self.headers["content-length"])
         corpo = json.loads(self.rfile.read(tamanho))
         falso.recebidas.append(
@@ -167,6 +168,16 @@ class _Tratador(BaseHTTPRequestHandler):
                 corpo=corpo, cabecalhos={k.lower(): v for k, v in self.headers.items()}
             )
         )
+        # `liberar` e `roteiro` sao capturados JUNTOS, aqui, e o tratador
+        # espera no `liberar` capturado -- nunca no `falso.liberar` do momento
+        # da espera. O reset do E2E (`falso_do_e2e`) troca o `Event` por um
+        # novo; um tratador que o lesse depois do reset esperaria no novo, que
+        # ninguem aciona, com o roteiro velho mandando segurar: preso ate o
+        # teto de 30 s. A ordem importa: `liberar` ANTES de `roteiro`, e o
+        # reset troca o roteiro ANTES do `Event` -- quem capturar o `Event`
+        # novo captura tambem o roteiro novo, que nao segura. No pytest do
+        # 1b-1 o `Event` nunca e trocado, e nada muda.
+        liberar = falso.liberar
         roteiro = falso.roteiro
         if roteiro.atrasar_cabecalhos:
             time.sleep(roteiro.atrasar_cabecalhos)
@@ -189,7 +200,7 @@ class _Tratador(BaseHTTPRequestHandler):
                 self.close_connection = True
                 return
             if roteiro.segurar_apos_eventos == indice:
-                falso.liberar.wait(timeout=30)
+                liberar.wait(timeout=30)
             if roteiro.atrasar_evento and roteiro.atrasar_evento[0] == indice:
                 time.sleep(roteiro.atrasar_evento[1])
             self.wfile.write(
@@ -204,8 +215,13 @@ class _Tratador(BaseHTTPRequestHandler):
 class _Servidor(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, falso: ServidorAnthropicFalso) -> None:
-        super().__init__(("127.0.0.1", 0), _Tratador)
+    def __init__(
+        self,
+        falso: ServidorAnthropicFalso,
+        porta: int,
+        tratador: type[TratadorDoFalso],
+    ) -> None:
+        super().__init__(("127.0.0.1", porta), tratador)
         self.falso = falso
 
     def handle_error(self, request: Any, client_address: Any) -> None:
@@ -216,14 +232,28 @@ class _Servidor(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+def falso_do_tratador(tratador: BaseHTTPRequestHandler) -> ServidorAnthropicFalso:
+    """O falso dono do servidor que chamou o tratador.
+
+    `self.server` e tipado como `socketserver.BaseServer`; o `assert` estreita
+    o tipo para o mypy e reprova alto se o tratador for montado noutro servidor.
+    """
+    servidor = tratador.server
+    assert isinstance(servidor, _Servidor)
+    return servidor.falso
+
+
 @dataclass
 class ServidorAnthropicFalso:
     roteiro: Roteiro = field(default_factory=Roteiro)
     recebidas: list[Recebida] = field(default_factory=list)
     liberar: threading.Event = field(default_factory=threading.Event)
+    # Porta 0: o sistema escolhe uma livre (o pytest). O E2E passa a 8150.
+    porta: int = 0
+    tratador: type[TratadorDoFalso] = TratadorDoFalso
 
     def __post_init__(self) -> None:
-        self._servidor = _Servidor(self)
+        self._servidor = _Servidor(self, self.porta, self.tratador)
         self._thread = threading.Thread(
             target=self._servidor.serve_forever, daemon=True
         )

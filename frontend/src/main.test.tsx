@@ -1,13 +1,22 @@
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { routeFetch } from './test/fetchRoutes'
+import { stubViewport } from './test/viewport'
 
 describe('main', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>'
-    // O `fetch` e stubbado ANTES do import porque main.tsx monta a arvore no
-    // proprio import, e a arvore ja busca as missoes. Sem o stub, o teste
-    // faria um pedido de verdade a uma URL relativa dentro do jsdom.
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])))
+    // O `fetch` e o `matchMedia` sao stubbados ANTES do import porque main.tsx
+    // monta a arvore no proprio import: a arvore ja busca as missoes e o
+    // estado da Tifa, e o painel da Tifa pergunta a largura da tela. Sem o
+    // stub, o teste faria um pedido de verdade a uma URL relativa dentro do
+    // jsdom (e o jsdom nao implementa `matchMedia`).
+    stubViewport('desktop')
+    routeFetch({
+      'GET /api/missions': () => Response.json([]),
+      'GET /api/tutoring/status': () => Response.json({ available: true }),
+      'GET /api/tutoring/messages': () => Response.json([]),
+    })
   })
 
   afterEach(() => {

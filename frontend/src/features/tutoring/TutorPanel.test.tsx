@@ -1,0 +1,873 @@
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
+import { controlledStream, sseFrame, streamResponse } from '../../test/sse'
+import { stubViewport } from '../../test/viewport'
+import { UNKNOWN_RESULT } from './messageFailure'
+import { PANEL_OPEN_KEY } from './panelPreference'
+import { describeQuestionLength } from './questionLimit'
+import { TutorConversation } from './TutorConversation'
+import { TutorPanel } from './TutorPanel'
+import type { ActionRead, MessageRead } from './types'
+import type { UseTutorConversationResult } from './useTutorConversation'
+
+const STATUS = 'GET /api/tutoring/status'
+const HISTORY = 'GET /api/tutoring/messages'
+const SEND = 'POST /api/tutoring/messages'
+
+const INPUT_LABEL = 'Sua mensagem para a Tifa'
+const GREETING =
+  'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
+const HISTORY_RETRY_NOTE =
+  'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
+
+const question = (id: number, content: string, cmid: string): MessageRead => ({
+  id,
+  role: 'user',
+  content,
+  status: 'completa',
+  client_message_id: cmid,
+  reply_to_id: null,
+  error_code: null,
+  created_at: '2026-09-22T12:00:00Z',
+  actions: [],
+})
+
+const answer = (
+  id: number,
+  replyTo: number,
+  content: string,
+  status: MessageRead['status'] = 'completa',
+): MessageRead => ({
+  id,
+  role: 'tutor',
+  content,
+  status,
+  client_message_id: null,
+  reply_to_id: replyTo,
+  error_code: status === 'falhou' ? 'provedor_indisponivel' : null,
+  created_at: '2026-09-22T12:00:01Z',
+  actions: [],
+})
+
+/** Uma rota que nunca responde: o recurso fica carregando. */
+const PENDING: Route = () => new Promise<Response>(() => undefined)
+
+const preStreamError =
+  (status: number, body: unknown): Route =>
+  () =>
+    Response.json(body, { status })
+
+/** O endereco do quadro, que a pagina passa ao painel (a feature nao o conhece). */
+const BOARD_HREF = '#missions-heading'
+
+function mountPanel(
+  routes: Record<string, Route>,
+  kind: 'desktop' | 'mobile' = 'desktop',
+  onMissionCreated: () => void = vi.fn(),
+) {
+  const fetchMock = routeFetch({
+    [STATUS]: () => Response.json({ available: true }),
+    [HISTORY]: () => Response.json([]),
+    ...routes,
+  })
+  const viewport = stubViewport(kind)
+  return {
+    fetchMock,
+    viewport,
+    ...render(<TutorPanel onMissionCreated={onMissionCreated} boardHref={BOARD_HREF} />),
+  }
+}
+
+afterEach(() => {
+  // P20 e P21 gravam o painel fechado: sem limpar, o proximo teste comecaria
+  // com o painel recolhido e reprovaria por ordem de execucao.
+  localStorage.clear()
+  vi.unstubAllGlobals()
+})
+
+function input(): HTMLTextAreaElement {
+  return screen.getByLabelText(INPUT_LABEL)
+}
+
+function sendButton(): HTMLButtonElement {
+  return screen.getByTestId('tutor-send')
+}
+
+/** Espera o status e o historico carregarem (o campo habilita e o Enviar aceita texto). */
+async function ready() {
+  await waitFor(() => {
+    expect(input()).toBeEnabled()
+  })
+  await waitFor(() => {
+    expect(screen.queryByTestId('tutor-history-loading')).not.toBeInTheDocument()
+  })
+}
+
+function type(text: string) {
+  fireEvent.change(input(), { target: { value: text } })
+}
+
+async function typeAndSend(text: string) {
+  await ready()
+  type(text)
+  fireEvent.click(sendButton())
+}
+
+/** O corpo do n-esimo envio (1, 2, ...). */
+function sent(fetchMock: ReturnType<typeof routeFetch>, n: number) {
+  return jsonBody(requestsTo(fetchMock, SEND)[n - 1] as RequestInit) as {
+    client_message_id: string
+    content: string
+  }
+}
+
+function messageWith(text: string): HTMLElement {
+  const item = screen
+    .getAllByTestId('tutor-message')
+    .find((li) => within(li).queryByText(text) !== null)
+  if (item === undefined) {
+    throw new Error(`nenhuma mensagem com "${text}"`)
+  }
+  return item
+}
+
+describe('TutorPanel: estados da conversa', () => {
+  it('P1 a regiao viva existe desde o primeiro render, vazia', async () => {
+    mountPanel({ [HISTORY]: PENDING })
+
+    const live = screen.getByTestId('tutor-live')
+    expect(live).toHaveAttribute('role', 'status')
+    expect(live.textContent).toBe('')
+
+    // Deixa o status assentar, para o teste nao terminar no meio de um setState.
+    await waitFor(() => {
+      expect(input()).toBeEnabled()
+    })
+  })
+
+  it('P2 carregando: esqueleto e anuncio de carregamento', async () => {
+    mountPanel({ [HISTORY]: PENDING })
+
+    expect(screen.getByTestId('tutor-history-loading')).toBeVisible()
+    expect(screen.getByText('Carregando a conversa…')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(input()).toBeEnabled()
+    })
+  })
+
+  it('P3 vazio: a saudacao da interface, e nao uma fala da Tifa', async () => {
+    mountPanel({})
+
+    expect(await screen.findByTestId('tutor-greeting')).toHaveTextContent(GREETING)
+    expect(screen.queryAllByTestId('tutor-message')).toHaveLength(0)
+    expect(screen.queryByTestId('tutor-messages')).not.toBeInTheDocument()
+  })
+
+  it('P4 historico: perguntas e respostas com o autor, na ordem', async () => {
+    const q1 = question(1, 'Oi, Tifa', 'c1')
+    const a2 = answer(2, 1, 'Oi! Bora estudar?')
+    mountPanel({ [HISTORY]: () => Response.json([q1, a2]) })
+
+    const list = await screen.findByTestId('tutor-messages')
+    const items = within(list).getAllByRole('listitem')
+    expect(items.map((li) => li.getAttribute('data-message-id'))).toEqual(['1', '2'])
+    expect(within(items[0] as HTMLElement).getByText('Você')).toBeInTheDocument()
+    expect(within(items[0] as HTMLElement).getByText('Oi, Tifa')).toBeInTheDocument()
+    expect(within(items[1] as HTMLElement).getByText('Tifa')).toBeInTheDocument()
+    expect(within(items[1] as HTMLElement).getByText('Oi! Bora estudar?')).toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-greeting')).not.toBeInTheDocument()
+  })
+
+  it('P5 marcas de interrompida, com falha e em andamento no historico', async () => {
+    mountPanel({
+      [HISTORY]: () =>
+        Response.json([
+          question(1, 'p1', 'c1'),
+          answer(2, 1, 'meio', 'interrompida'),
+          question(3, 'p3', 'c3'),
+          answer(4, 3, 'x', 'falhou'),
+          question(5, 'p5', 'c5'),
+          answer(6, 5, 'y', 'gerando'),
+          question(7, 'p7', 'c7'),
+          answer(8, 7, 'inteira'),
+        ]),
+    })
+
+    await screen.findByTestId('tutor-messages')
+    expect(within(messageWith('meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta interrompida',
+    )
+    expect(within(messageWith('x')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta com falha',
+    )
+    expect(within(messageWith('y')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta em andamento',
+    )
+    expect(within(messageWith('inteira')).queryByTestId('tutor-message-mark')).toBeNull()
+    expect(within(messageWith('p1')).queryByTestId('tutor-message-mark')).toBeNull()
+  })
+
+  it('P6 indisponivel pelo status: texto da spec, campo e Enviar desabilitados', async () => {
+    mountPanel({ [STATUS]: () => Response.json({ available: false }) })
+
+    expect(await screen.findByTestId('tutor-unavailable')).toHaveTextContent(
+      'A Tifa está fora do ar: falta configurar o provedor.',
+    )
+    expect(input()).toBeDisabled()
+    expect(sendButton()).toBeDisabled()
+    await screen.findByTestId('tutor-greeting')
+  })
+
+  it('P7 indisponivel pelo 503: o texto digitado continua no campo', async () => {
+    mountPanel({ [SEND]: preStreamError(503, { code: 'provedor_nao_configurado' }) })
+
+    await typeAndSend('Minha dúvida')
+
+    expect(await screen.findByTestId('tutor-unavailable')).toHaveTextContent(
+      'A Tifa está fora do ar: falta configurar o provedor.',
+    )
+    expect(input()).toHaveValue('Minha dúvida')
+    expect(input()).toBeDisabled()
+    expect(screen.queryByTestId('tutor-failure')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+  })
+
+  it('P8 o status que falha oferece tentar de novo', async () => {
+    const { fetchMock } = mountPanel({
+      [STATUS]: (_init, call) =>
+        call === 1 ? Response.json({}, { status: 500 }) : Response.json({ available: true }),
+    })
+
+    expect(await screen.findByTestId('tutor-status-error')).toHaveTextContent(
+      'Não foi possível verificar se a Tifa está disponível.',
+    )
+    expect(input()).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('tutor-status-retry'))
+    await waitFor(() => {
+      expect(input()).toBeEnabled()
+    })
+    expect(requestsTo(fetchMock, STATUS)).toHaveLength(2)
+    expect(screen.queryByTestId('tutor-status-error')).not.toBeInTheDocument()
+  })
+
+  it('P9 o historico que falha oferece tentar de novo', async () => {
+    mountPanel({
+      [HISTORY]: (_init, call) =>
+        call === 1 ? Response.json({}, { status: 500 }) : Response.json([]),
+    })
+
+    expect(await screen.findByTestId('tutor-history-error')).toHaveTextContent(
+      'Não foi possível carregar a conversa.',
+    )
+    fireEvent.click(screen.getByTestId('tutor-history-retry'))
+    expect(await screen.findByTestId('tutor-greeting')).toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-history-error')).not.toBeInTheDocument()
+  })
+})
+
+describe('TutorPanel: o envio', () => {
+  it('P10 escrevendo: o texto chega pelos delta e a regiao viva anuncia o inicio', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Me dá uma missão')
+    stream.push(sseFrame('user_message', question(1, 'Me dá uma missão', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Bora' }))
+    stream.push(sseFrame('delta', { text: ', vamos!' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora, vamos!')
+    })
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa está escrevendo…')
+    expect(sendButton()).toHaveTextContent('Enviando…')
+    expect(sendButton()).toBeDisabled()
+  })
+
+  it('P11 a regiao viva anuncia o fim, e nao cada palavra', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+    const live = screen.getByTestId('tutor-live')
+
+    await typeAndSend('Me dá uma missão')
+    expect(live).toHaveTextContent('Tifa está escrevendo…')
+    stream.push(sseFrame('user_message', question(1, 'Me dá uma missão', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Bora' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora')
+    })
+    expect(live.textContent).toBe('Tifa está escrevendo…')
+    stream.push(sseFrame('delta', { text: ', vamos!' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora, vamos!')
+    })
+    expect(live.textContent).toBe('Tifa está escrevendo…')
+
+    stream.push(sseFrame('done', answer(2, 1, 'Bora, vamos!')))
+    stream.close()
+    await waitFor(() => {
+      expect(live.textContent).toBe('Tifa terminou de responder.')
+    })
+    expect(screen.queryByTestId('tutor-partial')).not.toBeInTheDocument()
+    expect(messageWith('Bora, vamos!')).toBeInTheDocument()
+  })
+
+  it('P12 o campo so e limpo quando o user_message chega', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Pergunta gravada')
+    expect(input()).toHaveValue('Pergunta gravada')
+
+    stream.push(sseFrame('user_message', question(1, 'Pergunta gravada', 'c1')))
+    await waitFor(() => {
+      expect(input()).toHaveValue('')
+    })
+  })
+
+  it('P13 falha no stream: parcial marcado, alerta e Tentar de novo com o mesmo id', async () => {
+    const q10 = question(10, 'Me explica recursão', 'x')
+    const { fetchMock } = mountPanel({
+      [HISTORY]: (_init, call) =>
+        Response.json(call === 1 ? [] : [q10, answer(11, 10, 'Meio', 'falhou')]),
+      [SEND]: (_init, call) =>
+        call === 1
+          ? streamResponse([
+              sseFrame('user_message', q10),
+              sseFrame('delta', { text: 'Meio' }),
+              sseFrame('error', { code: 'provedor_indisponivel' }),
+            ])
+          : streamResponse([
+              sseFrame('user_message', q10),
+              sseFrame('done', answer(12, 10, 'Inteira')),
+            ]),
+    })
+
+    await typeAndSend('Me explica recursão')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+    )
+    expect(within(messageWith('Meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta com falha',
+    )
+
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    })
+    expect(sent(fetchMock, 2).client_message_id).toBe(sent(fetchMock, 1).client_message_id)
+    expect(sent(fetchMock, 2)).toEqual(sent(fetchMock, 1))
+    // A tentativa que falhou continua visivel, marcada; a nova vem depois.
+    expect(within(messageWith('Meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta com falha',
+    )
+    expect(messageWith('Inteira')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('P31 a linha gerando da resposta em voo nao vira uma segunda bolha', async () => {
+    // A atualizacao silenciosa da falha anterior chega ATRASADA, com a
+    // resposta nova ja sendo escrita: o servidor devolve a linha `gerando`
+    // dela (vazia). Desenhada, seria uma bolha "em andamento" ao lado do
+    // parcial -- a mesma resposta duas vezes.
+    const q10 = question(10, 'Me explica recursão', 'x')
+    let lateHistory!: (response: Response) => void
+    const stream = controlledStream()
+    mountPanel({
+      [HISTORY]: (_init, call) =>
+        call === 1
+          ? Response.json([])
+          : new Promise<Response>((resolve) => {
+              lateHistory = resolve
+            }),
+      [SEND]: (_init, call) =>
+        call === 1
+          ? streamResponse([
+              sseFrame('user_message', q10),
+              sseFrame('delta', { text: 'Meio' }),
+              sseFrame('error', { code: 'provedor_indisponivel' }),
+            ])
+          : stream.response,
+    })
+
+    await typeAndSend('Me explica recursão')
+    await screen.findByRole('alert')
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    stream.push(sseFrame('user_message', q10))
+    stream.push(sseFrame('delta', { text: 'Nova' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Nova')
+    })
+
+    await act(async () => {
+      lateHistory(
+        Response.json([
+          q10,
+          answer(11, 10, 'Meio', 'falhou'),
+          answer(12, 10, '', 'gerando'),
+          answer(9, 8, 'de outra pergunta', 'gerando'),
+        ]),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(screen.getAllByTestId('tutor-partial')).toHaveLength(1)
+    expect(
+      screen.getAllByTestId('tutor-message').map((li) => li.getAttribute('data-message-id')),
+    ).toEqual(['10', '11', '9'])
+    // So a linha da resposta EM VOO sai; um `gerando` de outra pergunta fica.
+    expect(
+      within(messageWith('de outra pergunta')).getByTestId('tutor-message-mark'),
+    ).toHaveTextContent('Resposta em andamento')
+
+    stream.push(sseFrame('done', answer(12, 10, 'Nova resposta')))
+    stream.close()
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    })
+    expect(
+      screen.getAllByTestId('tutor-message').map((li) => li.getAttribute('data-message-id')),
+    ).toEqual(['10', '11', '12', '9'])
+    expect(within(messageWith('Nova resposta')).queryByTestId('tutor-message-mark')).toBeNull()
+  })
+
+  it('P14 resultado desconhecido: parcial marcado como interrompida', async () => {
+    const q10 = question(10, 'Oi', 'x')
+    const { fetchMock } = mountPanel({
+      [HISTORY]: (_init, call) =>
+        call === 1 ? Response.json([]) : Response.json({}, { status: 500 }),
+      [SEND]: () =>
+        streamResponse([sseFrame('user_message', q10), sseFrame('delta', { text: 'x' })]),
+    })
+
+    await typeAndSend('Oi')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(UNKNOWN_RESULT.message)
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+    })
+    expect(within(messageWith('x')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta interrompida',
+    )
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P15 409 antes do stream: alerta, texto mantido', async () => {
+    mountPanel({ [SEND]: preStreamError(409, { code: 'mensagem_em_andamento' }) })
+
+    await typeAndSend('Outra pergunta')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A Tifa ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
+    )
+    expect(input()).toHaveValue('Outra pergunta')
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P16 422: alerta sem Tentar de novo, texto mantido', async () => {
+    mountPanel({
+      [SEND]: preStreamError(422, { detail: [{ msg: 'String should have at most 4000' }] }),
+    })
+
+    await typeAndSend('Texto recusado')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A pergunta não foi aceita. Confira o texto e envie de novo.',
+    )
+    expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+    expect(input()).toHaveValue('Texto recusado')
+  })
+
+  it('P17 depois de recarregar, a ultima pergunta interrompida pode ser reenviada', async () => {
+    const q10 = question(10, 'Pergunta antiga', 'id-da-pergunta-antiga')
+    const { fetchMock } = mountPanel({
+      [HISTORY]: () => Response.json([q10, answer(11, 10, 'meio', 'interrompida')]),
+      [SEND]: () =>
+        streamResponse([sseFrame('user_message', q10), sseFrame('done', answer(12, 10, 'Agora'))]),
+    })
+    await ready()
+
+    const note = await screen.findByTestId('tutor-history-retry-note')
+    expect(note).toHaveTextContent(HISTORY_RETRY_NOTE)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, SEND)).toHaveLength(1)
+    })
+    expect(sent(fetchMock, 1)).toEqual({
+      client_message_id: 'id-da-pergunta-antiga',
+      content: 'Pergunta antiga',
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    })
+  })
+
+  it('P18 contador: aparece perto do limite, some longe dele, e liga ao campo', async () => {
+    mountPanel({})
+    await ready()
+
+    type('a'.repeat(3599))
+    expect(screen.queryByText(/Restam/)).not.toBeInTheDocument()
+    expect(input()).not.toHaveAttribute('aria-describedby')
+
+    type('a'.repeat(3600))
+    const counter = screen.getByTestId('tutor-counter')
+    expect(counter).toHaveTextContent('Restam 400 caracteres.')
+    expect(input()).toHaveAttribute('aria-describedby', counter.id)
+    expect(counter.id).not.toBe('')
+  })
+
+  it('P19 acima do limite: Enviar desabilitado e o texto mantido', async () => {
+    const { fetchMock, container } = mountPanel({})
+    await ready()
+
+    type('a'.repeat(4001))
+    expect(screen.getByTestId('tutor-counter')).toHaveTextContent(
+      'Passou 1 caractere do limite de 4000.',
+    )
+    expect(sendButton()).toBeDisabled()
+    expect(input().value).toHaveLength(4001)
+
+    fireEvent.click(sendButton())
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    expect(requestsTo(fetchMock, SEND)).toHaveLength(0)
+    expect(input().value).toHaveLength(4001)
+  })
+
+  it('P30 indisponivel: nenhum Tentar de novo, nem o do historico', async () => {
+    mountPanel({
+      [STATUS]: () => Response.json({ available: false }),
+      [HISTORY]: () =>
+        Response.json([
+          question(10, 'Pergunta antiga', 'c10'),
+          answer(11, 10, 'meio', 'interrompida'),
+        ]),
+    })
+
+    await screen.findByTestId('tutor-unavailable')
+    await screen.findByTestId('tutor-messages')
+    expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-history-retry-note')).not.toBeInTheDocument()
+    expect(within(messageWith('meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta interrompida',
+    )
+  })
+
+  it.each([
+    [
+      'failed',
+      {
+        status: 'failed',
+        pending: { clientMessageId: 'c10', content: 'Pergunta' },
+        question: null,
+        partial: '',
+        failure: {
+          message:
+            'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+          recovery: 'retry',
+        },
+      },
+    ],
+    [
+      'unknown',
+      {
+        status: 'unknown',
+        pending: { clientMessageId: 'c10', content: 'Pergunta' },
+        question: null,
+        partial: '',
+      },
+    ],
+  ] as const)(
+    'P30b fora do ar, uma falha %s mostra o aviso e nao oferece Tentar de novo',
+    (_name, send) => {
+      // Pelo painel, este estado ainda nao e alcancavel (so se envia com a Tifa
+      // disponivel, e o status so recarrega a partir do erro); a conversa
+      // desenhada nao tem estado proprio e e montada direto com ele. Sem a
+      // guarda, o botao ofereceria um reenvio que so daria 503.
+      const retry = vi.fn()
+      const conversation: UseTutorConversationResult = {
+        history: { status: 'loaded', messages: [] },
+        messages: [],
+        send,
+        draft: 'Pergunta',
+        setDraft: vi.fn(),
+        length: describeQuestionLength('Pergunta'),
+        canSubmit: true,
+        submit: vi.fn(),
+        retryTarget: send.pending,
+        retry,
+        reloadHistory: vi.fn(),
+        updateAction: vi.fn(),
+      }
+      render(
+        <TutorConversation
+          conversation={conversation}
+          status={{ status: 'unavailable' }}
+          onReloadStatus={vi.fn()}
+          renderAction={() => <></>}
+        />,
+      )
+
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+      expect(screen.getByTestId('tutor-unavailable')).toBeInTheDocument()
+    },
+  )
+})
+
+describe('TutorPanel: desktop', () => {
+  it('P20 desktop: recolher e abrir o painel, lembrado no localStorage', async () => {
+    const { unmount } = mountPanel({})
+    await ready()
+
+    const toggle = screen.getByTestId('tutor-panel-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAttribute('aria-controls', 'tutor-panel-body')
+    expect(toggle).toHaveAccessibleName('Recolher o painel da Tifa')
+    expect(document.getElementById('tutor-panel-body')).not.toBeNull()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAccessibleName('Abrir o painel da Tifa')
+    expect(document.getElementById('tutor-panel-body')).toBeNull()
+    expect(localStorage.getItem(PANEL_OPEN_KEY)).toBe('false')
+
+    unmount()
+    render(<TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />)
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'false')
+    expect(document.getElementById('tutor-panel-body')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(localStorage.getItem(PANEL_OPEN_KEY)).toBe('true')
+    await ready()
+  })
+
+  it('P21 desktop fechado: o stream continua e a regiao viva segue anunciando', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Me dá uma missão')
+    stream.push(sseFrame('user_message', question(1, 'Me dá uma missão', 'c1')))
+    await waitFor(() => {
+      expect(input()).toHaveValue('')
+    })
+
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(document.getElementById('tutor-panel-body')).toBeNull()
+    stream.push(sseFrame('done', answer(2, 1, 'Resposta pronta')))
+    stream.close()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    })
+
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(messageWith('Resposta pronta')).toBeInTheDocument()
+  })
+
+  it('P26 o retrato e decorativo e nao usa asset nenhum', async () => {
+    mountPanel({})
+
+    const portrait = screen.getByTestId('tutor-portrait')
+    expect(portrait).toHaveAttribute('aria-hidden', 'true')
+    expect(portrait).toHaveTextContent('TL')
+    expect(portrait.querySelector('img')).toBeNull()
+    expect(screen.getByRole('complementary', { name: 'Tifa' })).toBeInTheDocument()
+    await ready()
+  })
+})
+
+describe('TutorPanel: celular', () => {
+  async function openSheet() {
+    const open = screen.getByTestId('tutor-sheet-open')
+    fireEvent.click(open)
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await ready()
+    return dialog
+  }
+
+  it('P22 celular: botao fixo abre a folha como dialogo, com o foco no campo', async () => {
+    const { fetchMock } = mountPanel({}, 'mobile')
+
+    const open = screen.getByTestId('tutor-sheet-open')
+    expect(open).toBeVisible()
+    expect(open).toHaveAttribute('aria-expanded', 'false')
+    expect(open).toHaveAttribute('aria-controls', 'tutor-sheet')
+    expect(open).toHaveAccessibleName('Falar com a Tifa')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // Abre depois de o status responder: com a Tifa disponivel, o campo
+    // esta habilitado e pode receber o foco.
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, STATUS)).toHaveLength(1)
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    fireEvent.click(open)
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAttribute('id', 'tutor-sheet')
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input())
+    })
+    await ready()
+  })
+
+  it('P22b celular: com o campo desabilitado, o foco vai para o Fechar a conversa', async () => {
+    mountPanel({ [STATUS]: () => Response.json({ available: false }) }, 'mobile')
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await within(dialog).findByTestId('tutor-unavailable')
+    expect(input()).toBeDisabled()
+    await waitFor(() => {
+      expect(document.activeElement).toBe(within(dialog).getByTestId('tutor-sheet-close'))
+    })
+  })
+
+  it('P23 celular: Esc e Fechar a conversa fecham a folha e devolvem o foco ao botao', async () => {
+    mountPanel({}, 'mobile')
+
+    let dialog = await openSheet()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByTestId('tutor-sheet-open'))
+    })
+
+    dialog = await openSheet()
+    fireEvent.click(within(dialog).getByTestId('tutor-sheet-close'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByTestId('tutor-sheet-open'))
+    })
+  })
+
+  it('P24 celular: o Tab fica dentro da folha', async () => {
+    mountPanel({}, 'mobile')
+
+    const dialog = await openSheet()
+    type('Algo para enviar')
+    const close = within(dialog).getByTestId('tutor-sheet-close')
+    const send = sendButton()
+    expect(send).toBeEnabled()
+
+    send.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(close)
+
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(send)
+  })
+
+  it('P24b celular: Tab e Shift+Tab no meio da folha seguem o fluxo normal', async () => {
+    mountPanel({}, 'mobile')
+
+    const dialog = await openSheet()
+    // Com texto, o Enviar habilita e o campo fica no MEIO da ordem de foco.
+    type('Algo para enviar')
+    expect(sendButton()).toBeEnabled()
+    input().focus()
+    expect(fireEvent.keyDown(dialog, { key: 'Tab' })).toBe(true)
+    expect(document.activeElement).toBe(input())
+    expect(fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })).toBe(true)
+    expect(document.activeElement).toBe(input())
+  })
+
+  it('P27 outras teclas na folha nao fazem nada', async () => {
+    mountPanel({}, 'mobile')
+
+    const dialog = await openSheet()
+    expect(fireEvent.keyDown(dialog, { key: 'a' })).toBe(true)
+    expect(screen.getByRole('dialog', { name: 'Tifa' })).toBeInTheDocument()
+  })
+
+  it('P25 trocar de layout nao perde o rascunho nem o stream', async () => {
+    const { viewport } = mountPanel({})
+    await ready()
+    type('Rascunho')
+
+    act(() => {
+      viewport.setDesktop(false)
+    })
+    expect(screen.queryByTestId('tutor-panel-toggle')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    expect(within(dialog).getByLabelText(INPUT_LABEL)).toHaveValue('Rascunho')
+  })
+})
+
+describe('TutorPanel: a proposta de missao', () => {
+  const CONFIRM = 'POST /api/tutoring/actions/5/confirm'
+  const proposal: ActionRead = {
+    id: 5,
+    kind: 'create_mission',
+    state: 'proposta',
+    payload: {
+      instructions: 'Estudar grafos por 40 minutos',
+      completion_criterion: 'Resumo de uma pagina',
+      difficulty: 2,
+      estimated_minutes: 40,
+      deadline: '2027-02-15T21:00:00-03:00',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+  const executed: ActionRead = { ...proposal, state: 'executada', mission_id: 40 }
+
+  /** O historico de uma pergunta e da resposta que carrega a acao. */
+  const historyWith = (action: ActionRead) => () =>
+    Response.json([
+      question(1, 'Me dá uma missão', 'c1'),
+      { ...answer(2, 1, 'Proponho esta missão.'), actions: [action] },
+    ])
+
+  it('P28 uma resposta com proposta mostra o cartao, e confirmar avisa a pagina', async () => {
+    const onMissionCreated = vi.fn()
+    mountPanel(
+      {
+        [HISTORY]: historyWith(proposal),
+        [CONFIRM]: () =>
+          Response.json({ action: executed, mission: { id: 40, instructions: 'x' } }),
+      },
+      'desktop',
+      onMissionCreated,
+    )
+
+    const card = await screen.findByTestId('tutor-proposal')
+    // O cartao mora dentro da mensagem da Tifa que o propos.
+    expect(within(messageWith('Proponho esta missão.')).getByTestId('tutor-proposal')).toBe(card)
+    fireEvent.click(within(card).getByTestId('proposal-confirm'))
+
+    expect(await screen.findByTestId('proposal-created')).toHaveTextContent('Missão criada')
+    expect(onMissionCreated).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('proposal-board-link')).toHaveAttribute('href', BOARD_HREF)
+    // No desktop o painel nao cobre o quadro: o link nao fecha nada.
+    fireEvent.click(screen.getByTestId('proposal-board-link'))
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('P29 Ver no Quartel-General fecha a folha no celular', async () => {
+    mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
+
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await ready()
+    const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
+
+    fireEvent.click(link)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
+  })
+})

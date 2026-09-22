@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# Executa o comando recebido com a API apontada para o banco de TESTE.
+# Executa o comando recebido com a API apontada para o banco de TESTE e para
+# o servidor FALSO da Anthropic, com a chave ficticia imposta.
+#
+# Duas guardas, as duas antes de o comando rodar: o banco precisa ter nome
+# terminando em `_test`, e o provedor (FOCUSQUEST_ANTHROPIC_BASE_URL, que o
+# playwright.config.ts define) precisa estar em loopback. E a chave da API e
+# SEMPRE a ficticia, qualquer que seja a do .env ou a do ambiente.
 #
 # Por que este script existe: a aplicacao le UMA variavel de banco
 # (FOCUSQUEST_DATABASE_URL, em src/focusquest/core/config.py). O E2E precisa
@@ -40,6 +46,8 @@ cd "$ROOT"
 # Aqui a guarda protege escrita, nao DROP: o E2E cria missoes. Se ela recusar,
 # o comando nao roda -- `set -e` derruba o script na propria substituicao.
 url="$(uv run python - <<'PY'
+from urllib.parse import urlsplit
+
 from sqlalchemy import make_url
 
 from focusquest.core.config import Settings
@@ -52,6 +60,24 @@ if not nome.endswith("_test"):
         "banco cujo nome termine em '_test' -- confira "
         "FOCUSQUEST_TEST_DATABASE_URL"
     )
+
+# O provedor da API do E2E tem de ser a MAQUINA LOCAL (o servidor falso).
+# Lista de permissao, e nao recusa de um nome. A chave real mora no Keychain
+# do macOS, nunca no .env (decisao D-a, emenda E1 do 1b-2) -- mas uma chave
+# posta no ambiente do shell ou no .env por engano chegaria aqui, e o
+# pre-push exporta toda FOCUSQUEST_* do .env para o worktree do gate. Com o
+# provedor fora da maquina -- a Anthropic, um proxy, um IP --, essa chave e o
+# gasto iriam para longe do teste. So o HOST vai para a mensagem: uma URL com
+# credencial embutida iria inteira para o log.
+endereco = Settings().anthropic_base_url
+host = urlsplit(endereco).hostname
+if host not in {"127.0.0.1", "localhost", "::1"}:
+    raise SystemExit(
+        "recusando subir a API do E2E com o provedor em "
+        f"'{host}'; o E2E so fala com o servidor falso em loopback -- "
+        "confira FOCUSQUEST_ANTHROPIC_BASE_URL (o playwright.config.ts a define)"
+    )
+
 # hide_password=False de proposito: o valor vai para uma variavel de ambiente
 # do processo filho, nao para log nem para mensagem de erro.
 print(url.render_as_string(hide_password=False))
@@ -59,4 +85,11 @@ PY
 )"
 
 export FOCUSQUEST_DATABASE_URL="$url"
+# A chave da API do E2E e SEMPRE a ficticia. A real mora no Keychain e nao
+# deveria estar em lugar nenhum daqui, mas uma chave posta por engano chegaria
+# a este ambiente pelo shell, pelo .env (o Settings o le) ou pelo pre-push
+# (que exporta toda FOCUSQUEST_* do .env para o worktree): impor aqui, no
+# unico caminho de subida da API do E2E, fecha os tres. O valor nao imita o
+# formato de uma chave real.
+export FOCUSQUEST_ANTHROPIC_API_KEY="e2e-chave-ficticia"
 exec "$@"

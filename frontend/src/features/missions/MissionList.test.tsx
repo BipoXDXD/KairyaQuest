@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { MissionList } from './MissionList'
+import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { MissionList, type MissionListHandle } from './MissionList'
 import type { Mission } from './types'
 
 const pendente: Mission = {
@@ -172,23 +174,16 @@ describe('MissionList', () => {
     expect(prazo).toHaveTextContent(/\d{2}\/\d{2}\/\d{4}/)
   })
 
-  it('apresenta o prazo em America/Sao_Paulo, mesmo com o processo em outro fuso', async () => {
-    // Um instante em que SP e UTC caem em DIAS diferentes: 02:30 de 20/09 em
-    // UTC sao 23:30 de 19/09 em SP. Com qualquer instante "de meio de dia" o
-    // teste nao distinguiria os fusos pela data, so pela hora.
-    //
-    // O que da dente a este teste e o `TZ` do processo fixado em `Asia/Tokyo`
-    // no `vite.config.ts`. Sem ele, na maquina do dono -- que esta em SP --, o
-    // formatador SEM `timeZone` produziria o mesmo texto esperado, e o teste
-    // passaria sem o conserto (medido). Em Tokyo o formatador sem `timeZone`
-    // diz 20/09/2026 11:30, e o teste reprova.
+  it('o cartao mostra o prazo pelo formatador de America/Sao_Paulo', async () => {
+    // A regra do fuso e provada em `shared/lib/deadline.test.ts`, com o porque
+    // do instante escolhido e do processo em `Asia/Tokyo`. Aqui fica a prova de
+    // que o CARTAO usa aquele formatador: um formatador local sem `timeZone`
+    // diria 20/09/2026 11:30 e reprovaria.
     stubFetchResolving([{ ...pendente, deadline: '2026-09-20T02:30:00Z' }])
 
     render(<MissionList />)
 
     await screen.findByTestId('missions-list')
-    // Regex e nao texto exato: o separador entre data e hora (virgula,
-    // espaco) muda entre versoes do ICU, e o que importa aqui e dia e hora.
     expect(screen.getByTestId('mission-deadline')).toHaveTextContent(/19\/09\/2026.*23:30/)
   })
 
@@ -848,6 +843,54 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     fireEvent.click(atualizar)
 
     expect(listGets(fetchMock)).toBe(2)
+    expect(screen.getByTestId('missions-reload-status')).toBeEmptyDOMElement()
+  })
+})
+
+describe('MissionList -- a recarga pedida pela pagina', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('o reload pelo ref recarrega o quadro, e espera a conclusao em voo', async () => {
+    // O ref e como a PAGINA pede a recarga depois de a Tifa criar uma missao.
+    // Ele passa pelo mesmo `requestReload` do "Atualizar o quadro": com uma
+    // conclusao em voo, espera (Incremento A, Task 6).
+    let resolver!: (response: Response) => void
+    const post = new Promise<Response>((resolve) => {
+      resolver = resolve
+    })
+    const fetchMock = routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(call === 1 ? [pendente] : [{ ...pendente, state: 'concluida' }]),
+      'POST /api/missions/7/complete': () => post,
+    })
+    const ref = createRef<MissionListHandle>()
+    render(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    fireEvent.click(screen.getByTestId('mission-complete'))
+
+    act(() => {
+      ref.current!.reload()
+    })
+
+    // Um GET so: a recarga pedida de fora esperou o POST em voo.
+    expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
+    expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
+      'Aguardando a conclusão em andamento para atualizar o quadro.',
+    )
+
+    await act(async () => {
+      resolver(Response.json({ ...pendente, state: 'concluida' }))
+      await post
+    })
+
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
     expect(screen.getByTestId('missions-reload-status')).toBeEmptyDOMElement()
   })
 })

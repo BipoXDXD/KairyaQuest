@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
-import { API_URL, WEB_URL } from './tests/e2e/servers'
+import { API_URL, FALSO_URL, WEB_URL } from './tests/e2e/servers'
 
 /**
  * A raiz do repositorio, resolvida a partir deste arquivo.
@@ -47,11 +47,25 @@ export default defineConfig({
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 
-  // Os DOIS servidores sao subidos pelo proprio Playwright, em portas
-  // dedicadas, com `reuseExistingServer: false`: o README §10 proibe
-  // reutilizar servidor pessoal. Com reuso, o E2E de quem estivesse com
-  // `npm run dev` aberto passaria contra o servidor da pessoa.
+  // Os TRES servidores -- o falso da Anthropic, a API e o frontend -- sao
+  // subidos pelo proprio Playwright, em portas dedicadas, com
+  // `reuseExistingServer: false`: o README §10 proibe reutilizar servidor
+  // pessoal. Com reuso, o E2E de quem estivesse com `npm run dev` aberto
+  // passaria contra o servidor da pessoa.
   webServer: [
+    {
+      // O MESMO servidor falso do pytest, como processo, com o controle HTTP
+      // de `/_control/`. PYTHONPATH=tests porque o pacote e `integration`
+      // (como o pytest o importa), e nao `tests.integration`.
+      command: `uv run python -m integration.falso_do_e2e --porta ${new URL(FALSO_URL).port}`,
+      cwd: REPO_ROOT,
+      env: { PYTHONPATH: 'tests' },
+      url: `${FALSO_URL}/_control/requests`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
     {
       // O script aponta FOCUSQUEST_DATABASE_URL para o banco de TESTE antes
       // de trocar de processo para o uvicorn. Ver scripts/e2e-env.sh.
@@ -68,6 +82,12 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
+      env: {
+        // O provedor da API do E2E e o servidor falso, nunca a Anthropic. O
+        // `scripts/e2e-env.sh` RECUSA subir com qualquer endereco fora do
+        // loopback e impoe a chave ficticia -- a do .env nunca chega aqui.
+        FOCUSQUEST_ANTHROPIC_BASE_URL: FALSO_URL,
+      },
     },
     {
       // `vite preview` e nao `vite dev`: o que o cenario visita e o BUILD de

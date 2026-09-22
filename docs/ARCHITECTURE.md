@@ -19,7 +19,7 @@ os dois blocos nunca se misturam.
 ## 1. O que existe hoje
 
 Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim do
-backend do Incremento 1b-1 (`feat/incremento-1b-1`, ainda não publicado —
+Incremento 1b-2 (`feat/incremento-1b-2`, ainda não publicado —
 ver `docs/HANDOFF.md`). Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -53,27 +53,60 @@ FocusQuest/
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
-│   │   │   └── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
-│   │   │       ├── MissionList.test.tsx
-│   │   │       ├── MissionList.tsx
-│   │   │       ├── completionFailure.test.ts
-│   │   │       ├── completionFailure.ts # code de erro → mensagem e ação da tela
-│   │   │       ├── types.ts
-│   │   │       ├── useCompleteMission.test.tsx
-│   │   │       ├── useCompleteMission.ts # conclui uma missão; pede e devolve a chave ao registro
-│   │   │       ├── useCompletionRegistry.test.tsx
-│   │   │       ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
-│   │   │       ├── useMissions.test.tsx
-│   │   │       └── useMissions.ts
+│   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
+│   │   │   │   ├── MissionList.test.tsx
+│   │   │   │   ├── MissionList.tsx  # o quadro; expõe MissionListHandle (reload) por useImperativeHandle, para a página pedir recarga
+│   │   │   │   ├── completionFailure.test.ts
+│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── useCompleteMission.test.tsx
+│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; pede e devolve a chave ao registro
+│   │   │   │   ├── useCompletionRegistry.test.tsx
+│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
+│   │   │   │   ├── useMissions.test.tsx
+│   │   │   │   └── useMissions.ts
+│   │   │   └── tutoring/          # a Tifa na tela (1b-2); importa só de shared/, nunca de features/missions/
+│   │   │       ├── ProposalCard.test.tsx
+│   │   │       ├── ProposalCard.tsx       # o cartão de proposta: Confirmar/Recusar, um ramo por Outcome
+│   │   │       ├── TutorConversation.tsx  # a conversa: histórico, campo, região viva de status
+│   │   │       ├── TutorPanel.test.tsx
+│   │   │       ├── TutorPanel.tsx         # o painel: lateral (desktop) ou folha modal (celular), hooks no topo
+│   │   │       ├── actionFailure.test.ts
+│   │   │       ├── actionFailure.ts       # mapa exaustivo BY_CODE (describeActionFailure) para confirmar/recusar
+│   │   │       ├── conversationHistory.test.ts
+│   │   │       ├── conversationHistory.ts # appendTurn, settleInterrupted, pendingFromHistory, replaceAction
+│   │   │       ├── messageFailure.test.ts
+│   │   │       ├── messageFailure.ts      # mapas PRE_STREAM e IN_STREAM para o envio de pergunta
+│   │   │       ├── panelPreference.test.ts
+│   │   │       ├── panelPreference.ts     # localStorage do painel aberto/fechado, tolerante a exceção
+│   │   │       ├── questionLimit.test.ts
+│   │   │       ├── questionLimit.ts       # MAX_QUESTION_LENGTH, COUNTER_VISIBLE_FROM, describeQuestionLength
+│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action)
+│   │   │       ├── useActionKeys.test.tsx
+│   │   │       ├── useActionKeys.ts       # chaves de confirmação por ação, no topo do TutorPanel
+│   │   │       ├── useDecideAction.test.tsx
+│   │   │       ├── useDecideAction.ts     # confirmar/recusar via postJson, reusando o CodigoDeErro do A
+│   │   │       ├── useIsDesktop.test.tsx
+│   │   │       ├── useIsDesktop.ts        # useSyncExternalStore sobre matchMedia (min-width: 1024px)
+│   │   │       ├── useTutorConversation.test.tsx
+│   │   │       ├── useTutorConversation.ts # histórico, rascunho, envio por postStream, reenvio idempotente
+│   │   │       ├── useTutorStatus.test.tsx
+│   │   │       └── useTutorStatus.ts      # disponibilidade da Tifa, error separado de unavailable
 │   │   ├── pages/
 │   │   │   ├── Headquarters.test.tsx
-│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe a tela, sem regra
+│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring, sem regra própria
 │   │   ├── shared/
-│   │   │   └── api/
-│   │   │       ├── client.test.ts
-│   │   │       └── client.ts      # o cliente HTTP único; componente nenhum chama fetch
-│   │   ├── test/                  # infraestrutura de teste, não código de aplicação
-│   │   │   └── setup.ts
+│   │   │   ├── api/
+│   │   │   │   ├── client.test.ts
+│   │   │   │   └── client.ts      # o cliente HTTP único: postJson e postStream; componente nenhum chama fetch
+│   │   │   └── lib/                # funções puras com mais de um usuário entre features (docs/ARCHITECTURE.md §5)
+│   │   │       ├── deadline.test.ts
+│   │   │       └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
+│   │   ├── test/                  # infraestrutura de teste, não código de aplicação (docs/QUALITY.md §3)
+│   │   │   ├── fetchRoutes.ts     # routeFetch: fetch falso roteado por metodo/URL, um Response novo por chamada
+│   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
+│   │   │   ├── sse.ts             # quadros e corpos SSE falsos, sem rede
+│   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
 │   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
 │   │   ├── App.tsx                # escolhe a tela; hoje, só o Quartel-General
@@ -82,18 +115,20 @@ FocusQuest/
 │   │   └── main.tsx
 │   ├── tests/
 │   │   └── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
+│   │       ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
 │   │       ├── headquarters.spec.ts
-│   │       └── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273)
+│   │       ├── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273, falso 8150)
+│   │       └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
 │   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
 │   ├── .gitignore
 │   ├── .prettierignore
 │   ├── .prettierrc.json
 │   ├── README.md
 │   ├── eslint.config.js
-│   ├── index.html
+│   ├── index.html                 # lang="pt-BR" e interactive-widget=resizes-content (1b-2, Task 4)
 │   ├── package-lock.json
 │   ├── package.json               # também define os scripts que o Makefile chama
-│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa
+│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa; três webServer
 │   ├── tsconfig.json
 │   ├── tsconfig.app.json
 │   ├── tsconfig.e2e.json          # faz o `tsc -b` alcançar tests/e2e
@@ -101,11 +136,12 @@ FocusQuest/
 │   └── vite.config.ts             # build, proxy de /api, coleta de teste e limiares de cobertura
 ├── scripts/                       # lógica de shell do gate, compartilhada entre local e CI
 │   ├── check-push.sh              # valida o topo de cada ref enviada, em worktree isolado
-│   ├── e2e-env.sh                 # sobe a API do E2E apontada para o banco de teste
+│   ├── e2e-env.sh                 # sobe a API do E2E; desde o 1b-2, guarda de loopback e chave fictícia imposta
 │   ├── init-test-db.sql           # cria o focusquest_test (compose e CI usam o mesmo arquivo)
-│   └── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
+│   ├── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
+│   └── push-env.sh                # mecanismo de lista de permissão que o pre-push usa para exportar FOCUSQUEST_*
 ├── src/
-│   └── focusquest/                # o pacote Python da API, instalado em modo editável
+│   └── focusquest/                # o pacote Python da API, instalado em modo editável — o 1b-2 não muda nada aqui
 │       ├── core/                  # infraestrutura comum a todos os módulos
 │       │   ├── __init__.py
 │       │   ├── base.py            # base declarativa do SQLAlchemy
@@ -142,16 +178,20 @@ FocusQuest/
 │   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
 │   │   ├── __init__.py
 │   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA, migração, e as fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
+│   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
 │   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável (não é teste)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso
-│   │   ├── test_e2e_env.py
+│   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
+│   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2)
 │   │   ├── test_health.py
+│   │   ├── test_install_gitleaks.py  # o script de download do Gitleaks, verificação de checksum e retentativa
 │   │   ├── test_migrations.py
 │   │   ├── test_missions_api.py
 │   │   ├── test_missions_concorrencia.py
 │   │   ├── test_missions_models.py
 │   │   ├── test_missions_service.py
 │   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
+│   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh
 │   │   ├── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
 │   │   ├── test_tutoring_acoes.py # confirmar e recusar, inclusive concorrência real
 │   │   ├── test_tutoring_api.py   # rotas, códigos de erro, SSE, segredo
@@ -161,7 +201,7 @@ FocusQuest/
 │   └── unit/                      # sem banco
 │       ├── __init__.py
 │       ├── test_clock.py
-│       ├── test_config.py
+│       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_tutoring_context.py  # montagem do turno
@@ -169,7 +209,7 @@ FocusQuest/
 │       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
 │       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
 │       └── test_tutoring_sse.py      # o invólucro `fechando_ao_cancelar`
-├── .env.example                   # modelo do .env da raiz (banco e, desde o 1b-1, a tutoria); o .env é ignorado pelo git
+├── .env.example                   # modelo do .env da raiz (banco e a tutoria); a chave da Anthropic fica vazia — a de verdade mora no Keychain (D-a, 1b-2)
 ├── .gitignore
 ├── .gitleaks.toml                 # configuração da varredura de segredos
 ├── .pre-commit-config.yaml        # declara os hooks pre-commit, pre-merge-commit e pre-push
@@ -198,12 +238,12 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   e nasce quando se justificar (README §3: "quando necessário").
 - **Não existe o módulo `progress`, nem módulo `users`.** O modelo `User`
   mora em `modules/missions/models.py` como dívida consciente (ver
-  `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) — só o
-  lado do frontend (`frontend/src/features/tutoring/`) continua contrato,
-  para o 1b-2.
+  `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) e
+  ganhou o lado do frontend (`frontend/src/features/tutoring/`) **no
+  1b-2** — a feature existe hoje, não é mais contrato.
 - **No frontend, não existem `app/`, `styles/`, nem `shared/ui/`,
-  `shared/hooks/`, `shared/lib/` e `shared/types/`.** Nem as features
-  `tutoring` e `rewards`.
+  `shared/hooks/` e `shared/types/`.** `shared/lib/` **nasceu no 1b-2**, com
+  `deadline.ts` (§5 regra 3). A feature `rewards` continua contrato.
 - **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
   arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
   não são importados por nenhum módulo — conferido com `grep` em
@@ -486,8 +526,8 @@ morreria com a transação); `404 acao_nao_encontrada`.
 - **`src/pages/`** *(existe)* — **composição**: uma página junta features e
   componentes reutilizáveis e decide o layout da tela. Não contém regra. Hoje
   há uma: `Headquarters.tsx`, o Quartel-General.
-- **`src/features/<feature>/`** *(existe para `missions`; contrato para
-  `tutoring` e `rewards`)* — a feature é a unidade real de organização:
+- **`src/features/<feature>/`** *(existe para `missions` e `tutoring`;
+  contrato para `rewards`)* — a feature é a unidade real de organização:
   componentes, hooks, contratos e testes **daquele** assunto, agrupados. Em
   `missions`, `useMissions.ts` busca os dados e expõe os quatro estados de
   tela como união discriminada (carregando, vazio, erro, carregado), e
@@ -504,22 +544,56 @@ morreria com a transação); `404 acao_nao_encontrada`.
   botão fica desabilitado em "Aguardando a conclusão em andamento…" e o quadro
   recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
   React; nada disso sai da feature.
+
+  Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
+  compõe dois contêineres — lateral expansível no desktop, folha modal no
+  celular (`useIsDesktop.ts`, `matchMedia`, não CSS responsivo: a semântica
+  ARIA muda com o layout, e media query não tem gancho de JavaScript) — e uma
+  região viva de status **fora** dos dois, existindo desde o primeiro render
+  (o mesmo padrão do A e do 1a). Os hooks da conversa
+  (`useTutorConversation.ts`, `useTutorStatus.ts`, `useActionKeys.ts`) vivem
+  no **topo** do painel, acima dos dois contêineres: como a troca de layout
+  desmonta e remonta o contêiner ativo, um hook mais fundo perderia o
+  rascunho e o stream em voo a cada troca. O envio é uma união discriminada
+  (`SendState`: `idle`/`sending`/`writing`/`failed`/`unknown`) sobre
+  `postStream`, com reenvio **idempotente** — o `client_message_id` do
+  "Tentar de novo" e do **Enviar** com o mesmo texto é o da pergunta
+  pendente, e só texto editado gera um id novo (`crypto.randomUUID`). O
+  cartão de proposta (`ProposalCard.tsx`) tem um ramo por `Outcome`
+  (`proposta`/`executada`/`recusada`/`falhou`), com chave de confirmação por
+  **ação** (não por cartão, porque a recarga da conversa remonta os
+  cartões). A confirmação chama o backend direto por `useDecideAction.ts`
+  (`postJson`, reusando `CodigoDeErro`), sem passar pelo hook da conversa
+  (decisão D2 da spec). A recarga do quadro de missões é pedida pela
+  **página** (`Headquarters.tsx`), por um `ref`
+  (`MissionListHandle` + `useImperativeHandle` em `MissionList.tsx`) — um
+  evento, não uma prop observada por efeito, que o lint
+  `react-hooks/set-state-in-effect` reprovaria.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
-  `requestJson` (GET) e `postJson` (POST) e a tradução de falha em
-  `ApiError`, que carrega `status` e `code`. O cliente **não lê o `detail`**:
-  a `message` do `ApiError` é escrita por ele, e quem decide o que mostrar
-  decide pelo `code`. Os demais `shared/` (`ui/`, `hooks/`, `lib/`, `types/`)
-  continuam contrato.
+  `requestJson` (GET), `postJson` (POST) e, desde o 1b-2, `postStream`
+  (`fetch` + `ReadableStream` + `TextDecoder`, sem biblioteca de SSE, com
+  `AbortSignal` para o painel cancelar ao desmontar) — as três com a mesma
+  tradução de falha em `ApiError`, que carrega `status` e `code`. O cliente
+  **não lê o `detail`**: a `message` do `ApiError` é escrita por ele, e quem
+  decide o que mostrar decide pelo `code`.
+- **`src/shared/lib/`** *(existe, desde o 1b-2)* — funções puras com mais de
+  um usuário entre features (§5 regra 3). Nasceu com `deadline.ts`
+  (`formatDeadline`, fuso `America/Sao_Paulo`, README §8), usado pelo cartão
+  da missão e pelo cartão da proposta da Tifa. Os demais `shared/` (`ui/`,
+  `hooks/`, `types/`) continuam contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
 - **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
   oposição a `public/`, servido sem passar pelo bundler. Hoje nenhum dos três
   arquivos da pasta é importado (§1).
-- **`src/test/`** *(existe)* — infraestrutura de teste (setup do jsdom).
-  Está **fora** do denominador da cobertura de propósito; ver
-  `docs/QUALITY.md` §3.
+- **`src/test/`** *(existe)* — infraestrutura de teste: `setup.ts` (o modo
+  de teste do React), `sse.ts` (quadros SSE falsos), `fetchRoutes.ts`
+  (`routeFetch`, um `fetch` falso roteado) e `viewport.ts` (`stubViewport`,
+  `matchMedia` falso, desde o 1b-2). Está **fora** do denominador da
+  cobertura de propósito; ver `docs/QUALITY.md` §3.
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
-  fora da coleta do Vitest.
+  fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
+  do servidor falso (8150), e `falso.ts` é o cliente do controle HTTP dele.
 
 ### Como o frontend alcança a API
 
@@ -560,12 +634,13 @@ legitimamente pertence a ele — nunca antes.
 | Vou criar… | Vai em | Estado |
 |---|---|---|
 | Componente visual reutilizável, sem regra de negócio (botão, cartão, barra de progresso) | `frontend/src/shared/ui/<Componente>.tsx` | contrato |
-| Componente específico de uma feature (cartão de missão, painel da Tifa) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`) |
+| Componente específico de uma feature (cartão de missão, painel da Tifa) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`) |
 | Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | existe |
 | Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | contrato |
-| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`) |
+| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`, `tutoring/types.ts`) |
 | Hook genérico | `frontend/src/shared/hooks/` | contrato |
-| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`) |
+| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`, `tutoring/useTutorConversation.ts`) |
+| Função pura usada por mais de uma feature | `frontend/src/shared/lib/` | existe (`deadline.ts`, desde o 1b-2) |
 | Token visual (cor, espaçamento, tipografia, foco, movimento) | `frontend/src/styles/` | contrato |
 | Estilo global | hoje `frontend/src/index.css`; migra para `frontend/src/styles/` quando a pasta nascer | existe |
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |

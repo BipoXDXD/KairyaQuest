@@ -155,8 +155,22 @@ def test_limites_da_tutoria_recusam_zero(
 def test_a_suite_nunca_aponta_para_a_anthropic() -> None:
     """A guarda de `tests/conftest.py` vale para todo teste.
 
-    O .env local do dono tem a chave de verdade, e o `pre-push` exporta toda
-    `FOCUSQUEST_*` dele. Com a guarda, um teste que esquecesse o override do
-    provedor bateria numa porta fechada, e nao numa chamada paga.
+    A chave de verdade mora no Keychain do macOS, nunca no .env (decisao
+    D-a); a guarda protege contra uma chave posta por engano no ambiente ou
+    no .env, e contra o `pre-push`, que exporta toda `FOCUSQUEST_*` do .env.
+    Com a guarda, um teste que esquecesse o override do provedor bateria numa
+    porta fechada, e nao numa chamada paga.
     """
     assert Settings().anthropic_base_url == "http://127.0.0.1:9"
+
+
+def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais
+    (Task 8 do 1b-2). Um `make check` rodado num shell que a exportou herda a
+    variavel: o provedor da suite tem de continuar numa porta fechada."""
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-api03-parece-de-verdade")
+    settings = Settings()
+    assert settings.anthropic_api_key is not None
+    assert settings.anthropic_base_url == "http://127.0.0.1:9"

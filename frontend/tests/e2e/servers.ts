@@ -17,3 +17,13 @@ export const API_URL = 'http://127.0.0.1:8100'
 
 /** O frontend dedicado do E2E, servindo o build de producao com o proxy de `/api`. */
 export const WEB_URL = 'http://127.0.0.1:5273'
+
+/**
+ * O servidor falso da Anthropic, como processo (`tests/integration/falso_do_e2e.py`).
+ *
+ * 8150: na faixa 81xx da API do E2E, para ser lida como porta de teste ponta a
+ * ponta; nao colide com 8000/5173 (desenvolvimento), 8100/5273 (E2E) nem
+ * 55432 (PostgreSQL); e nao e 8101, o "proximo numero" que alguem escolheria
+ * por reflexo para outro servidor.
+ */
+export const FALSO_URL = 'http://127.0.0.1:8150'

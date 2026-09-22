@@ -1,34 +1,9 @@
-import type { ReactElement } from 'react'
+import { useImperativeHandle, type ReactElement, type Ref } from 'react'
+import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import { useCompletionRegistry, type CompletionRegistry } from './useCompletionRegistry'
 import { useMissions, type MissionsState } from './useMissions'
-
-/**
- * Formatador do prazo, criado UMA vez fora do componente.
- *
- * O prazo chega como string ISO com fuso, entao `new Date(...)` produz o
- * instante certo -- nunca se deve cortar a string na mao para formatar.
- *
- * O texto visivel sai em `America/Sao_Paulo`, e NAO no fuso de quem le: e o que
- * o README §8 manda ("apresente em America/Sao_Paulo") e o que a decisao A3 da
- * spec repete. Sem o `timeZone`, o `Intl` usaria o fuso do navegador, e a
- * mesma missao mostraria dias diferentes para quem estivesse fora de SP. O
- * instante original continua exposto no atributo `dateTime` do `<time>`.
- *
- * Quem guarda esta escolha e o teste de unidade com um instante em que SP e
- * UTC caem em dias diferentes, rodando com o processo fixado em `Asia/Tokyo`
- * (ver `vite.config.ts`) -- sem a fixacao, numa maquina em SP, o teste passaria
- * sem o `timeZone`.
- */
-const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
-  timeZone: 'America/Sao_Paulo',
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
 
 const CARD_CLASS =
   'rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
@@ -205,7 +180,7 @@ function MissionCard({
         <dt className="text-slate-400">Prazo</dt>
         <dd>
           <time data-testid="mission-deadline" dateTime={mission.deadline}>
-            {deadlineFormatter.format(new Date(mission.deadline))}
+            {formatDeadline(mission.deadline)}
           </time>
         </dd>
 
@@ -213,7 +188,9 @@ function MissionCard({
         {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
             src/focusquest/modules/missions/schemas.py. Nada amarra os dois
             automaticamente (isso pediria gerar o tipo a partir do OpenAPI):
-            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. */}
+            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. A
+            terceira copia e a do cartao de proposta da Tifa
+            (`features/tutoring/ProposalCard.tsx`). */}
         <dd data-testid="mission-difficulty">{mission.difficulty} de 5</dd>
 
         <dt className="text-slate-400">Estimativa</dt>
@@ -330,6 +307,18 @@ function MissionsContent({
 }
 
 /**
+ * O que a PAGINA pode pedir ao quadro: recarregar (1b-2, a missao criada pela
+ * Tifa).
+ *
+ * Um `ref`, e nao um contador em prop observado por efeito: o efeito que chama
+ * `setState` ao ver a prop mudar e o que o `react-hooks/set-state-in-effect`
+ * reprova, e a recarga e um EVENTO (a confirmacao deu certo), nao um estado.
+ */
+export interface MissionListHandle {
+  reload: () => void
+}
+
+/**
  * O quadro de missoes do Quartel-General.
  *
  * A feature busca os proprios dados e resolve os proprios estados; ela nao
@@ -340,11 +329,15 @@ function MissionsContent({
  * O registro das conclusoes (`useCompletionRegistry`) mora AQUI, e nao nos
  * cartoes: e o nivel que nao desmonta no reload. Todo pedido de recarga -- o
  * "Atualizar o quadro" de um cartao e o "Tentar novamente" do erro -- passa
- * por ele, e espera a conclusao em voo.
+ * por ele, e espera a conclusao em voo. A recarga pedida pela PAGINA (pelo
+ * `ref`, quando a Tifa cria uma missao) tambem.
  */
-export function MissionList() {
+export function MissionList({ ref }: { ref?: Ref<MissionListHandle> }) {
   const { state, reload } = useMissions()
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
+  // O `requestReload`, e nao o `reload` cru: com uma conclusao em voo, a
+  // recarga pedida de fora ESPERA, como o "Atualizar o quadro" (Incremento A).
+  useImperativeHandle(ref, () => ({ reload: requestReload }), [requestReload])
 
   return (
     <section aria-labelledby="missions-heading" data-testid="missions">
