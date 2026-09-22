@@ -723,6 +723,64 @@ Criada na Task 1 e completada na Task 9 (plano
   **Não coberto por teste:** a ordem "roteiro antes do `Event`" no reset —
   a janela fica entre duas atribuições consecutivas e não há como segurá-la
   sem gancho no código; o motivo está no comentário do reset.
+- **Task 7** — cenários E2E da tutoria (commit deste registro):
+  `frontend/tests/e2e/tutoring.spec.ts`, cinco cenários contra o navegador
+  real, a API real, o banco real e o servidor falso como processo, com o
+  falso reiniciado antes de cada um. **(a)** perguntar, ver o texto chegar,
+  confirmar e ver a missão no quadro: o falso segura a resposta depois do
+  primeiro pedaço (`hold_after_events: 3`), e com ela presa o cenário vê o
+  parcial, a região viva em "Tifa está escrevendo…", o campo limpo pelo
+  `user_message` e o axe sem violação; depois do `liberar()`, o cartão da
+  proposta, "Tifa terminou de responder." e o axe de novo; confere que a API
+  fez **uma** requisição ao falso, com a chave **fictícia**; o Confirmar
+  mostra "Missão criada" e o quadro recarrega sozinho, pela página, com a
+  missão nova. **(b)** recusar: o cartão fica "Proposta recusada", sem
+  botões, o servidor grava `recusada` e nenhuma missão nasce. **(c)** o corte
+  vindo do falso (`cut_after_events: 3`, sem `message_stop`): a resposta
+  cortada fica na tela marcada "Resposta com falha", o `alert` avisa, e o
+  "Tentar de novo" produz a resposta inteira sem duplicar a pergunta — na
+  tela (uma pergunta) e no servidor (uma pergunta, respostas `falhou` e
+  `completa`, duas requisições ao falso). **(d)** indisponível (emenda E4,
+  por `page.route` sobre `GET /api/tutoring/status`): o texto literal da
+  spec, campo e Enviar desabilitados, o quadro mostrando uma missão semeada
+  por HTTP, o axe sem violação e zero requisições ao falso. **(e)** celular
+  (emenda E5, acréscimo aos quatro da spec, porque o README §7 exige o
+  layout no celular e o jsdom não tem layout): 390×844 com toque, a folha
+  abre pelo botão fixo, sem rolagem horizontal antes e depois, com o Enviar
+  dentro da viewport, o axe sem violação com a folha aberta, e o Esc fecha
+  a folha e devolve o foco ao botão. O axe roda com o conjunto **padrão** de
+  regras. **Desvio do plano no cenário (c):** os textos que o falso devolve
+  (`Começo…` e a resposta inteira) passaram a carregar o sufixo `EXECUCAO`,
+  como a regra 2 do próprio plano manda. **Medido:** com o texto do plano,
+  a segunda execução seguida de `make check-e2e` reprovou em (c) com
+  `strict mode violation` — o localizador `hasText: 'Começo'` resolveu para
+  duas linhas, a cortada desta execução e a da anterior (a conversa é uma só
+  e a tela mostra até 50 mensagens). Pior que a reprovação era a aprovação
+  da primeira execução do dia seguinte: a asserção da marca e o
+  `toHaveCount(1)` da resposta inteira casariam com as linhas **velhas**
+  antes de o corte e o reenvio desta execução acontecerem. **Nenhum defeito
+  de produção** apareceu: os 11 cenários passaram na primeira execução, e a
+  hipótese do plano sobre buffer no proxy do `vite preview` não se
+  confirmou — (a) viu o parcial antes do `liberar()`. **Mutações vistas
+  reprovando** (backup em `/tmp/fq-mutacao-t7.bak`, restauradas por `cp`,
+  cada uma pelo `make check-e2e`, que refaz o build): (1) a chave imposta
+  pelo `scripts/e2e-env.sh` trocada por `e2e-outra-chave` reprova (a) em
+  `toBe('e2e-chave-ficticia')` (`Received: "e2e-outra-chave"`); (2) a
+  recarga do quadro desligada reprova (a) no `toHaveCount(1)` do quadro
+  (`Received: 0`) — **forma ajustada:** a troca do plano,
+  `onMissionCreated={() => undefined}`, não compila (`TS6133: 'reloadBoard'
+  is declared but its value is never read`, `noUnusedLocals`), e a mutação
+  aplicada foi o corpo do `reloadBoard` sem o `board.current!.reload()`,
+  mesma semântica; (3) o `retry` sempre com `clientMessageId` novo reprova
+  (c) com duas perguntas na tela (`toHaveCount(1)` recebe 2); (4) o
+  `textarea` com `disabled={false}` reprova (d) em `toBeDisabled()`; (5) um
+  filho largo no `<main>` reprova (e) em `semRolagemHorizontal()`
+  (`Received: false`) — **forma ajustada:** a troca do plano, `<div
+  style={{ width: 600 }} />`, **passou** (EXIT 0, 11 aprovados); medido na
+  página construída, a div tinha 600 px de largura e o `scrollWidth`
+  continuava 390, porque uma caixa de altura zero não entra no overflow
+  rolável do Chromium. Com `{ width: 600, height: 10 }` o cenário reprova.
+  O defeito era da mutação, não do cenário.
 
 ## Comandos
 
@@ -772,6 +830,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre a base do 1b-2 (`a795ee7`, com este registro por cima) | Aprovado, EXIT 0, cerca de 51 s de relógio. Frontend: 92 testes em 9 arquivos, cobertura de 100% nos quatro eixos (116/116 instruções, 63/63 ramificações, 37/37 funções, 114/114 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 65 arquivos já formatados. mypy sem problemas em 61 arquivos. Backend: 271 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
 | `make check` sobre a Task 6 do 1b-2 (árvore do `342a6e3`, antes do commit) | Aprovado, EXIT 0. Frontend: 137 testes em 11 arquivos, cobertura de 100% nos quatro eixos (172/172 instruções, 92/92 ramificações, 47/47 funções, 169/169 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 299 testes (271 da base mais 18 de `test_falso_do_e2e.py` e 10 novos de `test_e2e_env.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium, agora com três `webServer` (o falso na 8150, a API apontada para ele, o frontend). Gitleaks sem achados. |
 | `make check` sobre as correções da revisão da Task 6 do 1b-2 (árvore do `d8461e7`) | Aprovado, EXIT 0. Frontend: 204 testes em 15 arquivos, cobertura de 100% nos quatro eixos (338/338 instruções, 207/207 ramificações, 98/98 funções, 325/325 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes (os 299 da Task 6 mais 13 novos em `test_falso_do_e2e.py`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 6 cenários aprovados em Chromium. Gitleaks sem achados. |
+| `make check` sobre a Task 7 do 1b-2 (árvore do commit deste registro) | Aprovado, EXIT 0. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado pela Task 7, que só acrescenta o cenário E2E. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 67 arquivos já formatados. mypy sem problemas em 63 arquivos. Backend: 312 testes, 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: **11 cenários** aprovados em Chromium (os 6 do quadro e os 5 da tutoria). Gitleaks sem achados. |
+| Contagem de linhas do E2E no `focusquest_test` depois de um `make check` (Task 7 do 1b-2) | 6 missões, 7 mensagens da tutoria, 2 ações — o esperado pelo desenho. Depois de mais um `make check-e2e` sem o pytest no meio: 12, 14 e 4. |
 
 ## Ambiente verificado
 
@@ -972,10 +1032,17 @@ ninguém mexer.
     E2E usa **três** portas fixas: 8100 (API), 5273 (frontend) e 8150
     (servidor falso, desde a Task 6 do 1b-2). No CI não há corrida: cada job
     tem o seu PostgreSQL.
-20. **Cada execução do E2E deixa quatro missões no `focusquest_test`** (duas
-    desde o Incremento A são concluídas), que só somem no próximo
-    `DROP SCHEMA` da suíte pytest. `make check-e2e` rodado repetidamente,
-    sem o `check-api` no meio, acumula.
+20. **Cada execução do E2E deixa linhas no `focusquest_test`**, que só somem
+    no próximo `DROP SCHEMA` da suíte pytest. Medido depois de um `make
+    check` completo, na Task 7 do 1b-2: **6 missões** (as 4 do
+    `headquarters.spec.ts`, duas delas concluídas, a confirmada em (a) e a
+    semeada em (d)), **7 mensagens** da tutoria ((a) 2, (b) 2, (c) 3) e **2
+    ações** ((a) e (b)). `make check-e2e` rodado repetidamente, sem o
+    `check-api` no meio, acumula por execução — medido: +6 missões, +7
+    mensagens e +2 ações (12/14/4 depois da segunda). A conversa da tutoria
+    é uma só, e a tela mostra as últimas 50 mensagens: por isso todo texto
+    que um cenário localiza, inclusive o que o falso devolve, carrega o
+    sufixo `EXECUCAO`.
 21. **O axe audita quatro estados** — a lista carregada, o erro de
     carregamento, a missão recém-concluída e o aviso de falha da conclusão
     —, **mas não o de carregando, nem o de envio** ("Concluindo…"), **nem o
@@ -985,7 +1052,12 @@ ninguém mexer.
     `disabled` — o `activeElement` vira `body`. É o caso do "Atualizar o
     quadro" durante a espera: quem o ativou pelo teclado e o mantinha
     focado perde o foco assim que ele desabilita. Nem o E2E nem o axe
-    auditam isso.
+    auditam isso. **Desde a Task 7 do 1b-2**, o axe audita também a tutoria
+    nos estados escrevendo (resposta presa no meio pelo falso), proposta,
+    indisponível e a folha aberta do celular. **Continuam fora**, cobertos
+    só no Vitest: o carregando do painel (esqueleto), o "Enviando…" antes do
+    `user_message`, os estados do cartão depois da decisão (executada,
+    recusada, falhou) e o aviso de falha do envio.
 22. **Um `package-lock.json` defasado passa no `make check` local e reprova no
     CI** — assimetria declarada em `docs/QUALITY.md` §4.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
@@ -1279,6 +1351,19 @@ que não tinham chegado aqui)
     Playwright não abre teclado virtual. O E2E (Task 7, cenário (e)) mede só
     a ausência de rolagem horizontal e o Enviar visível na folha aberta.
     Conferir num aparelho de verdade antes de afirmar.
+51. **Um `gerando` deixado por uma execução do E2E interrompida à força**
+    (Ctrl-C no meio de um stream) trava a conversa do `focusquest_test` até
+    o órfão ser recolhido — `tutor_timeout_seconds` (60) mais 30 s de
+    folga. Um `make check-e2e` rodado nesse intervalo recebe `409
+    mensagem_em_andamento` na primeira pergunta e reprova. O `make check`
+    completo não sofre disso: o pytest faz `DROP SCHEMA` antes. Saída, se
+    incomodar: `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS` curto no `env` da API do
+    E2E. (Registrada pelo desenho; não reproduzida na Task 7.)
+52. **O estado indisponível do E2E é produzido por `page.route` sobre
+    `/api/tutoring/status`** (emenda E4); o caminho real "API sem chave" é
+    provado só no pytest (`test_status_indisponivel_sem_chave`,
+    `test_sem_chave_responde_503_e_nao_grava`). O `503
+    provedor_nao_configurado` do `POST`, na tela, só no Vitest (P7).
 
 ## Próximo incremento
 
