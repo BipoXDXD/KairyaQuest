@@ -749,7 +749,7 @@ código nos dois lados.
 ### Camadas 1 e 2: o que cada uma pega
 
 O risco do desenho acima é o falso divergir do formato real sem que nada
-acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1:
+acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1, a terceira desde o 1b-2:
 
 1. **Construído com os tipos do SDK fixado.** Cada evento do roteiro
    (`eventos_do_roteiro`) é uma instância dos tipos do próprio `anthropic`
@@ -773,25 +773,44 @@ acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1:
    silencia o defeito. Se uma atualização futura do `anthropic` no
    `uv.lock` deixar de entender o falso, é esta camada que acusa no gate.
 
-### Camada 3: pendente
+### Camada 3: a sequência da API real
 
-A camada 3 — gravar a sequência de tipos de evento de uma chamada real (sem
-conteúdo) e comparar o falso contra ela — só existe depois de o dono fazer
-essa chamada, uma vez, com a chave dele. Isso é trabalho da **Task 8 do
-1b-2** (Steps 2–4: a chave no Keychain, o roteiro manual pela tela, o script
-`tests/integration/camada3.py` e o arquivo de referência), e ficou para
-depois desta rodada por decisão do dono de 2026-09-22 — pendências 40 e 42
-em `docs/HANDOFF.md` continuam abertas. Até lá, nem o 1b-1 nem o 1b-2 afirmam
-mais do que as camadas 1 e 2 provam: que o falso é válido **para o SDK**, não
-que é idêntico à API real. Quando a Task 8 terminar, esta subseção passa a
-descrever: como a referência foi gravada (script próprio, segunda chamada,
-linhas cruas via `with_streaming_response`, sem conteúdo); o que a
-comparação retira (`DESCARTADOS_PELO_SDK`, hoje só `ping`, com um teste que
-lê a fonte do `anthropic` instalado e reprova se ele deixar de descartar); o
-que ela **não** prova (que a API não mude amanhã — a referência é uma
-fotografia datada, com a versão do SDK e o modelo registrados no próprio
-JSON); e como regravar (comando na tabela "Comandos" do
-`docs/HANDOFF.md`, só pelo dono, nunca no gate).
+A camada 3 existe desde a Task 8 do 1b-2. As camadas 1 e 2 provam que o falso
+é válido **para o SDK**; esta prova que ele se parece com o que a API
+**manda**.
+
+- **Como a referência foi gravada.** Por um script próprio,
+  `tests/integration/camada3.py`, numa segunda chamada real (a primeira é a do
+  roteiro pela tela, pendência 42 do `docs/HANDOFF.md`), uma vez, pelo dono,
+  com a chave vinda do Keychain só para o processo. A requisição usa as mesmas
+  peças de produção (o sistema de `montar_turno`, a ferramenta, o modelo e o
+  `max_tokens` do `Settings`), e o script lê as linhas **cruas** do stream
+  (`with_streaming_response`), porque o SDK descarta o que não usa. O arquivo,
+  `tests/integration/referencia_da_api_real.json`, guarda só nomes de evento e
+  o tipo de cada bloco ou delta (repetições seguidas colapsadas), mais a data,
+  a versão do SDK e o modelo — nunca texto, ids ou a chave; um teste
+  (`test_a_referencia_gravada_nao_tem_conteudo`) confere a forma. O script
+  recusa gravar se o `anthropic_base_url` não for `api.anthropic.com`
+  (`test_a_captura_recusa_gravar_o_que_nao_e_a_api_real`).
+- **O que a comparação retira.** Só `DESCARTADOS_PELO_SDK`, hoje `ping`; um
+  teste (`test_o_sdk_fixado_ainda_descarta_ping`) lê a fonte do `anthropic`
+  instalado e reprova se ele deixar de descartar.
+- **O que ela achou.** A API real (`claude-opus-5`) manda um bloco de
+  **thinking** antes do texto, sem a requisição pedir. O falso passou a
+  emiti-lo por padrão (emenda E6 da spec, decisão do dono), e
+  `test_o_thinking_da_api_nao_chega_ao_dominio` prova que o adaptador de
+  produção o descarta. Consequência para quem escreve teste: as contagens de
+  eventos do falso incluem os 4 eventos do thinking; "depois do primeiro
+  pedaço de texto" é `APOS_O_PRIMEIRO_PEDACO` (7), e o E2E escreve o mesmo 7,
+  amarrado por `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`.
+- **Visto reprovando:** trocar `message_delta` por `message_deltaX` na
+  referência reprova `test_o_falso_emite_a_sequencia_da_api_real`; desligar o
+  thinking do falso também.
+- **O que ela não prova.** Que a API não mude amanhã: a referência é uma
+  fotografia datada, de um modelo e de uma versão do SDK, e de **uma**
+  resposta (texto e proposta). Regravar é só pelo dono, com o comando da
+  seção "Comandos" do `docs/HANDOFF.md`, nunca no gate — o CI nunca chama a
+  Anthropic.
 
 ### O falso como processo (E2E)
 

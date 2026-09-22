@@ -50,7 +50,12 @@ from focusquest.modules.tutoring.domain import StatusDaMensagem
 from focusquest.modules.tutoring.models import TutorMessage
 from focusquest.modules.tutoring.service import Tutoria
 from integration.conftest import Conversa
-from integration.provedor_falso import Roteiro, ServidorAnthropicFalso, Texto
+from integration.provedor_falso import (
+    APOS_O_PRIMEIRO_PEDACO,
+    Roteiro,
+    ServidorAnthropicFalso,
+    Texto,
+)
 
 PRAZO = 15.0
 
@@ -109,7 +114,9 @@ def test_desconectar_no_meio_grava_interrompida(
     conversa: Conversa,
 ) -> None:
     falso.roteiro = Roteiro(
-        blocos=(Texto(("comecou", " e seguiu")),), segurar_apos_eventos=3
+        # Presa depois do primeiro pedaco: o cliente ve um `delta` e some.
+        blocos=(Texto(("comecou", " e seguiu")),),
+        segurar_apos_eventos=APOS_O_PRIMEIRO_PEDACO,
     )
     cid = conversa.id("desconexao")
     with (

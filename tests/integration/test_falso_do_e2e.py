@@ -26,6 +26,7 @@ import pytest
 from integration import provedor_falso
 from integration.falso_do_e2e import TratadorComControle, roteiro_do_json
 from integration.provedor_falso import (
+    APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
     Roteiro,
     ServidorAnthropicFalso,
@@ -152,7 +153,9 @@ def test_o_roteiro_definido_pelo_controle_chega_ao_sdk(
     ) as stream:
         final = stream.get_final_message()
 
-    texto, ferramenta = final.content
+    # O falso padrao emite o bloco de thinking da API real na frente (1b-2).
+    pensamento, texto, ferramenta = final.content
+    assert pensamento.type == "thinking"
     assert texto.type == "text" and texto.text == "Bora, vamos!"
     assert ferramenta.type == "tool_use" and ferramenta.input == {"difficulty": 2}
 
@@ -240,7 +243,11 @@ def test_reset_solta_uma_resposta_presa(controlado: ServidorAnthropicFalso) -> N
     o `beforeEach` do E2E chama o reset, e ele tem de soltar o tratador."""
     httpx.put(
         f"{controlado.url}/_control/script",
-        json={"blocks": [{"text": ["um", "dois"]}], "hold_after_events": 3},
+        # Presa depois do primeiro pedaco ("um"), antes de "dois".
+        json={
+            "blocks": [{"text": ["um", "dois"]}],
+            "hold_after_events": APOS_O_PRIMEIRO_PEDACO,
+        },
     )
     primeiro = threading.Event()
     terminou = threading.Event()
@@ -259,8 +266,9 @@ def test_reset_solta_uma_resposta_presa(controlado: ServidorAnthropicFalso) -> N
         terminou.set()
 
     threading.Thread(target=consumir, daemon=True).start()
-    # O primeiro pedaco no cliente: o tratador ja escreveu o evento 2 e segue
-    # para o ponto de espera (antes do evento 3). `recebidas` nao serviria:
+    # O primeiro pedaco no cliente: o tratador ja o escreveu e segue para o
+    # ponto de espera (antes do evento `APOS_O_PRIMEIRO_PEDACO`). `recebidas`
+    # nao serviria:
     # a requisicao e registrada ANTES de o tratador chegar la.
     assert primeiro.wait(timeout=5)
 
@@ -296,7 +304,9 @@ def test_reset_entre_o_registro_e_a_espera_solta_o_tratador(
     monkeypatch.setattr(provedor_falso, "time", SimpleNamespace(sleep=segurar))
     controlado.roteiro = Roteiro(
         blocos=(Texto(("um", "dois")),),
-        segurar_apos_eventos=3,
+        # O mesmo ponto dos outros testes de espera: depois de "um". Com o
+        # thinking na frente, o 3 de antes seguraria ainda dentro dele.
+        segurar_apos_eventos=APOS_O_PRIMEIRO_PEDACO,
         atrasar_cabecalhos=1.0,
     )
     terminou = threading.Event()
@@ -323,7 +333,11 @@ def test_segurar_e_liberar_pelo_controle(controlado: ServidorAnthropicFalso) -> 
     axe auditar o estado "escrevendo" com o texto comprovadamente no meio."""
     httpx.put(
         f"{controlado.url}/_control/script",
-        json={"blocks": [{"text": ["um", "dois"]}], "hold_after_events": 3},
+        # Presa depois do primeiro pedaco ("um"), antes de "dois".
+        json={
+            "blocks": [{"text": ["um", "dois"]}],
+            "hold_after_events": APOS_O_PRIMEIRO_PEDACO,
+        },
     )
     with _sdk(controlado).messages.stream(
         model="claude-opus-5",
@@ -403,3 +417,13 @@ def test_o_processo_exige_a_porta() -> None:
     )
     assert resultado.returncode != 0
     assert "--porta" in resultado.stderr
+
+
+def test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest() -> None:
+    """O cenario TypeScript nao importa `APOS_O_PRIMEIRO_PEDACO` e escreve o
+    numero literal. Se o falso mudar a quantidade de eventos antes do texto
+    (como o thinking do 1b-2 mudou), o E2E seguraria ou cortaria no lugar
+    errado sem reprovar pelo motivo certo; esta guarda acusa a divergencia."""
+    fonte = (RAIZ / "frontend" / "tests" / "e2e" / "tutoring.spec.ts").read_text()
+    assert f"hold_after_events: {APOS_O_PRIMEIRO_PEDACO}," in fonte
+    assert f"cut_after_events: {APOS_O_PRIMEIRO_PEDACO}," in fonte

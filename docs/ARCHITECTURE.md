@@ -177,10 +177,13 @@ FocusQuest/
 │   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
 │   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
 │   │   ├── __init__.py
+│   │   ├── camada3.py             # grava a referência da camada 3 (chamada real, manual, do dono; nunca no gate) (1b-2)
 │   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA, migração, e as fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
 │   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
-│   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável (não é teste)
-│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso
+│   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável, com o bloco de thinking da API real por padrão (não é teste)
+│   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
+│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio)
+│   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
 │   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2)
 │   │   ├── test_health.py

@@ -36,6 +36,7 @@ from focusquest.modules.tutoring.service import (
 )
 from integration.conftest import Conversa
 from integration.provedor_falso import (
+    APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
     Roteiro,
     ServidorAnthropicFalso,
@@ -210,7 +211,10 @@ def test_stream_cortado_sem_fim_vira_provedor_indisponivel(
     conversa: Conversa,
 ) -> None:
     """A guarda da medicao M3: sem ela, o texto parcial viraria `completa`."""
-    falso.roteiro = Roteiro(blocos=(Texto(("meio", "resto")),), cortar_apos_eventos=3)
+    # Corta depois do primeiro pedaco ("meio"), antes do segundo.
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("meio", "resto")),), cortar_apos_eventos=APOS_O_PRIMEIRO_PEDACO
+    )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("corte")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
     assert final == RespostaFalhou(CodigoDoStream.PROVEDOR_INDISPONIVEL)
@@ -224,7 +228,11 @@ def test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
-    falso.roteiro = Roteiro(blocos=(Texto(("meio", "resto")),), atrasar_evento=(3, 1.2))
+    # A demora cai antes do segundo pedaco: "meio" ja chegou.
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("meio", "resto")),),
+        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, 1.2),
+    )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("demora")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
     assert final == RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
