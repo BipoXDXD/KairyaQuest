@@ -233,6 +233,17 @@ serviço.
   fila nem serviço externo além da própria API da Anthropic (chamada real
   só no 1b-2).
 
+### Incremento 1b-2 — decisões que a spec não fixava
+
+Transcritas da tabela "Decisões que a spec não fixava" do plano
+(`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`), à medida que as
+tarefas as põem em código.
+
+| Decisão | Motivo |
+|---|---|
+| `postStream` aceita `AbortSignal`, ao contrário do `postJson` (Task 1) | Abortar o stream é o que acontece quando o painel desmonta (troca de tela no futuro, fechamento da aba); para o servidor, é a desconexão que o 1b-1 grava como `interrompida`, e o reenvio é seguro. O argumento do `postJson` ("cancelar não desfaz a mudança") não se aplica: aqui o cancelamento é parte do contrato. |
+| Um quadro SSE malformado (sem `event:`/`data:` ou `data` que não é JSON) **reprova** o stream; um evento de nome desconhecido é **ignorado** pelo hook (Task 1) | O quadro malformado é defeito de protocolo, e continuar lendo depois dele seria adivinhar. O nome desconhecido é compatibilidade para frente (um backend mais novo pode acrescentar evento), e o final continua decidido só por `done`/`error`, então ignorar não esconde resultado: sem final, é `unknown`. Linhas que não são `event` nem `data` (comentário, `id:`) **dentro** de um quadro que tem as duas são ignoradas; um quadro só de comentário reprova. |
+
 ### Incrementos anteriores
 
 | Decisão | Motivo |
@@ -437,6 +448,39 @@ Commits `023d251`..`9fb9a8e` (15), backend só (a tela e o E2E são do 1b-2):
   `docs/ARCHITECTURE.md` §3 sobre os valores de `role`/`status`/`state`
   corrigida; a contagem de commits de correção (cinco), o trailer
   `Co-Authored-By` e as pendências 45 a 48 registrados aqui.
+
+## Alterações do Incremento 1b-2
+
+Criada na Task 1 e completada na Task 9 (plano
+`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`):
+
+- **Task 1** — `postStream` (commit `44e7ab2`): as três formas de terminar
+  (erro antes do stream como `ApiError` idêntico ao do `postJson`, eventos
+  entregues um a um, e falha de leitura no meio como `ApiError` com o
+  `status` da resposta e `code` `null`); `open` passou a ser o único `fetch`
+  do cliente (`frontend/src/shared/api/client.ts`);
+  `frontend/src/test/sse.ts` (helpers de quadro e de corpo SSE para os
+  testes). Um teste além dos que o plano listava — "ignora linhas que nao
+  sao event nem data, como comentario e id do SSE" — foi acrescentado para
+  fechar a ramificação do `parseFrame` que descarta essas linhas.
+- **Task 2** — tipos da tutoria e os dois mapas exaustivos de falha (commit
+  deste registro, o que traz os cinco arquivos de
+  `frontend/src/features/tutoring/`): `types.ts` com o contrato da API e os
+  três tipos de `code` — `PreStreamErrorCode` (falha antes de o stream
+  abrir), `StreamErrorCode` (evento `error` do stream) e `ActionErrorCode`
+  (confirmar/recusar); `messageFailure.ts` com os mapas `PRE_STREAM` e
+  `IN_STREAM` (`describePreStreamFailure`, `describeStreamFailure`, o
+  genérico `UNKNOWN_RESULT` e o 422 sem `code` que pede edição);
+  `actionFailure.ts` com o mapa `BY_CODE` (`describeActionFailure`). `Record`
+  sobre a união (um `code` novo reprova o `tsc`) e `Object.hasOwn`, no
+  padrão de `features/missions/completionFailure.ts`. Na mesma leva, só
+  comentários: `describeStreamFailure` passou a dizer que a falha já foi
+  encerrada pelo backend como `falhou`, **ou** `interrompida` quando a
+  resposta é recolhida como órfã (que emite `tempo_esgotado`,
+  `tutoring/service.py`) — o plano foi corrigido junto; o comentário do
+  teste extra da Task 1 deixou de sugerir que um `: keepalive` isolado é
+  aceito; e os comentários de `client.ts` e `src/test/sse.ts` citam o
+  caminho completo `src/focusquest/modules/tutoring/sse.py`.
 
 ## Comandos
 
@@ -809,6 +853,17 @@ que não tinham chegado aqui)
     a conclusão…"), que é segura mas imprecisa. Os handlers também não
     declaram `responses`, então o `/openapi.json` não publica o corpo de
     erro. Amarrar de verdade pediria gerar os tipos a partir do OpenAPI.
+    **Atualizada no 1b-2 (continua aberta):** desde o 1b-2, são **dois**
+    espelhos à mão no frontend: `MissionErrorCode`
+    (`features/missions/types.ts`) e, na tutoria, `PreStreamErrorCode`,
+    `StreamErrorCode` e `ActionErrorCode` (`features/tutoring/types.ts`),
+    que espelham o `CodigoDeErro` de `main.py` **e** o `CodigoDoStream` de
+    `tutoring/domain.py`. O desenho de segurança é o mesmo do A: um `code`
+    que o backend acrescente sem a linha no frontend cai no texto genérico
+    (`UNKNOWN_RESULT` ou o genérico do cartão), que é seguro — oferece
+    repetir com a mesma chave — mas impreciso. Amarrar continua pedindo
+    gerar os tipos do OpenAPI, e os códigos do stream nem estão no OpenAPI
+    (viajam dentro de um 200).
 33. **`crypto.randomUUID` só existe em contexto seguro** (HTTPS, `localhost`,
     `127.0.0.1`). O servidor de desenvolvimento (`localhost`) e o do E2E
     (`127.0.0.1`) são contextos seguros; o E2E prova o segundo, e o

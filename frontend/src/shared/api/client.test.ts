@@ -434,9 +434,11 @@ describe('client', () => {
     })
 
     it('ignora linhas que nao sao event nem data, como comentario e id do SSE', async () => {
-      // O backend nao as escreve, mas o formato SSE as permite (um proxy pode
-      // injetar `: keepalive`). Estrito e exigir `event` e `data`; recusar o
-      // resto do formato seria recusar SSE valido.
+      // O backend nao as escreve, mas o formato SSE as permite: aqui, uma linha
+      // de comentario e uma `id:` DENTRO de um quadro que tem `event` e `data`.
+      // Estrito e exigir `event` e `data` em cada quadro; as outras linhas sao
+      // ignoradas. Um quadro so de comentario (`: keepalive\n\n`) reprova no
+      // `parseFrame`, pela decisao do plano do 1b-2 (quadro malformado reprova).
       vi.stubGlobal(
         'fetch',
         vi

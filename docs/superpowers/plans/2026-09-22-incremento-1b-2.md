@@ -1183,7 +1183,10 @@ export function describePreStreamFailure(error: unknown): MessageFailure {
   return error.status === 422 && error.code === null ? REJECTED_BODY : UNKNOWN_RESULT
 }
 
-/** A falha que chegou no evento `error`, JA gravada como `falhou`. */
+/**
+ * A falha que chegou no evento `error`, JA encerrada pelo backend (`falhou`,
+ * ou `interrompida` se recolhida como orfa, que emite `tempo_esgotado`).
+ */
 export function describeStreamFailure(code: string): MessageFailure {
   return isStreamCode(code) ? IN_STREAM[code] : UNKNOWN_RESULT
 }

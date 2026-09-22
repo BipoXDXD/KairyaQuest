@@ -8,7 +8,10 @@
 
 const encoder = new TextEncoder()
 
-/** Um quadro SSE no formato exato do backend (`tutoring/sse.py`). */
+/**
+ * Um quadro SSE no formato exato do backend
+ * (`src/focusquest/modules/tutoring/sse.py`).
+ */
 export function sseFrame(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }

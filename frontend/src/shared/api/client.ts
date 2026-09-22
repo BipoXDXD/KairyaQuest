@@ -157,7 +157,10 @@ export interface StreamEvent {
   data: unknown
 }
 
-/** O separador de quadros do SSE que o backend escreve (`tutoring/sse.py`). */
+/**
+ * O separador de quadros do SSE que o backend escreve
+ * (`src/focusquest/modules/tutoring/sse.py`).
+ */
 const FRAME_SEPARATOR = '\n\n'
 
 /**
