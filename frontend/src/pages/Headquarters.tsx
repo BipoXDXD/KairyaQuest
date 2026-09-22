@@ -1,4 +1,5 @@
-import { MissionList } from '../features/missions/MissionList'
+import { useCallback, useRef } from 'react'
+import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
 
 /**
@@ -13,10 +14,18 @@ import { TutorPanel } from '../features/tutoring/TutorPanel'
  * navegacao lateral). Este e o recorte que o mesmo §7 autoriza: so o que tem
  * API. O quadro de missoes veio no 1a; o painel da Tifa entrou no 1b-2, ao
  * lado do quadro. A pagina continua sem regra: compoe duas features, e nenhuma
- * das duas sabe da outra. Estrutura vazia esperando conteudo seria interface
+ * das duas sabe da outra -- quando a Tifa cria uma missao, e a PAGINA que pede
+ * ao quadro para recarregar, pelo `ref` do `MissionList`. Estrutura vazia
+ * esperando conteudo seria interface
  * que promete o que nao existe.
  */
 export function Headquarters() {
+  const board = useRef<MissionListHandle>(null)
+  // O `!`: o quadro monta junto com a pagina, antes de qualquer clique que
+  // chegue aqui. Um `?.` criaria um ramo que nenhum uso real alcanca.
+  const reloadBoard = useCallback(() => {
+    board.current!.reload()
+  }, [])
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
       {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
@@ -34,9 +43,12 @@ export function Headquarters() {
             O que está em aberto, com prazo e recompensa.
           </p>
         </header>
-        <MissionList />
+        <MissionList ref={board} />
       </main>
-      <TutorPanel />
+      {/* O `#missions-heading` e o `id` do titulo do quadro. A pagina e quem
+          conhece as duas features, entao e ela quem passa o endereco -- a
+          feature `tutoring` nao sabe que esse `id` existe. */}
+      <TutorPanel onMissionCreated={reloadBoard} boardHref="#missions-heading" />
     </div>
   )
 }

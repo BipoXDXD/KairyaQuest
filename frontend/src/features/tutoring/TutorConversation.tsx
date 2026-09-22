@@ -1,6 +1,6 @@
-import { useId, type ReactElement, type Ref } from 'react'
+import { Fragment, useId, type ReactElement, type Ref } from 'react'
 import { UNKNOWN_RESULT } from './messageFailure'
-import type { MessageRead, MessageStatus } from './types'
+import type { ActionRead, MessageRead, MessageStatus } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
 import type { TutorStatus } from './useTutorStatus'
 
@@ -42,7 +42,19 @@ function Author({ role }: { role: MessageRead['role'] }) {
   )
 }
 
-function MessageItem({ message }: { message: MessageRead }) {
+/**
+ * Uma mensagem, e abaixo do texto da Tifa um cartao por acao que ela propos.
+ *
+ * Quem desenha o cartao e o painel (`renderAction`): e la que moram as chaves
+ * de confirmacao e o endereco do quadro, que esta arvore nao conhece.
+ */
+function MessageItem({
+  message,
+  renderAction,
+}: {
+  message: MessageRead
+  renderAction: (action: ActionRead) => ReactElement
+}) {
   const mark = STATUS_MARK[message.status]
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
@@ -53,6 +65,9 @@ function MessageItem({ message }: { message: MessageRead }) {
           {mark}
         </p>
       )}
+      {message.actions.map((action) => (
+        <Fragment key={action.id}>{renderAction(action)}</Fragment>
+      ))}
     </li>
   )
 }
@@ -201,11 +216,14 @@ export function TutorConversation({
   conversation,
   status,
   onReloadStatus,
+  renderAction,
   inputRef,
 }: {
   conversation: UseTutorConversationResult
   status: TutorStatus
   onReloadStatus: () => void
+  /** O cartao de uma acao proposta pela Tifa, montado pelo painel. */
+  renderAction: (action: ActionRead) => ReactElement
   inputRef?: Ref<HTMLTextAreaElement>
 }) {
   const counterId = useId()
@@ -241,7 +259,7 @@ export function TutorConversation({
         {conversation.messages.length > 0 || send.status !== 'idle' ? (
           <ol role="list" data-testid="tutor-messages" className="flex flex-col gap-2">
             {visibleMessages(conversation.messages, send).map((message) => (
-              <MessageItem key={message.id} message={message} />
+              <MessageItem key={message.id} message={message} renderAction={renderAction} />
             ))}
             <PartialAnswer send={send} />
           </ol>

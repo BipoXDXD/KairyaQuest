@@ -261,6 +261,11 @@ tarefas as põem em código.
 | A folha modal do celular prende o `Tab` dentro de si, e `Esc`/"Fechar a conversa" saem (Task 4) | É o contrato de um diálogo modal (padrão WAI-ARIA): o foco não pode escapar para o conteúdo atrás, e há sempre uma saída pelo teclado. |
 | O `main` ganhou `pb-24` de folga (Task 4) | O botão fixo do painel (celular) não podia cobrir os botões "Confirmar"/"Recusar" do quadro de missões quando a página rola até o fim. |
 | Com o campo de pergunta desabilitado, o foco de reserva ao abrir a folha vai para "Fechar a conversa" (Task 4) | O alvo natural do foco (o campo) não aceita foco enquanto desabilitado; sem reserva, o foco cairia fora do diálogo modal, quebrando o contrato de foco preso. |
+| A recarga do quadro pedida pela página usa um `ref` (`MissionListHandle` + `useImperativeHandle`), e não uma prop observada por efeito (Task 5) | Um efeito que chama `setState` ao ver a prop mudar é o que o lint `react-hooks/set-state-in-effect` reprova, e a recarga é um EVENTO (a confirmação deu certo), não um estado que a página mantém. |
+| `formatDeadline` mora em `shared/lib/deadline.ts`, e não em `features/missions/` nem duplicado em `features/tutoring/` (Task 5) | Tem dois usuários reais — o cartão da missão e o cartão da proposta da Tifa —, e a regra do fuso (`America/Sao_Paulo`, README §8, decisão A3) é uma só; uma cópia por feature seria a segunda regra para divergir (`docs/ARCHITECTURE.md` §5, regra 3). |
+| O "de 5" de `ProposalCard.tsx` é declarado como a terceira cópia à mão de `DIFICULDADE_MAXIMA` (Task 5) | Resolve a forma, não o conteúdo, da pendência 32: `tutoring/` não importa de `missions/` (regra 1 do §5), e um literal isolado não é regra que justifique subir a constante para `shared/`. A pendência permanece aberta para as três cópias. |
+| `prazo_expirado` é espelhado como `state: 'falhou'` direto no `changed`, sem nova ida à rede (Task 5) | O backend já grava a ação como `falhou` **antes** de responder 422 (spec, "Confirmar e recusar"): a tela só precisa repetir o que já é verdade, e uma recarga para confirmar seria uma chamada a mais sem informação nova. |
+| O `boardHref` é passado pela página ao `TutorPanel`, e não conhecido pela feature `tutoring` (Task 5) | A página é quem conhece as duas features (`missions` e `tutoring`) e o `id` do título do quadro; `tutoring` continua sem saber que `missions` existe, o mesmo contrato que já valia para `onMissionCreated`. |
 
 ### Incrementos anteriores
 
@@ -553,7 +558,7 @@ Criada na Task 1 e completada na Task 9 (plano
   sem a conferência da geração na recarga (reprova o caso da recarga em
   voo); sem o espelho do status (reprova seis casos); e sem o retorno
   `aborted` do `runTurn` (reprova o S17 pela contagem do histórico).
-- **Task 4** — o painel da Tifa (commit deste registro). Em
+- **Task 4** — o painel da Tifa (commit `6d7b15a`). Em
   `frontend/src/features/tutoring/`: `TutorPanel.tsx` e
   `TutorConversation.tsx`, com dois contêineres — lateral expansível no
   desktop e folha modal no celular — e a região viva **fora** dos dois
@@ -591,6 +596,51 @@ Criada na Task 1 e completada na Task 9 (plano
   resultado `unknown` (P14); `|| !canRetry` (P30b); `&& canRetry` (P30); o
   filtro da linha `gerando` (P31); e o foco de reserva em "Fechar a
   conversa" (P22b).
+- **Task 5** — o cartão de proposta, Confirmar e Recusar, e a recarga do
+  quadro (commit deste registro). Em `frontend/src/features/tutoring/`:
+  `ProposalCard.tsx`, um ramo por estado da acao (`proposta`, `executada`,
+  `recusada`, `falhou`) com o tipo de retorno declarado no `Outcome`, para o
+  `tsc` reprovar se um estado novo ficar sem ramo (a mesma tecnica de
+  `MissionList.tsx`); `useActionKeys.ts`, as chaves de confirmacao **por
+  acao**, criadas no **topo do `TutorPanel`** — e nao no cartao — porque a
+  recarga da conversa remonta os cartoes, e uma chave viva ali morreria
+  (pendencia 35); o `operation_id` nasce no primeiro clique e so sai do mapa
+  em `release`. `useDecideAction.ts`: o clique vai direto ao backend, sem
+  passar pelo modelo (decisao D2 da spec); a chave **fica** numa falha que se
+  repete (`recovery: 'retry'` — rede, 5xx, erro sem `code`), **troca** só no
+  `operacao_reutilizada` (`retry-with-new-operation`) e **sai** no sucesso e
+  em toda falha que nao se repete com ela; `prazo_expirado` espelha
+  `state: 'falhou'` e `error_code` direto no `changed`, sem nova ida a rede,
+  porque o backend ja gravou a acao como `falhou` antes do 422. Em
+  `frontend/src/features/missions/MissionList.tsx`: a interface
+  `MissionListHandle` (`{ reload: () => void }`) e
+  `useImperativeHandle(ref, () => ({ reload: requestReload }), ...)` — o
+  `requestReload` do `useCompletionRegistry`, e nao o `reload` cru do
+  `useMissions`, para a recarga pedida **de fora** (pela pagina) tambem
+  esperar uma conclusao em voo, como o "Atualizar o quadro" do Incremento A.
+  `frontend/src/pages/Headquarters.tsx` passa o `ref` e chama
+  `board.current!.reload()` em `onMissionCreated`, e passa `boardHref`
+  (`"#missions-heading"`) ao `TutorPanel` — a pagina e quem conhece as duas
+  features, nenhuma das duas conhece a outra. `frontend/src/shared/lib/deadline.ts`
+  ganhou `deadline.test.ts` proprio: o teste de unidade do fuso (o instante em
+  que SP e UTC caem em dias diferentes, processo fixado em `Asia/Tokyo`) saiu
+  de `MissionList.test.tsx` para lá, e em `MissionList.test.tsx` ficou só o
+  caso "o cartao mostra o prazo pelo formatador de America/Sao_Paulo", que
+  prova que o CARTAO usa aquele formatador (nao um formatador local). **O "5"
+  de "de 5"** em `ProposalCard.tsx` é a terceira cópia declarada de
+  `DIFICULDADE_MAXIMA` (pendência 32), a mão — as outras duas em
+  `missions/types.ts` e `missions/MissionList.tsx`; `tutoring/` não importa
+  de `missions/` (`docs/ARCHITECTURE.md` §5, regra 1). **Mutações vistas
+  reprovando no worktree:** a chave gerada com `crypto.randomUUID()` direto,
+  sem passar por `keys` (D2); `keys.release(action.id)` incondicional no
+  `.catch` (D2, reprova o caso em que a chave deveria ficar num `retry`); sem
+  o `keys.release(action.id)` do `.then` (D9, a chave de sucesso vazaria para
+  a proxima confirmacao); `useImperativeHandle` com `({ reload })` — o
+  `reload` cru do `useMissions` — no lugar de `requestReload` (reprova o
+  teste do `ref` em `MissionList.test.tsx` e Q2, a recarga pedida de fora nao
+  esperando a conclusao em voo); sem o `changed({ ...action, state: 'falhou',
+  ... })` no ramo `expired` de `useDecideAction` (D4); `onMissionCreated={()
+  => undefined}` em `Headquarters.tsx` no lugar de `reloadBoard` (Q1, Q2).
 - **Task 6** — infraestrutura do E2E da tutoria (commit `342a6e3`). **O falso
   configurável:** em `tests/integration/provedor_falso.py`, `_Tratador`
   virou `TratadorDoFalso` (público, porque outro módulo o estende), a
@@ -1081,6 +1131,12 @@ que não tinham chegado aqui)
     dos `setState` pode deixar a tela em "falhou" com a missão de fato
     concluída, e o "Tentar de novo" recupera. Ficou assim porque há um único
     consumidor do hook. Um segundo consumidor herda o risco.
+    **Atualizada na Task 5 do 1b-2:** `useDecideAction` herda a mesma forma:
+    não se protege sozinho contra dois `confirm()` no mesmo tick; a guarda é
+    o `disabled` dos botões, testada (C3). Com a chave idempotente, dois
+    POSTs no mesmo tick não criam duas missões (o backend prova isso:
+    `test_dois_confirmar_com_a_mesma_chave_criam_uma_missao`, em
+    `tests/integration/test_tutoring_acoes.py`).
 35. ~~**"Atualizar o quadro" descarta a chave de uma conclusão em voo em outro
     cartão.** `useCompleteMission(listed.id)` é instanciado por cartão, e o
     `reload` de `useMissions` remonta os cartões. Medido: com o POST da

@@ -8,7 +8,7 @@ import { PANEL_OPEN_KEY } from './panelPreference'
 import { describeQuestionLength } from './questionLimit'
 import { TutorConversation } from './TutorConversation'
 import { TutorPanel } from './TutorPanel'
-import type { MessageRead } from './types'
+import type { ActionRead, MessageRead } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
 
 const STATUS = 'GET /api/tutoring/status'
@@ -58,14 +58,25 @@ const preStreamError =
   () =>
     Response.json(body, { status })
 
-function mountPanel(routes: Record<string, Route>, kind: 'desktop' | 'mobile' = 'desktop') {
+/** O endereco do quadro, que a pagina passa ao painel (a feature nao o conhece). */
+const BOARD_HREF = '#missions-heading'
+
+function mountPanel(
+  routes: Record<string, Route>,
+  kind: 'desktop' | 'mobile' = 'desktop',
+  onMissionCreated: () => void = vi.fn(),
+) {
   const fetchMock = routeFetch({
     [STATUS]: () => Response.json({ available: true }),
     [HISTORY]: () => Response.json([]),
     ...routes,
   })
   const viewport = stubViewport(kind)
-  return { fetchMock, viewport, ...render(<TutorPanel />) }
+  return {
+    fetchMock,
+    viewport,
+    ...render(<TutorPanel onMissionCreated={onMissionCreated} boardHref={BOARD_HREF} />),
+  }
 }
 
 afterEach(() => {
@@ -598,6 +609,7 @@ describe('TutorPanel: o envio', () => {
           conversation={conversation}
           status={{ status: 'unavailable' }}
           onReloadStatus={vi.fn()}
+          renderAction={() => <></>}
         />,
       )
 
@@ -626,7 +638,7 @@ describe('TutorPanel: desktop', () => {
     expect(localStorage.getItem(PANEL_OPEN_KEY)).toBe('false')
 
     unmount()
-    render(<TutorPanel />)
+    render(<TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />)
     expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'false')
     expect(document.getElementById('tutor-panel-body')).toBeNull()
 
@@ -792,5 +804,70 @@ describe('TutorPanel: celular', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Tifa' })
     expect(within(dialog).getByLabelText(INPUT_LABEL)).toHaveValue('Rascunho')
+  })
+})
+
+describe('TutorPanel: a proposta de missao', () => {
+  const CONFIRM = 'POST /api/tutoring/actions/5/confirm'
+  const proposal: ActionRead = {
+    id: 5,
+    kind: 'create_mission',
+    state: 'proposta',
+    payload: {
+      instructions: 'Estudar grafos por 40 minutos',
+      completion_criterion: 'Resumo de uma pagina',
+      difficulty: 2,
+      estimated_minutes: 40,
+      deadline: '2027-02-15T21:00:00-03:00',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+  const executed: ActionRead = { ...proposal, state: 'executada', mission_id: 40 }
+
+  /** O historico de uma pergunta e da resposta que carrega a acao. */
+  const historyWith = (action: ActionRead) => () =>
+    Response.json([
+      question(1, 'Me dá uma missão', 'c1'),
+      { ...answer(2, 1, 'Proponho esta missão.'), actions: [action] },
+    ])
+
+  it('P28 uma resposta com proposta mostra o cartao, e confirmar avisa a pagina', async () => {
+    const onMissionCreated = vi.fn()
+    mountPanel(
+      {
+        [HISTORY]: historyWith(proposal),
+        [CONFIRM]: () =>
+          Response.json({ action: executed, mission: { id: 40, instructions: 'x' } }),
+      },
+      'desktop',
+      onMissionCreated,
+    )
+
+    const card = await screen.findByTestId('tutor-proposal')
+    // O cartao mora dentro da mensagem da Tifa que o propos.
+    expect(within(messageWith('Proponho esta missão.')).getByTestId('tutor-proposal')).toBe(card)
+    fireEvent.click(within(card).getByTestId('proposal-confirm'))
+
+    expect(await screen.findByTestId('proposal-created')).toHaveTextContent('Missão criada')
+    expect(onMissionCreated).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('proposal-board-link')).toHaveAttribute('href', BOARD_HREF)
+    // No desktop o painel nao cobre o quadro: o link nao fecha nada.
+    fireEvent.click(screen.getByTestId('proposal-board-link'))
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('P29 Ver no Quartel-General fecha a folha no celular', async () => {
+    mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
+
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await ready()
+    const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
+
+    fireEvent.click(link)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
   })
 })

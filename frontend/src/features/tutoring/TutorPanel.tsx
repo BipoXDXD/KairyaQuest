@@ -1,6 +1,8 @@
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { readPanelOpen, writePanelOpen } from './panelPreference'
+import { ProposalCard } from './ProposalCard'
 import { TutorConversation } from './TutorConversation'
+import { useActionKeys } from './useActionKeys'
 import { useIsDesktop } from './useIsDesktop'
 import { useTutorConversation, type SendState } from './useTutorConversation'
 import { useTutorStatus } from './useTutorStatus'
@@ -51,10 +53,22 @@ function focusables(root: HTMLElement): HTMLElement[] {
  * fechada -- um leitor de tela so anuncia mudanca numa regiao que ja estava
  * la.
  */
-export function TutorPanel() {
+export function TutorPanel({
+  onMissionCreated,
+  boardHref,
+}: {
+  /** Uma proposta foi confirmada: a pagina recarrega o quadro. */
+  onMissionCreated: () => void
+  /** O endereco do quadro na pagina. A feature nao sabe onde ele mora. */
+  boardHref: string
+}) {
   const isDesktop = useIsDesktop()
   const { state: status, reload: reloadStatus } = useTutorStatus()
   const conversation = useTutorConversation()
+  // As chaves de confirmacao, tambem aqui em cima: a recarga da conversa
+  // remonta os cartoes, e a chave de um resultado desconhecido tem de voltar
+  // no reenvio (pendencia 35).
+  const keys = useActionKeys()
   const [desktopOpen, setDesktopOpen] = useState(readPanelOpen)
   const [sheetOpen, setSheetOpen] = useState(false)
   const openButton = useRef<HTMLButtonElement>(null)
@@ -102,6 +116,19 @@ export function TutorPanel() {
       conversation={conversation}
       status={status}
       onReloadStatus={reloadStatus}
+      renderAction={(action) => (
+        <ProposalCard
+          action={action}
+          keys={keys}
+          onChanged={conversation.updateAction}
+          onMissionCreated={onMissionCreated}
+          onRefresh={conversation.reloadHistory}
+          boardHref={boardHref}
+          // No celular a folha cobre o quadro: seguir o link sem fecha-la
+          // levaria a pessoa a um lugar que ela nao ve.
+          onGoToBoard={isDesktop ? undefined : closeSheet}
+        />
+      )}
       inputRef={input}
     />
   )
