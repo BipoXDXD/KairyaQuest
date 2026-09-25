@@ -35,6 +35,7 @@ from focusquest.modules.missions.models import Mission, MissionOperation, User
 from focusquest.modules.missions.schemas import (
     DIFICULDADE_MAXIMA,
     MAIOR_INTEIRO_DA_COLUNA,
+    TAMANHO_MAXIMO_DO_IDENTIFICADOR,
 )
 
 # O usuario unico semeado pela migracao (README s8) -- o mesmo que o router
@@ -618,6 +619,34 @@ def test_identificador_de_operacao_vazio_devolve_422(client: TestClient) -> None
     assert resposta.status_code == 422
     locais = [erro["loc"] for erro in resposta.json()["detail"]]
     assert ["body", "operation_id"] in locais
+
+
+@pytest.mark.parametrize(
+    ("tamanho", "status"),
+    [
+        (TAMANHO_MAXIMO_DO_IDENTIFICADOR, 200),
+        (TAMANHO_MAXIMO_DO_IDENTIFICADOR + 1, 422),
+    ],
+)
+def test_identificador_de_operacao_tem_teto(
+    client: TestClient, tamanho: int, status: int
+) -> None:
+    """O `operation_id` no limite passa; um caractere a mais e 422 na borda.
+
+    Os dois lados do limite, e nao so o de fora: um teto trocado por
+    `max_length=TAMANHO - 1` recusaria o identificador valido mais longo, e so
+    o caso de dentro ve isso.
+    """
+    criada = _criar(client)
+
+    resposta = client.post(
+        f"/api/missions/{criada['id']}/complete", json={"operation_id": "o" * tamanho}
+    )
+
+    assert resposta.status_code == status, resposta.text
+    if status == 422:
+        locais = [erro["loc"] for erro in resposta.json()["detail"]]
+        assert ["body", "operation_id"] in locais
 
 
 def test_erro_de_validacao_mantem_o_formato_do_fastapi(client: TestClient) -> None:
