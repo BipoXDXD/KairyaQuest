@@ -117,8 +117,17 @@ exportar_env_focusquest() {
 # de exportar_env_focusquest (sem "||" nem "if" em volta).
 FQ_RESERVA_DO_PUSH=25
 
+# banco_do_push NOME_DE_TESTE -- imprime o banco do gate do push derivado de
+# um banco de teste que termina em "_test" (quem chama confere o sufixo):
+# "_push" entra antes do "_test". Fonte unica da regra: o isolar_gate_do_push
+# a usa para o push, e o scripts/novo-worktree.sh, para recusar um nome de
+# worktree cujo banco colidiria com o banco do push de alguem.
+banco_do_push() {
+  printf '%s' "${1%_test}_push_test"
+}
+
 isolar_gate_do_push() {
-  local url base consulta nome raiz_do_nome deslocamento
+  local url base consulta nome deslocamento banco_push
 
   url="${FOCUSQUEST_TEST_DATABASE_URL:-}"
   # A query vem depois do PRIMEIRO "?", e pode conter "/" e ate "_test": o nome
@@ -126,12 +135,11 @@ isolar_gate_do_push() {
   base="${url%%\?*}"
   consulta="${url:${#base}}"
   nome="${base##*/}"
-  if [ "$nome" = "$base" ] || ! [[ $nome =~ ^(.+)_test$ ]]; then
+  if [ "$nome" = "$base" ] || ! [[ $nome =~ ^.+_test$ ]]; then
     echo "!! o banco de teste '${nome}' nao e um nome que termine em _test: nao ha banco proprio para derivar ao gate do push, push rejeitado" >&2
     echo "!! confira FOCUSQUEST_TEST_DATABASE_URL no .env (ou no ambiente) de quem empurra" >&2
     return 1
   fi
-  raiz_do_nome="${BASH_REMATCH[1]}"
 
   deslocamento="${FOCUSQUEST_E2E_PORT_OFFSET:-0}"
   if ! [[ $deslocamento =~ ^[0-9]+$ ]] || ((10#$deslocamento >= FQ_RESERVA_DO_PUSH)); then
@@ -140,7 +148,8 @@ isolar_gate_do_push() {
     return 1
   fi
 
-  export FOCUSQUEST_TEST_DATABASE_URL="${base%/*}/${raiz_do_nome}_push_test${consulta}"
+  banco_push="$(banco_do_push "$nome")"
+  export FOCUSQUEST_TEST_DATABASE_URL="${base%/*}/${banco_push}${consulta}"
   export FOCUSQUEST_E2E_PORT_OFFSET="$((10#$deslocamento + FQ_RESERVA_DO_PUSH))"
-  echo "==> gate do push isolado: banco ${raiz_do_nome}_push_test, deslocamento das portas do E2E ${FOCUSQUEST_E2E_PORT_OFFSET}"
+  echo "==> gate do push isolado: banco ${banco_push}, deslocamento das portas do E2E ${FOCUSQUEST_E2E_PORT_OFFSET}"
 }

@@ -77,7 +77,10 @@ próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
 roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
 PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
-container (seção 6).
+container (seção 6). O nome `push` é **reservado** (o banco dele seria o
+`focusquest_push_test`, o do gate do push do principal), e o script recusa um
+nome cujo banco, ou banco do push, já seja usado por um worktree registrado
+(`docs/HANDOFF.md`, decisão F12).
 
 ## 1. Comandos
 
@@ -641,6 +644,23 @@ Sem eufemismo:
   acumula dados). Testado sem push nem worktree em
   `tests/integration/test_push_env.py`, com uma mutação reprovando cada
   guarda.
+- **Duas execuções simultâneas do `scripts/novo-worktree.sh`.** O
+  deslocamento automático é o menor livre entre os `.env` dos worktrees
+  registrados; entre ler e escrever o `.env` novo há uma janela (TOCTOU), e
+  duas execuções ao mesmo tempo escolheriam o mesmo deslocamento — o mesmo
+  vale para a conferência de bancos. O script fecha a janela com uma
+  **trava**: um diretório `novo-worktree.lock` no `.git` comum, criado com
+  `mkdir` (atômico e portátil; o `flock` não vem no macOS) antes de ler os
+  `.env` e removido depois de escrever o novo (ou em qualquer saída, por
+  `trap`). A segunda execução **recusa**, sem criar nada, nomeando a trava;
+  testado em `tests/integration/test_novo_worktree.py`. O que a trava **não**
+  cobre: (1) uma execução morta por `SIGKILL` (ou queda da máquina) deixa o
+  diretório para trás, e as seguintes recusam até alguém apagá-lo com
+  `rmdir` — a mensagem diz isso; (2) um `.env` de worktree editado à mão, ou
+  um worktree criado sem o script, fica fora da trava e pode escolher um
+  deslocamento ou banco já em uso — a conferência só vale no momento da
+  criação; (3) mudar depois o `.env` do principal (ou de qualquer worktree)
+  não reconfere nada.
 - **`make db-up` fora do worktree principal recria o container do
   PostgreSQL.** O `compose.yaml` monta `./scripts/init-test-db.sql` por
   caminho relativo; chamado de outro worktree, o bind aponta para outro

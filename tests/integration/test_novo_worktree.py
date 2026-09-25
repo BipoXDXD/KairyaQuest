@@ -285,8 +285,32 @@ def test_nunca_sobrescreve_um_env_existente(repo: Repositorio) -> None:
     resultado = repo.rodar("novo")
 
     assert resultado.returncode != 0
-    assert ".env" in resultado.stderr
+    assert "ja existe um .env" in resultado.stderr
+    assert "nao foi possivel escrever" not in resultado.stderr
     assert (repo.base / "FocusQuest-novo" / ".env").read_text() == "VERSIONADO=1\n"
+    assert repo.make_chamado() == []
+
+
+def test_falha_ao_escrever_o_env_nao_se_passa_por_env_existente(
+    repo: Repositorio,
+) -> None:
+    """A escrita do `.env` pode falhar por outra causa que nao um `.env` ja
+    presente (disco cheio, permissao, diretorio sumido). A mensagem distingue:
+    nao diz "ja existe", diz que nao conseguiu escrever e repassa o erro do
+    shell. Para provocar a falha sem depender de permissao (que o root
+    ignoraria), um hook `post-checkout` do repositorio temporario apaga o
+    worktree logo depois de o `git worktree add` cria-lo: o caminho do `.env`
+    deixa de existir (ENOENT)."""
+    gancho = repo.principal / ".git" / "hooks" / "post-checkout"
+    gancho.write_text('#!/bin/sh\nrm -rf "$PWD"\n')
+    gancho.chmod(0o755)
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "nao foi possivel escrever" in resultado.stderr
+    assert "ja existe" not in resultado.stderr
+    assert str(repo.base / "FocusQuest-novo" / ".env") in resultado.stderr
     assert repo.make_chamado() == []
 
 
@@ -294,3 +318,147 @@ def test_sem_argumento_mostra_o_uso(repo: Repositorio) -> None:
     resultado = repo.rodar()
     assert resultado.returncode == 64
     assert "uso: scripts/novo-worktree.sh <nome> [deslocamento]" in resultado.stderr
+
+
+# --- Colisao com o banco do push (revisao da Frente 0) ---------------------
+#
+# O banco de um worktree criado pelo script e `focusquest_<nome>_test`; o push
+# de quem tem o banco `R_test` usa `R_push_test` (F9). `focusquest_<x>_test`
+# so e igual a um `R_push_test` se `focusquest_<x>` terminar em `_push`; como
+# `<x>` nao tem `_`, o unico `_` de `focusquest_<x>` e o do prefixo, e isso so
+# acontece com `<x> == "push"` (R = `focusquest`, o do principal padrao). Por
+# isso `push` e reservado. No sentido contrario (o PUSH do worktree novo,
+# `focusquest_<x>_push_test`, igual ao banco de alguem), nenhum banco criado
+# pelo script casa, pela mesma razao -- mas um `.env` editado a mao pode, e o
+# script confere os bancos (e os bancos de push) de todo worktree registrado.
+
+
+def _trocar_banco(destino: Path, banco: str) -> None:
+    env = (destino / ".env").read_text()
+    atual = _valor(env, "FOCUSQUEST_TEST_DATABASE_URL")
+    (destino / ".env").write_text(
+        env.replace(atual, f"{PREFIXO}{banco}?options=-c%20x")
+    )
+
+
+def test_recusa_o_nome_push_que_seria_o_banco_do_push_do_principal(
+    repo: Repositorio,
+) -> None:
+    """`focusquest_push_test` e o banco do gate do push do principal: um
+    worktree com esse banco levaria `DROP SCHEMA` no meio da suite a cada push
+    feito do principal."""
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("push")
+
+    assert resultado.returncode != 0
+    assert "focusquest_push_test" in resultado.stderr
+    assert "reservado" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_push_e_reservado_mesmo_se_o_principal_usar_outro_banco(
+    repo: Repositorio,
+) -> None:
+    """A reserva e estrutural, nao depende do `.env` de hoje: o principal pode
+    voltar ao banco padrao depois que o worktree existir."""
+    (repo.principal / ".env").write_text(
+        ENV_PRINCIPAL.replace("focusquest_test?", "outro_test?")
+    )
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("push")
+
+    assert resultado.returncode != 0
+    assert "reservado" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_nome_cujo_push_cairia_no_banco_de_outro_worktree(
+    repo: Repositorio,
+) -> None:
+    """Um worktree com `.env` editado a mao para `focusquest_b_push_test`: o
+    push de um worktree `b` usaria esse banco."""
+    assert repo.rodar("a").returncode == 0
+    _trocar_banco(repo.base / "FocusQuest-a", "focusquest_b_push_test")
+    antes = repo.worktrees()
+    make_antes = repo.make_chamado()
+
+    resultado = repo.rodar("b")
+
+    assert resultado.returncode != 0
+    assert "focusquest_b_push_test" in resultado.stderr
+    assert str(repo.base / "FocusQuest-a") in resultado.stderr
+    assert repo.worktrees() == antes
+    assert repo.make_chamado() == make_antes
+    assert repo.git("branch", "--list", "wt/b") == ""
+
+
+def test_recusa_nome_cujo_banco_ja_e_de_outro_worktree(repo: Repositorio) -> None:
+    assert repo.rodar("a").returncode == 0
+    _trocar_banco(repo.base / "FocusQuest-a", "focusquest_c_test")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("c")
+
+    assert resultado.returncode != 0
+    assert "focusquest_c_test" in resultado.stderr
+    assert repo.worktrees() == antes
+    assert repo.git("branch", "--list", "wt/c") == ""
+
+
+def test_nomes_vizinhos_de_push_nao_colidem(repo: Repositorio) -> None:
+    """`a-push`, `push-a` e `pushx` sao aceitos: o hifen nao vira sublinhado,
+    entao `focusquest_a-push_test` nao e o `focusquest_a_push_test` do push de
+    `a`. Todos os bancos de teste e de push, principal incluido, sao
+    distintos."""
+    nomes = ["a", "a-push", "push-a", "pushx"]
+    for nome in nomes:
+        resultado = repo.rodar(nome)
+        assert resultado.returncode == 0, resultado.stderr
+
+    bancos = ["focusquest"] + [f"focusquest_{nome}" for nome in nomes]
+    todos = [f"{raiz}_test" for raiz in bancos] + [
+        f"{raiz}_push_test" for raiz in bancos
+    ]
+    assert len(set(todos)) == len(todos)
+    for nome in nomes:
+        env = (repo.base / f"FocusQuest-{nome}" / ".env").read_text()
+        assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+            f"{PREFIXO}focusquest_{nome}_test?options=-c%20x"
+        )
+
+
+# --- Trava contra duas execucoes simultaneas --------------------------------
+
+
+def _trava(repo: Repositorio) -> Path:
+    return repo.principal / ".git" / "novo-worktree.lock"
+
+
+def test_recusa_enquanto_outra_execucao_segura_a_trava(repo: Repositorio) -> None:
+    """Duas execucoes ao mesmo tempo leriam os mesmos deslocamentos livres e
+    escolheriam o mesmo. A trava (um diretorio criado com `mkdir`, atomico)
+    faz a segunda recusar -- sem apagar a trava da primeira."""
+    _trava(repo).mkdir()
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "outra execucao" in resultado.stderr
+    assert str(_trava(repo)) in resultado.stderr
+    assert _trava(repo).is_dir()
+    _nada_foi_criado(repo, antes)
+
+
+def test_a_trava_e_liberada_no_sucesso_e_na_recusa(repo: Repositorio) -> None:
+    assert repo.rodar("um").returncode == 0
+    assert not _trava(repo).exists()
+
+    recusado = repo.rodar("dois", "1")  # o 1 ja e do "um"
+
+    assert recusado.returncode != 0
+    assert "em uso" in recusado.stderr
+    assert not _trava(repo).exists()
+    assert repo.rodar("dois").returncode == 0

@@ -27,10 +27,24 @@
 # Recusa, sem criar nada: nome fora de [a-z0-9-] (ou comecando com hifen, ou
 # acima de 30 caracteres -- o nome vira diretorio, branch e banco, e o banco do
 # push, focusquest_<nome>_push_test, precisa caber nos 63 bytes do
-# PostgreSQL); destino ou branch que ja existam; deslocamento fora de 0 a 24 ou
-# ja em uso por outro worktree; .env do principal ausente ou com um banco de
-# teste que nao termine em _test. E NUNCA escreve por cima de um .env que ja
-# exista no destino.
+# PostgreSQL); o nome reservado "push"; um nome cujo banco (ou banco do push)
+# ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
+# branch que ja existam; deslocamento fora de 0 a 24 ou ja em uso por outro
+# worktree; .env do principal ausente ou com um banco de teste que nao termine
+# em _test; outra execucao em andamento (a trava). E NUNCA escreve por cima de
+# um .env que ja exista no destino.
+#
+# Por que "push" e o UNICO nome reservado (HANDOFF, decisao F12): o banco de
+# um worktree e focusquest_<nome>_test, e o gate do push de quem tem o banco
+# R_test usa R_push_test (banco_do_push, em push-env.sh). Os dois so coincidem
+# se "focusquest_<nome>" terminar em "_push"; como <nome> nao tem "_", o unico
+# "_" ali e o do prefixo, e isso so acontece com <nome> = "push" -- o banco
+# focusquest_push_test, o do push do principal padrao. "a-push" nao colide com
+# o push de "a" (focusquest_a-push_test contra focusquest_a_push_test). O
+# sentido contrario (o push do worktree novo, focusquest_<nome>_push_test,
+# igual ao banco de alguem) nao casa com nenhum banco criado por este script
+# pela mesma razao; so um .env editado a mao casaria, e para ele existe a
+# conferencia contra os worktrees registrados.
 set -euo pipefail
 
 uso() {
@@ -57,6 +71,9 @@ teto=$((FQ_RESERVA_DO_PUSH - 1))
 
 if ! [[ $nome =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ "${#nome}" -gt 30 ]; then
   recusa "nome invalido '${nome}': use so [a-z0-9-], comecando por letra ou digito, com ate 30 caracteres"
+fi
+if [ "$nome" = push ]; then
+  recusa "nome reservado 'push': o banco dele, focusquest_push_test, e o banco do gate do push do principal (o pre-push faria DROP SCHEMA nele no meio da suite); escolha outro nome"
 fi
 
 # O principal e o PRIMEIRO worktree da lista (o dono do .git), e nao
@@ -86,13 +103,40 @@ valor_no_env() {
   printf '%s' "$valor"
 }
 
-# Os deslocamentos em uso: o de cada worktree registrado, lido do .env dele.
-# Sem a linha (ou vazia), e 0 -- o padrao, o do principal.
+# A trava: da leitura do que os worktrees usam ate o .env novo estar escrito.
+# Sem ela, duas execucoes ao mesmo tempo leriam os mesmos deslocamentos livres
+# e escolheriam o mesmo (o .env da primeira ainda nao existe quando a segunda
+# le). "mkdir" e atomico e existe em qualquer sistema (o "flock" nao vem no
+# macOS). Uma execucao morta por SIGKILL deixa o diretorio para tras; a
+# mensagem diz como sair disso (docs/QUALITY.md secao 6).
+comum="$(cd "$principal" && cd "$(git rev-parse --git-common-dir)" && pwd)"
+trava="${comum}/novo-worktree.lock"
+if ! mkdir "$trava" 2>/dev/null; then
+  recusa "outra execucao do novo-worktree.sh esta em andamento (trava ${trava}); espere ela terminar -- se nenhuma estiver rodando, a trava sobrou de uma execucao interrompida: apague-a com rmdir ${trava}"
+fi
+liberar_trava() {
+  rmdir "$trava"
+}
+trap liberar_trava EXIT
+
+# O que cada worktree registrado usa, lido do .env dele: o deslocamento (sem a
+# linha, ou vazia, e 0 -- o padrao, o do principal) e os bancos -- o de teste
+# e o do push derivado dele. Um worktree sem .env, ou com um banco que nao
+# termine em _test, nao roda gate nenhum e nao ocupa banco.
 em_uso=" "
+bancos_ocupados=""
 while IFS= read -r caminho; do
   valor=""
   if [ -f "${caminho}/.env" ]; then
     valor="$(valor_no_env "${caminho}/.env" FOCUSQUEST_E2E_PORT_OFFSET)"
+    url_dele="$(valor_no_env "${caminho}/.env" FOCUSQUEST_TEST_DATABASE_URL)"
+    base_dele="${url_dele%%\?*}"
+    banco_dele="${base_dele##*/}"
+    if [ "$banco_dele" != "$base_dele" ] && [[ $banco_dele =~ ^.+_test$ ]]; then
+      bancos_ocupados="${bancos_ocupados}${banco_dele} ${caminho} (banco de teste)
+$(banco_do_push "$banco_dele") ${caminho} (banco do push)
+"
+    fi
   fi
   [[ $valor =~ ^[0-9]+$ ]] || valor=0
   em_uso="${em_uso}$((10#$valor)) "
@@ -126,6 +170,15 @@ consulta="${url:${#base}}"
 banco="focusquest_${nome}_test"
 url_nova="${base%/*}/${banco}${consulta}"
 
+# O banco novo e o banco do push dele nao podem ser nem o banco nem o banco do
+# push de nenhum worktree registrado (o principal incluido).
+banco_push="$(banco_do_push "$banco")"
+while IFS=' ' read -r ocupado dono; do
+  if [ "$ocupado" = "$banco" ] || [ "$ocupado" = "$banco_push" ]; then
+    recusa "o nome '${nome}' daria o banco ${banco} (e ${banco_push} no push), mas ${ocupado} ja e usado por ${dono}; escolha outro nome"
+  fi
+done <<<"$bancos_ocupados"
+
 # O .env novo, montado ANTES de criar qualquer coisa: as linhas do principal,
 # com o banco de teste trocado e sem deslocamento herdado; o deslocamento do
 # worktree novo vai no fim.
@@ -147,10 +200,20 @@ FOCUSQUEST_E2E_PORT_OFFSET=${deslocamento}
 git -C "$principal" worktree add --quiet -b "$branch" "$destino" main
 
 # noclobber: o redirecionamento falha se o arquivo ja existir, sem janela
-# entre conferir e escrever.
-if ! (set -o noclobber && printf '%s' "$env_novo" >"${destino}/.env") 2>/dev/null; then
-  recusa "ja existe um .env em ${destino} e ele NAO foi sobrescrito; o worktree foi criado, mas o bootstrap nao rodou -- confira o .env a mao"
+# entre conferir e escrever. A conferencia ANTES serve so para a mensagem: a
+# escrita tambem falha por outra causa (disco cheio, permissao), e dizer "ja
+# existe" nesse caso mandaria procurar um arquivo que nao esta la. Ela nao e
+# feita DEPOIS porque uma escrita que falhou pela metade deixa o arquivo.
+env_existia=nao
+[ ! -e "${destino}/.env" ] || env_existia=sim
+if ! erro_da_escrita="$( (set -o noclobber && printf '%s' "$env_novo" >"${destino}/.env") 2>&1)"; then
+  if [ "$env_existia" = sim ]; then
+    recusa "ja existe um .env em ${destino} e ele NAO foi sobrescrito; o worktree foi criado, mas o bootstrap nao rodou -- confira o .env a mao"
+  fi
+  recusa "nao foi possivel escrever ${destino}/.env (${erro_da_escrita}); o worktree foi criado, mas o bootstrap nao rodou -- confira o espaco em disco e as permissoes e escreva o .env a mao"
 fi
+liberar_trava
+trap - EXIT
 
 make -C "$destino" bootstrap
 

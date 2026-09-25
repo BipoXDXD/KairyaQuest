@@ -617,6 +617,9 @@ alvos do Makefile com os mesmos nomes). O que a execução decidiu dentro dele:
 | **F9.** O banco do push é o de teste **de quem empurra** com `_push` antes do `_test` (`focusquest_test` → `focusquest_push_test`; `focusquest_<nome>_test` → `focusquest_<nome>_push_test`); a query da URL atravessa intacta. | Continua terminando em `_test` (a guarda do `DROP` vale para ele) e é distinto por worktree. O nome do banco é o último segmento do caminho **antes** do primeiro `?` — uma query com `/` ou `_test` dentro não confunde a derivação (há teste com esse caso). |
 | **F10.** `novo-worktree.sh`: branch **`wt/<nome>`**, a partir da `main` **local**; nome em `[a-z0-9-]`, começando por letra ou dígito, **até 30 caracteres**; deslocamento automático = menor livre de 1 a 24, lido do `.env` de cada worktree registrado; **não roda `make db-up`** nem instala hooks. | O nome vira diretório, branch e banco, e `focusquest_<nome>_push_test` precisa caber nos 63 bytes (11 + 30 + 10 = 51). Um prefixo de branch próprio evita colidir com `main` ou `feat/*`. `make db-up` a partir de outro worktree recria o container (medido, pendência 73); os hooks moram no `.git` comum. |
 | **F11.** Pendência 11 (o 55432 repetido) **não** foi tocada. | Fora do escopo; o deslocamento novo não repete o 55432. As portas-base do E2E passaram a ter uma fonte só (`servers.ts`), e os limites novos têm testes de paridade. |
+| **F12.** (revisão) O `novo-worktree.sh` **reserva o nome `push`** e recusa um nome cujo banco (`focusquest_<nome>_test`) ou banco do push (`focusquest_<nome>_push_test`) já seja o banco de teste **ou** o banco do push de qualquer worktree registrado, o principal incluído (lidos do `.env` de cada um). A derivação do banco do push tem fonte única, `banco_do_push` em `scripts/push-env.sh`, usada pelo `isolar_gate_do_push` e pelo script. | Um worktree `push` teria o banco `focusquest_push_test`, o do gate do push do principal: o pre-push faria `DROP SCHEMA` nele no meio de um `make check`. A classe inteira fecha assim: `focusquest_<x>_test` só é igual a um `R_push_test` se `focusquest_<x>` terminar em `_push`; como `<x>` só tem `[a-z0-9-]`, o único `_` ali é o do prefixo, então só `<x> = push` casa (com `R = focusquest`) — `a-push` dá `focusquest_a-push_test`, distinto do `focusquest_a_push_test` do push de `a`. No outro sentido, `focusquest_<x>_push_test` não é banco de nenhum worktree criado pelo script (seria `<y> = <x>_push`, com `_`), e só um `.env` editado à mão casaria: para ele existe a conferência. A reserva é estrutural (vale mesmo se o principal usar outro banco hoje); a conferência cobre o que é configuração. |
+| **F13.** (revisão) **Trava** no `novo-worktree.sh`: `mkdir <.git comum>/novo-worktree.lock` antes de ler os `.env`, removida depois de escrever o novo ou em qualquer saída (`trap`). | Sem ela, duas execuções ao mesmo tempo liam os mesmos deslocamentos livres e escolhiam o mesmo (TOCTOU). `mkdir` é atômico e portátil (`flock` não vem no macOS). Limites em `docs/QUALITY.md` §6: uma execução morta por `SIGKILL` deixa a trava (a recusa diz como apagá-la), e um `.env` editado à mão fica fora dela. |
+| **F14.** (revisão) A falha ao escrever o `.env` do worktree novo distingue **"já existe um `.env`"** (conferido antes da escrita, que continua com `noclobber`) de **"não foi possível escrever"** (disco cheio, permissão, caminho sumido), repassando o erro do shell. | A mensagem única mandava procurar um arquivo que podia não existir. A conferência é feita antes, e não depois, porque uma escrita que falha pela metade deixa o arquivo. |
 
 ### Incrementos anteriores
 
@@ -1670,6 +1673,12 @@ Pendência 19, em quatro commits de código e um de teste, cada um pelo hook
 - **Documentação** (este commit): `AGENTS.md` §2 e §4, `docs/QUALITY.md`
   ("Primeiro uso", §1, §4, §5, §6 e §9), `docs/ARCHITECTURE.md` (árvore e
   `tests/e2e/`) e este arquivo.
+- **Correção da revisão** (F12–F14): `scripts/novo-worktree.sh` (nome
+  `push` reservado, conferência dos bancos dos worktrees registrados, trava e
+  mensagem do `.env`), `scripts/push-env.sh` (`banco_do_push`, fonte única da
+  derivação), oito testes novos em `tests/integration/test_novo_worktree.py`
+  (e um apertado: a mensagem de `.env` existente), `docs/QUALITY.md`
+  ("Primeiro uso" e §6) e este arquivo.
 
 O CI **não mudou**: nenhuma linha do `.github/workflows/quality.yml`, e os
 nomes dos alvos do `Makefile` são os mesmos (paridade 1:1, `AGENTS.md` §4).
