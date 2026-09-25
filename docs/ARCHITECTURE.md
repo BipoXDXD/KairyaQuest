@@ -18,9 +18,12 @@ os dois blocos nunca se misturam.
 
 ## 1. O que existe hoje
 
-Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim do
-Incremento B (`feat/incremento-b`, ainda não publicado — ver
-`docs/HANDOFF.md`), com as Tasks 0–9 comitadas (`12288a2..0b9197b`).
+Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim das
+Tasks 0–6 do Incremento C (`feat/incremento-c`, ainda não publicado — ver
+`docs/HANDOFF.md`), mais o fix round 1 da Task 5 (`9c2bd1e..e195128`, 9
+commits, antes do commit desta própria Task 7 de documentação) — a base
+`9c2bd1e` já é a ponta do Incremento B, também ainda não publicado; ver
+"Revisão-base" em `docs/HANDOFF.md`.
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -53,25 +56,35 @@ FocusQuest/
 │   │   ├── favicon.svg
 │   │   └── icons.svg
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
+│   │   ├── app/                    # inicialização e navegação (C); ver docs/ARCHITECTURE.md §5 regra 6
+│   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-general"/"Campanhas") (C, Task 1)
+│   │   │   ├── SideNav.test.tsx
+│   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
+│   │   │   ├── campaigns/         # a trilha da semana (C); consome shared/types/mission.ts e shared/lib/civilDate.ts
+│   │   │   │   ├── availability.test.ts
+│   │   │   │   ├── availability.ts       # AVAILABILITY_DISPLAY: Record<Availability, {label, icon}>, exaustivo (C, Task 3)
+│   │   │   │   ├── CampaignTrail.test.tsx
+│   │   │   │   ├── CampaignTrail.tsx     # a trilha: 7 dias, baú fechado, especial, trail-stale (C, Tasks 3 e 5)
+│   │   │   │   ├── types.ts              # Plan, PlanDay, PlanSpecial, CurrentPlan (C, Task 2)
+│   │   │   │   ├── useCurrentPlan.test.tsx
+│   │   │   │   └── useCurrentPlan.ts     # busca GET /api/plans/current; reload/refresh/refreshFailed (C, Tasks 2 e 5)
 │   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
 │   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc)
 │   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8)
 │   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8)
 │   │   │   │   ├── MissionList.test.tsx
 │   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle
-│   │   │   │   ├── civilDate.test.ts      # (B, Task 7, commit 242d677)
-│   │   │   │   ├── civilDate.ts           # formata "YYYY-MM-DD" sem conversão de fuso (B, Task 7 — Risco 3 do plano)
 │   │   │   │   ├── completionFailure.test.ts
 │   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B)
-│   │   │   │   ├── types.ts             # ganhou MissionType, Availability, DAYS_PER_MILESTONE, Cycle (B)
+│   │   │   │   ├── types.ts             # Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
 │   │   │   │   ├── useCompleteMission.test.tsx
 │   │   │   │   ├── useCompleteMission.ts # conclui uma missão; ganhou onCompleted opcional (B, Task 8)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
 │   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
 │   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
-│   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, decisão P9)
+│   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, P9); atualiza sozinho na volta à aba (C, Task 5); só a resposta do pedido mais recente decide (C, fix round 1, commit e195128)
 │   │   │   │   ├── useMissions.test.tsx
 │   │   │   │   └── useMissions.ts
 │   │   │   └── tutoring/          # a Tifa na tela (1b-2); importa só de shared/, nunca de features/missions/
@@ -102,15 +115,25 @@ FocusQuest/
 │   │   │       ├── useTutorStatus.test.tsx
 │   │   │       └── useTutorStatus.ts      # disponibilidade da Tifa, error separado de unavailable
 │   │   ├── pages/
+│   │   │   ├── Campaigns.test.tsx
+│   │   │   ├── Campaigns.tsx      # o main de Campanhas: h1 focável + <CampaignTrail /> (C, Tasks 1 e 4)
+│   │   │   ├── headings.ts        # HEADQUARTERS_HEADING_ID, CAMPAIGNS_HEADING_ID (C, Task 1)
 │   │   │   ├── Headquarters.test.tsx
-│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B)
+│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B); hidden na raiz e no main quando Campanhas está aberta (C, K2)
 │   │   ├── shared/
 │   │   │   ├── api/
 │   │   │   │   ├── client.test.ts
 │   │   │   │   └── client.ts      # o cliente HTTP único: postJson e postStream; componente nenhum chama fetch
-│   │   │   └── lib/                # funções puras com mais de um usuário entre features (docs/ARCHITECTURE.md §5)
-│   │   │       ├── deadline.test.ts
-│   │   │       └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
+│   │   │   ├── hooks/              # hooks genéricos com mais de um usuário entre features (C, docs/ARCHITECTURE.md §5)
+│   │   │   │   ├── useRefreshOnReturn.test.tsx
+│   │   │   │   └── useRefreshOnReturn.ts  # refresh silencioso em visibilitychange/focus; usado por useCycle e useCurrentPlan (C, Task 5, decisão K7)
+│   │   │   ├── lib/                # funções puras com mais de um usuário entre features (docs/ARCHITECTURE.md §5)
+│   │   │   │   ├── civilDate.test.ts      # (C, Task 2; movido de features/missions/, git mv, decisão K10)
+│   │   │   │   ├── civilDate.ts           # formatCivilDate; civilWeekday (o dia da semana, sem fuso) (C, Task 2)
+│   │   │   │   ├── deadline.test.ts
+│   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
+│   │   │   └── types/              # tipos compartilhados por mais de uma feature (C, docs/ARCHITECTURE.md §5)
+│   │   │       └── mission.ts      # Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
 │   │   ├── test/                  # infraestrutura de teste, não código de aplicação (docs/QUALITY.md §3)
 │   │   │   ├── fetchRoutes.ts     # routeFetch: fetch falso roteado por metodo/URL, um Response novo por chamada
 │   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
@@ -118,13 +141,13 @@ FocusQuest/
 │   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
 │   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
-│   │   ├── App.tsx                # escolhe a tela; hoje, só o Quartel-General
+│   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
 │   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx
 │   │   ├── main.test.tsx
 │   │   └── main.tsx
 │   ├── tests/
 │   │   └── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
-│   │       ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9, commit 0b9197b)
+│   │       ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1)
 │   │       ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
 │   │       ├── headquarters.spec.ts
 │   │       ├── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273, falso 8150)
@@ -267,9 +290,12 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) e
   ganhou o lado do frontend (`frontend/src/features/tutoring/`) **no
   1b-2** — a feature existe hoje, não é mais contrato.
-- **No frontend, não existem `app/`, `styles/`, nem `shared/ui/`,
-  `shared/hooks/` e `shared/types/`.** `shared/lib/` **nasceu no 1b-2**, com
-  `deadline.ts` (§5 regra 3). A feature `rewards` continua contrato.
+- **No frontend, não existem `styles/` nem `shared/ui/`.** `shared/lib/`
+  **nasceu no 1b-2**, com `deadline.ts` (§5 regra 3), e ganhou `civilDate.ts`
+  **no C**. `app/` (a navegação lateral), `shared/hooks/`
+  (`useRefreshOnReturn.ts`) e `shared/types/` (`mission.ts`) **nasceram no
+  Incremento C** — as três eram contrato até então. A feature `campaigns`
+  **nasceu no C**, a trilha da semana; `rewards` continua contrato.
 - **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
   arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
   não são importados por nenhum módulo — conferido com `grep` em
@@ -670,15 +696,35 @@ quem ainda não concluiu).
 
 ### Frontend — parte descrição, parte contrato
 
-- **`src/app/`** *(contrato)* — inicialização, rotas e providers. Hoje o papel
-  é cumprido por `src/main.tsx`, que monta `App` em `#root` dentro de
-  `StrictMode`, e por `src/App.tsx`, que escolhe a tela (sem roteador, porque
-  só há uma).
+- **`src/app/`** *(existe, desde o Incremento C)* — inicialização e
+  navegação. `src/main.tsx` continua montando `App` em `#root` dentro de
+  `StrictMode`. `App.tsx` é, desde o C, o **roteador de duas áreas** (C15,
+  decisão K1, §5 regra 6): um `useState<Area>` local, sem biblioteca de
+  rotas e sem mudar a URL (a URL entra quando houver uma terceira área).
+  `app/areas.ts` declara `type Area = 'headquarters' | 'campaigns'` e
+  `AREAS` (os rótulos "Quartel-general"/"Campanhas"); `app/SideNav.tsx` é a
+  barra — `<nav aria-label="Áreas">` com um `<button>` por área (sem `<a>`:
+  sem URL não há `href` real, e `<a>` sem `href` não recebe foco), o ativo
+  marcado por `aria-current="page"` **e** por um marcador visível `▸`
+  (`aria-hidden`, decisão K4 — aviso além da cor, README §7). No celular
+  (< `lg`) é uma barra no topo, no fluxo da página; no desktop, coluna
+  `sticky` — a mesma marcação nas duas larguras, só CSS (decisão K6). Depois
+  de navegar, o foco vai ao `h1` da área aberta (`tabIndex={-1}`, decisão
+  K5) — os `id` moram em `src/pages/headings.ts`, não em `app/`, porque são
+  das páginas.
 - **`src/pages/`** *(existe)* — **composição**: uma página junta features e
-  componentes reutilizáveis e decide o layout da tela. Não contém regra. Hoje
-  há uma: `Headquarters.tsx`, o Quartel-General.
-- **`src/features/<feature>/`** *(existe para `missions` e `tutoring`;
-  contrato para `rewards`)* — a feature é a unidade real de organização:
+  componentes reutilizáveis e decide o layout da tela. Não contém regra.
+  Hoje há duas: `Headquarters.tsx`, o Quartel-General, e `Campaigns.tsx`,
+  Campanhas (nasceu no C). O Quartel-General fica **montado e oculto**
+  (`hidden` na raiz e no `<main>`, HTML só tolera um `main` sem `hidden`)
+  enquanto Campanhas está aberta — desmontá-lo abortaria um stream da Tifa
+  em curso (decisão K2); Campanhas, ao contrário, desmonta ao sair, e cada
+  abertura busca a trilha de novo. `Campaigns.tsx` tem o `<main>`, o `h1`
+  "Campanhas — planos de estudo" e compõe `<CampaignTrail />` sem props
+  (decisão K11) — o componente começa no `h2` e não tem `<main>` próprio.
+- **`src/features/<feature>/`** *(existe para `missions`, `tutoring` e,
+  desde o C, `campaigns`; contrato para `rewards`)* — a feature é a unidade
+  real de organização:
   componentes, hooks, contratos e testes **daquele** assunto, agrupados. Em
   `missions`, `useMissions.ts` busca os dados e expõe os quatro estados de
   tela como união discriminada (carregando, vazio, erro, carregado), e
@@ -754,6 +800,24 @@ quem ainda não concluiu).
   (`MissionListHandle` + `useImperativeHandle` em `MissionList.tsx`) — um
   evento, não uma prop observada por efeito, que o lint
   `react-hooks/set-state-in-effect` reprovaria.
+
+  Em **`campaigns`** (nasceu no C), a trilha da semana: `useCurrentPlan.ts`
+  busca `GET /api/plans/current` e expõe `{ state, reload, refresh }` — o
+  mesmo desenho do `useCycle` (P9), com `refreshFailed` no estado `loaded` e
+  um estado próprio `no-plan` (`{"plan": null}` não é erro).
+  `CampaignTrail.tsx` desenha os 7 dias (`<ol>`, `data-testid="trail-day"`)
+  e a especial: um dia/especial `bloqueada` chega com `mission: null` e vira
+  baú fechado, sem instrução, dificuldade nem XP (C11 — o que não foi
+  revelado não existe para a tela); o marcador "Hoje" é o **último dia não
+  `bloqueada`** (decisão K9, sem segunda requisição); a disponibilidade
+  sempre em texto **e** ícone (`availability.ts`, `AVAILABILITY_DISPLAY`,
+  exaustivo sobre `Availability`, ícones SVG inline com `aria-hidden` —
+  decisão K8 relaxa a restrição de "só glifo Unicode" do plano, Ruling R8).
+  A trilha **só mostra**: nenhum botão Concluir — o dia de hoje disponível
+  aponta para o Quartel-General (decisão K8); com a prop opcional
+  `onOpenHeadquarters`, isso vira um botão (`trail-go-headquarters`,
+  Ruling R5), sem ela um texto. Quando `refreshFailed`, o
+  `data-testid="trail-stale"` avisa, com "Atualizar" chamando `reload`.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
   `requestJson` (GET), `postJson` (POST) e, desde o 1b-2, `postStream`
   (`fetch` + `ReadableStream` + `TextDecoder`, sem biblioteca de SSE, com
@@ -764,8 +828,33 @@ quem ainda não concluiu).
 - **`src/shared/lib/`** *(existe, desde o 1b-2)* — funções puras com mais de
   um usuário entre features (§5 regra 3). Nasceu com `deadline.ts`
   (`formatDeadline`, fuso `America/Sao_Paulo`, README §8), usado pelo cartão
-  da missão e pelo cartão da proposta da Tifa. Os demais `shared/` (`ui/`,
-  `hooks/`, `types/`) continuam contrato.
+  da missão e pelo cartão da proposta da Tifa. **Ganhou `civilDate.ts` no
+  C** (`git mv` de `features/missions/`, decisão K10, Ruling R3):
+  `formatCivilDate` (já existia) e `civilWeekday` (novo — "quinta-feira" a
+  partir de `"2026-09-24"`, sem conversão de fuso; a armadilha morta por
+  mutação é `new Date(civil)` sem `timeZone: 'UTC'`, não só remover o
+  `timeZone`, porque `civilNoon` ancora ao meio-dia UTC e nenhum fuso IANA
+  se desloca o bastante para cruzar a virada a partir daí — Ruling R7). Dois
+  usuários reais: `missions` (o cartão de hoje) e `campaigns` (os 7 dias da
+  trilha).
+- **`src/shared/hooks/`** *(existe, desde o C)* — hooks genéricos com mais
+  de um usuário entre features (§5 regra 3). Nasceu com
+  `useRefreshOnReturn.ts` (Task 5, decisão K7): ouve `visibilitychange` (só
+  quando `document.visibilityState === 'visible'`) e `focus` da janela, e
+  chama o `refresh` mais recente (guardado numa `ref`, não como dependência
+  do efeito) — fecha a pendência 57 do B (a virada do dia com a aba aberta).
+  Dois usuários: `useCycle` e `useCurrentPlan`. **Custo declarado (K7):**
+  trocar de área **dentro** do app depois da meia-noite não dispara nenhum
+  dos dois eventos — o Quartel-General oculto continua no dia anterior até
+  a aba sair e voltar, ou até recarregar (pendência, `docs/HANDOFF.md`).
+- **`src/shared/types/`** *(existe, desde o C)* — tipos compartilhados por
+  mais de uma feature (§5 regra 3). Nasceu com `mission.ts` (decisão K10,
+  Ruling R3): `Mission`, `MissionState`, `MissionType`, `Availability`,
+  `MISSION_STATE_LABELS`, `DAYS_PER_MILESTONE` e `MAX_DIFFICULTY`, movidos
+  de `features/missions/types.ts` **sem reexport** — "um lugar só para o
+  contrato". `features/missions/types.ts` ficou só com `Cycle` (que importa
+  `Mission` de `shared/`) e `MissionErrorCode`. `shared/ui/` continua
+  contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
 - **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
@@ -779,6 +868,13 @@ quem ainda não concluiu).
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
   fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
   do servidor falso (8150), e `falso.ts` é o cliente do controle HTTP dele.
+  **Desde o C** (Task 6), `cycle.spec.ts` ganhou três cenários em série
+  depois dos dois do B (o plano é único por semana, semeado uma vez no
+  `beforeAll`): abrir Campanhas pela navegação com a trilha do plano
+  semeado e o axe sem violações nas duas áreas; abrir Campanhas pelo
+  teclado (Tab, Tab, Enter, foco no título); e um `describe('celular')` a
+  390×844 (navegação visível, sem rolagem horizontal, sem sobreposição
+  entre "Falar com a Tifa" e os botões da navegação).
 
 ### Como o frontend alcança a API
 
@@ -819,13 +915,14 @@ legitimamente pertence a ele — nunca antes.
 | Vou criar… | Vai em | Estado |
 |---|---|---|
 | Componente visual reutilizável, sem regra de negócio (botão, cartão, barra de progresso) | `frontend/src/shared/ui/<Componente>.tsx` | contrato |
-| Componente específico de uma feature (cartão de missão, painel da Tifa) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`) |
+| Componente específico de uma feature (cartão de missão, painel da Tifa, trilha da semana) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`, `campaigns` desde o C) |
 | Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | existe |
-| Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | contrato |
-| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`, `tutoring/types.ts`) |
-| Hook genérico | `frontend/src/shared/hooks/` | contrato |
-| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`, `tutoring/useTutorConversation.ts`) |
-| Função pura usada por mais de uma feature | `frontend/src/shared/lib/` | existe (`deadline.ts`, desde o 1b-2) |
+| Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | existe (`mission.ts`, desde o C) |
+| Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`, `tutoring/types.ts`, `campaigns/types.ts`) |
+| Hook genérico | `frontend/src/shared/hooks/` | existe (`useRefreshOnReturn.ts`, desde o C) |
+| Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`, `tutoring/useTutorConversation.ts`, `campaigns/useCurrentPlan.ts`) |
+| Função pura usada por mais de uma feature | `frontend/src/shared/lib/` | existe (`deadline.ts` desde o 1b-2; `civilDate.ts` desde o C) |
+| Página nova da navegação lateral (uma área) | `frontend/src/pages/`, com o `id` do `h1` em `frontend/src/pages/headings.ts` e a entrada em `frontend/src/app/areas.ts` | existe (`Headquarters`, `Campaigns`, desde o C) |
 | Token visual (cor, espaçamento, tipografia, foco, movimento) | `frontend/src/styles/` | contrato |
 | Estilo global | hoje `frontend/src/index.css`; migra para `frontend/src/styles/` quando a pasta nascer | existe |
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
@@ -895,9 +992,12 @@ legitimamente pertence a ele — nunca antes.
    em um lugar, não replicado por feature.
 6. **Os dois alertas explícitos do README §3**, repetidos porque são os dois
    defeitos que este projeto mais provavelmente cometeria:
-   - **Nada de `App.tsx` gigante.** Hoje `App.tsx` só devolve
-     `<Headquarters />`. No dia em que houver mais de uma tela, o que entra
-     nele é um roteador, não o conteúdo da segunda tela.
+   - **Nada de `App.tsx` gigante.** Hoje `App.tsx` é o **roteador de duas
+     áreas**, por estado local (C15, decisão K1, Incremento C): um
+     `useState<Area>`, a barra `<SideNav />` de `app/`, e as duas páginas
+     (`Headquarters`, oculta ou visível; `Campaigns`, montada só enquanto
+     ativa). O que entra nele continua sendo o roteador, nunca o conteúdo de
+     uma área — isso mora em `pages/`.
    - **Nada de chamadas HTTP espalhadas por componentes.** Toda ida à rede
      passa pelo cliente de `shared/api/`, com tratamento de erro no mesmo
      lugar. Um `fetch` dentro de um componente é um defeito de arquitetura,
