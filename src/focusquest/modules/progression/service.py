@@ -66,7 +66,7 @@ def registrar_conclusao(session: Session, missao: Mission, agora: datetime) -> N
     """
     _travar_usuario(session, missao.user_id)
     entrada = _inserir_lancamento(session, missao, agora)
-    fatos = _fatos(session, missao.user_id)
+    satisfeitas = conquistas_satisfeitas(_fatos(session, missao.user_id))
     ja = set(
         session.scalars(
             select(UserAchievement.code).where(
@@ -75,10 +75,7 @@ def registrar_conclusao(session: Session, missao: Mission, agora: datetime) -> N
         )
     )
     for conquista in CATALOGO:
-        if (
-            conquista.codigo in conquistas_satisfeitas(fatos)
-            and conquista.codigo not in ja
-        ):
+        if conquista.codigo in satisfeitas and conquista.codigo not in ja:
             session.add(
                 UserAchievement(
                     user_id=missao.user_id,
