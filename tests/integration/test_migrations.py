@@ -14,7 +14,8 @@ from focusquest.core.database import create_engine_from_url
 from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission, WeeklyPlan
 
-from .conftest import alembic_config, exigir_banco_de_teste
+from .banco_de_teste import exigir_banco_de_teste
+from .conftest import alembic_config
 
 # As TABELAS que a migracao cria, sem `alembic_version` -- essa e do proprio
 # Alembic e sobrevive ao `downgrade base`.
