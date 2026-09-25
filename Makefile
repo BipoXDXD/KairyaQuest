@@ -77,11 +77,26 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # a variavel depois seria tarde). O `frontend/.env` nao serve aqui: ele e
 # ignorado pelo git, entao nao existe em clone novo nem no CI -- e o cliente
 # HTTP recusa carregar sem a variavel, de proposito.
+#
+# O deslocamento das portas (FOCUSQUEST_E2E_PORT_OFFSET, pendencia 19) chega ao
+# Playwright por esta receita, e SO ele: o `servers.ts` le a variavel do
+# ambiente do processo, e o Node nao le o `.env`. Quem resolve o valor e o
+# `Settings` -- o mesmo leitor do `.env` que a aplicacao usa, com a mesma
+# precedencia (ambiente acima do `.env`, como no pre-push) e a mesma validacao
+# (0 a 49) --, e a receita repassa apenas esse campo; nenhuma outra linha do
+# `.env` vai para o ambiente do Playwright. A atribuicao fica SOZINHA antes do
+# `&&`: numa atribuicao isolada, a falha da substituicao derruba a receita;
+# prefixada ao comando (`VAR=$$(...) npx ...`), ela seria ignorada e o E2E
+# subiria com deslocamento vazio -- as portas de outro worktree.
 check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-core
 	cd $(WEB) && VITE_API_URL=/api npm run build
-	cd $(WEB) && npx playwright test
+	deslocamento="$$(uv run python -c 'from focusquest.core.config import Settings; print(Settings().e2e_port_offset)')" \
+		&& cd $(WEB) && FOCUSQUEST_E2E_PORT_OFFSET="$$deslocamento" npx playwright test
 
-reset-test-db: ## DESTRUTIVO: recria o banco de TESTE do zero e aplica as migracoes
+# Desde a pendencia 19 o banco de teste e POR WORKTREE (o nome vem do .env), e
+# por isso o primeiro passo tambem CRIA o banco se ele ainda nao existir -- atras
+# da mesma guarda de nome do DROP SCHEMA (tests/integration/banco_de_teste.py).
+reset-test-db: ## DESTRUTIVO: cria se faltar, recria o banco de TESTE do zero e migra
 	PYTHONPATH=tests uv run python -m integration.banco_de_teste
 	uv run alembic -x test=true upgrade head
 

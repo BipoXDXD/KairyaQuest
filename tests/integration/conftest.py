@@ -17,7 +17,7 @@ from focusquest.modules.tutoring.models import TutorMessage
 from focusquest.modules.tutoring.service import Tutoria
 from integration.provedor_falso import ServidorAnthropicFalso, iniciar
 
-from .banco_de_teste import recriar_esquema
+from .banco_de_teste import criar_banco_se_ausente, recriar_esquema
 
 # O limite da resposta nos testes: curto o bastante para a demora do falso
 # esgota-lo em menos de um segundo.
@@ -37,7 +37,22 @@ def falso() -> Iterator[ServidorAnthropicFalso]:
 
 @pytest.fixture(scope="session")
 def engine(settings: Settings) -> Iterator[Engine]:
+    """A engine do banco de teste, CRIADO aqui se ainda nao existir.
+
+    A criacao mora nesta fixture, e nao so no `make reset-test-db`, por dois
+    motivos (pendencia 19). No `make check` o `check-api` roda ANTES do
+    `check-e2e` -- e do `reset-test-db`, pre-requisito dele --, entao o
+    primeiro `make check` de um worktree novo reprovaria no pytest se a suite
+    dependesse de um passo manual. E o worktree do pre-push comeca SEMPRE com
+    um banco novo (`..._push_test`): depender do `reset-test-db` ali seria
+    recusar todo push. Aqui, e nao em `banco_migrado`, porque alguns testes
+    conectam pela `engine` sem pedir o esquema (`test_health.py`).
+
+    A guarda de nome e de alvo vem antes de qualquer conexao
+    (`criar_banco_se_ausente`), a mesma do `DROP SCHEMA`.
+    """
     engine = create_engine_from_url(settings.test_database_url)
+    criar_banco_se_ausente(engine)
     yield engine
     engine.dispose()
 

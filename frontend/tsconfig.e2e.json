@@ -31,5 +31,5 @@
      confira o E2E. Sem ele, o `playwright.config.ts` e as specs nao entrariam
      em nenhum projeto: o Playwright transpila sem conferir tipo, e um erro de
      tipo no cenario so apareceria como falha de execucao -- ou nao apareceria. */
-  "include": ["playwright.config.ts", "tests/e2e"],
+  "include": ["playwright.config.ts", "tests/e2e", "tests/unit"],
 }

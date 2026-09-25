@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # Consumida pelo compose.yaml, nao pelo Python. Declarada aqui porque o
     # .env a carrega e porque variavel desconhecida deve continuar sendo erro.
     db_port: int = 55432
+    # Consumida pelo E2E (frontend/tests/e2e/servers.ts, via Makefile), nao pela
+    # aplicacao: desloca as tres portas do E2E para dois gates rodarem ao mesmo
+    # tempo em worktrees diferentes (pendencia 19). De 0 a 49 -- o limite e o
+    # vao entre a API (8100) e o falso (8150), menos um; o servers.ts o deriva
+    # das portas e tests/unit/test_config.py confere que os dois batem. Faixa
+    # por convencao: 0 a 24 para worktrees, 25 a 49 para o pre-push
+    # (scripts/push-env.sh).
+    e2e_port_offset: int = Field(default=0, ge=0, le=49)
 
     anthropic_api_key: SecretStr | None = None
     # Escrito por extenso, e nao `None`: com `base_url=None` o SDK obedece a
