@@ -183,6 +183,77 @@ def test_criar_o_plano_devolve_a_trilha_sem_revelar_o_futuro(
             ]
             * 7
         },
+        {
+            "days": [
+                {
+                    "instructions": "x",
+                    "completion_criterion": "y",
+                    "difficulty": 2,
+                    "estimated_minutes": 30,
+                }
+            ]
+            * 8
+        },
+        {
+            "days": [
+                {
+                    "instructions": "x",
+                    "completion_criterion": "y",
+                    "difficulty": 0,
+                    "estimated_minutes": 30,
+                }
+            ]
+            * 7
+        },
+        {
+            "days": [
+                {
+                    "instructions": "x",
+                    "completion_criterion": "y",
+                    "difficulty": 2,
+                    "estimated_minutes": 0,
+                }
+            ]
+            * 7
+        },
+        {
+            "bonus": {
+                "instructions": "x",
+                "completion_criterion": "y",
+                "estimated_minutes": 0,
+            }
+        },
+        {
+            "days": [
+                {
+                    "instructions": "x",
+                    "completion_criterion": "",
+                    "difficulty": 2,
+                    "estimated_minutes": 30,
+                }
+            ]
+            * 7
+        },
+        {
+            "bonus": {
+                "instructions": "",
+                "completion_criterion": "y",
+                "estimated_minutes": 30,
+            }
+        },
+        {
+            "days": [
+                {
+                    "instructions": "x",
+                    "completion_criterion": "y",
+                    "difficulty": 2,
+                    "estimated_minutes": 30,
+                    "deadline": "2026-10-01T12:00:00Z",
+                }
+            ]
+            * 7
+        },
+        {"campo_desconhecido": "x"},
     ],
     ids=[
         "seis-dias",
@@ -192,6 +263,14 @@ def test_criar_o_plano_devolve_a_trilha_sem_revelar_o_futuro(
         "dificuldade-6",
         "bonus-de-1441",
         "instrucao-vazia",
+        "oito-dias",
+        "dificuldade-0",
+        "diaria-de-0-min",
+        "bonus-de-0-min",
+        "criterio-vazio",
+        "bonus-instrucao-vazia",
+        "diaria-com-deadline",
+        "plano-com-campo-desconhecido",
     ],
 )
 def test_validacao_do_plano_responde_422(
@@ -265,12 +344,39 @@ def test_concluir_a_diaria_de_hoje_pela_api(
     assert (ciclo["streak"], ciclo["days_to_milestone"]) == (1, 6)
 
 
+def test_progresso_da_especial_reflete_a_sequencia_de_diarias_concluidas(
+    client: TestClient, relogio: list[datetime], session: Session
+) -> None:
+    """`special.progress` e a sequencia atual modulo 7 -- e nao um zero fixo,
+    que o `plano["special"]` do primeiro teste (sem nenhuma diaria concluida)
+    nao teria como distinguir de um valor de verdade calculado."""
+    relogio[0] = ao_meio_dia(SEGUNDA)
+    client.post("/api/plans", json=_corpo())
+    for i in range(2):
+        relogio[0] = ao_meio_dia(SEGUNDA + timedelta(days=i))
+        missao = client.get("/api/cycle").json()["mission"]
+        assert _concluir(client, missao["id"], f"op-prog-{i}").status_code == 200
+
+    assert client.get("/api/cycle").json()["streak"] == 2
+    plano = client.get("/api/plans/current").json()["plan"]
+    assert plano["special"]["progress"] == 2
+
+
 def test_o_nao_revelado_responde_o_mesmo_404_de_inexistente(
     client: TestClient, relogio: list[datetime], session: Session
 ) -> None:
     """Corpo INTEIRO igual, e nao so o status (C11)."""
     client.post("/api/plans", json=_corpo())
-    client.post("/api/plans", json=_corpo(SEGUNDA + timedelta(days=7)))
+    resposta_seguinte = client.post(
+        "/api/plans", json=_corpo(SEGUNDA + timedelta(days=7))
+    )
+    # O 201 da semana seguinte tambem esconde o futuro: os 7 dias vem
+    # bloqueados, sem missao nenhuma -- o mesmo bau fechado que o 404 abaixo
+    # prova para a conclusao por id.
+    assert resposta_seguinte.status_code == 201
+    plano_seguinte = resposta_seguinte.json()
+    assert [d["availability"] for d in plano_seguinte["days"]] == ["bloqueada"] * 7
+    assert all(d["mission"] is None for d in plano_seguinte["days"])
     inexistente = _concluir(client, 999_999)
     ocultas = [
         _id_da_diaria(session, QUARTA + timedelta(days=1)),  # dia futuro desta semana
@@ -326,6 +432,17 @@ def test_a_semana_inteira_revela_a_especial_de_660_xp(
         660,
     )
     assert especial["availability"] == "disponivel"
+    assert especial["id"] == _id_da_especial(session)
+
+    # A trilha (`GET /api/plans/current`) tambem publica a especial revelada,
+    # e nao so o ciclo: o `special.mission` da trilha e a MESMA missao, com o
+    # mesmo xp -- e nao o marcador `None` do plano ainda sem marco.
+    plano_atual = client.get("/api/plans/current").json()["plan"]
+    assert plano_atual["special"]["availability"] == "disponivel"
+    assert plano_atual["special"]["mission"] is not None
+    assert plano_atual["special"]["mission"]["id"] == especial["id"]
+    assert plano_atual["special"]["mission"]["xp"] == 660
+
     concluida = _concluir(client, especial["id"], "op-especial").json()
     assert (concluida["availability"], concluida["xp"]) == ("concluida", 660)
 

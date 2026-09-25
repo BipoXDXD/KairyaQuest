@@ -107,8 +107,9 @@ def concluir(
     devolvendo um status diferente na segunda vez.
 
     O relogio vem da dependencia e segue INTEIRO para o servico, que o le
-    depois de travar a linha. A rota nao le a hora: ler aqui seria ler antes
-    da trava (ver `core/clock.py`).
+    depois de travar a linha. A rota nao le a hora ANTES do servico: ler aqui
+    seria ler antes da trava (ver `core/clock.py`). Ela le de novo DEPOIS do
+    commit, so para montar a resposta -- ver o comentario abaixo.
     """
     missao = concluir_missao(
         session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock

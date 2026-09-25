@@ -34,6 +34,14 @@ def _segunda_feira(dia: date) -> date:
 
 
 class DailyCreate(BaseModel):
+    """Campo desconhecido e 422 (decisao P5, agora valendo para os tres
+    schemas de entrada do plano): um `deadline` mandado numa diaria seria
+    ignorado em silencio -- o prazo dela e DERIVADO (C10), nunca aceito na
+    entrada -- e quem manda um tem direito de saber que ele nao e respeitado,
+    em vez de descobrir isso lendo a resposta."""
+
+    model_config = ConfigDict(extra="forbid")
+
     instructions: str = Field(min_length=1)
     completion_criterion: str = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
@@ -41,9 +49,9 @@ class DailyCreate(BaseModel):
 
 
 class BonusCreate(BaseModel):
-    """A especial: sem `difficulty`, que e sempre a maxima (C9). Campo
-    desconhecido e 422 (decisao P5): quem manda `difficulty` fica sabendo que
-    ela nao e respeitada."""
+    """A especial: sem `difficulty`, que e sempre a maxima (C9). Mesmo motivo
+    do `extra="forbid"` de `DailyCreate`: quem manda `difficulty` fica sabendo
+    que ela nao e respeitada, em vez de ver o campo desaparecer em silencio."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +61,12 @@ class BonusCreate(BaseModel):
 
 
 class PlanCreate(BaseModel):
+    """Mesmo `extra="forbid"` de `DailyCreate` e `BonusCreate`, pelo mesmo
+    motivo: um campo desconhecido no corpo do plano (por exemplo, um resquicio
+    de um contrato antigo) e melhor recusado alto do que ignorado."""
+
+    model_config = ConfigDict(extra="forbid")
+
     week_start: Annotated[date, AfterValidator(_segunda_feira)]
     days: list[DailyCreate] = Field(
         min_length=DIAS_DA_SEMANA, max_length=DIAS_DA_SEMANA
