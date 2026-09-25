@@ -202,6 +202,7 @@ def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
 SERVERS_TS = (
     Path(__file__).resolve().parents[2] / "frontend" / "tests" / "e2e" / "servers.ts"
 )
+PUSH_ENV = Path(__file__).resolve().parents[2] / "scripts" / "push-env.sh"
 
 
 def test_o_deslocamento_das_portas_do_e2e_e_zero_por_padrao(
@@ -266,3 +267,17 @@ def test_o_limite_do_deslocamento_e_o_mesmo_do_servers_ts() -> None:
         maximo_do_ts
     ]
     assert "DESLOCAMENTO_MAXIMO = PORTA_DO_FALSO - PORTA_DA_API - 1" in fonte
+
+
+def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
+    """A faixa de 0 ao limite do `Settings` se divide em duas metades iguais:
+    0..24 para worktrees e 25..49 para o pre-push, que soma a reserva ao
+    deslocamento do worktree (`scripts/push-env.sh`). Se o limite mudar e a
+    reserva nao, o push de um worktree alto sairia da faixa -- ou a faixa dos
+    worktrees invadiria a do push."""
+    achado = re.search(r"^FQ_RESERVA_DO_PUSH=(\d+)$", PUSH_ENV.read_text(), re.M)
+    assert achado is not None
+    reserva = int(achado.group(1))
+    limites = Settings.model_fields["e2e_port_offset"].metadata
+    teto = next(m.le for m in limites if hasattr(m, "le"))
+    assert 2 * reserva - 1 == teto
