@@ -10,6 +10,18 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento B — o ciclo diário.** Branch `feat/incremento-b`, aberta a
+partir de `12288a2` (a `main`: o merge do PR #12, a camada 3 do 1b-2). Spec
+em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
+`docs/superpowers/plans/2026-09-25-incremento-b.md`. **Primeira sessão no
+Linux** (x86_64): o repositório chegou como arquivo ZIP, sem `.git`; o
+histórico foi religado por um clone sem checkout do remoto, e a árvore
+conferiu idêntica a `12288a2` (`git status` limpo). Hooks instalados por
+`uv run pre-commit install --install-hooks`; `make check` na base, sem
+mudança nenhuma: aprovado, EXIT 0 (ver "Resultados"). **Estado de
+publicação: não publicado.** Push, PR e merge autorizados pelo dono em
+2026-09-25 para este incremento.
+
 **Incremento 1b-2 — a tela da Tifa, o E2E e a chamada real.** Branch
 `feat/incremento-1b-2`, aberta a partir de `a795ee7` (a `main`: o merge do
 PR #10, o 1b-1). Spec em

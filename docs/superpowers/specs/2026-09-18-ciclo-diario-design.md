@@ -505,6 +505,9 @@ diárias e especiais); e a 9, que cresce.
 
 ## Interpretações a confirmar
 
+**Confirmadas pelo dono em 2026-09-25, como escritas abaixo** (as nove). O
+Incremento B as implementa sem mudança.
+
 Cada uma foi decidida para o trabalho não parar. Mudar qualquer uma custa editar
 esta spec, porque nada foi implementado.
 
