@@ -146,12 +146,14 @@ FocusQuest/
 │   │   ├── main.test.tsx
 │   │   └── main.tsx
 │   ├── tests/
-│   │   └── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
-│   │       ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1)
-│   │       ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
-│   │       ├── headquarters.spec.ts
-│   │       ├── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273, falso 8150)
-│   │       └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
+│   │   ├── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
+│   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1)
+│   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
+│   │   │   ├── headquarters.spec.ts
+│   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
+│   │   │   └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
+│   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
+│   │       └── servers.test.ts    # ambiente node: validação do deslocamento e as portas do playwright.config.ts (Frente 0)
 │   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
 │   ├── .gitignore
 │   ├── .prettierignore
@@ -161,10 +163,10 @@ FocusQuest/
 │   ├── index.html                 # lang="pt-BR" e interactive-widget=resizes-content (1b-2, Task 4)
 │   ├── package-lock.json
 │   ├── package.json               # também define os scripts que o Makefile chama
-│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa; três webServer
+│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa; três webServer, portas todas derivadas de servers.ts
 │   ├── tsconfig.json
 │   ├── tsconfig.app.json
-│   ├── tsconfig.e2e.json          # faz o `tsc -b` alcançar tests/e2e
+│   ├── tsconfig.e2e.json          # faz o `tsc -b` alcançar tests/e2e e tests/unit
 │   ├── tsconfig.node.json
 │   └── vite.config.ts             # build, proxy de /api, coleta de teste e limiares de cobertura
 ├── scripts/                       # lógica de shell do gate, compartilhada entre local e CI
@@ -172,7 +174,8 @@ FocusQuest/
 │   ├── e2e-env.sh                 # sobe a API do E2E; guarda de loopback e chave fictícia (1b-2); guarda do banco compartilhada com tests/integration/banco_de_teste.py (B, Task 6)
 │   ├── init-test-db.sql           # cria o focusquest_test (compose e CI usam o mesmo arquivo)
 │   ├── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
-│   └── push-env.sh                # mecanismo de lista de permissão que o pre-push usa para exportar FOCUSQUEST_*
+│   ├── novo-worktree.sh           # worktree irmão com banco de teste e portas do E2E próprios (Frente 0)
+│   └── push-env.sh                # lista de permissão que o pre-push usa para exportar FOCUSQUEST_*; banco e portas próprios do gate do push (Frente 0)
 ├── src/
 │   └── focusquest/                # o pacote Python da API, instalado em modo editável — o 1b-2 não muda nada aqui
 │       ├── core/                  # infraestrutura comum a todos os módulos
@@ -212,17 +215,17 @@ FocusQuest/
 │       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready e a tutoria
 ├── tests/
 │   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
-│   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
+│   ├── integration/               # contra PostgreSQL real (o banco de teste do worktree, focusquest_test por padrão), nunca SQLite
 │   │   ├── __init__.py
-│   │   ├── banco_de_teste.py    # guarda do banco de teste + recriar_esquema, compartilhada com make reset-test-db e scripts/e2e-env.sh (B, Task 6)
+│   │   ├── banco_de_teste.py    # guarda do banco de teste + recriar_esquema, compartilhada com make reset-test-db e scripts/e2e-env.sh (B, Task 6); criar_banco_se_ausente (Frente 0)
 │   │   ├── camada3.py             # grava a referência da camada 3 (chamada real, manual, do dono; nunca no gate) (1b-2)
-│   │   ├── conftest.py            # engine de teste; banco_migrado usa banco_de_teste.recriar_esquema + upgrade (B); fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
+│   │   ├── conftest.py            # engine de teste, que cria o banco se faltar (Frente 0); banco_migrado usa banco_de_teste.recriar_esquema + upgrade (B); fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
 │   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
 │   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável, com o bloco de thinking da API real por padrão (não é teste)
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
-│   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6)
+│   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6); criação sob demanda atrás da guarda (Frente 0)
 │   │   ├── test_cycle_api.py      # o contrato HTTP do ciclo: formas, recusas, códigos, ocultação por 404 (B, Task 5)
 │   │   ├── test_cycle_completion.py  # ocultação e regra do dia na conclusão, listagem só de avulsas (B, Task 4)
 │   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
@@ -233,12 +236,13 @@ FocusQuest/
 │   │   ├── test_health.py
 │   │   ├── test_install_gitleaks.py  # o script de download do Gitleaks, verificação de checksum e retentativa
 │   │   ├── test_migrations.py
+│   │   ├── test_novo_worktree.py  # scripts/novo-worktree.sh num repositório git temporário, com make falso (Frente 0)
 │   │   ├── test_missions_api.py
 │   │   ├── test_missions_concorrencia.py
 │   │   ├── test_missions_models.py
 │   │   ├── test_missions_service.py
 │   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
-│   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh
+│   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh; o isolamento do gate do push (Frente 0)
 │   │   ├── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
 │   │   ├── test_tutoring_acoes.py # confirmar e recusar, inclusive concorrência real
 │   │   ├── test_tutoring_api.py   # rotas, códigos de erro, SSE, segredo
@@ -879,6 +883,11 @@ quem ainda não concluiu).
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
   fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
   do servidor falso (8150), e `falso.ts` é o cliente do controle HTTP dele.
+  **Desde a Frente 0**, `servers.ts` é a fonte única das três portas (o
+  `playwright.config.ts` deriva todas dele) e as desloca por
+  `FOCUSQUEST_E2E_PORT_OFFSET`; a validação da variável tem teste Vitest em
+  `tests/unit/servers.test.ts`, fora de `tests/e2e/` para o Playwright não o
+  coletar como cenário.
   **Desde o C** (Task 6), `cycle.spec.ts` ganhou três cenários em série
   depois dos dois do B (o plano é único por semana, semeado uma vez no
   `beforeAll`): abrir Campanhas pela navegação com a trilha do plano

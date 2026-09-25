@@ -61,6 +61,24 @@ esperava, nunca algo não verificado.
 Sem o comando dos hooks, `git commit` e `git push` funcionam normalmente —
 sem nenhuma validação. Ver a limitação correspondente na seção 6.
 
+**Worktree que vai rodar o gate ao mesmo tempo que outro** (desde a Frente 0,
+pendência 19): em vez do roteiro acima, a partir de qualquer worktree já
+configurado,
+
+```bash
+scripts/novo-worktree.sh <nome>                   # ou <nome> <deslocamento>, de 0 a 24
+cd ../FocusQuest-<nome>
+make check
+```
+
+O script cria `../FocusQuest-<nome>` na branch nova `wt/<nome>` (a partir da
+`main`), escreve o `.env` a partir do do principal com um banco de teste
+próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
+roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
+valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
+PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
+container (seção 6).
+
 ## 1. Comandos
 
 > **Fonte de verdade:** o `Makefile`. A tabela abaixo descreve as receitas
@@ -80,7 +98,7 @@ sem nenhuma validação. Ver a limitação correspondente na seção 6.
 | `make db-down` | `docker compose down`: derruba o container **preservando** o volume (não usa `-v`). |
 | `make migrate` | `uv run alembic upgrade head` no banco de **desenvolvimento**. |
 | `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste** — só migra, não apaga. |
-| `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (apaga e recria o schema `public` do banco de teste, atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
+| `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (**desde a Frente 0, cria o banco de teste se ele não existir**; depois apaga e recria o schema `public` dele, tudo atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
 
 Os alvos de verificação são os quatro `check-*`. `bootstrap`, `format`,
 `db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
@@ -251,8 +269,18 @@ Cinco receitas, nesta ordem:
    com o limiar da seção 3.
 
 **O `check-api` precisa de banco.** Os testes de integração usam PostgreSQL
-real, nunca SQLite (README §10), no banco `focusquest_test` apontado por
-`FOCUSQUEST_TEST_DATABASE_URL`. A fixture `banco_migrado`
+real, nunca SQLite (README §10), no banco apontado por
+`FOCUSQUEST_TEST_DATABASE_URL` — `focusquest_test` por padrão, e um banco
+próprio por worktree desde a Frente 0 (abaixo). **O banco nasce sob
+demanda:** a fixture `engine` chama `criar_banco_se_ausente`
+(`tests/integration/banco_de_teste.py`), que conecta ao banco de manutenção
+`postgres` do mesmo servidor (derivado da própria URL) e cria o que falta —
+só **depois** da mesma guarda dupla do `DROP SCHEMA` (alvo igual ao
+configurado **e** nome terminado em `_test`) e de uma recusa a nomes acima de
+63 bytes, que o PostgreSQL truncaria em silêncio. A criação mora na fixture, e
+não só no `make reset-test-db`, porque no `make check` o `check-api` roda
+**antes** do `check-e2e`, e o worktree do pre-push começa sempre com um banco
+novo. Nenhum código do projeto apaga um banco (`DROP DATABASE`). A fixture `banco_migrado`
 (`tests/integration/conftest.py`) faz `DROP SCHEMA public CASCADE` e migra
 do zero uma vez por sessão do pytest — depois de uma guarda que recusa rodar
 se o alvo não for exatamente o banco de teste configurado **e** se o nome
@@ -300,6 +328,20 @@ mesmos criaram.
   consulta o banco) com `FOCUSQUEST_ANTHROPIC_BASE_URL` apontada para o
   falso; e o frontend na **5273** (`vite preview` do build). As portas de
   desenvolvimento são 8000 e 5173; nenhuma é reaproveitada (README §10).
+- **Deslocamento das portas por worktree (Frente 0).**
+  `FOCUSQUEST_E2E_PORT_OFFSET` (inteiro, padrão 0) soma o mesmo valor às três
+  portas. `frontend/tests/e2e/servers.ts` é a fonte única: lê e valida a
+  variável (só dígitos, de 0 a 49 — o vão entre a API e o falso, menos um,
+  derivado das portas-base; com 0 a 49 as faixas ficam disjuntas: API
+  8100–8149, falso 8150–8199, frontend 5273–5322), e o
+  `playwright.config.ts` deriva **todas** as portas dele. O valor chega ao
+  Playwright pelo `Makefile`, e só ele: o `Settings` (campo
+  `e2e_port_offset`, mesma faixa, ambiente acima do `.env`) o resolve, e a
+  receita repassa apenas essa chave. **Faixa por convenção:** 0 a 24 para
+  worktrees (0 é o padrão, o do principal) e 25 a 49 reservada ao pre-push,
+  que usa o deslocamento de quem empurra + 25 (seção 6). Dois testes conferem
+  que os limites do Python, do TypeScript e do `push-env.sh` batem
+  (`tests/unit/test_config.py`).
 - **`scripts/e2e-env.sh`** aponta `FOCUSQUEST_DATABASE_URL` da API do E2E
   para o banco de **teste** (lido de `Settings().test_database_url`, sem
   repetir a URL) e recusa subir se o nome do banco não terminar em `_test`.
@@ -349,8 +391,8 @@ mesmos criaram.
   pelo cenário semeado do E2E, que sempre tem um plano carregado com sucesso
   (pendência, `docs/HANDOFF.md`).
 
-**O E2E divide o banco `focusquest_test` com a suíte pytest.** É uma decisão
-deliberada, e duas exigências estruturais a tornam segura: o cenário semeia
+**O E2E divide o banco de teste do worktree com a suíte pytest** (o
+`focusquest_test`, por padrão). É uma decisão deliberada, e duas exigências estruturais a tornam segura: o cenário semeia
 **pela API, por HTTP** (nunca por SQL), e afirma **só sobre as linhas que ele
 mesmo criou** — cada missão carrega um sufixo único da execução e é
 localizada pelo `id` que a API devolveu; desde o 1b-2, todo texto que um
@@ -359,17 +401,24 @@ mesmo sufixo `EXECUCAO` (a conversa é uma só, e a tela mostra as últimas 50
 mensagens). Dado remanescente não aprova nem reprova o cenário. Duas
 consequências operacionais:
 
-- **Não rode `check-api` e `check-e2e` ao mesmo tempo na mesma máquina** —
-  nem dois `make check` simultâneos. **Continua aberta no Incremento B**
-  (pendência 19, `docs/HANDOFF.md`): o `reset-test-db` novo não muda esta
-  restrição — ele recria o schema do mesmo banco `focusquest_test`
-  compartilhado, e uma execução concorrente do `check-api` (que também
-  espera aquele schema de pé) reprova alto do mesmo jeito que reprovava
-  antes. A fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E
-  está usando, e o E2E usa **três** portas fixas (8100, 5273, 8150 desde o
-  1b-2). O resultado é falha alta (500, tabela inexistente, porta ocupada),
-  não aprovação silenciosa — mas é falha. No CI a corrida não existe: cada
-  job tem o próprio serviço PostgreSQL.
+- **Rode gates ao mesmo tempo só em worktrees com banco e portas próprios**
+  (Frente 0, pendência 19 **resolvida**, `docs/HANDOFF.md`). Dentro de um
+  mesmo worktree continua valendo: não rode `check-api` e `check-e2e` ao
+  mesmo tempo, nem dois `make check` — a fixture do pytest faz `DROP SCHEMA`
+  no banco que a API do E2E está usando, e as portas são as mesmas; o
+  resultado é falha alta (500, tabela inexistente, porta ocupada), não
+  aprovação silenciosa. **Entre worktrees**, cada um aponta o seu `.env` para
+  um banco de nome próprio terminado em `_test` e fixa um
+  `FOCUSQUEST_E2E_PORT_OFFSET` distinto (`scripts/novo-worktree.sh` faz as
+  duas coisas), e aí os gates rodam juntos. Quem não configura nada fica com
+  `focusquest_test` e deslocamento 0 — exatamente o comportamento anterior, e
+  portanto sem paralelismo com outro worktree **também** sem configuração.
+  **Medido na Frente 0:** dois `make check` simultâneos, um com o padrão e
+  outro num worktree criado pelo script (deslocamento 1), aprovaram os dois;
+  dois `check-e2e` simultâneos mantiveram as seis portas escutando juntas; e
+  dois `make check` junto com um `scripts/check-push.sh` também aprovaram os
+  três (números em `docs/HANDOFF.md`, "Resultados"). No CI a corrida não
+  existe: cada job tem o próprio serviço PostgreSQL.
 - **Desde o Incremento B, cada execução do `check-e2e` começa e termina com
   o banco vazio da própria execução** — não acumula mais entre chamadas
   seguidas (pendência 20, `docs/HANDOFF.md`, **resolvida** na Task 6,
@@ -448,7 +497,9 @@ são óbvios:
 - **O `focusquest_test` é criado pelo mesmo `scripts/init-test-db.sql`** que
   o `compose.yaml` monta em `/docker-entrypoint-initdb.d/`: o `services:` do
   Actions não monta esse volume, então o job executa o arquivo com `psql`.
-  A DDL do banco de teste tem um lugar só.
+  A DDL do banco de teste padrão tem um lugar só. Os bancos por worktree da
+  Frente 0 nascem de `criar_banco_se_ausente` (seção 4); no CI ela encontra o
+  `focusquest_test` já criado e não faz nada — o `env:` dos jobs não mudou.
 - **As variáveis `FOCUSQUEST_DATABASE_URL` e `FOCUSQUEST_TEST_DATABASE_URL`
   vêm do `env:` do job**, com a credencial local do container de serviço —
   não há segredo do repositório envolvido.
@@ -555,9 +606,9 @@ Sem eufemismo:
   consequências: o gate do worktree depende de um arquivo fora dele; um push
   que só **deleta** uma ref também é recusado sem essa configuração (aceito
   de propósito, para não manter um segundo caminho de código quase nunca
-  exercitado); e o worktree usa o **mesmo** PostgreSQL, o mesmo
-  `focusquest_test` e as mesmas portas do E2E que a máquina local, então um
-  push não pode correr em paralelo com outro gate (seção 4). **O que foi e o
+  exercitado); e o worktree usa o **mesmo** PostgreSQL da máquina local —
+  mas, desde a Frente 0, **não** o mesmo banco de teste nem as mesmas portas
+  (o item seguinte). **O que foi e o
   que não foi exercitado:** o `scripts/check-push.sh` executado à mão, pelo
   caminho da entrada padrão, sobre a revisão `96eaeba`, rodou
   `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env`
@@ -572,6 +623,34 @@ Sem eufemismo:
   a precedência do ambiente, e uma cópia do `check-push.sh` rodada numa raiz
   sem `.env` (com um `git` falso no `PATH`) para provar que ele passa pela
   função. Cada um desses testes reprovou com a mutação correspondente.
+- **O gate do `pre-push` roda em banco e portas próprios** (Frente 0,
+  pendência 19). Depois de exportar a configuração, o `check-push.sh` chama
+  `isolar_gate_do_push` (`scripts/push-env.sh`): o banco de teste de quem
+  empurra ganha `_push` antes do `_test` (`focusquest_test` →
+  `focusquest_push_test`; `focusquest_<nome>_test` →
+  `focusquest_<nome>_push_test`), continuando sob a guarda do `DROP SCHEMA`
+  e nascendo sozinho no gate; e o deslocamento das portas do E2E soma a
+  reserva de **25** ao do worktree (0 → 25, 7 → 32). **Faixa:** 0 a 24 para
+  worktrees, 25 a 49 para o push; o push de um worktree nunca cai no
+  `make check` de nenhum worktree nem no push de outro. O push **recusa**,
+  com a instrução, um banco de teste sem o sufixo `_test` e um deslocamento
+  fora de 0 a 24. Limites que continuam: dois pushes **do mesmo worktree** ao
+  mesmo tempo dividem banco e portas e colidem (empurre uma ref por vez, como
+  já manda o `AGENTS.md` §2); e o banco `..._push_test` fica no servidor entre
+  um push e outro (o gate recria o esquema dele a cada execução, então não
+  acumula dados). Testado sem push nem worktree em
+  `tests/integration/test_push_env.py`, com uma mutação reprovando cada
+  guarda.
+- **`make db-up` fora do worktree principal recria o container do
+  PostgreSQL.** O `compose.yaml` monta `./scripts/init-test-db.sql` por
+  caminho relativo; chamado de outro worktree, o bind aponta para outro
+  caminho, e o compose trata isso como mudança de configuração. Medido na
+  Frente 0 com `docker compose up -d --wait --dry-run postgres` a partir de
+  um worktree: `Container focusquest-postgres-1 Recreate`. Recriar o
+  container derruba as conexões de todo gate em andamento, em qualquer
+  worktree. Por isso o `scripts/novo-worktree.sh` não roda `make db-up`, e o
+  PostgreSQL se sobe pelo principal. Consertar exigiria mudar o `compose.yaml`
+  (pendência aberta no `docs/HANDOFF.md`).
 - **Sob o `pre-commit`, um push multi-ref valida só uma das refs.** O
   framework `pre-commit` consome toda a entrada padrão antes de chamar os
   hooks e repassa o que decidiu em variáveis de ambiente; em
@@ -861,7 +940,8 @@ A camada 3 existe desde a Task 8 do 1b-2. As camadas 1 e 2 provam que o falso
 ### O falso como processo (E2E)
 
 Desde o 1b-2 (Task 6), o E2E do Playwright precisa do falso **fora** do
-processo do pytest — como um servidor de verdade, na porta 8150, com o
+processo do pytest — como um servidor de verdade, na porta 8150 (mais o
+deslocamento do worktree, desde a Frente 0; seção 4), com o
 tempo de vida da suíte inteira do `check-e2e`. `tests/integration/falso_do_e2e.py`
 (`python -m integration.falso_do_e2e --porta N`, `PYTHONPATH=tests`) sobe o
 **mesmo** `ServidorAnthropicFalso` das camadas 1 e 2, com um `TratadorComControle`
