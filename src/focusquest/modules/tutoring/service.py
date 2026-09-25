@@ -32,6 +32,7 @@ from focusquest.modules.missions.domain import MissionState
 from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.missions.schemas import MissionCreate
 from focusquest.modules.missions.service import criar_missao, listar_missoes
+from focusquest.modules.progression.service import ler_progresso
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
@@ -189,6 +190,7 @@ def preparar_turno(
             for missao in listar_missoes(session, user_id)
             if missao.state is not MissionState.CONCLUIDA
         ],
+        progresso=ler_progresso(session, user_id),
         historico=_historico(session, user_id, tutoria.historico),
     )
     return ParaGerar(pergunta=pergunta, resposta_id=resposta.id, turno=turno)
