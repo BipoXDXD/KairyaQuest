@@ -24,11 +24,16 @@ aberta a partir de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C),
 num worktree próprio. Objetivo: dois `make check` rodando ao mesmo tempo em
 worktrees diferentes sem interferir — banco de teste por worktree, portas do
 E2E por worktree, pre-push isolado e `scripts/novo-worktree.sh`, pelo desenho
-aprovado pelo dono. A branch soma, até este registro, **5 commits**
-(`25953b9`, `af0a686`, `f61eaf2`, `4f37e40`, `ea49978`, contados com
-`git log --oneline 8ab91ce..HEAD`) — mais este commit de documentação, **6**
-no total. **Estado de publicação: não publicado.** Os commits nesta branch
-foram autorizados pelo dono; push, PR e merge, não.
+aprovado pelo dono. A branch soma **7 commits** (`25953b9`, `af0a686`,
+`f61eaf2`, `4f37e40`, `ea49978`, o commit de documentação `9450b39` e o
+conserto `5b463b5`, feito depois dele; contados com
+`git log --oneline 8ab91ce..5b463b5 | wc -l`, medido nesta sessão).
+(Registro anterior, corrigido pela onda de correções da revisão: este
+parágrafo contava 6 commits, porque o `5b463b5` nunca tinha sido contado.)
+**Estado de publicação: publicado pelo PR #15, mesclado por merge commit em
+`1aafc39` em 2026-09-25; estado atual em `gh pr view 15`.** (Registro
+anterior, corrigido pela onda de correções da revisão: este parágrafo dizia
+"não publicado".) Os commits nesta branch foram autorizados pelo dono.
 
 **Incremento C — a campanha.** Branch de integração `feat/incremento-c`,
 com dois worktrees de trabalho em paralelo, sem banco: `feat/incremento-c-nav`
