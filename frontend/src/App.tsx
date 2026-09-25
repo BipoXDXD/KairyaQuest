@@ -44,7 +44,13 @@ function App() {
       <SideNav active={area} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
         <Headquarters hidden={area !== 'headquarters'} />
-        {area === 'campaigns' && <Campaigns />}
+        {area === 'campaigns' && (
+          <Campaigns
+            onOpenHeadquarters={() => {
+              navigate('headquarters')
+            }}
+          />
+        )}
       </div>
     </div>
   )

@@ -4,8 +4,14 @@ import App from './App'
 import { requestsTo, routeFetch } from './test/fetchRoutes'
 import { stubViewport } from './test/viewport'
 
-/** O que o Quartel-general busca na montagem: ciclo, missoes, status e historico da Tifa. */
-function stubPage() {
+/**
+ * O que o Quartel-general busca na montagem: ciclo, missoes, status e
+ * historico da Tifa; e o que Campanhas busca ao abrir: a trilha da semana
+ * (`GET /api/plans/current`). O `plan` e parametrizavel porque um teste
+ * precisa de um dia `disponivel` na trilha (o botao "Ir ao Quartel-General");
+ * os demais usam o padrao `null` ("sem plano nesta semana").
+ */
+function stubPage(plan: unknown = null) {
   stubViewport('desktop')
   return routeFetch({
     'GET /api/cycle': () =>
@@ -19,6 +25,7 @@ function stubPage() {
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
     'GET /api/tutoring/messages': () => Response.json([]),
+    'GET /api/plans/current': () => Response.json({ plan }),
   })
 }
 
@@ -117,5 +124,69 @@ describe('App', () => {
     expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
     expect(requestsTo(fetchMock, 'GET /api/tutoring/messages')).toHaveLength(1)
     expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(1)
+  })
+
+  it('cada abertura de Campanhas busca a trilha de novo', async () => {
+    const fetchMock = stubPage()
+    render(<App />)
+    await settleHeadquarters()
+
+    // ida
+    fireEvent.click(screen.getByTestId('nav-campaigns'))
+    await screen.findByTestId('trail-no-plan')
+    // volta: Campanhas desmonta (K2), sem pedido novo a trilha
+    fireEvent.click(screen.getByTestId('nav-headquarters'))
+    // ida de novo: Campanhas remonta e busca a trilha outra vez
+    fireEvent.click(screen.getByTestId('nav-campaigns'))
+    await screen.findByTestId('trail-no-plan')
+
+    expect(requestsTo(fetchMock, 'GET /api/plans/current')).toHaveLength(2)
+  })
+
+  it('o botao "Ir ao Quartel-General" da trilha volta ao Quartel-general, com Campanhas desmontada e o foco no titulo do QG', async () => {
+    const planoComHojeDisponivel = {
+      week_start: '2026-09-21',
+      days: [
+        {
+          day: '2026-09-24',
+          availability: 'disponivel',
+          mission: {
+            id: 1,
+            instructions: 'Revisar recursao',
+            completion_criterion: 'Resolver 3 exercicios',
+            difficulty: 2,
+            estimated_minutes: 30,
+            mission_type: 'diaria',
+            day: '2026-09-24',
+            deadline: '2026-09-25T00:00:00-03:00',
+            state: 'pendente',
+            availability: 'disponivel',
+            started_at: null,
+            completed_at: null,
+            xp: 40,
+            actual_duration_minutes: null,
+          },
+        },
+      ],
+      special: { availability: 'bloqueada', progress: 3, mission: null },
+    }
+    stubPage(planoComHojeDisponivel)
+    render(<App />)
+    await settleHeadquarters()
+
+    fireEvent.click(screen.getByTestId('nav-campaigns'))
+    const botao = await screen.findByRole('button', {
+      name: 'Ir ao Quartel-General para concluir: Revisar recursao',
+    })
+
+    fireEvent.click(botao)
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(/quartel-general/i)
+    expect(heading).toHaveFocus()
+    expect(screen.getByTestId('headquarters')).toBeVisible()
+    expect(screen.queryByTestId('campaigns')).not.toBeInTheDocument()
+    expect(screen.getByTestId('nav-headquarters')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('nav-campaigns')).not.toHaveAttribute('aria-current')
   })
 })

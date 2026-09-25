@@ -1,16 +1,23 @@
+import { CampaignTrail } from '../features/campaigns/CampaignTrail'
 import { CAMPAIGNS_HEADING_ID } from './headings'
 
 /**
  * Campanhas — planos de estudo (README §7; spec do ciclo diario, "Campanhas
  * — a trilha").
  *
- * A pagina COMPOE, como o Quartel-general: o `main`, o titulo e, no lugar
- * do paragrafo reservado abaixo, a trilha da semana -- `<CampaignTrail />`,
- * de `features/campaigns/CampaignTrail.tsx`, sem props, com titulos a partir
- * do `h2` (decisao K11 do plano do C). Ate a trilha chegar, a pagina diz a
- * verdade: nada de estrutura vazia prometendo o que nao existe.
+ * A pagina COMPOE, como o Quartel-general: o `main`, o titulo e a trilha da
+ * semana -- `<CampaignTrail />`, de `features/campaigns/CampaignTrail.tsx`,
+ * com titulos a partir do `h2`. `onOpenHeadquarters` e opcional e so
+ * atravessa (Ruling R5 do controlador do C): quem decide a navegacao e o
+ * `App`, nao esta pagina; Campanhas repassa o callback, e a trilha decide
+ * mostrar o botao "Ir ao Quartel-General" so quando ele existe. Com isso,
+ * Campanhas deixa de ser sem props (K11 relaxado por R5).
  */
-export function Campaigns() {
+export function Campaigns({
+  onOpenHeadquarters,
+}: {
+  onOpenHeadquarters?: () => void
+} = {}) {
   return (
     <main data-testid="campaigns" className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-6">
@@ -25,13 +32,7 @@ export function Campaigns() {
           A semana inteira, dia a dia, e a missão especial.
         </p>
       </header>
-      <p
-        data-testid="campaigns-placeholder"
-        className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300"
-      >
-        A trilha da semana ainda não chegou a esta versão. A missão de hoje continua no
-        Quartel-general.
-      </p>
+      <CampaignTrail onOpenHeadquarters={onOpenHeadquarters} />
     </main>
   )
 }

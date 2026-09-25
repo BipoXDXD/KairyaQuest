@@ -10,6 +10,8 @@ describe('Campaigns', () => {
   })
 
   it('anuncia Campanhas no titulo de nivel 1, dentro do main, focavel por programa', () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
     render(<Campaigns />)
 
     const main = screen.getByRole('main')
@@ -22,14 +24,11 @@ describe('Campaigns', () => {
     expect(heading).toHaveAttribute('tabindex', '-1')
   })
 
-  it('diz que a trilha ainda nao chegou, sem prometer conteudo e sem ir a rede', () => {
-    const fetchMock = routeFetch({})
+  it('compoe a trilha da semana', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
     render(<Campaigns />)
 
-    expect(screen.getByTestId('campaigns-placeholder')).toHaveTextContent(
-      'A trilha da semana ainda não chegou a esta versão. A missão de hoje continua no Quartel-general.',
-    )
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 })
