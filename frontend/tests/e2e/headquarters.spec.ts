@@ -65,6 +65,12 @@ interface MissaoCriada extends PedidoDeMissao {
   completed_at: string | null
 }
 
+/** O recorte de `GET /api/progress` que os cenarios de conclusao leem (P6). */
+interface Progresso {
+  xp_total: number
+  level: number
+}
+
 /**
  * As duas missoes do cenario, na ordem em que sao CRIADAS -- que e o inverso
  * da ordem de prazo.
@@ -389,6 +395,11 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
 }) => {
   const alvo = await missaoDoCenario(playwright, 'Refazer a lista 2')
   const rota = `**/api/missions/${String(alvo.id)}/complete`
+  // P6: o nivel antes da conclusao vem da API, e nao de uma constante --
+  // outros arquivos do E2E concluem missoes contra o mesmo usuario, e o nivel
+  // em que este cenario comeca depende da ordem em que os arquivos rodam. Lido
+  // ANTES do clique: a primeira resposta, descartada, ja conclui no servidor.
+  const antes = (await (await page.request.get('/api/progress')).json()) as Progresso
   // O que o interceptador viu: a chave de cada pedido e o corpo de cada
   // resposta que o servidor deu e o navegador nunca recebeu.
   const chaves: string[] = []
@@ -431,9 +442,16 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
   const rewardXp = item.getByTestId('reward-xp')
   await expect(rewardXp).toBeVisible()
-  await expect(rewardXp).toHaveText(/^\+\d+ XP$/)
-  // Este e o segundo cenario deste ARQUIVO a concluir uma missao -- o XP
-  // acumulado cruza o nivel 2 aqui (confirmado na saida do gate antes deste
-  // ajuste: "Missão concluída.+40 XPSubiu para o nível 2!").
-  await expect(item.getByTestId('reward-level-up')).toHaveText('Subiu para o nível 2!')
+  await expect(rewardXp).toHaveText(`+${String(alvo.xp)} XP`)
+  // O nivel depois, lido do servidor. O saldo tem de ser o de antes mais o XP
+  // desta missao: se nao for, outra conclusao entrou no meio e a comparacao
+  // de niveis abaixo nao diria nada sobre ESTA conclusao.
+  const depois = (await (await page.request.get('/api/progress')).json()) as Progresso
+  expect(depois.xp_total).toBe(antes.xp_total + alvo.xp)
+  const subida = item.getByTestId('reward-level-up')
+  if (depois.level > antes.level) {
+    await expect(subida).toHaveText(`Subiu para o nível ${String(depois.level)}!`)
+  } else {
+    await expect(subida).toHaveCount(0)
+  }
 })
