@@ -8,6 +8,7 @@ from sqlalchemy import pool
 # Importados pelo efeito colateral de registrar as tabelas no `Base.metadata`:
 # sem eles, o `target_metadata` do autogenerate nao conheceria a tutoria.
 import focusquest.modules.missions.models  # noqa: F401
+import focusquest.modules.progression.models  # noqa: F401
 import focusquest.modules.tutoring.models  # noqa: F401
 from focusquest.core.base import Base
 from focusquest.core.config import Settings
