@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import get_session
+from focusquest.modules.missions.cycle_service import leitura_da_avulsa, ler_missao
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
     MissionComplete,
@@ -73,7 +74,7 @@ def criar(dados: MissionCreate, session: SessaoDaRequisicao) -> MissionRead:
         deadline=dados.deadline,
     )
     session.commit()
-    return MissionRead.model_validate(missao)
+    return MissionRead.da_leitura(leitura_da_avulsa(missao))
 
 
 @router.get("")
@@ -86,7 +87,7 @@ def listar(session: SessaoDaRequisicao) -> list[MissionRead]:
     transacao aberta pela sessao morre no fim da requisicao.
     """
     return [
-        MissionRead.model_validate(missao)
+        MissionRead.da_leitura(leitura_da_avulsa(missao))
         for missao in listar_missoes(session, USUARIO_UNICO)
     ]
 
@@ -113,4 +114,7 @@ def concluir(
         session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock
     )
     session.commit()
-    return MissionRead.model_validate(missao)
+    # Relida depois do commit, com o relogio lido de novo: a disponibilidade de
+    # uma missao concluida e `concluida` em qualquer instante, e o prazo nao
+    # depende do instante -- ler a hora de novo nao muda a resposta.
+    return MissionRead.da_leitura(ler_missao(session, missao, clock()))
