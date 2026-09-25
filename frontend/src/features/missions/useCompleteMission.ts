@@ -13,14 +13,15 @@ import type { CompletionRegistry } from './useCompletionRegistry'
  * O `reward` vem A PARTE, e nao dentro de `mission`: e o `RewardAnnouncement`
  * quem le, e a missao guardada aqui NAO leva a chave `reward` (D16) -- ela e
  * um `Mission` de verdade, e nao o `MissionCompletion` cru da resposta.
- * `reward` pode faltar (deploy defasado ou contrato violado, ver
- * `MissionCompletion`): a conclusao vale do mesmo jeito, so nao ha anuncio.
+ * `reward` pode faltar ou vir `null` (deploy defasado ou contrato violado,
+ * ver `MissionCompletion`): a conclusao vale do mesmo jeito, so nao ha
+ * anuncio.
  * `failed` carrega a traducao da falha -- mensagem e acao --, e nao o erro cru.
  */
 export type CompletionState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'completed'; mission: Mission; reward: Reward | undefined }
+  | { status: 'completed'; mission: Mission; reward: Reward | null | undefined }
   | { status: 'failed'; failure: CompletionFailure }
 
 export interface UseCompleteMissionResult {

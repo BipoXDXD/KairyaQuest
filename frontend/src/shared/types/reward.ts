@@ -35,10 +35,13 @@ export interface Reward {
  * mais.
  */
 export interface MissionCompletion extends Mission {
-  // Opcional DE PROPOSITO: o `postJson` nao valida a resposta em tempo de
-  // execucao, e um deploy defasado (backend anterior ao incremento D) ou um
-  // contrato violado devolve a missao sem `reward`. Opcional aqui, o
-  // TypeScript obriga quem le a ter a guarda -- sem ela, o cartao lia
-  // `reward.xp_awarded` de `undefined` e derrubava o quadro inteiro.
-  reward?: Reward
+  // Opcional e anulavel DE PROPOSITO: o `postJson` nao valida a resposta em
+  // tempo de execucao, e um deploy defasado (backend anterior ao incremento
+  // D) ou um contrato violado devolve a missao sem `reward` (chave ausente)
+  // ou com `"reward": null` explicito -- o padrao do FastAPI/Pydantic para um
+  // `Optional[Reward] = None` sem `response_model_exclude_none`. Modelados os
+  // dois casos aqui, o TypeScript obriga quem le a ter a guarda contra ambos
+  // -- sem ela, o cartao lia `reward.xp_awarded` de `undefined`/`null` e
+  // derrubava o quadro inteiro.
+  reward?: Reward | null
 }

@@ -129,7 +129,8 @@ function CompletionControls({
         className="text-sm text-emerald-300"
       >
         <p data-testid="mission-completion-text">{statusText(completion)}</p>
-        {completion.status === 'completed' && completion.reward !== undefined && (
+        {/* `!= null` de proposito: cobre `reward` ausente E `reward: null`. */}
+        {completion.status === 'completed' && completion.reward != null && (
           <RewardAnnouncement reward={completion.reward} />
         )}
       </div>

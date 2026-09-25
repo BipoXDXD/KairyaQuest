@@ -406,6 +406,36 @@ describe('MissionList -- concluir', () => {
     expect(screen.queryByTestId('reward-xp')).not.toBeInTheDocument()
   })
 
+  it('uma conclusao com reward NULL explicito mantem o quadro, anuncia o texto e nao mostra XP', async () => {
+    // `"reward": null` e o que o FastAPI/Pydantic serve por padrao para um
+    // `Optional[Reward] = None` sem `response_model_exclude_none` -- e
+    // `null !== undefined`, entao uma guarda so contra a chave ausente deixava
+    // passar o mesmo TypeError.
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json([pendente]))
+        .mockResolvedValueOnce(Response.json({ ...pendenteConcluida, reward: null })),
+    )
+    render(<MissionList />)
+    const statusAntes = await screen.findByTestId('mission-completion-status')
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
+    expect(statusDepois).toBe(statusAntes)
+    expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
+      'Missão concluída.',
+    )
+    expect(screen.getByTestId('missions-list')).toBeInTheDocument()
+    expect(screen.getByTestId('mission-item')).toBeInTheDocument()
+    expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    expect(screen.queryByTestId('reward')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('reward-xp')).not.toBeInTheDocument()
+  })
+
   it('numa falha de rede, avisa e deixa tentar de novo com a MESMA chave', async () => {
     const fetchMock = vi
       .fn()
