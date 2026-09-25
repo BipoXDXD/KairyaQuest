@@ -19,7 +19,11 @@ from focusquest.core.errors import (
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
 )
-from focusquest.modules.missions.domain import MissionState, validar_transicao
+from focusquest.modules.missions.domain import (
+    MissionState,
+    MissionType,
+    validar_transicao,
+)
 from focusquest.modules.missions.models import Mission, MissionOperation
 
 # O tipo da operacao registrada em `mission_operations.kind`: QUAL operacao
@@ -69,6 +73,7 @@ def criar_missao(
     """
     missao = Mission(
         user_id=user_id,
+        mission_type=MissionType.AVULSA,
         instructions=instructions,
         completion_criterion=completion_criterion,
         difficulty=difficulty,

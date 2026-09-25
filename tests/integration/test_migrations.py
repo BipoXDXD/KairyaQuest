@@ -1,25 +1,37 @@
 """A migracao precisa aplicar em banco VAZIO (README s10)."""
 
 from collections.abc import Iterator
+from datetime import UTC, date, datetime
 
 import pytest
 from alembic import command
-from sqlalchemy import Engine, inspect, make_url, text
+from sqlalchemy import Engine, delete, inspect, make_url, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url
+from focusquest.modules.missions.domain import MissionState, MissionType
+from focusquest.modules.missions.models import Mission, WeeklyPlan
 
 from .conftest import alembic_config, exigir_banco_de_teste
 
 # As TABELAS que a migracao cria, sem `alembic_version` -- essa e do proprio
 # Alembic e sobrevive ao `downgrade base`.
-TABELAS_DA_MIGRACAO = frozenset({"users", "missions", "mission_operations"})
+TABELAS_DA_MIGRACAO = frozenset(
+    {"users", "missions", "mission_operations", "weekly_plans"}
+)
 
 
 def test_migracao_aplica_em_banco_vazio(banco_migrado: Engine) -> None:
     tabelas = set(inspect(banco_migrado).get_table_names())
-    assert {"users", "missions", "mission_operations", "alembic_version"} <= tabelas
+    assert {
+        "users",
+        "missions",
+        "mission_operations",
+        "weekly_plans",
+        "alembic_version",
+    } <= tabelas
 
 
 def test_migracao_cria_o_usuario_unico(banco_migrado: Engine) -> None:
@@ -239,7 +251,86 @@ def test_downgrade_da_0002_leva_so_a_tutoria(banco_migrado: Engine) -> None:
     try:
         tabelas = set(inspect(banco_migrado).get_table_names())
         assert not (TABELAS_DA_TUTORIA & tabelas)
-        assert tabelas >= TABELAS_DA_MIGRACAO
+        # `weekly_plans` some junto: e da 0003, e a 0001 nao a criou.
+        assert tabelas >= {"users", "missions", "mission_operations"}
     finally:
         command.upgrade(alembic_config(), "head")
     assert set(inspect(banco_migrado).get_table_names()) >= TABELAS_DA_TUTORIA
+
+
+def test_a_0003_transforma_as_missoes_existentes_em_avulsas(
+    banco_migrado: Engine,
+) -> None:
+    """A linha do 1a atravessa a 0003 como avulsa, com plano e dia nulos."""
+    command.downgrade(alembic_config(), "0002")
+    try:
+        with banco_migrado.begin() as conexao:
+            conexao.execute(
+                text(
+                    "INSERT INTO missions (user_id, instructions, "
+                    "completion_criterion, difficulty, estimated_minutes, "
+                    "deadline) VALUES (1, 'da 0002', 'y', 1, 30, now())"
+                )
+            )
+        command.upgrade(alembic_config(), "head")
+        with banco_migrado.connect() as conexao:
+            linha = conexao.execute(
+                text(
+                    "SELECT mission_type, plan_id, day FROM missions "
+                    "WHERE instructions = 'da 0002'"
+                )
+            ).one()
+        assert tuple(linha) == ("avulsa", None, None)
+    finally:
+        command.upgrade(alembic_config(), "head")
+        with banco_migrado.begin() as conexao:
+            conexao.execute(text("DELETE FROM missions WHERE instructions = 'da 0002'"))
+
+
+def test_o_downgrade_da_0003_recusa_quando_existe_diaria(banco_migrado: Engine) -> None:
+    """Falha ALTO, e a transacao do Alembic desfaz tudo: o esquema continua em head."""
+    with Session(bind=banco_migrado) as sessao:
+        plano = WeeklyPlan(
+            user_id=1,
+            week_start=date(2026, 9, 21),
+            created_at=datetime(2026, 9, 21, 15, tzinfo=UTC),
+        )
+        sessao.add(plano)
+        sessao.flush()
+        sessao.add(
+            Mission(
+                user_id=1,
+                instructions="diaria do downgrade",
+                completion_criterion="y",
+                difficulty=1,
+                estimated_minutes=30,
+                state=MissionState.PENDENTE,
+                mission_type=MissionType.DIARIA,
+                plan_id=plano.id,
+                day=date(2026, 9, 21),
+                deadline=None,
+            )
+        )
+        sessao.commit()
+        plano_id = plano.id
+    try:
+        with pytest.raises(RuntimeError, match="downgrade da 0003 recusado"):
+            command.downgrade(alembic_config(), "0002")
+        assert "weekly_plans" in inspect(banco_migrado).get_table_names()
+    finally:
+        with Session(bind=banco_migrado) as sessao:
+            sessao.execute(delete(Mission).where(Mission.plan_id == plano_id))
+            sessao.execute(delete(WeeklyPlan).where(WeeklyPlan.id == plano_id))
+            sessao.commit()
+
+
+def test_o_downgrade_da_0003_leva_so_o_ciclo(banco_migrado: Engine) -> None:
+    command.downgrade(alembic_config(), "0002")
+    try:
+        tabelas = set(inspect(banco_migrado).get_table_names())
+        colunas = {c["name"] for c in inspect(banco_migrado).get_columns("missions")}
+        assert "weekly_plans" not in tabelas
+        assert {"tutor_messages", "tutor_actions", "missions"} <= tabelas
+        assert not ({"mission_type", "plan_id", "day"} & colunas)
+    finally:
+        command.upgrade(alembic_config(), "head")

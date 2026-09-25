@@ -14,7 +14,7 @@ from sqlalchemy import MetaData, UniqueConstraint, delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from focusquest.modules.missions.domain import MissionState
+from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.tutoring.domain import (
     EstadoDaAcao,
@@ -76,6 +76,7 @@ def _acao(session: Session, resposta: TutorMessage, **ajustes: Any) -> TutorActi
 def _missao(session: Session) -> Mission:
     missao = Mission(
         user_id=ESTUDANTE,
+        mission_type=MissionType.AVULSA,
         instructions="Ler",
         completion_criterion="Resumo",
         difficulty=1,

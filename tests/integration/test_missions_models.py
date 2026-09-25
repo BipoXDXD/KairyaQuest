@@ -3,11 +3,11 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import MetaData, func, select, text
+from sqlalchemy import MetaData, UniqueConstraint, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from focusquest.modules.missions.domain import MissionState
+from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission, MissionOperation
 
 # Nome da copia da tabela que o teste de divergencia cria. Explicito no que e:
@@ -18,6 +18,7 @@ ESPELHO_DO_MODELO = "missions_espelho_do_modelo"
 def _missao(**kwargs: object) -> Mission:
     base: dict[str, object] = {
         "user_id": 1,
+        "mission_type": MissionType.AVULSA,
         "instructions": "Ler o capitulo 3",
         "completion_criterion": "Resumo de uma pagina entregue",
         "difficulty": 3,
@@ -62,6 +63,7 @@ def test_instante_volta_com_timezone(session: Session) -> None:
     session.add(missao)
     session.flush()
     session.refresh(missao)
+    assert missao.deadline is not None
     assert missao.deadline.tzinfo is not None
 
 
@@ -211,17 +213,49 @@ def test_o_modelo_descreve_os_mesmos_checks_que_a_migracao_criou(
     # criada. E o mesmo NoReferencedTableError que obrigou a existir o modelo
     # User, agora no metadata da copia.
     Mission.metadata.tables["users"].to_metadata(metadados)
+    # Alvo da FK composta: sem ela, o espelho de `missions` nao resolveria
+    # `fk_missions_plano_do_usuario`.
+    Mission.metadata.tables["weekly_plans"].to_metadata(metadados)
     espelho = Mission.metadata.tables["missions"].to_metadata(
         metadados, name=ESPELHO_DO_MODELO
     )
     # Nome de indice e unico por schema (nome de restricao, nao): manter
     # `ix_missions_user_id` colidiria com o indice que a migracao ja criou.
     espelho.indexes.clear()
+    # Restricao UNIQUE nasce com um indice de mesmo nome, e nome de indice e
+    # unico por schema: `uq_missions_plan_id_day` colidiria com o da tabela
+    # real. Este teste compara so os CHECK (pendencia 9); os UNIQUE, o indice
+    # parcial e a FK composta sao provados pelos testes de recusa nomeada de
+    # `test_cycle_models.py`.
+    for restricao in [
+        r for r in espelho.constraints if isinstance(r, UniqueConstraint)
+    ]:
+        espelho.constraints.remove(restricao)
     espelho.create(session.connection())
 
     assert _checks_do_postgres(session, ESPELHO_DO_MODELO) == _checks_do_postgres(
         session, "missions"
     )
+
+
+def test_o_modelo_de_weekly_plans_descreve_os_checks_da_migracao(
+    session: Session,
+) -> None:
+    """O mesmo espelho, para a tabela nova: o CHECK da segunda-feira."""
+    metadados = MetaData()
+    Mission.metadata.tables["users"].to_metadata(metadados)
+    espelho = Mission.metadata.tables["weekly_plans"].to_metadata(
+        metadados, name="weekly_plans_espelho_do_modelo"
+    )
+    for restricao in [
+        r for r in espelho.constraints if isinstance(r, UniqueConstraint)
+    ]:
+        espelho.constraints.remove(restricao)
+    espelho.create(session.connection())
+
+    assert _checks_do_postgres(
+        session, "weekly_plans_espelho_do_modelo"
+    ) == _checks_do_postgres(session, "weekly_plans")
 
 
 # ---------------------------------------------------------------------------
