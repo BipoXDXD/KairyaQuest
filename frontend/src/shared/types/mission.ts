@@ -40,6 +40,15 @@ export type Availability =
  */
 export const DAYS_PER_MILESTONE = 7
 
+/**
+ * A dificuldade maxima. Espelha `DIFICULDADE_MAXIMA`, em
+ * src/focusquest/modules/missions/schemas.py, a mao. A trilha
+ * (`features/campaigns/`) usa esta constante; o cartao de
+ * `features/missions/MissionCard.tsx` e o de proposta da tutoria ainda
+ * escrevem o "de 5" literal (nao mexidos por este incremento).
+ */
+export const MAX_DIFFICULTY = 5
+
 export interface Mission {
   id: number
   instructions: string
