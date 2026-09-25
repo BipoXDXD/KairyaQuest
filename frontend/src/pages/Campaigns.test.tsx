@@ -9,7 +9,7 @@ describe('Campaigns', () => {
     vi.unstubAllGlobals()
   })
 
-  it('anuncia Campanhas no titulo de nivel 1, dentro do main, focavel por programa', () => {
+  it('anuncia Campanhas no titulo de nivel 1, dentro do main, focavel por programa', async () => {
     routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
     render(<Campaigns />)
@@ -22,6 +22,10 @@ describe('Campaigns', () => {
     // ordem do Tab.
     expect(heading).toHaveAttribute('id', CAMPAIGNS_HEADING_ID)
     expect(heading).toHaveAttribute('tabindex', '-1')
+    // Aguarda o `GET /api/plans/current` da montagem assentar: sem isto, a
+    // resposta chega depois do fim do teste e o React avisa "not wrapped in
+    // act(...)" (achado m2 da revisao final do C).
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 
   it('compoe a trilha da semana', async () => {

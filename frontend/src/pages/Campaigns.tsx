@@ -5,7 +5,7 @@ import { CAMPAIGNS_HEADING_ID } from './headings'
  * Campanhas — planos de estudo (README §7; spec do ciclo diario, "Campanhas
  * — a trilha").
  *
- * A pagina COMPOE, como o Quartel-general: o `main`, o titulo e a trilha da
+ * A pagina COMPOE, como o Quartel-General: o `main`, o titulo e a trilha da
  * semana -- `<CampaignTrail />`, de `features/campaigns/CampaignTrail.tsx`,
  * com titulos a partir do `h2`. `onOpenHeadquarters` e opcional e so
  * atravessa (Ruling R5 do controlador do C): quem decide a navegacao e o

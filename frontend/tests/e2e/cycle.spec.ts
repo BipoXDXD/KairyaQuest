@@ -44,12 +44,21 @@ function diaCivil(civil: string, deslocamento: number): string {
   return dia.toISOString().slice(0, 10)
 }
 
-/** Se duas caixas de `boundingBox()` se sobrepoem; nula nunca sobrepoe nada. */
+/**
+ * Se duas caixas de `boundingBox()` se sobrepoem. Uma caixa NULA reprova: e
+ * o elemento sem caixa (oculto ou fora do layout), e tratar isso como "sem
+ * sobreposicao" deixaria passar um botao escondido (Ruling R14 da revisao
+ * final do C).
+ */
 function caixasSeSobrepoem(
   a: { x: number; y: number; width: number; height: number } | null,
   b: { x: number; y: number; width: number; height: number } | null,
 ): boolean {
-  if (a === null || b === null) return false
+  expect(a, 'boundingBox() nulo: o elemento nao tem caixa').not.toBeNull()
+  expect(b, 'boundingBox() nulo: o elemento nao tem caixa').not.toBeNull()
+  // Os `expect` acima ja reprovaram se alguma for nula; isto so estreita o
+  // tipo (e, por seguranca, responde "sobrepoe", nunca "passa").
+  if (a === null || b === null) return true
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
@@ -192,14 +201,14 @@ test('Campanhas abre pela navegação, com a trilha do plano semeado, e passa no
   const resultadoCampanhas = await new AxeBuilder({ page }).analyze()
   expect(resultadoCampanhas.violations).toEqual([])
 
-  // Voltar ao Quartel-general: o titulo dele focado, e o axe sem violacoes
+  // Voltar ao Quartel-General: o titulo dele focado, e o axe sem violacoes
   // de novo -- as duas areas (Review Focus 2 do plano do C: um so `main`
   // visivel por vez).
   await page.getByTestId('nav-headquarters').click()
   const quartelGeneral = page.getByTestId('headquarters')
   const tituloQuartel = quartelGeneral.getByRole('heading', {
     level: 1,
-    name: 'Quartel-general — seu painel de estudos',
+    name: 'Quartel-General — seu painel de estudos',
   })
   await expect(tituloQuartel).toBeFocused()
   await expect(page.getByTestId('nav-headquarters')).toHaveAttribute('aria-current', 'page')
@@ -237,7 +246,7 @@ test.describe('celular', () => {
     await expect(nav).toBeVisible()
     await expect.poll(async () => semRolagemHorizontal(page)).toBe(true)
 
-    // "Falar com a Tifa" so existe no Quartel-general (Campanhas nao tem
+    // "Falar com a Tifa" so existe no Quartel-General (Campanhas nao tem
     // painel da Tifa), e e ai que o pouso da pagina comeca.
     const tifa = page.getByTestId('tutor-sheet-open')
     await expect(tifa).toBeVisible()
@@ -254,6 +263,10 @@ test.describe('celular', () => {
     await page.getByTestId('nav-campaigns').click()
     await expect(page.getByTestId('campaigns')).toBeVisible()
     await expect(nav).toBeVisible()
+    // A trilha precisa ter CARREGADO antes da medida: com "Consultando a
+    // trilha..." na tela, a medida seria da pagina quase vazia, e uma trilha
+    // que estourasse a largura passaria (achado m3 da revisao final do C).
+    await expect(page.getByTestId('trail-day')).toHaveCount(7)
     await expect.poll(async () => semRolagemHorizontal(page)).toBe(true)
   })
 })

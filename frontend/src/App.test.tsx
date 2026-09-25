@@ -5,7 +5,7 @@ import { requestsTo, routeFetch } from './test/fetchRoutes'
 import { stubViewport } from './test/viewport'
 
 /**
- * O que o Quartel-general busca na montagem: ciclo, missoes, status e
+ * O que o Quartel-General busca na montagem: ciclo, missoes, status e
  * historico da Tifa; e o que Campanhas busca ao abrir: a trilha da semana
  * (`GET /api/plans/current`). O `plan` e parametrizavel porque um teste
  * precisa de um dia `disponivel` na trilha (o botao "Ir ao Quartel-General");
@@ -29,7 +29,7 @@ function stubPage(plan: unknown = null) {
   })
 }
 
-/** Espera os efeitos do Quartel-general assentarem. */
+/** Espera os efeitos do Quartel-General assentarem. */
 async function settleHeadquarters() {
   await screen.findByTestId('missions-empty')
   await screen.findByTestId('tutor-greeting')
@@ -41,17 +41,17 @@ describe('App', () => {
     vi.unstubAllGlobals()
   })
 
-  it('monta o Quartel-general como tela inicial', async () => {
+  it('monta o Quartel-General como tela inicial', async () => {
     stubPage()
 
     render(<App />)
 
     expect(screen.getByTestId('headquarters')).toBeVisible()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/quartel-general/i)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
     await settleHeadquarters()
   })
 
-  it('abre no Quartel-general, marcado como area atual na navegacao', async () => {
+  it('abre no Quartel-General, marcado como area atual na navegacao', async () => {
     stubPage()
 
     render(<App />)
@@ -63,7 +63,7 @@ describe('App', () => {
     await settleHeadquarters()
   })
 
-  it('Campanhas abre pela navegacao: o titulo dela recebe o foco e o Quartel-general fica oculto', async () => {
+  it('Campanhas abre pela navegacao: o titulo dela recebe o foco e o Quartel-General fica oculto', async () => {
     stubPage()
     render(<App />)
     await settleHeadquarters()
@@ -76,9 +76,13 @@ describe('App', () => {
     expect(screen.getByTestId('headquarters')).not.toBeVisible()
     expect(screen.getByTestId('nav-campaigns')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByTestId('nav-headquarters')).not.toHaveAttribute('aria-current')
+    // Aguarda o `GET /api/plans/current` que a trilha fez ao montar: sem
+    // isto, a resposta assenta depois do fim do teste e o React avisa
+    // "not wrapped in act(...)" (achado m2 da revisao final do C).
+    await screen.findByTestId('trail-no-plan')
   })
 
-  it('voltar ao Quartel-general devolve o foco ao titulo dele e desmonta Campanhas', async () => {
+  it('voltar ao Quartel-General devolve o foco ao titulo dele e desmonta Campanhas', async () => {
     stubPage()
     render(<App />)
     await settleHeadquarters()
@@ -87,14 +91,14 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('nav-headquarters'))
 
     const heading = screen.getByRole('heading', { level: 1 })
-    expect(heading).toHaveTextContent(/quartel-general/i)
+    expect(heading).toHaveTextContent(/Quartel-General/)
     expect(heading).toHaveFocus()
     expect(screen.getByTestId('headquarters')).toBeVisible()
     expect(screen.queryByTestId('campaigns')).not.toBeInTheDocument()
     expect(screen.getByTestId('nav-headquarters')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('so um main visivel; o do Quartel-general oculto tem o proprio hidden', async () => {
+  it('so um main visivel; o do Quartel-General oculto tem o proprio hidden', async () => {
     stubPage()
     render(<App />)
     await settleHeadquarters()
@@ -105,6 +109,8 @@ describe('App', () => {
     // elemento -- um ancestral oculto nao basta para a regra.
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getByTestId('headquarters')).toHaveAttribute('hidden')
+    // Aguarda a trilha assentar (mesmo motivo do teste acima: aviso act()).
+    await screen.findByTestId('trail-no-plan')
   })
 
   it('o rascunho da Tifa sobrevive a ida e volta por Campanhas, sem remontar nada', async () => {
@@ -118,7 +124,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('nav-campaigns'))
     fireEvent.click(screen.getByTestId('nav-headquarters'))
 
-    // Desmontar o Quartel-general desmontaria o painel: o rascunho sumiria e
+    // Desmontar o Quartel-General desmontaria o painel: o rascunho sumiria e
     // um stream em andamento seria abortado (decisao K2 do plano do C).
     expect(screen.getByTestId('tutor-input')).toHaveValue('Como estudo recursao?')
     expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
@@ -143,7 +149,7 @@ describe('App', () => {
     expect(requestsTo(fetchMock, 'GET /api/plans/current')).toHaveLength(2)
   })
 
-  it('o botao "Ir ao Quartel-General" da trilha volta ao Quartel-general, com Campanhas desmontada e o foco no titulo do QG', async () => {
+  it('o botao "Ir ao Quartel-General" da trilha volta ao Quartel-General, com Campanhas desmontada e o foco no titulo do QG', async () => {
     const planoComHojeDisponivel = {
       week_start: '2026-09-21',
       days: [
@@ -182,7 +188,7 @@ describe('App', () => {
     fireEvent.click(botao)
 
     const heading = screen.getByRole('heading', { level: 1 })
-    expect(heading).toHaveTextContent(/quartel-general/i)
+    expect(heading).toHaveTextContent(/Quartel-General/)
     expect(heading).toHaveFocus()
     expect(screen.getByTestId('headquarters')).toBeVisible()
     expect(screen.queryByTestId('campaigns')).not.toBeInTheDocument()

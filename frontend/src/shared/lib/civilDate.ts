@@ -6,8 +6,10 @@
  * "Datas civis versus instantes"). `new Date('2026-09-21')` e a meia-noite em
  * UTC, e formatada em Sao Paulo vira domingo, 20/09 -- o dia errado. Aqui a
  * data e montada ao MEIO-DIA em UTC e formatada em UTC: nenhum fuso entra na
- * conta, e o meio-dia deixa margem de doze horas mesmo se alguem tirar o
- * `timeZone` daqui por engano.
+ * conta. O meio-dia so da margem de -12h a +11h: a leste de +12h (Kiritimati
+ * e UTC+14) ele ja e o dia seguinte, entao quem segura o dia la e o
+ * `timeZone: 'UTC'` dos formatadores -- e o que os testes com
+ * `TZ=Pacific/Kiritimati` guardam.
  *
  * Mora em `shared/lib/` desde o Incremento C (`docs/ARCHITECTURE.md` §5,
  * regra 3): nasceu em `features/missions/` para a "Missão de hoje" e passou a

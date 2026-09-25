@@ -33,6 +33,6 @@ describe('main', () => {
       await import('./main')
     })
 
-    expect(document.querySelector('#root h1')).toHaveTextContent('Quartel-general')
+    expect(document.querySelector('#root h1')).toHaveTextContent('Quartel-General')
   })
 })

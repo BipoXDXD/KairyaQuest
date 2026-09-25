@@ -35,7 +35,7 @@ describe('Headquarters', () => {
 
     render(<Headquarters />)
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/quartel-general/i)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
     // Espera os efeitos das features assentarem, para o teste nao terminar no
     // meio de uma atualizacao de estado.
     await screen.findByTestId('missions-empty')

@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { civilWeekday, formatCivilDate } from './civilDate'
 
 describe('formatCivilDate', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   // A armadilha que a spec do ciclo nomeia: `new Date('2026-09-21')` e a
   // meia-noite em UTC, e formatada em Sao Paulo vira domingo, 20/09.
   it('mostra o dia que a API mandou, sem conversao de fuso', () => {
@@ -10,6 +14,15 @@ describe('formatCivilDate', () => {
 
   it('atravessa a virada do ano sem escorregar para o dia anterior', () => {
     expect(formatCivilDate('2027-01-01')).toBe('sexta-feira, 01/01')
+  })
+
+  it('nao escorrega de dia a LESTE de UTC alem de +12h: o formatador fixa o fuso em UTC', async () => {
+    // Mesmo motivo do teste de `civilWeekday` abaixo: em Kiritimati (UTC+14)
+    // o meio-dia UTC de 21/09 ja e 22/09, e so o `timeZone: 'UTC'` segura.
+    vi.resetModules()
+    vi.stubEnv('TZ', 'Pacific/Kiritimati')
+    const { formatCivilDate: formatEmKiritimati } = await import('./civilDate')
+    expect(formatEmKiritimati('2026-09-21')).toBe('segunda-feira, 21/09')
   })
 })
 
@@ -26,24 +39,36 @@ describe('civilWeekday', () => {
     expect(civilWeekday('2026-09-27')).toBe('domingo')
   })
 
-  it('nao escorrega de dia a OESTE de UTC, onde a armadilha da data civil aparece de verdade', async () => {
-    // O processo de teste fica fixado em Asia/Tokyo (vite.config.ts), que e a
-    // LESTE de UTC: meio-dia UTC + 9h ainda cai no MESMO dia, entao rodar so
-    // em Tokyo nunca pegaria um `civilWeekday` que perdesse o `timeZone: 'UTC'`
-    // (medido: o mutante sobrevive em Tokyo). A armadilha e a mesma que o
-    // comentario do arquivo documenta para `formatCivilDate`, e o mesmo padrao
-    // do teste "data civil a oeste de utc" do E2E do ciclo (5d250b3,
-    // `tests/e2e/cycle.spec.ts`): so um fuso a OESTE de UTC, como
-    // America/Sao_Paulo, prova que a funcao fixa o fuso em UTC de verdade, e
-    // nao depende do fuso de quem roda o processo.
+  // `vi.resetModules()` + import() dinamico nos dois testes abaixo (mesmo
+  // padrao de `shared/api/client.test.ts`): o formatador de `civilWeekday` e
+  // criado UMA vez, no carregamento do modulo, entao so uma instancia NOVA --
+  // sob o `TZ` trocado -- sente o fuso do processo.
+  it('nao escorrega de dia a OESTE de UTC: nao volta a `new Date(civil)`, a meia-noite UTC', async () => {
+    // O processo de teste fica fixado em Asia/Tokyo (vite.config.ts), a
+    // LESTE de UTC. A armadilha que a spec nomeia -- `new Date('2026-09-21')`
+    // e a meia-noite UTC, que em Sao Paulo ainda e domingo -- so aparece a
+    // OESTE, e e isto que este teste guarda (Ruling R7; mesmo padrao do teste
+    // "data civil a oeste de utc" do E2E do ciclo, 5d250b3).
     //
-    // `vi.resetModules()` + import() dinamico (mesmo padrao de
-    // `shared/api/client.test.ts`): o formatador de `civilWeekday` e criado
-    // UMA vez, no carregamento do modulo, entao so uma instancia NOVA -- sob o
-    // `TZ` trocado -- exercitaria a falta do `timeZone` se ela existisse.
+    // Ele NAO prova que o formatador fixa o fuso em UTC: o meio-dia UTC em
+    // Sao Paulo e 9h do MESMO dia, entao tirar o `timeZone: 'UTC'` passa aqui
+    // (medido na onda final do Incremento C). Quem prova isso e o teste
+    // seguinte, a LESTE, alem de +12h.
     vi.resetModules()
     vi.stubEnv('TZ', 'America/Sao_Paulo')
     const { civilWeekday: civilWeekdayEmSaoPaulo } = await import('./civilDate')
     expect(civilWeekdayEmSaoPaulo('2026-09-21')).toBe('segunda-feira')
+  })
+
+  it('nao escorrega de dia a LESTE de UTC alem de +12h: o formatador fixa o fuso em UTC', async () => {
+    // Pacific/Kiritimati e UTC+14: o meio-dia UTC de 21/09 e 2h de 22/09 la.
+    // Sem o `timeZone: 'UTC'` no formatador, a segunda-feira vira
+    // terca-feira -- e o unico fuso real em que a margem do meio-dia nao
+    // basta, e por isso e o que mata o mutante (achado m1 da revisao final
+    // do Incremento C; Tokyo, +9h, e Sao Paulo, -3h, deixam ele vivo).
+    vi.resetModules()
+    vi.stubEnv('TZ', 'Pacific/Kiritimati')
+    const { civilWeekday: civilWeekdayEmKiritimati } = await import('./civilDate')
+    expect(civilWeekdayEmKiritimati('2026-09-21')).toBe('segunda-feira')
   })
 })

@@ -57,7 +57,7 @@ FocusQuest/
 │   │   └── icons.svg
 │   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
 │   │   ├── app/                    # inicialização e navegação (C); ver docs/ARCHITECTURE.md §5 regra 6
-│   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-general"/"Campanhas") (C, Task 1)
+│   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-General"/"Campanhas") (C, Task 1)
 │   │   │   ├── SideNav.test.tsx
 │   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
@@ -702,7 +702,7 @@ quem ainda não concluiu).
   decisão K1, §5 regra 6): um `useState<Area>` local, sem biblioteca de
   rotas e sem mudar a URL (a URL entra quando houver uma terceira área).
   `app/areas.ts` declara `type Area = 'headquarters' | 'campaigns'` e
-  `AREAS` (os rótulos "Quartel-general"/"Campanhas"); `app/SideNav.tsx` é a
+  `AREAS` (os rótulos "Quartel-General"/"Campanhas"); `app/SideNav.tsx` é a
   barra — `<nav aria-label="Áreas">` com um `<button>` por área (sem `<a>`:
   sem URL não há `href` real, e `<a>` sem `href` não recebe foco), o ativo
   marcado por `aria-current="page"` **e** por um marcador visível `▸`
@@ -746,8 +746,10 @@ quem ainda não concluiu).
   `missions` ganhou o ciclo diário: `useCycle.ts` busca
   `GET /api/cycle` e expõe um `refresh` que **não** passa por "carregando"
   (decisão P9 — recarregar assim desmontaria o cartão e apagaria o anúncio
-  "Missão concluída."); `civilDate.ts` formata a data civil `"YYYY-MM-DD"`
-  que a API devolve **sem** conversão de fuso — `new Date(civil)` sozinho
+  "Missão concluída."); `civilDate.ts` (nasceu aqui, em `features/missions/`;
+  **desde o C mora em `src/shared/lib/civilDate.ts`**, ver `src/shared/lib/`
+  abaixo) formata a data civil `"YYYY-MM-DD"` que a API devolve **sem**
+  conversão de fuso — `new Date(civil)` sozinho
   levaria a tela num fuso a oeste de UTC a mostrar o dia anterior (Risco 3
   do plano); `CycleSection.tsx` desenha a "Missão de hoje", a sequência
   ("Sequência: N dia(s) seguido(s)") e o progresso até o marco ("N de 7"),
@@ -804,7 +806,11 @@ quem ainda não concluiu).
   Em **`campaigns`** (nasceu no C), a trilha da semana: `useCurrentPlan.ts`
   busca `GET /api/plans/current` e expõe `{ state, reload, refresh }` — o
   mesmo desenho do `useCycle` (P9), com `refreshFailed` no estado `loaded` e
-  um estado próprio `no-plan` (`{"plan": null}` não é erro).
+  um estado próprio `no-plan` (`{"plan": null}` não é erro). Nos dois hooks,
+  um `refresh` que falha com a tela ainda em "carregando" leva ao estado de
+  **erro**, com o "Tentar novamente" — ele invalidou a carga inicial, e nada
+  mais tiraria a tela de "carregando" (achado I1 da revisão final do C,
+  Ruling R12).
   `CampaignTrail.tsx` desenha os 7 dias (`<ol>`, `data-testid="trail-day"`)
   e a especial: um dia/especial `bloqueada` chega com `mission: null` e vira
   baú fechado, sem instrução, dificuldade nem XP (C11 — o que não foi
@@ -831,10 +837,14 @@ quem ainda não concluiu).
   da missão e pelo cartão da proposta da Tifa. **Ganhou `civilDate.ts` no
   C** (`git mv` de `features/missions/`, decisão K10, Ruling R3):
   `formatCivilDate` (já existia) e `civilWeekday` (novo — "quinta-feira" a
-  partir de `"2026-09-24"`, sem conversão de fuso; a armadilha morta por
-  mutação é `new Date(civil)` sem `timeZone: 'UTC'`, não só remover o
-  `timeZone`, porque `civilNoon` ancora ao meio-dia UTC e nenhum fuso IANA
-  se desloca o bastante para cruzar a virada a partir daí — Ruling R7). Dois
+  partir de `"2026-09-24"`, sem conversão de fuso). Duas mutações mortas:
+  `new Date(civil)` cru (a meia-noite UTC), que só um fuso a **oeste** de UTC
+  pega (`TZ=America/Sao_Paulo`, Ruling R7); e tirar o `timeZone: 'UTC'` do
+  formatador, que só um fuso a **leste** de +12h pega — o meio-dia UTC de
+  `civilNoon` já é o dia seguinte em `Pacific/Kiritimati` (UTC+14), o caso
+  que os testes usam (achado m1 da revisão final do C; a afirmação anterior,
+  de que nenhum fuso IANA cruzava a virada a partir do meio-dia, estava
+  errada). Dois
   usuários reais: `missions` (o cartão de hoje) e `campaigns` (os 7 dias da
   trilha).
 - **`src/shared/hooks/`** *(existe, desde o C)* — hooks genéricos com mais

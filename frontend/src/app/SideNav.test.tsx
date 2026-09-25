@@ -4,20 +4,20 @@ import type { Area } from './areas'
 import { SideNav } from './SideNav'
 
 describe('SideNav', () => {
-  it('e um landmark de navegacao chamado Áreas, com Quartel-general e Campanhas, nessa ordem', () => {
+  it('e um landmark de navegacao chamado Áreas, com Quartel-General e Campanhas, nessa ordem', () => {
     render(<SideNav active="headquarters" onNavigate={vi.fn()} />)
 
     const nav = screen.getByRole('navigation', { name: 'Áreas' })
     const buttons = within(nav).getAllByRole('button')
     expect(buttons).toHaveLength(2)
     // O nome acessivel nao inclui o marcador ▸ (aria-hidden).
-    expect(buttons[0]).toHaveAccessibleName('Quartel-general')
+    expect(buttons[0]).toHaveAccessibleName('Quartel-General')
     expect(buttons[1]).toHaveAccessibleName('Campanhas')
   })
 
   it.each<[Area, string, string]>([
-    ['headquarters', 'Quartel-general', 'Campanhas'],
-    ['campaigns', 'Campanhas', 'Quartel-general'],
+    ['headquarters', 'Quartel-General', 'Campanhas'],
+    ['campaigns', 'Campanhas', 'Quartel-General'],
   ])('com %s ativa, so ela tem aria-current=page', (active, current, other) => {
     render(<SideNav active={active} onNavigate={vi.fn()} />)
 
@@ -42,7 +42,7 @@ describe('SideNav', () => {
     render(<SideNav active="headquarters" onNavigate={onNavigate} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Campanhas' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Quartel-general' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Quartel-General' }))
 
     expect(onNavigate.mock.calls).toEqual([['campaigns'], ['headquarters']])
   })

@@ -56,7 +56,9 @@ export interface Mission {
   /**
    * De 1 a 5; o teto e imposto pela API. O 5 espelha `DIFICULDADE_MAXIMA`, em
    * src/focusquest/modules/missions/schemas.py, e nada amarra os dois: quem
-   * mudar la tem de mudar aqui e no "de 5" de `MissionList.tsx`.
+   * mudar la tem de mudar aqui (`MAX_DIFFICULTY`) e no "de 5" literal de
+   * `features/missions/MissionCard.tsx` e `features/tutoring/ProposalCard.tsx`
+   * (pendencia do Incremento C em `docs/HANDOFF.md`).
    */
   difficulty: number
   estimated_minutes: number

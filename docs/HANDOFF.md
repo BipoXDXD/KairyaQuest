@@ -535,7 +535,7 @@ está também no comentário do arquivo citado.
 
 ### Incremento C — decisões tomadas durante a execução
 
-Dez rulings do controlador, registradas no ledger da sessão
+Quinze rulings do controlador, registradas no ledger da sessão
 (`.superpowers/sdd/2026-09-25-incremento-c/progress.md`) à medida que a
 varredura prévia e a execução das Tasks encontravam divergência entre o
 plano e o que já existia (os worktrees `feat/incremento-c-nav` e
@@ -550,10 +550,15 @@ entre o pedido de correção e o desenho necessário.
 | R4 | `useCurrentPlan` ganha `refresh()` silencioso e `refreshFailed` já na Task 2 (a interface que o plano só desenhava para lá), e a trilha ganha o aviso `trail-stale` já na Task 3 | A Task 5 (atualizar na volta à aba) depende dessa interface existir; adiantá-la evita reabrir `useCurrentPlan` na Task 5. Custo: um pouco de código a mais na aterrissagem das Tasks 2+3, sem consumidor ainda (fechado só na Task 5). |
 | R5 | Manter a prop **opcional** `onOpenHeadquarters` da trilha (vira o botão "Ir ao Quartel-General"), e ligá-la na Task 4 (`Campaigns` recebe o retorno de chamada do `App`, que usa `navigate('headquarters')` com foco no `h1` do QG) | Melhor experiência que um texto solto sem ação, sem criar um segundo registro de conclusão (K8 continua preservado — o botão só navega, não conclui). Sem a prop, o componente continua funcionando (mostra o texto). Custo: `Campaigns` deixa de ser estritamente sem props (K11 relaxado, ver a nota na tabela acima). |
 | R6 | Os `data-testid` da trilha ficam como o worktree de trabalho já tinha implementado (`trail-availability`, não `trail-day-availability` do plano), mais `trail-stale` (novo); o E2E da Task 6 usa os nomes reais | O plano é só o contrato **entre** tarefas — quando a tarefa que produz o nome já está feita e provada, o nome dela vence sobre o nome hipotético do plano. Custo: nenhum, é só nomenclatura. |
-| R7 | A prova de `civilWeekday` por mutação usa um caso que o teste mata de fato: `new Date(civil)` com `getDay` local sob um fuso a **oeste** de UTC (mesmo padrão do teste "data civil a oeste de utc" de `5d250b3`) — não só remover `timeZone: 'UTC'` do formatador. Nome final: `civilWeekday` (o nome do plano) | Medido: só tirar `timeZone: 'UTC'` mantendo `civilNoon` (meio-dia UTC) não muda o resultado em nenhum fuso IANA real — o deslocamento máximo (-12h/+14h) não alcança a virada a partir do meio-dia. A mutação que a spec teme de verdade (`new Date(civil)` cru) é a que precisa estar provada morta. Custo: nenhum — é a forma certa da prova, não uma mudança de escopo. |
+| R7 | A prova de `civilWeekday` por mutação usa um caso que o teste mata de fato: `new Date(civil)` com `getDay` local sob um fuso a **oeste** de UTC (mesmo padrão do teste "data civil a oeste de utc" de `5d250b3`) — não só remover `timeZone: 'UTC'` do formatador. Nome final: `civilWeekday` (o nome do plano) | A mutação que a spec teme de verdade (`new Date(civil)` cru) é a que precisa estar provada morta. **Corrigido na onda final (achado m1):** a justificativa original dizia que só tirar `timeZone: 'UTC'` mantendo `civilNoon` "não muda o resultado em nenhum fuso IANA real"; é falso — o deslocamento máximo é +14h, e o meio-dia UTC em `Pacific/Kiritimati` já é o dia seguinte. Tokyo (+9h) e São Paulo (-3h) deixavam esse mutante vivo; o teste com `TZ=Pacific/Kiritimati` o mata (ver "Alterações do Incremento C", onda final de correções). Custo: nenhum — é a forma certa da prova, não uma mudança de escopo. |
 | R8 | Ícones SVG inline com `aria-hidden` aceitos no lugar de glifos Unicode que o plano pedia | O objetivo da restrição original (nenhuma dependência nova; ícone sempre acompanhado de texto) é cumprido do mesmo jeito — SVG inline não é biblioteca. Custo: nenhum funcional. |
 | R9 | O texto "Sem plano nesta semana." fica como o worktree de trabalho já tinha, **não** "Nenhum plano nesta semana" que o plano pedia (achado Important da revisão das Tasks 2+3) | A spec do ciclo diário (linha 419) diz "sem plano nesta semana", e o próprio plano pede o mesmo texto de garantia do Quartel-General, cujo `CycleSection` diz "Sem plano nesta semana: …" — a spec é a autoridade sobre o plano quando os dois divergem. Custo se errado: trocar uma palavra e um teste. |
 | R10 | Na correção de corrida do `refresh` (Task 5, fix round 1, commit `e195128`): "só o pedido mais recente decide" vale **também** para falha — se o pedido mais antigo teve sucesso e o mais recente falha depois, o resultado é `refreshFailed: true` (o aviso reflete a última tentativa; o dado mostrado continua o do sucesso mais antigo) | Regra única e simétrica para sucesso e falha, sem caso especial — a alternativa ("sucesso é sempre a última palavra sobre o aviso") exigiria tratar as duas respostas de jeitos diferentes na mesma guarda. Custo se errado: um aviso de desatualizado pessimista num caso raro (sucesso seguido de falha tardia); a correção seria trocar por uma guarda assimétrica e um teste novo para ela. |
+| R11 | A correção pedida pela revisão da Task 7 (os *minors* adiados do ledger não tinham virado pendências neste documento) entra no despacho único de correção da revisão final, e não num despacho próprio: só os *minors* que a triagem final mantivesse abertos viram pendências | Evita documentar como pendente o que a onda final ia consertar (ex.: o aviso `act()` de `Campaigns.test.tsx`, a grafia, o `caixasSeSobrepoem`). Custo: a Task 7 ficou aberta até a onda final. |
+| R12 | Achado Important I1 da revisão final: o `refresh()` que falha com a tela ainda em "carregando" leva ao estado de **erro** (com "Tentar novamente"), nos dois hooks (`useCycle`, `useCurrentPlan`), como o revisor propôs; os testes passam a deixar a carga inicial **assentar** depois da falha | O `refresh` incrementa a sequência e a resposta da carga inicial passa a ser descartada; o `catch` só marcava `refreshFailed` em `loaded` e devolvia `loading` intacto — o QG e a trilha ficavam em "Consultando…" para sempre, sem saída. Estado sem saída é defeito de usuário. Os dois testes antigos passavam vacuamente (a carga inicial nunca assentava). Custo: nenhum. |
+| R13 | Grafia única **"Quartel-General"** (a da spec do ciclo diário) no rótulo da navegação, no `h1` do QG, na trilha e nos testes (Vitest e E2E) | A interface tinha as duas grafias ("Quartel-general" no rótulo e no `h1`, "Quartel-General" na trilha). Nos documentos, só onde citam o texto da tela. O README §7 (linha "**Quartel-general:** …") não cita texto de tela e não foi mexido. Custo: *churn* de texto nos testes. |
+| R14 | `caixasSeSobrepoem` (E2E do celular) passa a **afirmar** que as duas caixas de `boundingBox()` não são nulas | Antes, uma caixa nula (elemento oculto, sem caixa) contava como "sem sobreposição", e um botão escondido passaria. Uma linha, do revisor final. Custo: nenhum. |
+| R15 | O *minor* m5 (`MAX_DIFFICULTY` × o "de 5" literal) e os *minors* "pode ficar" da triagem final viram pendências neste documento (R11); a pendência da Task 3 sobre `TrailContent` exportada fica **fechada** (resolvida na Task 5) | Registro honesto do que ficou, separado entre dívida pequena aberta, aceito sem ação e verificado. Custo: nenhum. |
 
 **Achado fora do escopo de qualquer Task, registrado pela Task 6 e resolvido
 pela Task 5 (fix round 1):** durante a Task 6, `git status --short` mostrou
@@ -1429,6 +1434,10 @@ plano na Task 2 (`f26b47d`, `0d9b5f3`), a trilha na Task 3 (`a8e899e`), a
 integração na Task 4 (`c6153af`), atualizar na volta à aba na Task 5
 (`69b5dc4`), o E2E na Task 6 (`9c8cd65`) e a correção de corrida da Task 5
 por cima do commit da Task 6 (`e195128`, fix round 1 — ver Ruling R10).
+Depois deles, a documentação da Task 7 (`c15318a`) e a onda final de
+correções da revisão final da branch, em dois commits: o conserto do I1
+(`f1c2276`) e o das demais correções mais esta documentação (ver "Onda
+final de correções", ao fim desta seção).
 
 - **Task 0** — revisão-base e o plano (commit `bb6497c`): `docs/HANDOFF.md`
   ganhou o parágrafo "Incremento C — a campanha" (ver "Revisão-base");
@@ -1547,6 +1556,50 @@ por cima do commit da Task 6 (`e195128`, fix round 1 — ver Ruling R10).
   restauradas. Achado fora do escopo, registrado nesta Task: edição
   concorrente na árvore (ver "Incremento C — decisões tomadas durante a
   execução", acima — era o fix round 1 da Task 5). `task-6-report.md`.
+- **Task 7** — documentação (commit `c15318a`): este documento
+  (revisão-base, decisões, alterações, resultados, pendências 59–61),
+  `docs/ARCHITECTURE.md` (a árvore e as seções de `app/`, `pages/`,
+  `features/campaigns/`, `shared/lib/`, `shared/hooks/`, `shared/types/`) e
+  `docs/QUALITY.md`. `task-7-report.md`.
+- **Onda final de correções** (revisão final da branch e revisão da Task 7;
+  Rulings R11–R15). Relatório: `final-fix-report.md` no diretório da sessão.
+  - **I1 (Important), commit `f1c2276`** — `useCycle.ts` e
+    `useCurrentPlan.ts`: no `catch` do `refresh`, um estado `loading` vira
+    `{ status: 'error', message }` (Ruling R12); antes ficava `loading` para
+    sempre, sem "Tentar novamente", quando um `focus`/`visibilitychange`
+    durante a carga inicial disparava um `GET` que falhava. Os dois testes
+    vácuos (a carga inicial nunca assentava) foram reescritos para a carga
+    inicial **assentar** depois da falha, com sucesso e com falha
+    (`it.each`, nos dois hooks), mais um teste do terceiro ramo (erro
+    continua erro) em cada hook e um teste de componente no `CycleSection`
+    (`focus`) e na trilha (`visibilitychange`) com o "Tentar novamente".
+    RED medido (os quatro testes de hook e os dois de componente reprovando
+    com `{ status: 'loading' }`/sem `cycle-error`/`trail-error`), GREEN, e
+    a mutação que reverte o conserto reprova três testes por hook.
+  - **m1** — `shared/lib/civilDate.test.ts`: casos com
+    `TZ=Pacific/Kiritimati` (UTC+14) para `civilWeekday` e para
+    `formatCivilDate`; tirar o `timeZone: 'UTC'` de qualquer um dos dois
+    formatadores agora reprova (`'terça-feira'` no lugar de
+    `'segunda-feira'`), e antes passava a suíte inteira. O comentário do
+    teste a oeste deixou de dizer que ele prova o `timeZone`, e o comentário
+    de `civilDate.ts` (o meio-dia não dá margem a leste de +12h) foi
+    corrigido, assim como a justificativa da Ruling R7 e o parágrafo de
+    `shared/lib/` do `docs/ARCHITECTURE.md`, que diziam o contrário.
+  - **m2** — os avisos `act()` de arquivos do C: `Campaigns.test.tsx`
+    ("anuncia Campanhas…") e `App.test.tsx` (os dois testes que clicam em
+    Campanhas) agora aguardam `trail-no-plan`. Na suíte inteira, de 4 avisos
+    para 1 — o que sobra é o do B, em `MissionList.test.tsx`.
+  - **m3** — `tests/e2e/cycle.spec.ts`, cenário do celular: espera os 7
+    `trail-day` antes de medir a rolagem horizontal de Campanhas.
+  - **m4 / R13** — "Quartel-General" em todo o frontend (rótulo da
+    navegação em `app/areas.ts`, `h1` do QG, comentários e testes, inclusive
+    o E2E); os testes do `h1` trocaram `/quartel-general/i` pela grafia
+    exata, para travá-la. No `docs/ARCHITECTURE.md`, os dois lugares que
+    citam o rótulo.
+  - **R14** — `caixasSeSobrepoem` afirma que as duas caixas não são nulas.
+  - **Documentação** — as Rulings R11–R15 (acima), as pendências 62–71, o
+    `civilDate.ts` em `shared/lib/` indicado no parágrafo de `missions` do
+    `docs/ARCHITECTURE.md`, e a linha desta onda em "Resultados".
 
 ## Comandos
 
@@ -1642,6 +1695,9 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` rodado por mim direto (sem o hook), logo depois do anterior, sobre a mesma árvore (ainda commit `71a2001`) | Aprovado, EXIT 0, 94,2 s de relógio. Frontend: 305 testes em 25 arquivos, cobertura de 100% nos quatro eixos (538/538 instruções, 355/355 ramificações, 165/165 funções, 520/520 linhas) — idêntico ao anterior. `uv lock --check` aprovado. Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — idêntico. E2E: 13 cenários aprovados em Chromium (13,6 s de Playwright). Gitleaks sem achados. |
 | `make check`, duas vezes seguidas, sobre a árvore final do Incremento C (Tasks 0–6 integradas mais o fix round 1 da Task 5, HEAD `e195128`, antes deste commit de documentação) | Aprovado, EXIT 0 nas duas, ~1m37s e ~1m33s de relógio. Frontend: **376 testes em 31 arquivos**, cobertura de 100% nos quatro eixos (641/641 instruções, 412/412 ramificações, 204/204 funções, 620/620 linhas) — idêntico nas duas rodadas. `uv lock --check` aprovado. Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — inalterado pelo C, que não toca `src/focusquest/`. E2E: **16 cenários** aprovados em Chromium (17,1 s e 14,5 s de Playwright) — os 13 do B mais os 3 novos da Task 6 do C. Gitleaks sem achados nas duas. |
 | `make check-e2e`, duas vezes seguidas, sobre a mesma árvore (prova de que a trilha, semeada uma vez por semana, não reprova com `409 plano_existente` na segunda rodada) | Aprovado, EXIT 0 nas duas (~21,8 s e ~19,2 s de relógio, incluindo `reset-test-db` + build + Playwright). **16 passed** nas duas (17,0 s e 14,6 s de Playwright) — idêntico à contagem das duas rodadas de `make check` acima. |
+| `make check`, rodado por mim direto, sobre a árvore da onda final de correções do C (HEAD `f1c2276` com as correções m1–m4, R14 e esta documentação por cima, antes do commit) | Aprovado, EXIT 0, 99,5 s de relógio. Frontend: **384 testes em 31 arquivos** (os 376 da Task 7 mais os da onda final), cobertura de 100% nos quatro eixos (641/641 instruções, 416/416 ramificações, 204/204 funções, 622/622 linhas). ESLint e Prettier sem achados. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — inalterado. E2E: **16 cenários** aprovados em Chromium (15,9 s de Playwright). Gitleaks sem achados. |
+| `make check-e2e` sozinho, logo depois, sobre a mesma árvore (depois das mudanças no E2E: m3, R13, R14) | Aprovado, EXIT 0, 19,8 s de relógio (`reset-test-db` + build + Playwright). **16 passed** (15,2 s de Playwright). |
+| `npx vitest run --reporter=verbose 2>&1 \| grep -c "not wrapped in act"` no frontend, antes e depois da onda final | **4 antes** (HEAD `c15318a`): 2 de `App.test.tsx`, 1 de `Campaigns.test.tsx` e 1 de `MissionList.test.tsx`. **1 depois**: só o de `MissionList.test.tsx` ("T7: se operationIdFor lancar antes do POST…"), que já existia na base do B. Nenhum aviso vem de arquivo do C. |
 
 ## Ambiente verificado
 
@@ -2422,6 +2478,94 @@ que não tinham chegado aqui)
     roda headless nesta máquina). Mesma lacuna, mesmo motivo, das Tasks
     anteriores que tocaram layout (Task 1, `c-nav-report.md`: "o layout do
     celular/desktop segue sem inspeção visual manual").
+
+**Criadas pelo Incremento C — *minors* das revisões (Rulings R11 e R15)**
+
+Os *minors* que as revisões de Task e a revisão final deixaram registrados
+no ledger da sessão, um por item. Estão separados em três grupos, sem
+inflar nenhum: dívida pequena **aberta** (vale fazer um dia), **aceita sem
+ação** (a decisão é deixar como está, com motivo) e **verificada** (não é
+pendência; fica o registro). Os que a onda final consertou (os avisos
+`act()`, a grafia, o `caixasSeSobrepoem`, a medida do E2E do celular e o
+caso de `civilWeekday`) não estão aqui: estão em "Alterações do Incremento
+C".
+
+*Abertas — dívida pequena*
+
+62. **A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
+    (`frontend/src/pages/Headquarters.tsx`, a `div` raiz: `min-h-screen
+    bg-slate-950 text-slate-100 lg:flex`). Desde a Task 1 o `App.tsx` já
+    envolve as duas áreas numa `div` com as mesmas classes; dentro dele, as
+    da raiz do QG são redundantes (inofensivas: mesma cor, mesma altura
+    mínima). Ficou da aterrissagem da Task 1 para não mexer em layout sem
+    inspeção visual (pendência 61).
+63. **`CampaignTrail.tsx` tem cerca de 370 linhas** (371, medido), com dez
+    subcomponentes num arquivo só
+    (`frontend/src/features/campaigns/CampaignTrail.tsx`). Candidato a
+    decomposição (por exemplo, o dia, o baú e a especial em arquivos
+    próprios) quando a trilha crescer; hoje está coberto a 100% e não há
+    segundo usuário de nenhum subcomponente.
+64. **Três títulos de teste E2E com acento fora de citação literal**
+    (`frontend/tests/e2e/cycle.spec.ts`, os três cenários da Task 6:
+    "Campanhas abre pela navegação…", "…Tab ate a navegação, Enter, e o
+    foco vai para o título" e "a navegação fica visível no topo, sem
+    rolagem horizontal, e não cobre…"). A convenção do arquivo é título sem
+    acento, com acento só dentro de citação literal do texto da tela.
+    Cosmético; trocar muda o nome do teste no relatório do Playwright.
+65. **Não há teste com três ou mais pedidos concorrentes** em `useCycle` e
+    `useCurrentPlan` (`frontend/src/features/missions/useCycle.test.tsx`,
+    `frontend/src/features/campaigns/useCurrentPlan.test.tsx`). Os testes
+    de corrida usam dois pedidos em voo (os dois eventos de
+    `useRefreshOnReturn`). O contador de sequência é monotônico e a guarda
+    compara com o valor corrente, então o caso de N pedidos se reduz ao de
+    dois por construção — mas isso é argumento, não teste.
+66. **`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
+    lugares** (achado m5 da revisão final):
+    `frontend/src/shared/types/mission.ts` exporta `MAX_DIFFICULTY = 5`, que
+    a trilha usa; `frontend/src/features/missions/MissionCard.tsx` ("de 5"
+    no `mission-difficulty`) e `frontend/src/features/tutoring/ProposalCard.tsx`
+    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão. Nada
+    amarra nenhum dos três ao `DIFICULDADE_MAXIMA` do backend. Não foi
+    trocado aqui porque o C não mexe nas features `missions`/`tutoring` por
+    estética; o comentário de `Mission.difficulty` foi corrigido para
+    apontar os dois arquivos certos (antes citava `MissionList.tsx`).
+
+*Aceitas, sem ação*
+
+67. **O subtítulo de Campanhas não estava na spec**
+    (`frontend/src/pages/Campaigns.tsx`: "A semana inteira, dia a dia, e a
+    missão especial."). Veio do worktree da Task 1; a revisão o registrou e
+    ele foi **aceito** como está — descreve a área sem prometer nada que a
+    tela não faça.
+68. **A *fixture* da Task 3 difere da do plano**
+    (`frontend/src/features/campaigns/CampaignTrail.test.tsx`: hoje na
+    quinta, progresso 3; o plano pedia quarta, progresso 1). **Aceita:**
+    exercita mais ramos — uma semana só cobre `fora_do_plano`, `perdida`,
+    `concluida`, `disponivel` e `bloqueada`, com um dia revelado a mais que
+    a do plano — e os casos que o plano pedia continuam provados.
+69. **`reload()` gasta dois números de sequência** (`useCycle.ts` e
+    `useCurrentPlan.ts`: um incremento no próprio `reload`, outro no
+    efeito que ele dispara). **Necessário, não cosmético:** o incremento no
+    `reload` invalida na hora um `refresh` em voo (antes de o efeito rodar),
+    e o do efeito é o `id` da nova carga. Um só dos dois deixaria uma janela
+    em que a resposta atrasada do `refresh` ainda casaria.
+70. **`refresh()` não tem guarda de desmontagem** (`useCycle.ts`,
+    `useCurrentPlan.ts`): uma resposta que chega depois de o componente
+    desmontar chama `setState` num componente que não existe mais. No
+    React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
+    pedido não tem efeito colateral. Aceito; um `AbortController` no
+    `refresh` seria a saída se um dia importar.
+
+*Verificada — registro, não pendência*
+
+71. **As mutações da navegação (Task 1).** A aterrissagem da Task 1 refez 4
+    das 7 mutações do relatório original (M1, M4, M5, M6); M2, M3 e M8
+    tinham sido feitas só no worktree antigo. A revisão final refez M2
+    (marcador `▸` em todos os itens) e M3 (`onNavigate('headquarters')`
+    fixo), e a onda final refez M8 (o `h1` de Campanhas sem `tabIndex`):
+    dois testes reprovam ("anuncia Campanhas no titulo de nivel 1…" e
+    "Campanhas abre pela navegacao: o titulo dela recebe o foco…").
+    Nenhuma mutação da Task 1 fica sem prova na branch integrada.
 
 ## Próximo incremento
 

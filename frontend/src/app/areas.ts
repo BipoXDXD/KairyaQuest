@@ -9,6 +9,6 @@
 export type Area = 'headquarters' | 'campaigns'
 
 export const AREAS: readonly { id: Area; label: string }[] = [
-  { id: 'headquarters', label: 'Quartel-general' },
+  { id: 'headquarters', label: 'Quartel-General' },
   { id: 'campaigns', label: 'Campanhas' },
 ]
