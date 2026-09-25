@@ -156,6 +156,26 @@ describe('TutorPanel: estados da conversa', () => {
     })
   })
 
+  it('P2 o esqueleto so pulsa sem pedido de movimento reduzido (README §7)', async () => {
+    mountPanel({ [HISTORY]: PENDING })
+
+    // A classe e a do Tailwind: `motion-safe:` so vale sob
+    // `prefers-reduced-motion: no-preference`. Um `animate-pulse` solto
+    // pulsaria para quem pediu menos movimento.
+    const bars = Array.from(
+      screen.getByTestId('tutor-history-loading').querySelectorAll('[aria-hidden="true"]'),
+    )
+    expect(bars).toHaveLength(3)
+    for (const bar of bars) {
+      const classes = bar.className.split(/\s+/)
+      expect(classes).toContain('motion-safe:animate-pulse')
+      expect(classes).not.toContain('animate-pulse')
+    }
+    await waitFor(() => {
+      expect(input()).toBeEnabled()
+    })
+  })
+
   it('P3 vazio: a saudacao da interface, e nao uma fala da Tifa', async () => {
     mountPanel({})
 
