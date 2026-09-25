@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { CycleSection } from '../features/missions/CycleSection'
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
 
@@ -13,10 +14,11 @@ import { TutorPanel } from '../features/tutoring/TutorPanel'
  * O §7 preve mais coisa aqui (proxima missao, XP, progresso, painel da Tifa,
  * navegacao lateral). Este e o recorte que o mesmo §7 autoriza: so o que tem
  * API. O quadro de missoes veio no 1a; o painel da Tifa entrou no 1b-2, ao
- * lado do quadro. A pagina continua sem regra: compoe duas features, e nenhuma
- * das duas sabe da outra -- quando a Tifa cria uma missao, e a PAGINA que pede
- * ao quadro para recarregar, pelo `ref` do `MissionList`. Estrutura vazia
- * esperando conteudo seria interface
+ * lado do quadro; a missao de hoje e a sequencia entraram no B, acima do
+ * quadro de avulsas. A pagina continua sem regra: compoe as features, e
+ * nenhuma delas sabe da outra -- quando a Tifa cria uma missao, e a PAGINA
+ * que pede ao quadro para recarregar, pelo `ref` do `MissionList`. Estrutura
+ * vazia esperando conteudo seria interface
  * que promete o que nao existe.
  */
 export function Headquarters() {
@@ -43,6 +45,7 @@ export function Headquarters() {
             O que está em aberto, com prazo e recompensa.
           </p>
         </header>
+        <CycleSection />
         <MissionList ref={board} />
       </main>
       {/* O `#missions-heading` e o `id` do titulo do quadro. A pagina e quem

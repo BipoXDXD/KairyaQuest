@@ -6,10 +6,18 @@ import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { stubViewport } from '../test/viewport'
 import { Headquarters } from './Headquarters'
 
-/** A pagina busca tres recursos na montagem: missoes, status e historico da Tifa. */
+/** A pagina busca quatro recursos na montagem: ciclo, missoes, status e historico da Tifa. */
 function stubPage() {
   stubViewport('desktop')
   return routeFetch({
+    'GET /api/cycle': () =>
+      Response.json({
+        today: '2026-09-23',
+        mission: null,
+        streak: 0,
+        days_to_milestone: 7,
+        special: null,
+      }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
     'GET /api/tutoring/messages': () => Response.json([]),
@@ -41,13 +49,29 @@ describe('Headquarters', () => {
     expect(screen.getByTestId('missions')).toBeInTheDocument()
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
+    await screen.findByTestId('cycle-no-plan')
     // Uma ida a rede por recurso, e cada uma e de uma feature: a pagina nao
     // chama a API. Contar o total deixou de servir quando a pagina passou a
-    // compor duas features (1b-2).
+    // compor mais de uma feature (1b-2, e agora o ciclo no B).
+    expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(1)
     expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
     expect(requestsTo(fetchMock, 'GET /api/tutoring/status')).toHaveLength(1)
     expect(requestsTo(fetchMock, 'GET /api/tutoring/messages')).toHaveLength(1)
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('compoe a missao de hoje acima do quadro de avulsas', async () => {
+    stubPage()
+
+    render(<Headquarters />)
+
+    await screen.findByTestId('missions-empty')
+    await screen.findByTestId('tutor-greeting')
+    await screen.findByTestId('cycle-no-plan')
+    expect(
+      screen.getByTestId('cycle').compareDocumentPosition(screen.getByTestId('missions')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
   })
 
   it('compoe o painel da Tifa ao lado do quadro', async () => {
