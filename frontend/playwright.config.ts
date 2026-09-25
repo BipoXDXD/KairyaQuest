@@ -13,6 +13,14 @@ import { API_URL, FALSO_URL, WEB_URL } from './tests/e2e/servers'
  */
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
+/**
+ * As portas saem de `servers.ts`, a fonte unica -- nenhuma e escrita aqui.
+ * Com `FOCUSQUEST_E2E_PORT_OFFSET` (pendencia 19), as tres se deslocam juntas;
+ * uma porta escrita a mao neste arquivo ficaria para tras, e o gate de um
+ * worktree subiria um servidor na porta do gate de outro.
+ */
+const porta = (url: string): string => new URL(url).port
+
 export default defineConfig({
   testDir: './tests/e2e',
 
@@ -57,7 +65,7 @@ export default defineConfig({
       // O MESMO servidor falso do pytest, como processo, com o controle HTTP
       // de `/_control/`. PYTHONPATH=tests porque o pacote e `integration`
       // (como o pytest o importa), e nao `tests.integration`.
-      command: `uv run python -m integration.falso_do_e2e --porta ${new URL(FALSO_URL).port}`,
+      command: `uv run python -m integration.falso_do_e2e --porta ${porta(FALSO_URL)}`,
       cwd: REPO_ROOT,
       env: { PYTHONPATH: 'tests' },
       url: `${FALSO_URL}/_control/requests`,
@@ -69,8 +77,7 @@ export default defineConfig({
     {
       // O script aponta FOCUSQUEST_DATABASE_URL para o banco de TESTE antes
       // de trocar de processo para o uvicorn. Ver scripts/e2e-env.sh.
-      command:
-        './scripts/e2e-env.sh uv run uvicorn focusquest.main:app --host 127.0.0.1 --port 8100',
+      command: `./scripts/e2e-env.sh uv run uvicorn focusquest.main:app --host 127.0.0.1 --port ${porta(API_URL)}`,
       cwd: REPO_ROOT,
       // `/ready` e nao `/health`: o `/health` responde 200 sem tocar no banco,
       // entao ele aprovaria uma API que nao consegue consultar nada. O
@@ -93,7 +100,7 @@ export default defineConfig({
       // `vite preview` e nao `vite dev`: o que o cenario visita e o BUILD de
       // producao, o mesmo artefato que iria para o ar. O `make check-e2e`
       // roda o build antes, e e dele que o preview serve.
-      command: 'npx vite preview --host 127.0.0.1 --port 5273 --strictPort',
+      command: `npx vite preview --host 127.0.0.1 --port ${porta(WEB_URL)} --strictPort`,
       url: WEB_URL,
       reuseExistingServer: false,
       timeout: 120_000,

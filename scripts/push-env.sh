@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # Biblioteca do scripts/check-push.sh: leva a configuracao de banco do .env do
 # repositorio principal para o ambiente do worktree de validacao, e RECUSA o
-# push quando ela falta. O PORQUE de o worktree precisar disso esta no
+# push quando ela falta; e isola o gate do push em banco e portas proprios
+# (isolar_gate_do_push, no fim do arquivo). O PORQUE de o worktree precisar disso esta no
 # check-push.sh, junto da chamada; aqui mora so o mecanismo.
 #
 # E carregada com "." (source), nao executada: a funcao precisa exportar no
@@ -88,4 +89,67 @@ exportar_env_focusquest() {
     echo "!! NAO existe a opcao de pular o check-api: gate cego nao e gate" >&2
     return 1
   fi
+}
+
+# ---------------------------------------------------------------------------
+# isolar_gate_do_push
+# ---------------------------------------------------------------------------
+# Pendencia 19. Depois de exportar_env_focusquest, o worktree de validacao
+# teria o MESMO banco de teste e as MESMAS portas do E2E do worktree que
+# empurra -- e um push colidiria com um "make check" rodando ali (o DROP
+# SCHEMA de um derruba o E2E do outro; as portas fixas recusam o segundo
+# servidor). Esta funcao troca as duas coisas, so no ambiente do gate do push:
+#
+#  - O banco: o nome de teste de QUEM empurra ganha "_push" antes do "_test"
+#    (focusquest_test -> focusquest_push_test; focusquest_gate_test ->
+#    focusquest_gate_push_test). Continua terminando em "_test", entao a guarda
+#    do DROP SCHEMA vale para ele, e cada worktree tem o seu banco de push. O
+#    banco nasce sozinho no gate (fixture "engine" da suite pytest).
+#
+#  - As portas: deslocamento do worktree + FQ_RESERVA_DO_PUSH. A faixa inteira
+#    vai de 0 a 49 (o limite do servers.ts e do Settings); por convencao, 0 a 24
+#    e dos worktrees e 25 a 49, do push. O push de um worktree nunca cai no de
+#    outro (deslocamentos distintos somados a mesma reserva) nem num worktree.
+#
+# Recusa -- fechada, com a instrucao -- um banco de teste sem o sufixo "_test"
+# (nao ha de onde derivar, e e o erro que a guarda do DROP existe para pegar) e
+# um deslocamento fora de 0 a 24. Retorna 1 na recusa; mesma regra de chamada
+# de exportar_env_focusquest (sem "||" nem "if" em volta).
+FQ_RESERVA_DO_PUSH=25
+
+# banco_do_push NOME_DE_TESTE -- imprime o banco do gate do push derivado de
+# um banco de teste que termina em "_test" (quem chama confere o sufixo):
+# "_push" entra antes do "_test". Fonte unica da regra: o isolar_gate_do_push
+# a usa para o push, e o scripts/novo-worktree.sh, para recusar um nome de
+# worktree cujo banco colidiria com o banco do push de alguem.
+banco_do_push() {
+  printf '%s' "${1%_test}_push_test"
+}
+
+isolar_gate_do_push() {
+  local url base consulta nome deslocamento banco_push
+
+  url="${FOCUSQUEST_TEST_DATABASE_URL:-}"
+  # A query vem depois do PRIMEIRO "?", e pode conter "/" e ate "_test": o nome
+  # do banco e o ultimo segmento do caminho ANTES dela.
+  base="${url%%\?*}"
+  consulta="${url:${#base}}"
+  nome="${base##*/}"
+  if [ "$nome" = "$base" ] || ! [[ $nome =~ ^.+_test$ ]]; then
+    echo "!! o banco de teste '${nome}' nao e um nome que termine em _test: nao ha banco proprio para derivar ao gate do push, push rejeitado" >&2
+    echo "!! confira FOCUSQUEST_TEST_DATABASE_URL no .env (ou no ambiente) de quem empurra" >&2
+    return 1
+  fi
+
+  deslocamento="${FOCUSQUEST_E2E_PORT_OFFSET:-0}"
+  if ! [[ $deslocamento =~ ^[0-9]+$ ]] || ((10#$deslocamento >= FQ_RESERVA_DO_PUSH)); then
+    echo "!! FOCUSQUEST_E2E_PORT_OFFSET='${deslocamento}' fora da faixa dos worktrees: esperado um inteiro de 0 a $((FQ_RESERVA_DO_PUSH - 1)), push rejeitado" >&2
+    echo "!! de ${FQ_RESERVA_DO_PUSH} a $((2 * FQ_RESERVA_DO_PUSH - 1)) a faixa e do proprio pre-push (deslocamento do worktree + ${FQ_RESERVA_DO_PUSH}); ver docs/QUALITY.md secao 6" >&2
+    return 1
+  fi
+
+  banco_push="$(banco_do_push "$nome")"
+  export FOCUSQUEST_TEST_DATABASE_URL="${base%/*}/${banco_push}${consulta}"
+  export FOCUSQUEST_E2E_PORT_OFFSET="$((10#$deslocamento + FQ_RESERVA_DO_PUSH))"
+  echo "==> gate do push isolado: banco ${banco_push}, deslocamento das portas do E2E ${FOCUSQUEST_E2E_PORT_OFFSET}"
 }

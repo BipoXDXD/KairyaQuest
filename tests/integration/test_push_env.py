@@ -30,6 +30,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parents[2]
 BIBLIOTECA = RAIZ / "scripts" / "push-env.sh"
 CHECK_PUSH = RAIZ / "scripts" / "check-push.sh"
@@ -214,3 +216,184 @@ def test_check_push_recusa_pela_guarda_antes_de_tocar_no_git(tmp_path: Path) -> 
     ) in resultado.stderr
     assert "nada foi validado" not in resultado.stderr
     assert not marcador.exists()
+
+
+# ---------------------------------------------------------------------------
+# Isolamento do gate do push (pendencia 19): banco e portas proprios, para um
+# push nao colidir com um `make check` rodando no mesmo worktree nem em outro.
+# ---------------------------------------------------------------------------
+
+HARNESS_ISOLADO = (
+    'set -euo pipefail; . "$1"; exportar_env_focusquest "$2"; '
+    'isolar_gate_do_push; shift 2; exec "$@"'
+)
+PREFIXO = "postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/"
+
+
+def _isolar(
+    tmp_path: Path, conteudo_extra: str, comando: list[str], url_teste: str = URL_TESTE
+) -> subprocess.CompletedProcess[str]:
+    arquivo_env = tmp_path / ".env"
+    arquivo_env.write_text(
+        f"FOCUSQUEST_DATABASE_URL={URL_DEV}\n"
+        f"FOCUSQUEST_TEST_DATABASE_URL={url_teste}\n" + conteudo_extra
+    )
+    return subprocess.run(
+        [
+            "bash",
+            "-c",
+            HARNESS_ISOLADO,
+            "harness",
+            str(BIBLIOTECA),
+            str(arquivo_env),
+            *comando,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_ambiente_sem_focusquest(),
+    )
+
+
+def _ambiente_do_filho(resultado: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    assert resultado.returncode == 0, resultado.stderr
+    return dict(
+        linha.split("=", 1)
+        for linha in resultado.stdout.splitlines()
+        if linha.startswith("FOCUSQUEST_")
+    )
+
+
+def test_o_push_usa_um_banco_proprio_derivado_do_de_teste(tmp_path: Path) -> None:
+    """`focusquest_test` vira `focusquest_push_test`: outro banco, no mesmo
+    servidor, com o nome AINDA terminando em `_test` (a guarda do DROP
+    continua valendo para ele)."""
+    filho = _ambiente_do_filho(_isolar(tmp_path, "", ["env"]))
+    assert filho["FOCUSQUEST_TEST_DATABASE_URL"] == PREFIXO + "focusquest_push_test"
+    # O banco de desenvolvimento nao muda: o gate nao o usa, e trocar um
+    # endereco que ninguem pediu para trocar seria surpresa.
+    assert filho["FOCUSQUEST_DATABASE_URL"] == URL_DEV
+
+
+def test_o_banco_do_push_de_um_worktree_e_so_dele(tmp_path: Path) -> None:
+    """Dois worktrees empurrando ao mesmo tempo nao dividem o banco do push:
+    o nome deriva do banco de teste de QUEM empurra. A query da URL atravessa
+    intacta -- inclusive com `/` e `_test` dentro dela."""
+    url = PREFIXO + "focusquest_gate_test?options=-c%20a/b_test"
+    filho = _ambiente_do_filho(_isolar(tmp_path, "", ["env"], url_teste=url))
+    assert filho["FOCUSQUEST_TEST_DATABASE_URL"] == (
+        PREFIXO + "focusquest_gate_push_test?options=-c%20a/b_test"
+    )
+
+
+def test_o_push_desloca_as_portas_para_a_faixa_reservada(tmp_path: Path) -> None:
+    """Sem deslocamento no `.env` (o worktree principal, 0), o push usa 25."""
+    filho = _ambiente_do_filho(_isolar(tmp_path, "", ["env"]))
+    assert filho["FOCUSQUEST_E2E_PORT_OFFSET"] == "25"
+
+
+def test_o_push_de_um_worktree_deslocado_soma_a_reserva(tmp_path: Path) -> None:
+    """Worktree com 7 empurra com 32: distinto de todo worktree (0 a 24) e do
+    push de qualquer outro worktree (que soma 25 a um deslocamento distinto)."""
+    filho = _ambiente_do_filho(
+        _isolar(tmp_path, "FOCUSQUEST_E2E_PORT_OFFSET=7\n", ["env"])
+    )
+    assert filho["FOCUSQUEST_E2E_PORT_OFFSET"] == "32"
+
+
+def test_deslocamento_vazio_no_env_conta_como_zero(tmp_path: Path) -> None:
+    filho = _ambiente_do_filho(
+        _isolar(tmp_path, "FOCUSQUEST_E2E_PORT_OFFSET=\n", ["env"])
+    )
+    assert filho["FOCUSQUEST_E2E_PORT_OFFSET"] == "25"
+
+
+@pytest.mark.parametrize("valor", ["25", "49", "abc", "-1", "1.5"])
+def test_recusa_o_push_com_deslocamento_fora_da_faixa_dos_worktrees(
+    tmp_path: Path, valor: str
+) -> None:
+    """De 25 em diante a faixa e do push: um worktree ali empurraria com 50+,
+    fora do limite -- e o push de um colidiria com o `make check` de outro."""
+    resultado = _isolar(
+        tmp_path,
+        f"FOCUSQUEST_E2E_PORT_OFFSET={valor}\n",
+        ["echo", "A GUARDA DEIXOU PASSAR"],
+    )
+    assert resultado.returncode != 0
+    assert "FOCUSQUEST_E2E_PORT_OFFSET" in resultado.stderr
+    assert "de 0 a 24" in resultado.stderr
+    assert "push rejeitado" in resultado.stderr
+    assert "A GUARDA DEIXOU PASSAR" not in resultado.stdout
+
+
+@pytest.mark.parametrize(
+    "url", [URL_DEV, PREFIXO + "_test", PREFIXO + "focusquest_testes"]
+)
+def test_recusa_o_push_se_o_banco_de_teste_nao_termina_em_test(
+    tmp_path: Path, url: str
+) -> None:
+    """Sem o sufixo nao ha de onde derivar um banco `_push_test` -- e um
+    `FOCUSQUEST_TEST_DATABASE_URL` apontado para o banco de desenvolvimento e
+    exatamente o erro que a guarda do DROP existe para pegar. Recusa aqui, com
+    a instrucao, em vez de levar o erro ao gate do worktree."""
+    resultado = _isolar(tmp_path, "", ["echo", "A GUARDA DEIXOU PASSAR"], url_teste=url)
+    assert resultado.returncode != 0
+    assert "termine em _test" in resultado.stderr
+    assert "push rejeitado" in resultado.stderr
+    assert "A GUARDA DEIXOU PASSAR" not in resultado.stdout
+
+
+def _check_push_numa_copia(
+    tmp_path: Path, conteudo_env: str
+) -> subprocess.CompletedProcess[str]:
+    """Uma COPIA do `check-push.sh` numa raiz com o `.env` dado, sem ref
+    nenhuma na entrada e com um `git` falso que falha se for chamado."""
+    raiz = tmp_path / "raiz"
+    scripts = raiz / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(CHECK_PUSH, scripts / "check-push.sh")
+    shutil.copy2(BIBLIOTECA, scripts / "push-env.sh")
+    (raiz / ".env").write_text(conteudo_env)
+
+    bin_falso = tmp_path / "bin"
+    bin_falso.mkdir()
+    git_falso = bin_falso / "git"
+    git_falso.write_text("#!/bin/sh\nexit 97\n")
+    git_falso.chmod(0o755)
+
+    ambiente = _ambiente_sem_focusquest(
+        PATH=f"{bin_falso}{os.pathsep}{os.environ['PATH']}"
+    )
+    for chave in list(ambiente):
+        if chave.startswith("PRE_COMMIT_"):
+            del ambiente[chave]
+    return subprocess.run(
+        [str(scripts / "check-push.sh")],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env=ambiente,
+    )
+
+
+def test_check_push_isola_o_gate_antes_de_validar(tmp_path: Path) -> None:
+    """A outra ponta: o `check-push.sh` de verdade chama o isolamento, e o
+    anuncia. Sem ref na entrada ele termina em "nada foi validado" -- o que
+    prova que passou pelo isolamento SEM recusar."""
+    resultado = _check_push_numa_copia(tmp_path, CONFIG_COMPLETA)
+    assert (
+        "==> gate do push isolado: banco focusquest_push_test, "
+        "deslocamento das portas do E2E 25"
+    ) in resultado.stdout
+    assert "nada foi validado" in resultado.stderr
+
+
+def test_check_push_recusa_pelo_isolamento(tmp_path: Path) -> None:
+    resultado = _check_push_numa_copia(
+        tmp_path, CONFIG_COMPLETA + "FOCUSQUEST_E2E_PORT_OFFSET=30\n"
+    )
+    assert resultado.returncode == 1
+    assert "de 0 a 24" in resultado.stderr
+    assert "nada foi validado" not in resultado.stderr

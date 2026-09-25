@@ -50,7 +50,10 @@ ser separada do `make bootstrap` e o papel de cada passo, está em
   produto inteiro. Preserve o que já existe: não refaça o ambiente, não rode
   scaffold por cima, não mova arquivos por estética.
 - **Um implementador por worktree.** Separe branches, diretórios, portas e
-  bancos. Revisar o trabalho de outro agente **não** autoriza editar a árvore
+  bancos — `scripts/novo-worktree.sh <nome>` cria o worktree com banco de
+  teste e portas do E2E próprios (`docs/QUALITY.md`, "Primeiro uso após
+  clonar"). Não rode `make db-up` fora do worktree principal: o compose
+  recriaria o container do PostgreSQL de todos. Revisar o trabalho de outro agente **não** autoriza editar a árvore
   dele.
 - **Empurre uma ref por vez.** O framework `pre-commit` só expõe **uma** ref
   ao hook `pre-push`; um `git push origin branch-a branch-b` leva as demais
@@ -128,8 +131,12 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   `check-api` roda `uv lock --check`, Ruff lint, Ruff `format --check`, mypy
   estrito sobre `src tests alembic` e pytest com cobertura de 100%; ele e o
   `check-e2e` precisam de um PostgreSQL de pé e **não podem rodar ao mesmo
-  tempo na mesma máquina** — os dois usam o banco `focusquest_test`, e a
-  suíte pytest faz `DROP SCHEMA` nele (`docs/QUALITY.md` §4).
+  tempo no mesmo worktree** — os dois usam o banco de teste dele, e a suíte
+  pytest faz `DROP SCHEMA` nele. **Entre worktrees, podem**, desde que cada
+  um tenha banco de teste (nome próprio terminado em `_test`) e
+  `FOCUSQUEST_E2E_PORT_OFFSET` próprios — `scripts/novo-worktree.sh <nome>`
+  cria o worktree já assim; o pre-push isola o próprio gate sozinho
+  (`docs/QUALITY.md` §4 e §6).
   **Fonte de verdade:** o `Makefile`. Até o alvo existir, a fonte era o
   `docs/QUALITY.md` §4, porque um contrato sobre algo inexistente só podia
   morar num documento; com as receitas escritas, este item e aquela seção
