@@ -1,10 +1,11 @@
 """A configuracao vem do ambiente, sem valor embutido para credencial."""
 
 import os
+import re
 from pathlib import Path
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from focusquest.core.config import Settings
 
@@ -192,3 +193,76 @@ def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
     settings = Settings()
     assert settings.anthropic_api_key is not None
     assert settings.anthropic_base_url == "http://127.0.0.1:9"
+
+
+# ---------------------------------------------------------------------------
+# Deslocamento das portas do E2E (pendencia 19)
+# ---------------------------------------------------------------------------
+
+SERVERS_TS = (
+    Path(__file__).resolve().parents[2] / "frontend" / "tests" / "e2e" / "servers.ts"
+)
+
+
+def test_o_deslocamento_das_portas_do_e2e_e_zero_por_padrao(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Quem nao configura nada ve as portas de sempre (8100, 5273, 8150)."""
+    assert _settings_do_arquivo(monkeypatch, tmp_path, "").e2e_port_offset == 0
+
+
+def test_o_deslocamento_das_portas_do_e2e_vem_do_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Campo declarado: sem ele, o `.env` de um worktree com a linha seria
+    recusado inteiro por `extra_forbidden`."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, "FOCUSQUEST_E2E_PORT_OFFSET=7\n"
+    )
+    assert settings.e2e_port_offset == 7
+
+
+@pytest.mark.parametrize("valor", ["-1", "50", "abc", "1.5"])
+def test_o_deslocamento_das_portas_do_e2e_recusa_fora_da_faixa(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str
+) -> None:
+    """Fora de 0..49 as faixas das portas se sobrepoem: com 50, a API
+    (8100 + 50) cairia na porta do falso de quem usa 0 (8150).
+
+    O TIPO do erro e conferido, e nao so o nome do campo: sem o campo
+    declarado, a mesma linha tambem reprova -- por `extra_forbidden`, que cita
+    o mesmo nome. Afirmar so o nome deixaria este teste verde sem a validacao.
+    """
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(
+            monkeypatch, tmp_path, f"FOCUSQUEST_E2E_PORT_OFFSET={valor}\n"
+        )
+    assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
+        (
+            ("e2e_port_offset",),
+            {"-1": "greater_than_equal", "50": "less_than_equal"}.get(
+                valor, "int_parsing"
+            ),
+        )
+    ]
+
+
+def test_o_limite_do_deslocamento_e_o_mesmo_do_servers_ts() -> None:
+    """Duas linguagens, um limite: o `servers.ts` o DERIVA das portas-base (o
+    deslocamento maximo e o vao entre a API e o falso, menos um), e o
+    `Settings` o declara. Se alguem mudar uma porta-base no TypeScript, este
+    teste acusa o limite do Python que ficou para tras."""
+    fonte = SERVERS_TS.read_text()
+
+    def porta(nome: str) -> int:
+        achado = re.search(rf"^const {nome} = (\d+)$", fonte, re.MULTILINE)
+        assert achado is not None, nome
+        return int(achado.group(1))
+
+    maximo_do_ts = porta("PORTA_DO_FALSO") - porta("PORTA_DA_API") - 1
+    limites = Settings.model_fields["e2e_port_offset"].metadata
+    assert [getattr(m, "ge", None) for m in limites if hasattr(m, "ge")] == [0]
+    assert [getattr(m, "le", None) for m in limites if hasattr(m, "le")] == [
+        maximo_do_ts
+    ]
+    assert "DESLOCAMENTO_MAXIMO = PORTA_DO_FALSO - PORTA_DA_API - 1" in fonte

@@ -304,7 +304,8 @@ class ServidorAnthropicFalso:
     roteiro: Roteiro = field(default_factory=Roteiro)
     recebidas: list[Recebida] = field(default_factory=list)
     liberar: threading.Event = field(default_factory=threading.Event)
-    # Porta 0: o sistema escolhe uma livre (o pytest). O E2E passa a 8150.
+    # Porta 0: o sistema escolhe uma livre (o pytest). O E2E passa a 8150 mais
+    # o deslocamento do worktree (`frontend/tests/e2e/servers.ts`).
     porta: int = 0
     tratador: type[TratadorDoFalso] = TratadorDoFalso
 
