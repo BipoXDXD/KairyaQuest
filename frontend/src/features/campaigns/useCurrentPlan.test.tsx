@@ -156,6 +156,291 @@ describe('useCurrentPlan', () => {
     expect(result.current.state).toEqual({ status: 'loading' })
   })
 
+  it('dois refresh concorrentes em que o primeiro responde por ultimo: fica o dado do segundo', async () => {
+    // `visibilitychange` e `focus` podem chamar `refresh()` os dois quando a
+    // aba volta -- duas chamadas ficam em voo ao mesmo tempo, sem garantia
+    // de que a mais VELHA responde primeiro. Sem a guarda de sequencia, a
+    // resposta do primeiro chegando por ultimo sobrescreveria o dado do
+    // segundo com um dado desatualizado.
+    let resolverPrimeiro: (resposta: Response) => void = () => undefined
+    let resolverSegundo: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return Response.json({ plan: plano })
+        if (call === 2)
+          return new Promise<Response>((resolve) => {
+            resolverPrimeiro = resolve
+          })
+        if (call === 3)
+          return new Promise<Response>((resolve) => {
+            resolverSegundo = resolve
+          })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.refresh()
+      result.current.refresh()
+    })
+
+    // O SEGUNDO (mais recente) responde primeiro, com sucesso.
+    await act(async () => {
+      resolverSegundo(Response.json({ plan: planoAtualizado }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+
+    // O PRIMEIRO (mais velho) so responde DEPOIS, com um dado diferente --
+    // e ignorado.
+    const planoDesatualizado: Plan = {
+      ...plano,
+      special: { availability: 'bloqueada', progress: 1, mission: null },
+    }
+    await act(async () => {
+      resolverPrimeiro(Response.json({ plan: planoDesatualizado }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+  })
+
+  it('o primeiro refresh tem sucesso e o segundo (mais recente) falha depois: o aviso reflete o pedido mais recente', async () => {
+    // Mesma decisao de desenho do `useCycle`: a resposta que conta e sempre
+    // a do pedido mais RECENTE, sucesso ou falha, sem tratar erro como caso
+    // especial.
+    let resolverPrimeiro: (resposta: Response) => void = () => undefined
+    let resolverSegundo: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return Response.json({ plan: plano })
+        if (call === 2)
+          return new Promise<Response>((resolve) => {
+            resolverPrimeiro = resolve
+          })
+        if (call === 3)
+          return new Promise<Response>((resolve) => {
+            resolverSegundo = resolve
+          })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.refresh()
+      result.current.refresh()
+    })
+
+    // O PRIMEIRO (mais velho) responde com sucesso primeiro -- mas o
+    // SEGUNDO ja esta em voo, entao esta resposta e descartada (o plano
+    // continua o da carga inicial).
+    await act(async () => {
+      resolverPrimeiro(Response.json({ plan: planoAtualizado }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: plano,
+      refreshFailed: false,
+    })
+
+    // O SEGUNDO (mais recente) falha depois: e o unico que conta.
+    await act(async () => {
+      resolverSegundo(new Response(null, { status: 500 }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: plano,
+      refreshFailed: true,
+    })
+  })
+
+  it('o segundo refresh (mais recente) tem sucesso, e o primeiro (mais velho) falha por ultimo: sem aviso de desatualizado', async () => {
+    let resolverPrimeiro: (resposta: Response) => void = () => undefined
+    let resolverSegundo: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return Response.json({ plan: plano })
+        if (call === 2)
+          return new Promise<Response>((resolve) => {
+            resolverPrimeiro = resolve
+          })
+        if (call === 3)
+          return new Promise<Response>((resolve) => {
+            resolverSegundo = resolve
+          })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.refresh()
+      result.current.refresh()
+    })
+
+    // O SEGUNDO (mais recente) tem sucesso primeiro.
+    await act(async () => {
+      resolverSegundo(Response.json({ plan: planoAtualizado }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+
+    // O PRIMEIRO (mais velho) falha por ultimo -- e ignorado: nao liga o
+    // aviso por cima de um dado que ja esta atualizado.
+    await act(async () => {
+      resolverPrimeiro(new Response(null, { status: 500 }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+  })
+
+  it('um reload que comeca com um refresh em voo invalida a resposta atrasada do refresh', async () => {
+    let resolverRefresh: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return Response.json({ plan: plano })
+        if (call === 2)
+          return new Promise<Response>((resolve) => {
+            resolverRefresh = resolve
+          })
+        if (call === 3) return Response.json({ plan: planoAtualizado })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.refresh() // call 2, fica em voo
+    })
+    act(() => {
+      result.current.reload() // call 3, ja completa
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'loaded',
+        plan: planoAtualizado,
+        refreshFailed: false,
+      })
+    })
+
+    // O refresh antigo (call 2) so responde AGORA, com um dado diferente do
+    // reload -- e ignorado.
+    const planoAntigo: Plan = {
+      ...plano,
+      special: { availability: 'bloqueada', progress: 6, mission: null },
+    }
+    await act(async () => {
+      resolverRefresh(Response.json({ plan: planoAntigo }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+  })
+
+  it('o sucesso do pedido inicial que chega DEPOIS de um refresh mais novo ja ter assentado nao sobrescreve o dado mais novo', async () => {
+    // A mesma guarda de sequencia vale para a carga do EFEITO (montagem),
+    // nao so para `refresh`: aqui e o pedido inicial que fica velho.
+    let resolverInicial: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1)
+          return new Promise<Response>((resolve) => {
+            resolverInicial = resolve
+          })
+        if (call === 2) return Response.json({ plan: planoAtualizado })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    expect(result.current.state).toEqual({ status: 'loading' })
+
+    act(() => {
+      result.current.refresh() // call 2, mais novo -- responde com sucesso primeiro
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'loaded',
+        plan: planoAtualizado,
+        refreshFailed: false,
+      })
+    })
+
+    // O pedido inicial (mais velho) so responde AGORA, com um dado
+    // diferente -- e ignorado.
+    await act(async () => {
+      resolverInicial(Response.json({ plan: plano }))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({
+      status: 'loaded',
+      plan: planoAtualizado,
+      refreshFailed: false,
+    })
+  })
+
+  it('o refresh que falha antes do pedido inicial assentar nao inventa um estado carregado', async () => {
+    // Mesmo raciocinio do `useCycle`: `refresh()` falha antes do pedido
+    // inicial assentar, com o MESMO `id` ainda corrente (nada mais novo
+    // comecou) -- a checagem de `id` deixa passar, e quem decide e o
+    // `atual.status`.
+    let rejeitarRefresh: (error: unknown) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return new Promise<Response>(() => undefined) // inicial fica em voo
+        if (call === 2)
+          return new Promise<Response>((_resolve, reject) => {
+            rejeitarRefresh = reject
+          })
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    expect(result.current.state).toEqual({ status: 'loading' })
+
+    act(() => {
+      result.current.refresh()
+    })
+    await act(async () => {
+      rejeitarRefresh(new Error('falha de rede'))
+      await Promise.resolve()
+    })
+    expect(result.current.state).toEqual({ status: 'loading' })
+  })
+
   it('a aba que volta a ficar visivel atualiza a trilha em silencio', async () => {
     routeFetch({
       'GET /api/plans/current': (_init, call) =>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, requestJson } from '../../shared/api/client'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { CurrentPlan, Plan } from './types'
@@ -51,16 +51,33 @@ function messageFor(error: unknown): string {
 export function useCurrentPlan(): UseCurrentPlanResult {
   const [state, setState] = useState<CurrentPlanState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
+  /**
+   * Sequencia de pedidos, compartilhada entre a carga do efeito (montagem e
+   * `reload`) e o `refresh` silencioso -- mesmo desenho e mesmo motivo do
+   * `useCycle` (achado da revisao da Task 5): `visibilitychange` e `focus`
+   * podem chamar `refresh()` os dois quando a aba volta, e sem esta guarda a
+   * resposta mais VELHA que chegasse por ULTIMO sobrescreveria o estado com
+   * dado desatualizado -- inclusive `refreshFailed`.
+   *
+   * `reload` incrementa a sequencia na hora, entao tambem invalida um
+   * `refresh` que ja estava em voo.
+   */
+  const requestId = useRef(0)
 
   const reload = useCallback(() => {
+    requestId.current += 1
     setState({ status: 'loading' })
     setAttempt((anterior) => anterior + 1)
   }, [])
 
   useEffect(() => {
+    const id = (requestId.current += 1)
     const controller = new AbortController()
     requestJson<CurrentPlan>('/plans/current', controller.signal)
       .then(({ plan }) => {
+        if (requestId.current !== id) {
+          return
+        }
         setState(
           plan === null ? { status: 'no-plan' } : { status: 'loaded', plan, refreshFailed: false },
         )
@@ -69,7 +86,7 @@ export function useCurrentPlan(): UseCurrentPlanResult {
         // Um pedido que NOS cancelamos (StrictMode, troca de tela) nao e falha
         // para mostrar: sem a guarda, a rejeicao tardia dele sobrescreveria a
         // trilha boa com o estado de erro.
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestId.current !== id) {
           return
         }
         setState({ status: 'error', message: messageFor(error) })
@@ -80,15 +97,23 @@ export function useCurrentPlan(): UseCurrentPlanResult {
   }, [attempt])
 
   const refresh = useCallback(() => {
+    const id = (requestId.current += 1)
     requestJson<CurrentPlan>('/plans/current')
       .then(({ plan }) => {
+        if (requestId.current !== id) {
+          return
+        }
         setState(
           plan === null ? { status: 'no-plan' } : { status: 'loaded', plan, refreshFailed: false },
         )
       })
       .catch(() => {
+        if (requestId.current !== id) {
+          return
+        }
         // So marca o que esta carregado: se um reload comecou nesse meio
-        // tempo, a tela esta em "carregando" e o reload decide o resto.
+        // tempo, a tela esta em "carregando" (e a checagem de `id` acima ja
+        // teria voltado antes de chegar aqui) e o reload decide o resto.
         setState((atual) => (atual.status === 'loaded' ? { ...atual, refreshFailed: true } : atual))
       })
   }, [])

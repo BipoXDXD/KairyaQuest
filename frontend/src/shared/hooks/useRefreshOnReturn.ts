@@ -22,10 +22,17 @@ import { useEffect, useRef } from 'react'
  * teste "usa sempre o refresh mais recente..." prova as duas metades: o
  * valor chamado e sempre o novo, e o registro acontece uma vez so.
  *
- * `visibilitychange` e `focus` podem disparar os dois quando a aba volta
- * (o navegador nao garante so um). Dois `refresh` seguidos sao aceitaveis
- * aqui de proposito: nao ha por que juntar os dois eventos num so pedido
- * quando o pior caso e uma segunda chamada de rede a mais.
+ * `visibilitychange` e `focus` podem disparar os dois quando a aba volta (o
+ * navegador nao garante so um), entao este gancho pode chamar `refresh` duas
+ * vezes seguidas de proposito -- ele nao junta os dois eventos num so
+ * pedido. Isso NAO e "uma chamada de rede a mais" e mais nada: duas chamadas
+ * concorrentes de `refresh` sem nenhuma guarda deixariam a resposta mais
+ * VELHA, se chegasse por ULTIMO, sobrescrever a mais nova com dado
+ * desatualizado (achado da revisao da Task 5). Quem fecha esse risco e
+ * `useCycle` e `useCurrentPlan`, e nao este gancho: os dois tem uma
+ * sequencia de pedidos (`requestId`) que so deixa a resposta do pedido mais
+ * RECENTE mexer no estado, entao chamar `refresh` duas vezes aqui e seguro
+ * por CONSTRUCAO do lado de quem chama, nao por sorte na ordem de chegada.
  *
  * A `ref` e atualizada dentro de um `useEffect` PROPRIO, e nao durante a
  * renderizacao: escrever em `ref.current` no corpo do componente e o que a
