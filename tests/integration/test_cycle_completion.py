@@ -146,9 +146,18 @@ def test_operacao_nova_sobre_diaria_concluida_e_transicao_ilegal_em_qualquer_dia
         _concluir(session, diaria, "op-2", ao_meio_dia(QUARTA + timedelta(days=1)))
 
 
-def test_a_ocultacao_vem_antes_do_reuso(session: Session) -> None:
-    """Uma chave gasta em outra missao, mandada ao id de uma diaria oculta, tem
-    de dar o 404 de "nao existe" -- o 409 de reuso revelaria que ela existe."""
+@pytest.mark.parametrize(
+    "cenario",
+    ["diaria_de_dia_futuro", "especial_bloqueada", "diaria_de_semana_seguinte"],
+)
+def test_a_ocultacao_vem_antes_do_reuso(session: Session, cenario: str) -> None:
+    """Uma chave gasta em outra missao, mandada ao id de uma missao oculta, tem
+    de dar o 404 de "nao existe" -- o 409 de reuso revelaria que ela existe.
+
+    Testado nos tres jeitos de ocultacao que C11 preve: a diaria de um dia
+    futuro NA MESMA semana, a especial ainda bloqueada (sem marco) e a diaria
+    de uma semana futura, que so existe porque o plano dela ja foi criado.
+    """
     _plano(session)
     avulsa = criar_missao(
         session,
@@ -160,13 +169,25 @@ def test_a_ocultacao_vem_antes_do_reuso(session: Session) -> None:
         deadline=ao_meio_dia(QUARTA),
     )
     _concluir(session, avulsa, "op-gasta", ao_meio_dia(QUARTA))
+
+    if cenario == "diaria_de_dia_futuro":
+        missao_oculta = _diaria(session, QUARTA + timedelta(days=1))
+    elif cenario == "especial_bloqueada":
+        missao_oculta = session.scalars(
+            select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+        ).one()
+    else:
+        semana_seguinte = SEGUNDA + timedelta(days=7)
+        _plano(session, semana=semana_seguinte)
+        missao_oculta = session.scalars(
+            select(Mission).where(
+                Mission.mission_type == MissionType.DIARIA,
+                Mission.day == semana_seguinte,
+            )
+        ).one()
+
     with pytest.raises(MissaoNaoEncontradaError):
-        _concluir(
-            session,
-            _diaria(session, QUARTA + timedelta(days=1)),
-            "op-gasta",
-            ao_meio_dia(QUARTA),
-        )
+        _concluir(session, missao_oculta, "op-gasta", ao_meio_dia(QUARTA))
 
 
 def test_especial_fora_da_janela_esta_expirada(session: Session) -> None:
@@ -180,6 +201,24 @@ def test_especial_fora_da_janela_esta_expirada(session: Session) -> None:
     fechada = datetime(2026, 9, 29, 3, tzinfo=UTC)  # terca 00:00 em SP
     with pytest.raises(MissaoExpiradaError):
         _concluir(session, especial, "op-e", fechada)
+
+
+def test_conclui_a_especial_dentro_da_janela(session: Session) -> None:
+    """O caminho positivo que falta ao lado de `test_especial_fora_da_janela...`:
+    a semana inteira concluida destrava a especial, e ela pode ser concluida
+    de verdade -- estado e instante gravados, como qualquer outra missao."""
+    _plano(session, criado=SEGUNDA)
+    for i in range(7):
+        dia = SEGUNDA + timedelta(days=i)
+        _concluir(session, _diaria(session, dia), f"op-{i}", ao_meio_dia(dia))
+    especial = session.scalars(
+        select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+    ).one()
+    marco = SEGUNDA + timedelta(days=6)  # domingo: setima diaria seguida
+    dentro_da_janela = ao_meio_dia(marco)
+    missao = _concluir(session, especial, "op-especial", dentro_da_janela)
+    assert missao.state is MissionState.CONCLUIDA
+    assert missao.completed_at == dentro_da_janela
 
 
 def test_a_avulsa_nao_tem_regra_de_dia(session: Session) -> None:
