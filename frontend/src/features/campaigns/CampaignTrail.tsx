@@ -272,15 +272,14 @@ function TrailLoaded({
 /**
  * Um estado por ramo; `ReactElement` faz um estado novo reprovar o `tsc`.
  *
- * Exportado a parte de `CampaignTrail` para o teste do `trail-stale`
- * (R4): nenhum evento chama `refresh()` ainda (isso e de uma tarefa futura,
- * que liga a trilha a uma conclusao feita no Quartel-General), entao o unico
- * jeito HONESTO de exercitar o ramo `refreshFailed` -- sem inventar uma
- * chamada de rede que nada no Incremento C dispara de verdade -- e dar o
- * estado pronto a esta funcao de apresentacao, do mesmo jeito que ela recebe
- * de `useCurrentPlan` em producao.
+ * Ate a Task 5, esta funcao era exportada a parte para o teste do
+ * `trail-stale` (R4): nenhum evento chamava `refresh()`, entao o unico jeito
+ * de exercitar o ramo `refreshFailed` era dar o estado pronto direto a ela.
+ * Com `useRefreshOnReturn` ligando o `refresh` real (a aba que volta a ficar
+ * visivel), `CampaignTrail.test.tsx` passou a exercitar o mesmo ramo pelo
+ * caminho de verdade -- o export deixou de ter uso e foi removido.
  */
-export function TrailContent({
+function TrailContent({
   state,
   reload,
   onOpenHeadquarters,
@@ -349,10 +348,11 @@ export function TrailContent({
  * `onOpenHeadquarters` (a navegacao, que e da pagina), a orientacao vira um
  * botao.
  *
- * A trilha e lida ao montar. Nenhum evento chama o `refresh` silencioso do
- * `useCurrentPlan` ainda -- isso e de uma tarefa futura, que liga a trilha a
- * uma conclusao feita no Quartel-General -- mas o aviso `trail-stale` ja
- * existe, pronto para quando ele chamar.
+ * A trilha e lida ao montar, e atualizada em silencio (`useRefreshOnReturn`,
+ * dentro de `useCurrentPlan`) quando a aba volta a ficar visivel ou a janela
+ * recebe foco -- fecha o achado "a aba aberta na virada do dia mostra o dia
+ * anterior ate recarregar" (Task 5 do Incremento C). Se essa atualizacao
+ * falhar, o aviso `trail-stale` avisa que a trilha pode estar desatualizada.
  */
 export function CampaignTrail({
   onOpenHeadquarters,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, requestJson } from '../../shared/api/client'
+import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { CurrentPlan, Plan } from './types'
 
 /**
@@ -24,9 +25,8 @@ export interface UseCurrentPlanResult {
   reload: () => void
   /**
    * Atualiza em silencio, SEM passar por "carregando" (mesmo desenho do
-   * `refresh` de `useCycle`). Ainda sem nenhum evento que o chame -- isso e
-   * de uma tarefa futura, que liga a trilha a conclusao feita no
-   * Quartel-General.
+   * `refresh` de `useCycle`). Ligado a `useRefreshOnReturn`: a aba que volta
+   * a ficar visivel, ou a janela que recebe foco, chama este `refresh`.
    */
   refresh: () => void
 }
@@ -92,6 +92,11 @@ export function useCurrentPlan(): UseCurrentPlanResult {
         setState((atual) => (atual.status === 'loaded' ? { ...atual, refreshFailed: true } : atual))
       })
   }, [])
+
+  // A aba que volta a ficar visivel, ou a janela que recebe foco, atualiza a
+  // trilha em silencio -- fecha o achado "a aba aberta na virada do dia
+  // mostra o dia anterior ate recarregar" (Task 5 do Incremento C).
+  useRefreshOnReturn(refresh)
 
   return { state, reload, refresh }
 }

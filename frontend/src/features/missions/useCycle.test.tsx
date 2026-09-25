@@ -133,6 +133,37 @@ describe('useCycle', () => {
     expect(result.current.state).toEqual({ status: 'loading' })
   })
 
+  it('a aba que volta a ficar visivel atualiza o ciclo em silencio (a virada do dia)', async () => {
+    // O cenario da meia-noite: a aba ficou aberta de um dia para o outro, e
+    // `today` precisa mudar sem passar por "carregando" -- e o motivo de
+    // existir o `refresh` silencioso, agora ligado ao evento real.
+    const ontem: Cycle = { ...semPlano, today: '2026-09-23' }
+    const hoje: Cycle = { ...semPlano, today: '2026-09-24' }
+    routeFetch({
+      'GET /api/cycle': (_init, call) => Response.json(call === 1 ? ontem : hoje),
+    })
+    const { result } = renderHook(() => useCycle())
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'loaded', cycle: ontem, refreshFailed: false })
+    })
+
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    // Logo apos o evento, ainda na mesma volta de eventos: nao virou
+    // "carregando". Se a fiacao usasse `reload` no lugar de `refresh`, este
+    // `state.status` seria `loading` aqui.
+    expect(result.current.state.status).toBe('loaded')
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'loaded', cycle: hoje, refreshFailed: false })
+    })
+  })
+
   it('um pedido cancelado que so rejeita DEPOIS do bom ja ter assentado nao vira erro', async () => {
     // A guarda `controller.signal.aborted` existe para o pedido cancelado que
     // demora a notificar: o StrictMode (ou uma troca de tela) aborta o

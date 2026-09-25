@@ -156,6 +156,36 @@ describe('useCurrentPlan', () => {
     expect(result.current.state).toEqual({ status: 'loading' })
   })
 
+  it('a aba que volta a ficar visivel atualiza a trilha em silencio', async () => {
+    routeFetch({
+      'GET /api/plans/current': (_init, call) =>
+        Response.json({ plan: call === 1 ? plano : planoAtualizado }),
+    })
+    const { result } = renderHook(() => useCurrentPlan())
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'loaded', plan: plano, refreshFailed: false })
+    })
+
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    // Logo apos o evento: nao virou "carregando". Se a fiacao usasse `reload`
+    // no lugar de `refresh`, este `state.status` seria `loading` aqui.
+    expect(result.current.state.status).toBe('loaded')
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'loaded',
+        plan: planoAtualizado,
+        refreshFailed: false,
+      })
+    })
+  })
+
   it('um pedido cancelado que so rejeita DEPOIS do bom ja ter assentado nao vira erro', async () => {
     // Mesmo desenho do teste de `useCycle`: a rejeicao do pedido que o
     // StrictMode abortou e ADIADA para depois de o segundo pedido ja ter

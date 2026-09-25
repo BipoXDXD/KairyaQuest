@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
 import { routeFetch } from '../../test/fetchRoutes'
-import { CampaignTrail, TrailContent } from './CampaignTrail'
+import { CampaignTrail } from './CampaignTrail'
 import type { Plan, PlanDay, PlanSpecial } from './types'
 
 /** Uma diaria revelada, com o dia e a disponibilidade pedidos. */
@@ -92,8 +92,17 @@ async function diaDaTrilha(day: string): Promise<HTMLElement> {
   return item
 }
 
+/** Troca `document.visibilityState`, como o navegador faz ao trocar de aba. */
+function setVisibility(state: DocumentVisibilityState): void {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  })
+}
+
 describe('CampaignTrail', () => {
   afterEach(() => {
+    setVisibility('visible')
     vi.unstubAllGlobals()
   })
 
@@ -340,35 +349,49 @@ describe('CampaignTrail', () => {
     expect(within(secao).queryByTestId('trail-go-headquarters')).not.toBeInTheDocument()
   })
 
-  it('quando a atualizacao silenciosa falhou, avisa que a trilha pode estar desatualizada e oferece Atualizar', () => {
-    // Nenhum evento chama `refresh()` no Incremento C (R4 do controlador --
-    // isso e de uma tarefa futura, que liga a trilha a uma conclusao feita no
-    // Quartel-General). `TrailContent` e a funcao de apresentacao que
-    // `CampaignTrail` monta com o estado de `useCurrentPlan`; dar a ela um
-    // `loaded` com `refreshFailed: true` direto prova o mesmo render e o
-    // mesmo efeito (o botao chama `reload`) que a producao vai exercitar
-    // quando a Task 5 ligar o `refresh` a um evento real -- sem inventar uma
-    // chamada de rede que a trilha ainda nao faz de verdade.
-    const reload = vi.fn()
-    render(
-      <TrailContent
-        state={{ status: 'loaded', plan: plano(), refreshFailed: true }}
-        reload={reload}
-      />,
-    )
-
-    const aviso = screen.getByTestId('trail-stale')
-    expect(aviso).toHaveAttribute('role', 'alert')
-    expect(aviso).toHaveTextContent('Não foi possível atualizar a trilha.')
-
-    fireEvent.click(within(aviso).getByRole('button', { name: 'Atualizar' }))
-    expect(reload).toHaveBeenCalledTimes(1)
-  })
-
   it('sem falha na atualizacao, o aviso de trilha desatualizada nao aparece', async () => {
     servir(plano())
     render(<CampaignTrail />)
     await screen.findAllByTestId('trail-day')
     expect(screen.queryByTestId('trail-stale')).not.toBeInTheDocument()
+  })
+
+  it('a aba que volta a ficar visivel atualiza a trilha em silencio; se o GET falhar, ela continua na tela com o aviso trail-stale', async () => {
+    // O caminho REAL da Task 5 (fecha a pendencia da Task 3): antes, o unico
+    // jeito de exercitar `refreshFailed` era dar o estado pronto direto a
+    // `TrailContent`, porque nada chamava `refresh()`. Agora `useRefreshOnReturn`
+    // liga o evento real, e este teste dispara o MESMO evento que o navegador
+    // dispara ao voltar para a aba.
+    const fetchMock = routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1) return Response.json({ plan: plano() })
+        if (call === 2) return new Response(null, { status: 500 })
+        return Response.json({ plan: plano() })
+      },
+    })
+    render(<CampaignTrail />)
+    expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
+    expect(screen.queryByTestId('trail-stale')).not.toBeInTheDocument()
+
+    act(() => {
+      setVisibility('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    // A trilha continua na tela, sem sumir e sem voltar a "carregando",
+    // enquanto o segundo pedido esta em voo.
+    expect(screen.getAllByTestId('trail-day')).toHaveLength(7)
+    expect(screen.queryByTestId('trail-loading')).not.toBeInTheDocument()
+
+    const aviso = await screen.findByTestId('trail-stale')
+    expect(aviso).toHaveAttribute('role', 'alert')
+    expect(aviso).toHaveTextContent('Não foi possível atualizar a trilha.')
+    expect(screen.getAllByTestId('trail-day')).toHaveLength(7)
+
+    fireEvent.click(within(aviso).getByRole('button', { name: 'Atualizar' }))
+    await waitFor(() => {
+      expect(screen.queryByTestId('trail-stale')).not.toBeInTheDocument()
+    })
+    expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })

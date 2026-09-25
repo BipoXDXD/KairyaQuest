@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, requestJson } from '../../shared/api/client'
+import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { Cycle } from './types'
 
 /**
@@ -68,6 +69,11 @@ export function useCycle(): UseCycleResult {
         setState((atual) => (atual.status === 'loaded' ? { ...atual, refreshFailed: true } : atual))
       })
   }, [])
+
+  // A aba que volta a ficar visivel, ou a janela que recebe foco, atualiza o
+  // ciclo em silencio -- fecha o achado "a aba aberta na virada do dia mostra
+  // o dia anterior ate recarregar" (Task 5 do Incremento C).
+  useRefreshOnReturn(refresh)
 
   return { state, reload, refresh }
 }
