@@ -215,6 +215,13 @@ export FQ_TOOLS_DIR="${ROOT}/.tools"
 . "${ROOT}/scripts/push-env.sh"
 exportar_env_focusquest "${ROOT}/.env"
 
+# Banco de teste e portas do E2E PROPRIOS do gate do push (pendencia 19): sem
+# isto, o worktree de validacao usaria o mesmo focusquest_test e as mesmas
+# portas de quem empurra, e o push colidiria com um "make check" rodando ao
+# mesmo tempo. O mecanismo e a faixa estao em scripts/push-env.sh; mesma regra
+# de chamada da linha acima (sem "||" nem "if": a recusa derruba o push).
+isolar_gate_do_push
+
 while read -r ref_local sha_local; do
   [ -n "$ref_local" ] || continue
 
