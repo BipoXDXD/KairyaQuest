@@ -1,0 +1,296 @@
+"""Testes do `scripts/novo-worktree.sh` (pendencia 19).
+
+O script cria um worktree irmao do principal, com banco de teste e portas do
+E2E proprios, para dois gates rodarem ao mesmo tempo. Os testes o executam DE
+VERDADE, mas num repositorio git temporario: uma copia do script (e da
+biblioteca `push-env.sh`, de onde ele tira a reserva de portas do push) fica
+em `<tmp>/FocusQuest/scripts/`, e o script resolve o principal a partir do
+proprio caminho -- nunca encosta no repositorio real.
+
+O `make` do PATH e falso: registra os argumentos num arquivo e sai com zero.
+Assim "roda `make bootstrap`" e verificavel sem `npm ci` nenhum, e "nao roda"
+tambem -- uma recusa que chamasse o `make` deixaria rastro.
+
+Nenhum teste conecta em banco: o script so ESCREVE o nome do banco no `.env`;
+quem o cria e o gate, no primeiro uso (`test_banco_de_teste.py`).
+"""
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+RAIZ = Path(__file__).resolve().parents[2]
+SCRIPT = RAIZ / "scripts" / "novo-worktree.sh"
+BIBLIOTECA = RAIZ / "scripts" / "push-env.sh"
+
+PREFIXO = "postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/"
+ENV_PRINCIPAL = (
+    "# comentario que atravessa\n"
+    f"FOCUSQUEST_DATABASE_URL={PREFIXO}focusquest\n"
+    f"FOCUSQUEST_TEST_DATABASE_URL={PREFIXO}focusquest_test?options=-c%20x\n"
+    "FOCUSQUEST_TUTOR_MODEL=claude-opus-5\n"
+)
+
+
+class Repositorio:
+    """O principal temporario, o `make` falso e o jeito de rodar o script."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.base = tmp_path
+        self.principal = tmp_path / "FocusQuest"
+        self.registro_do_make = tmp_path / "make-chamado"
+        bin_falso = tmp_path / "bin"
+        bin_falso.mkdir()
+        make_falso = bin_falso / "make"
+        make_falso.write_text(f'#!/bin/sh\necho "$@" >> "{self.registro_do_make}"\n')
+        make_falso.chmod(0o755)
+        self.ambiente = {
+            chave: valor
+            for chave, valor in os.environ.items()
+            if not chave.startswith(("FOCUSQUEST_", "GIT_"))
+        } | {
+            "PATH": f"{bin_falso}{os.pathsep}{os.environ['PATH']}",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "teste",
+            "GIT_AUTHOR_EMAIL": "teste@example.invalid",
+            "GIT_COMMITTER_NAME": "teste",
+            "GIT_COMMITTER_EMAIL": "teste@example.invalid",
+        }
+
+        self.principal.mkdir()
+        self.git("init", "-q", "-b", "main")
+        (self.principal / ".gitignore").write_text(".env\n")
+        (self.principal / "README.md").write_text("principal\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "base")
+        scripts = self.principal / "scripts"
+        scripts.mkdir()
+        shutil.copy2(SCRIPT, scripts / "novo-worktree.sh")
+        shutil.copy2(BIBLIOTECA, scripts / "push-env.sh")
+        (self.principal / ".env").write_text(ENV_PRINCIPAL)
+
+    def git(self, *argumentos: str, onde: Path | None = None) -> str:
+        return subprocess.run(
+            ["git", *argumentos],
+            cwd=onde or self.principal,
+            env=self.ambiente,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def rodar(self, *argumentos: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(self.principal / "scripts" / "novo-worktree.sh"), *argumentos],
+            cwd=self.base,
+            env=self.ambiente,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def make_chamado(self) -> list[str]:
+        if not self.registro_do_make.exists():
+            return []
+        return self.registro_do_make.read_text().splitlines()
+
+    def worktrees(self) -> list[str]:
+        return [
+            linha.removeprefix("worktree ")
+            for linha in self.git("worktree", "list", "--porcelain").splitlines()
+            if linha.startswith("worktree ")
+        ]
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Repositorio:
+    return Repositorio(tmp_path)
+
+
+def _valor(env: str, chave: str) -> str:
+    linhas = [linha for linha in env.splitlines() if linha.startswith(f"{chave}=")]
+    assert len(linhas) == 1, linhas
+    return linhas[0].split("=", 1)[1]
+
+
+def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
+    resultado = repo.rodar("medida")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.base / "FocusQuest-medida"
+    # Branch nova, a partir da main.
+    assert repo.git("rev-parse", "--abbrev-ref", "HEAD", onde=destino) == "wt/medida"
+    assert repo.git("rev-parse", "HEAD", onde=destino) == repo.git("rev-parse", "main")
+
+    env = (destino / ".env").read_text()
+    # So o NOME do banco de teste muda; servidor, credencial e query ficam.
+    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_medida_test?options=-c%20x"
+    )
+    assert _valor(env, "FOCUSQUEST_DATABASE_URL") == f"{PREFIXO}focusquest"
+    assert _valor(env, "FOCUSQUEST_TUTOR_MODEL") == "claude-opus-5"
+    assert "# comentario que atravessa" in env
+    # O principal nao declara deslocamento (0); o primeiro livre e 1.
+    assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "1"
+
+    assert repo.make_chamado() == [f"-C {destino} bootstrap"]
+    assert "focusquest_medida_test" in resultado.stdout
+    assert "8101" in resultado.stdout
+    assert "make check" in resultado.stdout
+    # O .env do principal nao muda.
+    assert (repo.principal / ".env").read_text() == ENV_PRINCIPAL
+
+
+def test_o_deslocamento_automatico_e_o_menor_livre(repo: Repositorio) -> None:
+    """Os deslocamentos em uso sao lidos do `.env` de cada worktree existente;
+    o principal sem a linha conta como 0."""
+    assert repo.rodar("um").returncode == 0
+    assert repo.rodar("dois", "3").returncode == 0
+
+    resultado = repo.rodar("tres")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.base / "FocusQuest-tres" / ".env").read_text()
+    assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "2"
+
+
+def test_um_deslocamento_do_principal_substitui_a_linha(repo: Repositorio) -> None:
+    """Se o `.env` do principal ja tiver a linha, o novo nao a herda: fica uma
+    so, com o valor do worktree novo."""
+    (repo.principal / ".env").write_text(
+        ENV_PRINCIPAL + "FOCUSQUEST_E2E_PORT_OFFSET=5\n"
+    )
+
+    resultado = repo.rodar("outro", "7")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.base / "FocusQuest-outro" / ".env").read_text()
+    assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "7"
+
+
+def _nada_foi_criado(repo: Repositorio, antes: list[str]) -> None:
+    assert repo.worktrees() == antes
+    assert repo.make_chamado() == []
+    assert repo.git("branch", "--list", "wt/*") == ""
+
+
+@pytest.mark.parametrize(
+    "nome",
+    [
+        "",
+        "Maiuscula",
+        "com_sublinhado",
+        "-comeca-com-hifen",
+        "a/b",
+        "a b",
+        "../fora",
+        "x" * 31,
+    ],
+)
+def test_recusa_nome_invalido(repo: Repositorio, nome: str) -> None:
+    """So `[a-z0-9-]`, comecando por letra ou digito, ate 30 caracteres: o nome
+    vira diretorio, branch e nome de banco -- e o banco do push
+    (`focusquest_<nome>_push_test`) precisa caber nos 63 bytes do PostgreSQL."""
+    antes = repo.worktrees()
+
+    resultado = repo.rodar(nome)
+
+    assert resultado.returncode != 0
+    assert "nome invalido" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_worktree_que_ja_existe(repo: Repositorio) -> None:
+    ocupado = repo.base / "FocusQuest-ja"
+    ocupado.mkdir()
+    (ocupado / "arquivo").write_text("intocado\n")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("ja")
+
+    assert resultado.returncode != 0
+    assert "ja existe" in resultado.stderr
+    assert sorted(p.name for p in ocupado.iterdir()) == ["arquivo"]
+    assert (ocupado / "arquivo").read_text() == "intocado\n"
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_branch_que_ja_existe(repo: Repositorio) -> None:
+    repo.git("branch", "wt/ja")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("ja")
+
+    assert resultado.returncode != 0
+    assert "wt/ja" in resultado.stderr
+    assert repo.worktrees() == antes
+    assert repo.make_chamado() == []
+
+
+@pytest.mark.parametrize("deslocamento", ["25", "49", "abc", "-1", "0"])
+def test_recusa_deslocamento_fora_da_faixa_ou_em_uso(
+    repo: Repositorio, deslocamento: str
+) -> None:
+    """De 25 em diante e do pre-push; 0 e o do principal, em uso."""
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo", deslocamento)
+
+    assert resultado.returncode != 0
+    assert "deslocamento" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_sem_env_no_principal(repo: Repositorio) -> None:
+    (repo.principal / ".env").unlink()
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert ".env" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_se_o_banco_de_teste_do_principal_nao_termina_em_test(
+    repo: Repositorio,
+) -> None:
+    (repo.principal / ".env").write_text(
+        ENV_PRINCIPAL.replace("focusquest_test?", "focusquest?")
+    )
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "_test" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_nunca_sobrescreve_um_env_existente(repo: Repositorio) -> None:
+    """O `.env` e ignorado pelo git, mas um repositorio que o versionasse (ou
+    um `git worktree add` que o trouxesse de outro jeito) deixaria um no
+    destino: o script recusa em vez de escrever por cima, e nao segue para o
+    bootstrap."""
+    (repo.principal / ".gitignore").write_text("")
+    (repo.principal / ".env").write_text("VERSIONADO=1\n")
+    repo.git("add", ".env", ".gitignore")
+    repo.git("commit", "-q", "-m", "env versionado")
+    (repo.principal / ".env").write_text(ENV_PRINCIPAL)
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert ".env" in resultado.stderr
+    assert (repo.base / "FocusQuest-novo" / ".env").read_text() == "VERSIONADO=1\n"
+    assert repo.make_chamado() == []
+
+
+def test_sem_argumento_mostra_o_uso(repo: Repositorio) -> None:
+    resultado = repo.rodar()
+    assert resultado.returncode == 64
+    assert "uso: scripts/novo-worktree.sh <nome> [deslocamento]" in resultado.stderr
