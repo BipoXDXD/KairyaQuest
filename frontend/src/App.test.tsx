@@ -5,11 +5,12 @@ import { requestsTo, routeFetch } from './test/fetchRoutes'
 import { stubViewport } from './test/viewport'
 
 /**
- * O que o Quartel-General busca na montagem: ciclo, missoes, status e
- * historico da Tifa; e o que Campanhas busca ao abrir: a trilha da semana
- * (`GET /api/plans/current`). O `plan` e parametrizavel porque um teste
- * precisa de um dia `disponivel` na trilha (o botao "Ir ao Quartel-General");
- * os demais usam o padrao `null` ("sem plano nesta semana").
+ * O que o Quartel-General busca na montagem: ciclo, missoes, status,
+ * historico da Tifa e progresso (Task 8, incremento D); e o que Campanhas
+ * busca ao abrir: a trilha da semana (`GET /api/plans/current`). O `plan` e
+ * parametrizavel porque um teste precisa de um dia `disponivel` na trilha
+ * (o botao "Ir ao Quartel-General"); os demais usam o padrao `null` ("sem
+ * plano nesta semana").
  */
 function stubPage(plan: unknown = null) {
   stubViewport('desktop')
@@ -26,6 +27,14 @@ function stubPage(plan: unknown = null) {
     'GET /api/tutoring/status': () => Response.json({ available: true }),
     'GET /api/tutoring/messages': () => Response.json([]),
     'GET /api/plans/current': () => Response.json({ plan }),
+    'GET /api/progress': () =>
+      Response.json({
+        xp_total: 20,
+        level: 1,
+        level_floor_xp: 0,
+        next_level_xp: 100,
+        achievements: [],
+      }),
   })
 }
 
@@ -34,6 +43,7 @@ async function settleHeadquarters() {
   await screen.findByTestId('missions-empty')
   await screen.findByTestId('tutor-greeting')
   await screen.findByTestId('cycle-no-plan')
+  await screen.findByTestId('progress-level')
 }
 
 describe('App', () => {

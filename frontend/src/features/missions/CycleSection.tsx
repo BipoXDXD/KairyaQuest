@@ -31,8 +31,10 @@ interface CardProps {
  * progresso ate a especial -- ou o cartao dela, quando esta vigente.
  *
  * Os cartoes sao os MESMOS do quadro de avulsas (`MissionCard`): a conclusao
- * da diaria segue as mesmas regras de chave e reenvio. O `onCompleted` e o
- * `refresh` silencioso (decisao P9): a sequencia muda sem desmontar o cartao.
+ * da diaria segue as mesmas regras de chave e reenvio. O `onCompleted` faz o
+ * `refresh` silencioso do PROPRIO ciclo (decisao P9): a sequencia muda sem
+ * desmontar o cartao; e ainda avisa `onMissionCompleted`, da PAGINA, que
+ * usa o aviso para atualizar o painel de progresso (Task 8, incremento D).
  */
 function CycleLoaded({
   cycle,
@@ -145,15 +147,22 @@ function CycleContent({ state, card }: { state: CycleState; card: CardProps }): 
  * avulsas: os conjuntos de missoes sao disjuntos (diaria e especial aqui,
  * avulsas la), e cada registro espera so as conclusoes que o reload DELE
  * remontaria.
+ *
+ * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao
+ * feita aqui (a diaria ou a especial) -- hoje, para atualizar o painel de
+ * progresso com `refresh()` silencioso (Task 8, incremento D).
  */
-export function CycleSection() {
+export function CycleSection({ onMissionCompleted }: { onMissionCompleted?: () => void }) {
   const { state, reload, refresh } = useCycle()
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
   const card: CardProps = {
     registry,
     onReload: requestReload,
     reloadWaiting: waitingForCompletion,
-    onCompleted: refresh,
+    onCompleted: () => {
+      refresh()
+      onMissionCompleted?.()
+    },
     reloadLabel: 'Atualizar a missão de hoje',
   }
   return (

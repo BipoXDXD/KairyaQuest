@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { CycleSection } from '../features/missions/CycleSection'
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
+import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
 import { HEADQUARTERS_HEADING_ID } from './headings'
 
@@ -12,15 +13,19 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  * e traduz o dado e a feature `missions` -- que nao sabe que esta pagina
  * existe. E por isso que trocar esta pagina nao mexe na feature.
  *
- * O §7 preve mais coisa aqui (proxima missao, XP, progresso, painel da Tifa,
- * navegacao lateral). Este e o recorte que o mesmo §7 autoriza: so o que tem
- * API. O quadro de missoes veio no 1a; o painel da Tifa entrou no 1b-2, ao
- * lado do quadro; a missao de hoje e a sequencia entraram no B, acima do
- * quadro de avulsas. A pagina continua sem regra: compoe as features, e
- * nenhuma delas sabe da outra -- quando a Tifa cria uma missao, e a PAGINA
- * que pede ao quadro para recarregar, pelo `ref` do `MissionList`. Estrutura
- * vazia esperando conteudo seria interface
- * que promete o que nao existe.
+ * O §7 preve mais coisa aqui (proxima missao, painel da Tifa, navegacao
+ * lateral). Este e o recorte que o mesmo §7 autoriza: so o que tem API. O
+ * quadro de missoes veio no 1a; o painel da Tifa entrou no 1b-2, ao lado do
+ * quadro; a missao de hoje e a sequencia entraram no B, acima do quadro de
+ * avulsas; o nivel, o XP e as conquistas ganharam API no D (D14) e entraram
+ * como o painel de progresso, acima da missao de hoje. A pagina continua sem
+ * regra: compoe as features, e nenhuma delas sabe da outra -- quando a Tifa
+ * cria uma missao, e a PAGINA que pede ao quadro para recarregar, pelo `ref`
+ * do `MissionList`; quando qualquer missao e concluida (a diaria, a especial
+ * ou uma avulsa), e a PAGINA que pede ao painel de progresso para se
+ * atualizar, pelo `ref` do `ProgressPanel` (decisao P3: `refresh` silencioso,
+ * sem passar por "carregando"). Estrutura vazia esperando conteudo seria
+ * interface que promete o que nao existe.
  *
  * `hidden`: desde o C, o `App` OCULTA esta pagina quando Campanhas esta
  * aberta, em vez de desmonta-la -- desmontar levaria junto o painel da Tifa,
@@ -30,10 +35,15 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  */
 export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   const board = useRef<MissionListHandle>(null)
-  // O `!`: o quadro monta junto com a pagina, antes de qualquer clique que
-  // chegue aqui. Um `?.` criaria um ramo que nenhum uso real alcanca.
+  const progress = useRef<ProgressPanelHandle>(null)
+  // O `!`: o quadro e o painel montam junto com a pagina, antes de qualquer
+  // clique que chegue aqui. Um `?.` criaria um ramo que nenhum uso real
+  // alcanca.
   const reloadBoard = useCallback(() => {
     board.current!.reload()
+  }, [])
+  const refreshProgress = useCallback(() => {
+    progress.current!.refresh()
   }, [])
   return (
     <div hidden={hidden} className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
@@ -57,8 +67,9 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
             O que está em aberto, com prazo e recompensa.
           </p>
         </header>
-        <CycleSection />
-        <MissionList ref={board} />
+        <ProgressPanel ref={progress} />
+        <CycleSection onMissionCompleted={refreshProgress} />
+        <MissionList ref={board} onMissionCompleted={refreshProgress} />
       </main>
       {/* O `#missions-heading` e o `id` do titulo do quadro. A pagina e quem
           conhece as duas features, entao e ela quem passa o endereco -- a

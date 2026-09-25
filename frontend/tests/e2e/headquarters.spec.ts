@@ -329,9 +329,31 @@ test('concluir pela tela muda o estado no servidor, e a tela concluida e acessiv
   // Pelo NOME ACESSIVEL, que diz qual missao o botao conclui.
   await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
 
-  await expect(item.getByRole('status')).toHaveText('Missão concluída.')
+  // P4 (Task 7): a igualdade exata sobre a regiao viva inteira
+  // (`role="status"`) quebrou quando a Task 4 passou a mandar `reward` de
+  // verdade -- o anuncio da recompensa (D16) entra na MESMA regiao, e o
+  // texto fixo mora no `<p data-testid="mission-completion-text">` filho.
+  // A prova passa a ter duas partes: o texto fixo, pelo testid do filho; e o
+  // anuncio de verdade, pelo `reward-xp` (mesma mudanca que a Task 7 ja
+  // tinha feito nos testes de unidade).
+  await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
+  const rewardXp = item.getByTestId('reward-xp')
+  await expect(rewardXp).toBeVisible()
+  await expect(rewardXp).toHaveText(/^\+\d+ XP$/)
   await expect(item.getByTestId('mission-state')).toHaveText('Concluída')
   await expect(item.getByTestId('mission-complete')).toHaveCount(0)
+
+  // R12: espera a animacao de entrada do anuncio assentar
+  // (`motion-safe:animate-[reward-in_400ms_ease-out]`, no `<div
+  // data-testid="reward">` de RewardAnnouncement.tsx) antes do axe. Sem isto,
+  // o axe podia auditar um quadro no MEIO do fade-in (opacidade parcial) e
+  // acusar contraste insuficiente -- a cor final (`text-emerald-200` sobre o
+  // fundo composto do cartao) tem contraste ~14,7:1, bem acima do 4,5:1
+  // exigido (conta registrada em task-8-report.md). Nao mudamos a cor, nao
+  // desligamos a animacao.
+  await expect
+    .poll(() => item.getByTestId('reward').evaluate((el) => getComputedStyle(el).opacity))
+    .toBe('1')
 
   // Conjunto de regras PADRAO, sem `withTags` nem `disableRules`.
   const resultado = await new AxeBuilder({ page }).analyze()
@@ -404,5 +426,14 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   // A MESMA conclusao: o `completed_at` e o do primeiro pedido, e nao um novo.
   expect(segundaConclusao.completed_at).toBe(descartadas[0]?.completed_at)
   expect(JSON.parse(segunda.request().postData() ?? '{}')).toEqual({ operation_id: chaves[0] })
-  await expect(item.getByRole('status')).toHaveText('Missão concluída.')
+  // Mesmo ajuste do teste acima (P4 x Task 4): texto fixo pelo filho, anuncio
+  // real pelo `reward-xp`.
+  await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
+  const rewardXp = item.getByTestId('reward-xp')
+  await expect(rewardXp).toBeVisible()
+  await expect(rewardXp).toHaveText(/^\+\d+ XP$/)
+  // Este e o segundo cenario deste ARQUIVO a concluir uma missao -- o XP
+  // acumulado cruza o nivel 2 aqui (confirmado na saida do gate antes deste
+  // ajuste: "Missão concluída.+40 XPSubiu para o nível 2!").
+  await expect(item.getByTestId('reward-level-up')).toHaveText('Subiu para o nível 2!')
 })
