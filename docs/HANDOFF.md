@@ -10,6 +10,16 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento C — a campanha.** Branch de integração `feat/incremento-c`,
+com dois worktrees de trabalho em paralelo, sem banco: `feat/incremento-c-nav`
+(Tasks 0 e 1) e `feat/incremento-c-trilha` (Tasks 2 e 3). Base: `9c2bd1e`
+(a ponta de `feat/incremento-b`, PR #13 aprovado pelo `quality-gate` e ainda
+não mesclado — Ruling R1 do controlador, 2026-09-25: o merge do PR #13 ficou
+para o dono, e o C parte da ponta do B em vez de esperar `origin/main`).
+Spec em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
+`docs/superpowers/plans/2026-09-25-incremento-c.md`. **Estado de
+publicação: não publicado.**
+
 **Incremento B — o ciclo diário.** Branch `feat/incremento-b`, aberta a
 partir de `12288a2` (a `main`: o merge do PR #12, a camada 3 do 1b-2). Spec
 em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
