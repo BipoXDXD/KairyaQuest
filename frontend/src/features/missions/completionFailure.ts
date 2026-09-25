@@ -43,6 +43,11 @@ const FAILURE_BY_CODE: Record<MissionErrorCode, CompletionFailure> = {
     message: 'Não foi possível registrar esta tentativa. Tente de novo.',
     recovery: 'retry-with-new-operation',
   },
+  missao_expirada: {
+    message:
+      'O dia desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
+    recovery: 'refresh',
+  },
 }
 
 /**
