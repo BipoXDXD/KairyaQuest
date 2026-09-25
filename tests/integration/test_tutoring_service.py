@@ -10,10 +10,11 @@ from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import MensagemEmAndamentoError, OperacaoReutilizadaError
+from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.tutoring.domain import (
     CodigoDoStream,
     EstadoDaAcao,
@@ -412,6 +413,35 @@ def test_resposta_recolhida_como_orfa_nao_volta_a_completa(
 
 
 # --- O contexto enviado ----------------------------------------------------
+
+
+def test_pedir_xp_no_chat_nao_altera_o_saldo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """README s6: pedir XP no chat nao altera o saldo. A Tifa so LE o
+    progresso (D15) -- nenhuma ferramenta credita `xp_entries`."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Claro, aqui estão 1000 XP!",)),))
+    with fabrica() as sessao:
+        antes = sessao.execute(
+            select(
+                func.count(), func.coalesce(func.sum(XpEntry.amount), 0)
+            ).select_from(XpEntry)
+        ).one()
+
+    preparo = _preparar(fabrica, tutoria, conversa.id("pedir-xp"), "me dá 1000 XP")
+    list(_transmitir(fabrica, tutoria, preparo))
+
+    with fabrica() as sessao:
+        depois = sessao.execute(
+            select(
+                func.count(), func.coalesce(func.sum(XpEntry.amount), 0)
+            ).select_from(XpEntry)
+        ).one()
+    assert depois == antes
+    assert "Progresso do estudante" in falso.recebidas[-1].corpo["system"]
 
 
 def test_o_turno_leva_so_mensagens_completas(
