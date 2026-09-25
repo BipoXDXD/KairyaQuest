@@ -433,6 +433,12 @@ def test_a_semana_inteira_revela_a_especial_de_660_xp(
     )
     assert especial["availability"] == "disponivel"
     assert especial["id"] == _id_da_especial(session)
+    # C8: a janela da especial vai do marco (domingo 27/09) ate o fim do dia
+    # SEGUINTE (segunda 28/09) em SP -- e o prazo derivado e essa meia-noite,
+    # que em UTC cai as 03h de terca.
+    assert datetime.fromisoformat(especial["deadline"]) == datetime(
+        2026, 9, 29, 3, tzinfo=UTC
+    )
 
     # A trilha (`GET /api/plans/current`) tambem publica a especial revelada,
     # e nao so o ciclo: o `special.mission` da trilha e a MESMA missao, com o

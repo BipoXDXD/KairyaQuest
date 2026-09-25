@@ -12,7 +12,7 @@ import { API_URL } from './servers'
  * tem de ser a da API, e a meia-noite de Sao Paulo nao e a de Toquio.
  *
  * **Limitacao conhecida (spec, Riscos):** se a semeadura e a conclusao
- * caírem em lados diferentes da meia-noite de Sao Paulo, o cenario reprova.
+ * cairem em lados diferentes da meia-noite de Sao Paulo, o cenario reprova.
  * Semear a partir do `today` da API estreita a janela, mas nao a fecha. Sem
  * nova tentativa automatica e sem teste pulado.
  *
@@ -46,6 +46,14 @@ const DIAS = Array.from({ length: 7 }, (_, indice) => ({
 
 let hoje = ''
 let missaoDeHoje = ''
+
+// A armadilha da data civil (converter um `Date` para o fuso do navegador e
+// comparar o dia) so aparece a OESTE de UTC: Tokyo (fuso global, ver
+// playwright.config.ts) esta a LESTE, entao a mesma meia-noite so empurra a
+// data para a frente, nunca para tras, e o bug passaria batido. Sao Paulo e
+// a oeste, e e so aqui, neste spec, que a suite prova a data civil de
+// verdade -- o `timezoneId` global continua Tokyo para os demais specs.
+test.use({ timezoneId: 'America/Sao_Paulo' })
 
 test.describe.configure({ mode: 'serial' })
 

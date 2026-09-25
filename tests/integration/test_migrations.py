@@ -336,7 +336,7 @@ def test_o_downgrade_da_0003_leva_so_o_ciclo(banco_migrado: Engine) -> None:
         assert {"tutor_messages", "tutor_actions", "missions"} <= tabelas
         assert not ({"mission_type", "plan_id", "day"} & nomes_das_colunas)
         # O downgrade da 0003 devolve o NOT NULL que a 0002 exigia: sem esta
-        # asserção, remover o `alter_column(..., nullable=False)` do
+        # assercao, remover o `alter_column(..., nullable=False)` do
         # downgrade nao reprovaria teste nenhum.
         assert deadline["nullable"] is False
     finally:
