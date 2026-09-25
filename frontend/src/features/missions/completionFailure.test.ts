@@ -38,7 +38,7 @@ describe('describeCompletionFailure', () => {
       'missao_expirada',
       {
         message:
-          'O dia desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
+          'O prazo desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
         recovery: 'refresh',
       },
     ],

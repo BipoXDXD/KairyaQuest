@@ -21,6 +21,8 @@ interface CardProps {
   onReload: () => void
   reloadWaiting: boolean
   onCompleted: () => void
+  /** m5: aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
+  reloadLabel: string
 }
 
 /**
@@ -52,10 +54,21 @@ function CycleLoaded({
         </p>
       ) : (
         <ul role="list" className="flex flex-col gap-3">
-          <MissionCard mission={cycle.mission} {...card} />
+          {/* m1: a chave pela ID da missao, e nao pela POSICAO. Sem ela, um
+              `refresh` que devolve outra missao (a diaria de amanha, se a
+              conclusao caiu perto da meia-noite e a resposta chegou depois)
+              mantem a MESMA instancia do cartao -- e ela continua presa no
+              `completion.status === 'completed'` de ontem, mostrando a missao
+              velha em vez da nova. A chave forca o remonte quando o `id` muda. */}
+          <MissionCard key={cycle.mission.id} mission={cycle.mission} {...card} />
         </ul>
       )}
-      <p data-testid="cycle-streak" className="text-sm font-medium text-slate-200">
+      {/* m4: `role="status"` desde o primeiro render do estado carregado -- um
+          leitor de tela so anuncia mudanca numa regiao viva que ja estava no
+          documento. Sem isto, nem a mudanca da sequencia (ao concluir a
+          diaria) nem o texto que muda quando ela chega ao marco eram
+          anunciados. */}
+      <p role="status" data-testid="cycle-streak" className="text-sm font-medium text-slate-200">
         Sequência: {streakLabel(cycle.streak)}
       </p>
       {cycle.special === null ? (
@@ -69,7 +82,8 @@ function CycleLoaded({
             Missão especial — bônus da sequência
           </h3>
           <ul role="list" className="flex flex-col gap-3">
-            <MissionCard mission={cycle.special} {...card} />
+            {/* m1: mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
+            <MissionCard key={cycle.special.id} mission={cycle.special} {...card} titleLevel={4} />
           </ul>
         </div>
       )}
@@ -139,6 +153,7 @@ export function CycleSection() {
     onReload: requestReload,
     reloadWaiting: waitingForCompletion,
     onCompleted: refresh,
+    reloadLabel: 'Atualizar a missão de hoje',
   }
   return (
     <section aria-labelledby="cycle-heading" data-testid="cycle" className="mb-8">

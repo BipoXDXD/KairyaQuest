@@ -51,12 +51,15 @@ function statusText(completion: CompletionState): string {
  * - **falha que se repete** (rede, erro sem code, chave gasta): o aviso e o
  *   botao vira "Tentar de novo" -- com a mesma chave, ou com uma nova, quem
  *   decide e o hook.
- * - **falha que nao se repete** (ja concluida, nao existe mais): o aviso, e
- *   "Atualizar o quadro" no lugar do Concluir. Repetir so daria o mesmo erro;
- *   recarregar mostra o estado de verdade.
- * - **esperando o quadro**: "Atualizar o quadro" pedido com outra conclusao em
- *   voo fica desabilitado e diz "Aguardando a conclusão em andamento…"; o
- *   quadro recarrega sozinho quando ela termina (`useCompletionRegistry`). Quem
+ * - **falha que nao se repete** (ja concluida, nao existe mais): o aviso, e o
+ *   `reloadLabel` no lugar do Concluir. Repetir so daria o mesmo erro;
+ *   recarregar mostra o estado de verdade. O rotulo e "Atualizar o quadro" por
+ *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
+ *   (m5): a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
+ *   ali nao atualiza um "quadro" -- recarrega o ciclo.
+ * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
+ *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
+ *   recarrega sozinho quando ela termina (`useCompletionRegistry`). Quem
  *   anuncia a espera e a regiao viva do QUADRO, e nao a deste cartao: a espera
  *   e do quadro inteiro, e varios cartoes com o botao anunciariam o mesmo
  *   texto varias vezes.
@@ -76,12 +79,14 @@ function CompletionControls({
   onComplete,
   onReload,
   reloadWaiting,
+  reloadLabel,
 }: {
   mission: Mission
   completion: CompletionState
   onComplete: () => void
   onReload: () => void
   reloadWaiting: boolean
+  reloadLabel: string
 }) {
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
   // rotulo de estado ja diz "Concluída".
@@ -114,7 +119,7 @@ function CompletionControls({
           onClick={onReload}
           className={RELOAD_BUTTON_CLASS}
         >
-          {reloadWaiting ? RELOAD_WAITING_LABEL : 'Atualizar o quadro'}
+          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
         </button>
       )}
       <p role="status" data-testid="mission-completion-status" className="text-sm text-emerald-300">
@@ -139,25 +144,44 @@ export function MissionCard({
   onReload,
   reloadWaiting,
   onCompleted,
+  titleLevel = 3,
+  reloadLabel = 'Atualizar o quadro',
 }: {
   mission: Mission
   registry: CompletionRegistry
   onReload: () => void
   reloadWaiting: boolean
   onCompleted?: () => void
+  /**
+   * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
+   * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
+   * especial: sem isso, o `<h3>` do titulo da secao ("Missão especial — bônus
+   * da sequência") e o `<h3>` do titulo do cartao colidiam no mesmo nivel,
+   * dentro da mesma secao.
+   */
+  titleLevel?: 3 | 4
+  /**
+   * O texto do botao de recuperacao (m5). Padrao "Atualizar o quadro", como
+   * sempre foi. Ver o comentario de `CompletionControls` acima.
+   */
+  reloadLabel?: string
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
   const mission = completion.status === 'completed' ? completion.mission : listed
+  const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
 
   return (
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-4">
-        <h3 data-testid="mission-instructions" className="text-base font-semibold text-slate-100">
+        <HeadingTag
+          data-testid="mission-instructions"
+          className="text-base font-semibold text-slate-100"
+        >
           {mission.instructions}
-        </h3>
+        </HeadingTag>
         {/* O estado vem como rotulo em texto, nao como cor: o README §7 exige
             aviso alem da cor. */}
         <span
@@ -214,6 +238,7 @@ export function MissionCard({
         onComplete={complete}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
+        reloadLabel={reloadLabel}
       />
     </li>
   )

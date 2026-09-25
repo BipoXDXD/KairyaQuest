@@ -84,6 +84,10 @@ describe('CycleSection', () => {
     expect(within(cartao).getByTestId('mission-instructions')).toHaveTextContent(
       diaria.instructions,
     )
+    // m3: o titulo do cartao da missao de hoje e h3 por padrao, como sempre foi.
+    expect(
+      within(cartao).getByRole('heading', { level: 3, name: diaria.instructions }),
+    ).toBeInTheDocument()
     expect(screen.getByTestId('cycle-streak')).toHaveTextContent('Sequência: 3 dias seguidos')
     expect(screen.getByTestId('cycle-progress')).toHaveTextContent(
       'Missão especial: 3 de 7 — faltam 4 dias.',
@@ -141,15 +145,18 @@ describe('CycleSection', () => {
     })
     render(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
-    // `{ level: 3 }` sozinho colide com o `<h3>` do titulo do CARTAO
-    // (`mission-instructions`, em `MissionCard.tsx`): a secao tem os dois.
-    // O `name` desambigua sem mudar a intencao -- ainda e o titulo da secao
-    // da especial que o teste confere.
+    // m3: o titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
+    // (`titleLevel={4}`, em CycleSection.tsx) -- por isso os dois cabem na
+    // mesma secao sem colidir no mesmo nivel. Antes do conserto os dois eram
+    // h3, e so o `name` desambiguava a consulta abaixo.
     expect(
       within(secao).getByRole('heading', {
         level: 3,
         name: 'Missão especial — bônus da sequência',
       }),
+    ).toBeInTheDocument()
+    expect(
+      within(secao).getByRole('heading', { level: 4, name: especial.instructions }),
     ).toBeInTheDocument()
     expect(within(secao).getByTestId('mission-xp')).toHaveTextContent('660 XP')
     expect(screen.queryByTestId('cycle-progress')).toBeNull()
@@ -191,5 +198,88 @@ describe('CycleSection', () => {
       expect(screen.getByTestId('cycle-streak')).toHaveTextContent('Sequência: 4 dias seguidos')
     })
     expect(screen.queryByTestId('cycle-stale')).toBeNull()
+  })
+
+  it('m4: a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
+    render(<CycleSection />)
+    // O ATRIBUTO, e nao so `getByRole('status')`: o `<p>` nao tem role
+    // implicita nenhuma, entao so o atributo prova que a regiao existe.
+    expect(await screen.findByTestId('cycle-streak')).toHaveAttribute('role', 'status')
+  })
+
+  it('m5: o botao de recuperacao do cartao do ciclo diz "Atualizar a missão de hoje", nao "Atualizar o quadro"', async () => {
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo()),
+      'POST /api/missions/31/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'Atualizar a missão de hoje' }),
+    ).toBeInTheDocument()
+    // O rotulo padrao do MissionCard (do quadro de avulsas) nao pode aparecer
+    // aqui: seria falar de um "quadro" que a secao do ciclo nao tem.
+    expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
+  })
+
+  it('m1: se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
+    // O cenario da revisao: a diaria 31 e concluida perto da meia-noite, e a
+    // resposta do refresh ja e a diaria 32 de amanha. Sem `key={mission.id}`
+    // em CycleSection.tsx, o MESMO MissionCard continua montado, preso em
+    // `completion.status === 'completed'` da missao 31 -- a tela mostraria a
+    // diaria de ONTEM, ja concluida, no lugar da de hoje.
+    const diaria32: Mission = {
+      ...diaria,
+      id: 32,
+      day: '2026-09-24',
+      deadline: '2026-09-25T00:00:00-03:00',
+      instructions: 'Resolver 3 exercicios de grafos',
+    }
+    routeFetch({
+      'GET /api/cycle': (_init, call) =>
+        Response.json(
+          call === 1 ? ciclo() : ciclo({ mission: diaria32, streak: 4, days_to_milestone: 3 }),
+        ),
+      'POST /api/missions/31/complete': () => Response.json(diariaConcluida),
+    })
+    render(<CycleSection />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
+    )
+    await screen.findByTestId('mission-completion-status')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-item')).toHaveAttribute('data-mission-id', '32')
+    })
+    const cartao = screen.getByTestId('mission-item')
+    expect(within(cartao).getByTestId('mission-instructions')).toHaveTextContent(
+      diaria32.instructions,
+    )
+    // A 32 e nova (`pendente`/`disponivel`): oferece Concluir, e nao "Missão
+    // concluída." presa da 31.
+    expect(within(cartao).getByTestId('mission-complete')).toBeInTheDocument()
+  })
+
+  it('m7: a especial CONCLUIDA dentro da janela mostra "Concluída" e nao oferece Concluir', async () => {
+    const especialConcluida: Mission = {
+      ...especial,
+      state: 'concluida',
+      availability: 'concluida',
+      completed_at: '2026-09-24T10:00:00Z',
+    }
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especialConcluida })),
+    })
+    render(<CycleSection />)
+
+    const secao = await screen.findByTestId('cycle-special')
+    expect(within(secao).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    expect(within(secao).queryByTestId('mission-complete')).toBeNull()
   })
 })
