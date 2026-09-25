@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import type { Mission } from '../../shared/types/mission'
 import { CycleSection } from './CycleSection'
-import type { Cycle, Mission } from './types'
+import type { Cycle } from './types'
 
 const diaria: Mission = {
   id: 31,

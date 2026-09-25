@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Mission } from '../features/missions/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
+import type { Mission } from '../shared/types/mission'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { stubViewport } from '../test/viewport'
 import { Headquarters } from './Headquarters'

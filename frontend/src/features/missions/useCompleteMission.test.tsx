@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import type { Mission } from './types'
+import type { Mission } from '../../shared/types/mission'
 import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
 

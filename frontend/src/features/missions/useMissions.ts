@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, requestJson } from '../../shared/api/client'
-import type { Mission } from './types'
+import type { Mission } from '../../shared/types/mission'
 
 /**
  * Os quatro estados de tela que o README §7 exige, como uniao discriminada.

@@ -1,8 +1,8 @@
 import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Mission } from '../../shared/types/mission'
 import { useMissions } from './useMissions'
-import type { Mission } from './types'
 
 const missao: Mission = {
   id: 1,

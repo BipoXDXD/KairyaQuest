@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import type { Mission } from '../../shared/types/mission'
 import { MissionList, type MissionListHandle } from './MissionList'
-import type { Mission } from './types'
 
 const pendente: Mission = {
   id: 7,
