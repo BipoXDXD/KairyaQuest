@@ -708,10 +708,27 @@ quem ainda não concluiu).
   ou o cartão da especial vigente no lugar dele. `MissionCard.tsx` foi
   extraído de `MissionList.tsx` para ser reaproveitado pelo cartão da
   missão de hoje, com o `onCompleted` opcional de `useCompleteMission.ts`
-  acionando o `refresh` do ciclo depois de concluir. O quadro de avulsas
-  (`MissionList.tsx`) passou a se chamar "Outras missões — tarefas com
-  prazo" (decisão P8), e `Headquarters.tsx` compõe `<CycleSection />`
-  **acima** dele.
+  acionando o `refresh` do ciclo depois de concluir; cada cartão do ciclo
+  leva `key={mission.id}` (sem ela, um `refresh` que troca de missão
+  reaproveitaria a instância presa no estado "concluída" da anterior). O
+  quadro de avulsas (`MissionList.tsx`) passou a se chamar "Outras missões
+  — tarefas com prazo" (decisão P8), e `Headquarters.tsx` compõe
+  `<CycleSection />` **acima** dele.
+
+  **Conserto final da revisão da branch** (commit `71a2001`):
+  `MissionCard.tsx` ganhou duas props opcionais, com padrão igual ao
+  comportamento anterior (nenhum outro consumidor precisou mudar).
+  `titleLevel?: 3 | 4` (padrão `3`) escolhe a tag do título do cartão
+  (`<h3>`/`<h4>`) — `CycleSection.tsx` passa `4` só no cartão de **dentro**
+  da especial, porque a seção da especial já usa `<h3>` para o próprio
+  título, e um `<h3>` aninhado quebraria a hierarquia de cabeçalhos.
+  `reloadLabel?: string` (padrão `"Atualizar o quadro"`, repassado a
+  `CompletionControls`) troca o rótulo do botão de recuperação — os dois
+  cartões do ciclo usam `"Atualizar a missão de hoje"`. O parágrafo da
+  sequência (`data-testid="cycle-streak"`) ganhou `role="status"`: é uma
+  região viva **desde o primeiro render** (o mesmo padrão do painel da
+  Tifa, acima), para que uma mudança de sequência ao concluir uma missão
+  seja anunciada por leitor de tela.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no

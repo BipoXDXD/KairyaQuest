@@ -19,9 +19,11 @@ histórico foi religado por um clone sem checkout do remoto, e a árvore
 conferiu idêntica a `12288a2` (`git status` limpo). Hooks instalados por
 `uv run pre-commit install --install-hooks`; `make check` na base, sem
 mudança nenhuma: aprovado, EXIT 0 (ver "Resultados"). A branch soma, até
-este registro (Task 10), **13 commits** (Tasks 0–9, contados com
+este registro (fechamento final, depois da revisão da branch), **16
+commits** (Tasks 0–9, a documentação da Task 10 e o conserto final em dois
+commits — backend/E2E e frontend —, contados com
 `git log --oneline 12288a2..HEAD | wc -l`, medido nesta sessão) — mais este
-commit de documentação, **14** no total. **Estado de publicação: não
+commit de documentação, **17** no total. **Estado de publicação: não
 publicado.** Push, PR e merge autorizados pelo dono em 2026-09-25 para este
 incremento.
 
@@ -409,6 +411,31 @@ assentado nao vira erro'`: monta em `StrictMode` (duplo efeito), espera o
 `loaded` do segundo pedido e só então rejeita manualmente o primeiro, com o
 componente **vivo** — esse teste reprova (`error` em vez de `loaded`) sem a
 guarda, e passa com ela.
+
+**Revisão final da branch (commits `5cd4474` e `5d250b3`).** Achados
+"Important": **I1** — o E2E do ciclo (`cycle.spec.ts`) rodava com o
+navegador no fuso global do `playwright.config.ts` (`Asia/Tokyo`), e a
+armadilha da data civil só aparece a **oeste** de UTC; corrigido com
+`test.use({ timezoneId: 'America/Sao_Paulo' })` escopado a esse arquivo —
+medido sem o `timeZone` do formatador: a tela mostrou "24/09" em vez de
+"25/09". **I2** — os dois testes da guarda de `recriar_esquema`/
+`exigir_banco_de_teste` (`test_banco_de_teste.py`) apontavam para
+`settings.database_url`, o banco de **desenvolvimento** real; trocados por
+uma URL fixa com porta 9 fechada, para que a guarda seja testada sem nunca
+tocar um banco de verdade. **T3** — o prazo (`deadline`) da especial
+revelada não tinha asserção em `test_a_semana_inteira_revela_a_especial_de_660_xp`;
+acrescentada a comparação com o fim da janela dos dois dias em UTC. Achados
+"minor" corrigidos no mesmo lote: `key` que faltava nos dois `MissionCard`
+do ciclo (um `refresh` que trocava de missão mantinha a instância antiga,
+presa em "concluída"); hierarquia de títulos (`h3` dentro de `h3` — o
+cartão da especial agora usa `h4` via `titleLevel`); a sequência
+(`cycle-streak`) sem `role="status"`, portanto nunca anunciada por leitor
+de tela; e os textos "Atualizar o quadro" (virou "Atualizar a missão de
+hoje" nos cartões do ciclo) e a mensagem de `missao_expirada` ("o dia desta
+missão" virou "o prazo desta missão", porque a janela da especial é de dois
+dias). Detalhe de cada mutação vista reprovando em
+`.superpowers/sdd/2026-09-25-incremento-b/fix-final-front-report.md` e
+`fix-final-back-report.md`.
 
 ### Dependências e infraestrutura que entraram no B
 
@@ -1052,7 +1079,9 @@ Tasks 0–9 estão comitadas em `feat/incremento-b`
 (`git log --oneline 12288a2..HEAD`): backend nas Tasks 0–5 (`3544344` até
 `6b42962`, o fix round da Task 5), `check-e2e` de esquema limpo na Task 6
 (`50e2150`), frontend do ciclo nas Tasks 7–8 (`242d677`, `08b3dcc`) e o E2E
-do ciclo na Task 9 (`0b9197b`, HEAD).
+do ciclo na Task 9 (`0b9197b`). Depois da Task 9: a documentação da Task 10
+(`5cd4474`) e o conserto final da revisão da branch, em dois commits —
+backend/E2E (`5d250b3`) e frontend (`71a2001`, HEAD) — descritos abaixo.
 
 - **Task 0** — revisão-base no Linux e o plano deste incremento
   (commits `12288a2`..`3544344`): primeira sessão nesta máquina Linux, o
@@ -1218,6 +1247,59 @@ do ciclo na Task 9 (`0b9197b`, HEAD).
   (tirar o `refresh` do `onCompleted`; `civilDate.ts` com `timeZone: 'UTC'`
   e `new Date(civil)` direto) e restauradas. `make check` completo passou
   antes do commit. `task-9-report.md`.
+- **Conserto final — backend e E2E** (commit `5d250b3`): fecha os achados
+  I1, I2, T3-prazo e m6 da revisão final da branch (ver "Decisões tomadas
+  durante a execução"), arquivo a arquivo:
+  - `tests/integration/test_banco_de_teste.py` — os dois testes da guarda
+    (`test_recriar_esquema_recusa_o_banco_de_desenvolvimento`,
+    `test_o_modulo_como_comando_recusa_o_banco_errado`) trocaram
+    `settings.database_url` (o banco de **desenvolvimento** real) por uma
+    URL fixa com porta 9 fechada nesta máquina; import `Settings` removido
+    (I2).
+  - `tests/integration/test_cycle_api.py` —
+    `test_a_semana_inteira_revela_a_especial_de_660_xp` ganhou a asserção
+    do `deadline` da especial contra o fim da janela dos dois dias em UTC
+    (T3).
+  - `frontend/tests/e2e/cycle.spec.ts` — `test.use({ timezoneId:
+    'America/Sao_Paulo' })` escopado ao arquivo, porque a armadilha da data
+    civil só aparece a oeste de UTC e o `playwright.config.ts` global roda
+    em `Asia/Tokyo` (I1).
+  - `tests/integration/test_migrations.py` — acento corrigido em
+    "assercao" (m6).
+  - Verificado com banco e portas livres: `pytest` sobre os três arquivos
+    de teste tocados (**48 passed**), `make check-e2e` (**13 passed**), e
+    quatro mutações vistas reprovando e restauradas (guarda sem a checagem
+    de porta fechada, guarda sem a condição `_test`, `_ler_especial` com
+    `fim_do_dia`, formatador de `civilDate.ts` sem `timeZone`). `make check`
+    completo passou antes do commit. `fix-final-back-report.md`.
+- **Conserto final — frontend** (commit `71a2001`, HEAD): fecha os achados
+  m1, m3, m4, m5(a), m5(b) e m7 da revisão final da branch, arquivo a
+  arquivo:
+  - `frontend/src/features/missions/CycleSection.tsx` — `key` no
+    `MissionCard` da missão de hoje e no da especial (m1: sem ela, um
+    `refresh` que trocava de missão reaproveitava a instância presa em
+    "concluída"); `titleLevel={4}` no cartão de dentro da especial (m3: h4
+    em vez de h3 aninhado); `role="status"` no parágrafo da sequência
+    (`cycle-streak`, m4); `reloadLabel: 'Atualizar a missão de hoje'` no
+    objeto `card` compartilhado (m5a).
+  - `frontend/src/features/missions/MissionCard.tsx` — prop opcional
+    `titleLevel?: 3 | 4` (padrão 3, `<HeadingTag>` calculada, m3); prop
+    opcional `reloadLabel?: string` (padrão "Atualizar o quadro",
+    repassada a `CompletionControls`, m5a).
+  - `frontend/src/features/missions/completionFailure.ts` — mensagem de
+    `missao_expirada` trocou "o dia desta missão" por "o prazo desta
+    missão" (m5b: a janela da especial é de dois dias, não um).
+  - `frontend/src/features/missions/CycleSection.test.tsx` e
+    `completionFailure.test.ts` — testes novos/ajustados para m1, m3 (nível
+    3 padrão e nível 4 dentro da especial), m4 (role estável), m5a, m5b e
+    m7 (especial concluída dentro da janela, sem oferecer Concluir).
+  - Verificado no worktree (sem tocar banco): `vitest` sobre os três
+    arquivos tocados (**59 passed**), `typecheck`, `lint`,
+    `format:check`, e `test:coverage` (**305 testes em 25 arquivos, 100%
+    nos quatro eixos**); cada mutação (uma por achado) vista reprovando e
+    restaurada. `make check` completo (hook do commit) e mais um `make
+    check` rodado depois, com o banco e as portas do E2E — ambos EXIT 0,
+    números em "Resultados". `fix-final-front-report.md`.
 
 ## Comandos
 
@@ -1309,6 +1391,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre a base `12288a2`, no Linux, antes de qualquer mudança do Incremento B (ruling da Task 0 no ledger) | Aprovado, EXIT 0, 1m47s. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas). Backend: 322 testes, cobertura total de 100%. E2E: 11 cenários. Gitleaks sem achados. |
 | `make check` duas vezes seguidas, sobre a árvore final do Incremento B (Tasks 0–9 integradas, HEAD `0b9197b`) | Aprovado, EXIT 0 nas duas, ~1m31s de relógio cada. Frontend: 301 testes em 25 arquivos, cobertura de 100% nos quatro eixos (537/537 instruções, 351/351 ramificações, 165/165 funções, 519/519 linhas) — idêntico nas duas rodadas. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: **465 testes**, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — idêntico nas duas rodadas. E2E: **13 cenários** aprovados em Chromium (12,8 s e 13,1 s). Gitleaks sem achados nas duas. |
 | `make check-e2e` duas vezes seguidas, sobre a árvore final (prova do C17: o segundo `check-e2e` também aprova, de esquema limpo) | Aprovado, EXIT 0 nas duas (~19,4 s e ~18,6 s de relógio, incluindo `reset-test-db` + build + Playwright). **13 passed** nas duas (14,6 s e 13,6 s de Playwright) — os 11 cenários antigos mais os 2 do `cycle.spec.ts`; o segundo `check-e2e`, rodado imediatamente depois do primeiro sem `check-api` no meio, não reprovou com `409 plano_existente`, confirmando que `reset-test-db` recria o esquema do zero a cada execução. |
+| `make check` do hook `pre-commit` no commit `71a2001` (conserto final do frontend, passo 1 do fechamento) — número visto rodando `pre-commit run gate --verbose` logo depois, sobre a mesma árvore (o hook, sem `--verbose`, só imprime "Passed") | Aprovado, EXIT 0, 100,17 s de relógio. Frontend: **305 testes em 25 arquivos**, cobertura de 100% nos quatro eixos (538/538 instruções, 355/355 ramificações, 165/165 funções, 520/520 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: **465 testes**, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações). E2E: **13 cenários** aprovados em Chromium (15,9 s de Playwright). Gitleaks sem achados. |
+| `make check` rodado por mim direto (sem o hook), logo depois do anterior, sobre a mesma árvore (ainda commit `71a2001`) | Aprovado, EXIT 0, 94,2 s de relógio. Frontend: 305 testes em 25 arquivos, cobertura de 100% nos quatro eixos (538/538 instruções, 355/355 ramificações, 165/165 funções, 520/520 linhas) — idêntico ao anterior. `uv lock --check` aprovado. Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — idêntico. E2E: 13 cenários aprovados em Chromium (13,6 s de Playwright). Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -1989,6 +2073,28 @@ que não tinham chegado aqui)
     um tipo de missão cuja regra dependa do instante de outro jeito no
     futuro. Não medido; registrado porque o ledger pediu o registro
     explícito, não porque haja um caso reproduzido de resposta errada.
+57. **A seção do ciclo não se atualiza sozinha na virada do dia com a aba
+    aberta** (achado m2 da revisão final da branch, diferido de propósito).
+    `useCycle` só refaz o `GET /api/cycle` por `refresh()` explícito
+    (chamado depois de concluir uma missão); não há refetch em
+    `visibilitychange` nem em `focus`. Consequência: uma aba deixada aberta
+    de um lado para o outro da meia-noite de São Paulo continua mostrando o
+    dia anterior — missão de hoje, sequência e progresso — até um `refresh`
+    manual (recarregar a página ou concluir algo). Fica para o **Incremento
+    C**, junto com a trilha da semana, que tem o mesmo problema em escala
+    maior (sete dias, não um).
+58. **Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
+    e para a diária PERDIDA na trilha** (triagem da revisão final da branch;
+    já estava listado como "minor" diferido da Task 3, promovido a pendência
+    aqui). `tests/integration/test_cycle_service.py` cobre a especial
+    revelada e a avulsa na trilha, mas não o caso de a especial aparecer
+    **expirada** (janela dos dois dias fechada) nem o de uma diária aparecer
+    **perdida** na trilha da semana devolvida por `ler_plano_atual`/
+    `ler_ciclo`. Nenhum dos dois estados é inalcançável — `Availability` já
+    os modela —, só não tem teste que force a trilha a exibi-los. Fica para
+    o **Incremento C**, que consome a trilha (`GET /api/plans/current`) para
+    a tela de Campanhas e precisa dos dois estados cobertos antes de
+    renderizá-los.
 
 ## Próximo incremento
 
