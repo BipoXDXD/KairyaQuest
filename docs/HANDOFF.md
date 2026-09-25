@@ -437,6 +437,39 @@ dias). Detalhe de cada mutação vista reprovando em
 `.superpowers/sdd/2026-09-25-incremento-b/fix-final-front-report.md` e
 `fix-final-back-report.md`.
 
+**Achado: `test_limites_da_tutoria_recusam_zero` era vacuamente verde sob o
+`pre-push`, defeito pré-existente descoberto pelo `pre-push` real de um
+clone.** O `git push` desta branch foi recusado pelo gate com as três
+reprovações do parametrizado
+(`FOCUSQUEST_TUTOR_MAX_TOKENS=0`/`FOCUSQUEST_TUTOR_TIMEOUT_SECONDS=0`/
+`FOCUSQUEST_TUTOR_HISTORY_MESSAGES=0`), enquanto `make check` local passava.
+Causa: `scripts/check-push.sh` + `scripts/push-env.sh` exportam para o
+ambiente do worktree do gate toda `FOCUSQUEST_*` do `.env` do clone
+(`docs/QUALITY.md` §6); o `.env` deste clone, copiado do `.env.example`, traz
+`FOCUSQUEST_TUTOR_MAX_TOKENS=1024` etc. — valores não-zero. O helper
+`_settings_do_arquivo` (`tests/unit/test_config.py`) escrevia um `.env`
+temporário com `=0` e esperava `ValueError`, mas no pydantic-settings a
+variável de **ambiente** vence o arquivo: o `Settings()` lia o valor
+exportado pelo `pre-push`, não o `0` do arquivo, e não recusava. Medido antes
+de mexer: `FOCUSQUEST_TUTOR_MAX_TOKENS=1024
+FOCUSQUEST_TUTOR_TIMEOUT_SECONDS=60 FOCUSQUEST_TUTOR_HISTORY_MESSAGES=20 uv
+run pytest tests/unit/test_config.py -q --no-cov` reproduziu as mesmas três
+reprovações fora do `pre-push`; os demais testes do arquivo (inclusive os
+que também usam o helper) passaram com todo o `.env` exportado, então o
+vazamento era só destas três. Conserto: `_settings_do_arquivo` agora tira do
+ambiente, com `monkeypatch.delenv`, toda variável `FOCUSQUEST_*` que estiver
+presente no processo no momento da chamada — não só as de banco e a chave da
+Anthropic — antes de escrever o `.env` do teste; docstring no próprio helper
+explica o motivo. `pre-push`, `push-env.sh` e o gate não foram tocados. A
+guarda de sessão de `tests/conftest.py`
+(`FOCUSQUEST_ANTHROPIC_BASE_URL`) não foi enfraquecida: o `monkeypatch` do
+teste restaura o ambiente no teardown, e `test_a_suite_nunca_aponta_para_a_anthropic`
+não usa o helper. Verificado: o mesmo comando de reprodução passa com as
+variáveis exportadas e sem elas, e com todo o `.env` exportado num
+subshell (`set -a; . ./.env; set +a`); mutação (reverter o `delenv`
+generalizado para o antigo, específico de banco/chave) reproduziu as mesmas
+três reprovações, restaurada em seguida.
+
 ### Dependências e infraestrutura que entraram no B
 
 O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e

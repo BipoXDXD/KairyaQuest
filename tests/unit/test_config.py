@@ -1,5 +1,6 @@
 """A configuracao vem do ambiente, sem valor embutido para credencial."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -76,12 +77,29 @@ def _settings_do_arquivo(
 ) -> Settings:
     """Um `Settings` lido SO de um .env escrito pelo teste.
 
-    As variaveis de banco saem do ambiente para que o .env do teste seja a
-    unica fonte; o chdir impede o .env real do repositorio de entrar.
+    Tira do ambiente TODA variavel `FOCUSQUEST_*` presente no processo, nao
+    so as de banco e a chave da Anthropic: no pydantic-settings a variavel de
+    AMBIENTE vence o arquivo, entao qualquer `FOCUSQUEST_*` que sobrevivesse
+    aqui leria o valor do processo, nao o do .env que este teste acabou de
+    escrever. O `pre-push` (scripts/check-push.sh + scripts/push-env.sh)
+    exporta para o ambiente do gate toda `FOCUSQUEST_*` do .env do clone -- e
+    o `.env` copiado do `.env.example` tem `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+    etc., nao zero. Sem este delenv, `test_limites_da_tutoria_recusam_zero`
+    passava em `make check` isolado e reprovava so sob o `pre-push`: o .env
+    de teste escrevia "=0", mas a variavel de ambiente exportada (nao-zero)
+    vencia, e o `Settings()` nao recusava. Medido em 2026-09-25: com as tres
+    variaveis exportadas (valores do `.env.example`), as tres reprovacoes do
+    `pre-push` foram reproduzidas fora dele, e o delenv abaixo as fez passar.
+    O `chdir` continua tirando o .env real do repositorio da jogada; o
+    delenv tira o ambiente. Isto NAO toca a guarda de sessao de
+    `tests/conftest.py` (`FOCUSQUEST_ANTHROPIC_BASE_URL`): o `monkeypatch`
+    deste teste restaura o ambiente no teardown, entao a guarda volta a
+    valer para o proximo teste -- o mesmo mecanismo que
+    `test_padroes_da_tutoria` ja usa para o mesmo fim.
     """
-    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FOCUSQUEST_ANTHROPIC_API_KEY", raising=False)
+    for chave in list(os.environ):
+        if chave.startswith("FOCUSQUEST_"):
+            monkeypatch.delenv(chave, raising=False)
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(_BANCOS + conteudo)
     return Settings()
