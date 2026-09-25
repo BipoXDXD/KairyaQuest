@@ -130,6 +130,41 @@ describe('CampaignTrail', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('I1: a aba que volta durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+    let resolverInicial: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/plans/current': (_init, call) => {
+        if (call === 1)
+          return new Promise<Response>((resolve) => {
+            resolverInicial = resolve
+          })
+        if (call === 2) return new Response(null, { status: 503 })
+        return Response.json({ plan: plano() })
+      },
+    })
+    render(<CampaignTrail />)
+    expect(screen.getByTestId('trail-loading')).toBeInTheDocument()
+
+    act(() => {
+      setVisibility('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    const alerta = await screen.findByTestId('trail-error')
+    expect(alerta).toHaveTextContent('O servidor respondeu 503.')
+
+    // A carga inicial assenta DEPOIS, e e descartada por ser mais velha: o
+    // erro continua, com a saida pelo botao.
+    await act(async () => {
+      resolverInicial(Response.json({ plan: plano() }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(screen.getByTestId('trail-error')).toBeInTheDocument()
+    expect(screen.queryByTestId('trail-loading')).not.toBeInTheDocument()
+
+    fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar novamente' }))
+    expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
+  })
+
   it('sem plano na semana e um estado proprio, sem trilha, e diz que a sequencia nao quebra', async () => {
     servir(null)
     render(<CampaignTrail />)

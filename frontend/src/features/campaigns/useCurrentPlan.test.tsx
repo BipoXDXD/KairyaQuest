@@ -412,33 +412,87 @@ describe('useCurrentPlan', () => {
     })
   })
 
-  it('o refresh que falha antes do pedido inicial assentar nao inventa um estado carregado', async () => {
-    // Mesmo raciocinio do `useCycle`: `refresh()` falha antes do pedido
-    // inicial assentar, com o MESMO `id` ainda corrente (nada mais novo
-    // comecou) -- a checagem de `id` deixa passar, e quem decide e o
-    // `atual.status`.
-    let rejeitarRefresh: (error: unknown) => void = () => undefined
+  // Achado I1 da revisao final (Ruling R12). `refresh()` incrementa a
+  // sequencia, entao a resposta da carga inicial do efeito passa a ser
+  // descartada quando chegar -- quem decide o estado e o refresh. Se ele
+  // falha com a tela ainda em "carregando", "carregando" vira ERRO (com o
+  // "Tentar novamente"): antes, o `catch` so sabia marcar `refreshFailed`
+  // num estado `loaded` e devolvia o `loading` intacto, e a tela ficava
+  // presa em "Consultando..." para sempre. A carga inicial ASSENTA depois,
+  // de proposito: e isso que mostra que nada mais tiraria a tela de
+  // "carregando" (um teste em que ela nunca assenta passaria vacuamente).
+  it.each([
+    ['com sucesso', () => Response.json({ plan: plano })],
+    ['com falha', () => new Response(null, { status: 502 })],
+  ])(
+    'o refresh que falha antes da carga inicial assentar vira erro, e a carga inicial que assenta depois (%s) nao muda isso',
+    async (_caso, respostaInicial) => {
+      let resolverInicial: (resposta: Response) => void = () => undefined
+      let resolverRefresh: (resposta: Response) => void = () => undefined
+      routeFetch({
+        'GET /api/plans/current': (_init, call) => {
+          if (call === 1)
+            return new Promise<Response>((resolve) => {
+              resolverInicial = resolve
+            })
+          if (call === 2)
+            return new Promise<Response>((resolve) => {
+              resolverRefresh = resolve
+            })
+          return new Promise<Response>(() => undefined)
+        },
+      })
+      const { result } = renderHook(() => useCurrentPlan())
+      expect(result.current.state).toEqual({ status: 'loading' })
+
+      act(() => {
+        result.current.refresh()
+      })
+      await act(async () => {
+        resolverRefresh(new Response(null, { status: 503 }))
+        await Promise.resolve()
+      })
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'error',
+          message: 'O servidor respondeu 503.',
+        })
+      })
+
+      // Um macrotask inteiro: deixa a resposta inicial percorrer todo o
+      // `requestJson` (corpo, JSON, `then`/`catch` do efeito) antes da
+      // assercao -- so microtasks poderiam afirmar antes de ela chegar.
+      await act(async () => {
+        resolverInicial(respostaInicial())
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor respondeu 503.',
+      })
+    },
+  )
+
+  it('o refresh que falha com a tela ja no erro deixa o erro como esta, com a mensagem da carga', async () => {
+    // O terceiro ramo do `catch` do refresh: nem `loaded` (marcaria
+    // desatualizado) nem `loading` (viraria erro) -- o erro que ja esta na
+    // tela, com o "Tentar novamente", continua sendo a saida.
     routeFetch({
-      'GET /api/plans/current': (_init, call) => {
-        if (call === 1) return new Promise<Response>(() => undefined) // inicial fica em voo
-        if (call === 2)
-          return new Promise<Response>((_resolve, reject) => {
-            rejeitarRefresh = reject
-          })
-        return new Promise<Response>(() => undefined)
-      },
+      'GET /api/plans/current': (_init, call) =>
+        call === 1 ? new Response(null, { status: 503 }) : new Response(null, { status: 500 }),
     })
     const { result } = renderHook(() => useCurrentPlan())
-    expect(result.current.state).toEqual({ status: 'loading' })
-
-    act(() => {
-      result.current.refresh()
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor respondeu 503.',
+      })
     })
     await act(async () => {
-      rejeitarRefresh(new Error('falha de rede'))
-      await Promise.resolve()
+      result.current.refresh()
+      await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(result.current.state).toEqual({ status: 'loading' })
+    expect(result.current.state).toEqual({ status: 'error', message: 'O servidor respondeu 503.' })
   })
 
   it('a aba que volta a ficar visivel atualiza a trilha em silencio', async () => {

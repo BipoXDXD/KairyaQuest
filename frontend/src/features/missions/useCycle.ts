@@ -94,14 +94,25 @@ export function useCycle(): UseCycleResult {
         }
         setState({ status: 'loaded', cycle, refreshFailed: false })
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (requestId.current !== id) {
           return
         }
-        // So marca o que esta carregado: se um reload comecou nesse meio
-        // tempo, a tela esta em "carregando" (e a checagem de `id` acima ja
-        // teria voltado antes de chegar aqui) e o reload decide o resto.
-        setState((atual) => (atual.status === 'loaded' ? { ...atual, refreshFailed: true } : atual))
+        // Com o dado na tela, a falha so o marca como possivelmente
+        // desatualizado. Com a tela ainda em "carregando", este refresh
+        // invalidou a carga inicial (a resposta dela sera descartada pela
+        // checagem de `id`), entao ninguem mais tiraria a tela dali: vira
+        // ERRO, com o "Tentar novamente" (achado I1 da revisao final do
+        // Incremento C, Ruling R12 -- antes, o QG ficava em "Consultando..."
+        // para sempre). Um reload que comecou depois deste refresh ja teria
+        // voltado na checagem de `id` acima.
+        setState((atual) =>
+          atual.status === 'loaded'
+            ? { ...atual, refreshFailed: true }
+            : atual.status === 'loading'
+              ? { status: 'error', message: messageFor(error) }
+              : atual,
+        )
       })
   }, [])
 
