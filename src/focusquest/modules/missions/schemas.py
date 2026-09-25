@@ -13,22 +13,24 @@ banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
 da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import (
     AfterValidator,
     AwareDatetime,
     BaseModel,
-    ConfigDict,
     Field,
     computed_field,
 )
 
+from focusquest.modules.missions.cycle_domain import Availability
+from focusquest.modules.missions.cycle_service import MissaoLida
 from focusquest.modules.missions.domain import (
     MissionState,
+    MissionType,
     duracao_real,
-    xp_para_dificuldade,
+    xp_da_missao,
 )
 
 # O teto da dificuldade aceita na ENTRADA. Escolhido em 5 por dois motivos que
@@ -141,37 +143,56 @@ class MissionComplete(BaseModel):
 class MissionRead(BaseModel):
     """A missao como a API a publica.
 
-    `from_attributes` existe para que a rota possa validar direto o objeto do
-    SQLAlchemy. O schema continua sendo uma coisa diferente do modelo: ele
-    escolhe o que sai (nao publica `user_id` nem `created_at`) e acrescenta o
-    que e derivado.
+    Nao e mais validada direto do objeto do SQLAlchemy (`from_attributes`):
+    `deadline` e `availability` sao DERIVADOS para a diaria e a especial (C10,
+    C2), e so o servico sabe deriva-los. Quem publica uma missao passa por
+    `da_leitura`, com o que o servico leu.
 
     Os dois `type: ignore[prop-decorator]` abaixo nao escondem defeito nosso:
-    o mypy nao suporta decorador acima de `@property` (`Decorators on top of
-    @property are not supported`), e `@computed_field` precisa estar acima --
-    e a ordem que o proprio pydantic documenta. Sem o ignore o `make check-api`
-    reprova; com ele, o codigo verificado e exatamente o que roda. Medido nas
-    duas direcoes: sem o ignore sao dois erros, com o ignore o mypy nao acusa
-    ignore sem uso (o `strict` liga `warn_unused_ignores`).
+    o mypy nao suporta decorador acima de `@property`, e `@computed_field`
+    precisa estar acima -- e a ordem que o proprio pydantic documenta.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int
     instructions: str
     completion_criterion: str
     difficulty: int
     estimated_minutes: int
+    mission_type: MissionType
+    # Data CIVIL do ciclo, sem fuso: a tela a mostra sem conversao.
+    day: date | None
+    # Obrigatorio na resposta mesmo sendo nulo na COLUNA para diaria e
+    # especial: e calculado para elas, e a especial bloqueada nunca e
+    # publicada como MissionRead (spec, Endpoints).
     deadline: datetime
+    availability: Availability
     state: MissionState
     started_at: datetime | None
     completed_at: datetime | None
 
+    @classmethod
+    def da_leitura(cls, lida: MissaoLida) -> MissionRead:
+        missao = lida.missao
+        return cls(
+            id=missao.id,
+            instructions=missao.instructions,
+            completion_criterion=missao.completion_criterion,
+            difficulty=missao.difficulty,
+            estimated_minutes=missao.estimated_minutes,
+            mission_type=missao.mission_type,
+            day=missao.day,
+            deadline=lida.deadline,
+            availability=lida.availability,
+            state=missao.state,
+            started_at=missao.started_at,
+            completed_at=missao.completed_at,
+        )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def xp(self) -> int:
-        """Derivado da dificuldade, nunca armazenado (decisao A4)."""
-        return xp_para_dificuldade(self.difficulty)
+        """Derivado do tipo e da dificuldade, nunca armazenado (A4, C9)."""
+        return xp_da_missao(self.mission_type, self.difficulty)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

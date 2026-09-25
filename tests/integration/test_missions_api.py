@@ -26,7 +26,11 @@ from sqlalchemy.pool import QueuePool
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import app
-from focusquest.modules.missions.domain import MissionState, xp_para_dificuldade
+from focusquest.modules.missions.domain import (
+    MissionState,
+    MissionType,
+    xp_para_dificuldade,
+)
 from focusquest.modules.missions.models import Mission, MissionOperation, User
 from focusquest.modules.missions.schemas import (
     DIFICULDADE_MAXIMA,
@@ -168,6 +172,7 @@ def _missao_de_outro_usuario(session: Session) -> int:
     _registrar_outro_usuario(session)
     missao = Mission(
         user_id=OUTRO,
+        mission_type=MissionType.AVULSA,
         instructions="Missao alheia",
         completion_criterion="Nao e da sua conta",
         difficulty=1,

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-api check-e2e check-secrets format db-up db-down migrate migrate-test
+.PHONY: help bootstrap check check-web check-api check-e2e check-secrets format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -68,20 +68,22 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 	uv run mypy src tests alembic
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
-# `migrate-test` e PRE-REQUISITO, e nao a primeira linha da receita: o cenario
-# fala com a API de verdade, e uma API contra um banco sem esquema responde 500
-# -- falha ruidosa, mas com o sintoma longe da causa. Com o pre-requisito,
-# `make check-e2e` roda sozinho num clone novo, sem depender de o `check-api`
-# ter passado antes e deixado o esquema em head.
+# `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
+# o E2E semeia um plano semanal, que e unico por semana -- sem esquema limpo,
+# o segundo `make check-e2e` seguido reprovaria com 409 (spec do ciclo, C17).
 #
 # `VITE_API_URL=/api` na propria linha do build porque o valor e embutido no
 # BUNDLE, em tempo de build (o `vite preview` serve o que o build produziu; ler
 # a variavel depois seria tarde). O `frontend/.env` nao serve aqui: ele e
 # ignorado pelo git, entao nao existe em clone novo nem no CI -- e o cliente
 # HTTP recusa carregar sem a variavel, de proposito.
-check-e2e: migrate-test ## Build e testes ponta a ponta com Playwright e axe-core
+check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-core
 	cd $(WEB) && VITE_API_URL=/api npm run build
 	cd $(WEB) && npx playwright test
+
+reset-test-db: ## DESTRUTIVO: recria o banco de TESTE do zero e aplica as migracoes
+	PYTHONPATH=tests uv run python -m integration.banco_de_teste
+	uv run alembic -x test=true upgrade head
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh

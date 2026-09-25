@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.core.errors import PrazoExpiradoError, ProvedorNaoConfiguradoError
+from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.router import USUARIO_UNICO
 from focusquest.modules.missions.schemas import MAIOR_INTEIRO_DA_COLUNA, MissionRead
 from focusquest.modules.tutoring.dependencies import get_tutoria
@@ -142,7 +143,7 @@ def confirmar(
         raise PrazoExpiradoError("o prazo proposto ja passou; peca outra proposta")
     return ConfirmRead(
         action=ActionRead.model_validate(resultado.acao),
-        mission=MissionRead.model_validate(resultado.missao),
+        mission=MissionRead.da_leitura(leitura_da_avulsa(resultado.missao)),
     )
 
 

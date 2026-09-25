@@ -15,11 +15,18 @@ from sqlalchemy.orm import Session
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
+    MissaoExpiradaError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
 )
-from focusquest.modules.missions.domain import MissionState, validar_transicao
+from focusquest.modules.missions.cycle_domain import NAO_CONCLUIVEIS
+from focusquest.modules.missions.cycle_service import ler_missao
+from focusquest.modules.missions.domain import (
+    MissionState,
+    MissionType,
+    validar_transicao,
+)
 from focusquest.modules.missions.models import Mission, MissionOperation
 
 # O tipo da operacao registrada em `mission_operations.kind`: QUAL operacao
@@ -69,6 +76,7 @@ def criar_missao(
     """
     missao = Mission(
         user_id=user_id,
+        mission_type=MissionType.AVULSA,
         instructions=instructions,
         completion_criterion=completion_criterion,
         difficulty=difficulty,
@@ -90,11 +98,17 @@ def listar_missoes(session: Session, user_id: int) -> list[Mission]:
     pode devolver as linhas em qualquer ordem, e a lista mudaria de ordem
     sozinha entre dois carregamentos da tela. `id` entra como desempate para
     que dois prazos iguais tambem tenham ordem definida.
+
+    So avulsas: a diaria e a especial aparecem pelo ciclo (`GET /api/cycle`), e
+    listar uma diaria futura aqui a revelaria (C11).
     """
     return list(
         session.scalars(
             select(Mission)
-            .where(Mission.user_id == user_id)
+            .where(
+                Mission.user_id == user_id,
+                Mission.mission_type == MissionType.AVULSA,
+            )
             .order_by(Mission.deadline, Mission.id)
         )
     )
@@ -144,11 +158,17 @@ def concluir_missao(
 
     # A hora e lida AQUI, com a linha ja travada, e nao antes do `_buscar`
     # (decisao C13 da spec do ciclo diario). Lida antes, uma conclusao que
-    # esperasse a trava de outra carregaria um instante anterior a espera. No
-    # Incremento A so o `completed_at` usa a hora; no B, a regra do dia a le
-    # entre o reenvio e a transicao, e por isso a leitura ja fica neste ponto.
+    # esperasse a trava de outra carregaria um instante anterior a espera. A
+    # hora decide a ocultacao, a regra do dia e o `completed_at`.
     # Provado por `test_relogio_e_lido_com_a_linha_ja_travada`.
     agora = clock()
+
+    # Ocultacao ANTES do reenvio (spec, "Ordem da conclusao", passo 3): um
+    # `operation_id` gasto em outra missao, mandado ao id de uma missao
+    # oculta, cairia na checagem de reuso e receberia 409, enquanto um id
+    # inexistente recebe 404 -- a diferenca revelaria que ela existe.
+    # `ler_missao` levanta o mesmo `MissaoNaoEncontradaError` de "nao existe".
+    lida = ler_missao(session, missao, agora)
 
     ja_feita = session.scalar(
         select(MissionOperation).where(MissionOperation.operation_id == operation_id)
@@ -158,6 +178,16 @@ def concluir_missao(
         # Mesma missao e mesmo tipo: e reenvio, e o resultado e o de antes.
         # `missao` ja E a missao da operacao -- a conferencia acima garante.
         return missao
+
+    # Regra do dia, so para o que nao foi concluido (a disponibilidade de uma
+    # missao concluida e `concluida`, que nao esta em NAO_CONCLUIVEIS). Depois
+    # do reenvio: a conclusao das 23:59:59 reenviada as 00:00:01 ja devolveu o
+    # mesmo 200 acima.
+    if lida.availability in NAO_CONCLUIVEIS:
+        raise MissaoExpiradaError(
+            f"missao {mission_id} nao pode mais ser concluida: "
+            f"{lida.availability.value}"
+        )
 
     validar_transicao(missao.state, MissionState.CONCLUIDA)
     missao.state = MissionState.CONCLUIDA

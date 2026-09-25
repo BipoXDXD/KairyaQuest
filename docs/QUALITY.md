@@ -25,10 +25,13 @@ O `.env` é obrigatório para o gate, não para a aplicação apenas:
 `FOCUSQUEST_TEST_DATABASE_URL` sem valor padrão, e sem elas o `check-api`
 reprova na partida. O `make db-up` precisa vir antes do `make check` porque
 a suíte de integração e o E2E falam com um PostgreSQL real. O
-`make migrate-test` à parte não é estritamente necessário — o `check-e2e`
-o declara como pré-requisito, e a fixture do pytest migra o banco de teste
-por conta própria —, mas rodá-lo sozinho mostra uma falha de migração
-isolada, antes de ela aparecer misturada ao resto do gate.
+`make migrate-test` à parte não é estritamente necessário — a fixture do
+pytest migra o banco de teste por conta própria —, mas rodá-lo sozinho
+mostra uma falha de migração isolada, antes de ela aparecer misturada ao
+resto do gate. **Desde o Incremento B**, o pré-requisito **do `check-e2e`**
+deixou de ser `migrate-test` e passou a ser `reset-test-db` (seção 4;
+Task 6, commit `50e2150`), mas `make migrate-test` continua útil como
+comando isolado, para o mesmo diagnóstico rápido de migração.
 
 O comando dos hooks é separado do `make bootstrap` **de propósito**, não por
 esquecimento: `make bootstrap` não instala hooks de git, e não vai passar a
@@ -70,13 +73,14 @@ sem nenhuma validação. Ver a limitação correspondente na seção 6.
 | `make check` | Gate completo. Agrega `check-web`, `check-api`, `check-e2e` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
 | `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
-| `make check-e2e` | Pré-requisito `migrate-test`; depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
+| `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
 | `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar arquivos **versionados**, e é manual. |
 | `make db-up` | `docker compose up -d --wait postgres`: sobe o PostgreSQL do `compose.yaml` e só devolve o controle com o healthcheck aprovado. |
 | `make db-down` | `docker compose down`: derruba o container **preservando** o volume (não usa `-v`). |
 | `make migrate` | `uv run alembic upgrade head` no banco de **desenvolvimento**. |
-| `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste**. |
+| `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste** — só migra, não apaga. |
+| `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (apaga e recria o schema `public` do banco de teste, atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
 
 Os alvos de verificação são os quatro `check-*`. `bootstrap`, `format`,
 `db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
@@ -259,8 +263,28 @@ mesmos criaram.
 
 ### `check-e2e`
 
-- **Pré-requisito `migrate-test`:** a API do cenário contra um banco sem
-  esquema responderia 500, com o sintoma longe da causa.
+- **Pré-requisito `reset-test-db`, desde o Incremento B** (Task 6, commit
+  `50e2150`; a fonte de verdade continua sendo o `Makefile`). Antes do B, o
+  pré-requisito era `migrate-test` (só migrava);
+  agora o `check-e2e` **começa de esquema limpo** — o alvo recria o schema
+  `public` do banco de teste do zero (`DROP SCHEMA public CASCADE` +
+  `CREATE SCHEMA public`, atrás da guarda compartilhada de
+  `tests/integration/banco_de_teste.py`) e reaplica as migrações, antes de
+  qualquer cenário. **Motivo (spec do ciclo diário, C17):** o plano semanal
+  é único por semana (`uq_weekly_plans_user_id_week_start`); sem esquema
+  limpo, um `cycle.spec.ts` que semeia o mesmo plano numa segunda execução
+  do `check-e2e` reprovaria com `409 plano_existente`, em vez de rodar de
+  novo do zero. Isso **fecha** a pendência sobre linhas acumuladas entre
+  execuções do E2E (`docs/HANDOFF.md`, pendência 20): com esquema limpo a
+  cada `check-e2e`, não há mais o que acumular — a API do cenário contra um
+  banco sem esquema (o cenário antigo que o `migrate-test` evitava)
+  continua evitado, agora por um alvo que também apaga o que sobrou.
+  **Medido na Task 6** (antes do `cycle.spec.ts` da Task 9): `make
+  check-e2e` rodado duas vezes seguidas, sem `check-api` no meio — **11
+  passed** nas duas, confirmando o critério de aceite da C17. **Remedido ao
+  fim do B** (Task 10, árvore final com o `cycle.spec.ts` da Task 9): `make
+  check-e2e` duas vezes seguidas — **13 passed** nas duas (os 11 antigos
+  mais os 2 do ciclo), EXIT 0.
 - **Build de produção** (`VITE_API_URL=/api npm run build`): a variável vai
   na própria linha porque é embutida no bundle em tempo de build, e o
   `frontend/.env` não existe num clone novo nem no CI.
@@ -319,19 +343,24 @@ mensagens). Dado remanescente não aprova nem reprova o cenário. Duas
 consequências operacionais:
 
 - **Não rode `check-api` e `check-e2e` ao mesmo tempo na mesma máquina** —
-  nem dois `make check` simultâneos. A fixture do pytest faz `DROP SCHEMA`
-  no banco que a API do E2E está usando, e o E2E usa **três** portas fixas
-  (8100, 5273, 8150 desde o 1b-2). O resultado é falha alta (500, tabela
-  inexistente, porta ocupada), não aprovação silenciosa — mas é falha. No CI
-  a corrida não existe: cada job tem o próprio serviço PostgreSQL.
-- **Cada execução do E2E deixa linhas no `focusquest_test`.** Elas só somem
-  no próximo `DROP SCHEMA` da suíte pytest. Medido depois de um `make check`
-  completo, na Task 7 do 1b-2 (substitui a medição "4 linhas" do
-  Incremento A, que só contava missões): **6 missões** (as 4 do quadro, duas
-  concluídas, mais a confirmada e a semeada pela tutoria), **7 mensagens**
-  da tutoria e **2 ações**. `make check-e2e` rodado repetidamente, sem o
-  `check-api` no meio, acumula por execução — medido: +6/+7/+2 (12/14/4
-  depois da segunda).
+  nem dois `make check` simultâneos. **Continua aberta no Incremento B**
+  (pendência 19, `docs/HANDOFF.md`): o `reset-test-db` novo não muda esta
+  restrição — ele recria o schema do mesmo banco `focusquest_test`
+  compartilhado, e uma execução concorrente do `check-api` (que também
+  espera aquele schema de pé) reprova alto do mesmo jeito que reprovava
+  antes. A fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E
+  está usando, e o E2E usa **três** portas fixas (8100, 5273, 8150 desde o
+  1b-2). O resultado é falha alta (500, tabela inexistente, porta ocupada),
+  não aprovação silenciosa — mas é falha. No CI a corrida não existe: cada
+  job tem o próprio serviço PostgreSQL.
+- **Desde o Incremento B, cada execução do `check-e2e` começa e termina com
+  o banco vazio da própria execução** — não acumula mais entre chamadas
+  seguidas (pendência 20, `docs/HANDOFF.md`, **resolvida** na Task 6,
+  commit `50e2150`). Antes do B, medido na Task 7 do 1b-2: um `make check` completo
+  deixava **6 missões**, **7 mensagens** da tutoria e **2 ações**, e um
+  `check-e2e` repetido sem `check-api` no meio acumulava por execução
+  (+6/+7/+2, 12/14/4 depois da segunda) — essa medição fica registrada como
+  o comportamento **anterior** ao `reset-test-db`, não o atual.
 
 ### Validação dos lockfiles — assimetria declarada
 

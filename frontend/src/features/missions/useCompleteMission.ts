@@ -52,10 +52,14 @@ export interface UseCompleteMissionResult {
  *
  * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que
  * faz o "Atualizar o quadro" esperar a conclusao em andamento.
+ *
+ * Quem precisa reagir ao sucesso -- a secao do ciclo atualiza a sequencia --
+ * passa `onCompleted`; o quadro de avulsas nao passa nada.
  */
 export function useCompleteMission(
   missionId: number,
   registry: CompletionRegistry,
+  onCompleted?: () => void,
 ): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
 
@@ -78,6 +82,7 @@ export function useCompleteMission(
       .then((mission) => {
         registry.release(missionId)
         setState({ status: 'completed', mission })
+        onCompleted?.()
       })
       .catch((error: unknown) => {
         const failure = describeCompletionFailure(error)
@@ -91,7 +96,7 @@ export function useCompleteMission(
         // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
         registry.settled()
       })
-  }, [missionId, registry])
+  }, [missionId, registry, onCompleted])
 
   return { state, complete }
 }

@@ -79,3 +79,33 @@ def xp_para_dificuldade(dificuldade: int) -> int:
     if dificuldade < 1:
         raise ValueError(f"dificuldade precisa ser >= 1, recebido {dificuldade}")
     return XP_BASE + XP_INCREMENTO * dificuldade * (dificuldade - 1)
+
+
+class MissionType(StrEnum):
+    """O tipo da missao (spec do ciclo diario, decisao C4).
+
+    A avulsa e a missao do 1a, com prazo proprio. A diaria e a especial nascem
+    do plano semanal, e o prazo delas e DERIVADO (C10), nunca gravado. O nome
+    e `mission_type`, e nao `kind`, porque `mission_operations.kind` ja existe
+    com outro sentido.
+    """
+
+    AVULSA = "avulsa"
+    DIARIA = "diaria"
+    ESPECIAL = "especial"
+
+
+# C9: a especial esta sempre na dificuldade maxima e vale o triplo dela --
+# "o bonus vale o triplo das missoes dificeis", confirmado pelo dono em
+# 2026-09-25. A dificuldade e a mesma de `DIFICULDADE_MAXIMA` (a borda, em
+# schemas.py); um teste de unidade amarra as duas.
+DIFICULDADE_DA_ESPECIAL = 5
+MULTIPLICADOR_DA_ESPECIAL = 3
+
+
+def xp_da_missao(tipo: MissionType, dificuldade: int) -> int:
+    """XP da missao, derivado do tipo e da dificuldade -- nunca armazenado (A4)."""
+    xp = xp_para_dificuldade(dificuldade)
+    if tipo is MissionType.ESPECIAL:
+        return xp * MULTIPLICADOR_DA_ESPECIAL
+    return xp

@@ -19,12 +19,17 @@ from focusquest.core.database import get_engine
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     MensagemEmAndamentoError,
+    MissaoExpiradaError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
+    PlanoExistenteError,
     PrazoExpiradoError,
     ProvedorNaoConfiguradoError,
+    SemanaDistanteError,
+    SemanaEncerradaError,
 )
+from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.tutoring.router import router as tutoring_router
@@ -33,6 +38,7 @@ _log = logging.getLogger(__name__)
 
 app = FastAPI(title="FocusQuest")
 app.include_router(missions_router)
+app.include_router(cycle_router)
 app.include_router(tutoring_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
@@ -59,9 +65,8 @@ class CodigoDeErro(StrEnum):
     obrigaria `NaoPertenceAoUsuarioError` a carregar `missao_nao_encontrada`,
     que e mentira no dominio e so e verdade na resposta.
 
-    Tem so os codigos que algum handler devolve. Os do ciclo diario
-    (`missao_expirada`, `plano_existente`, ...) entram com o erro que os usa:
-    um membro sem handler seria contrato publicado que nenhum caminho alcanca.
+    Tem so os codigos que algum handler devolve: um membro sem handler seria
+    contrato publicado que nenhum caminho alcanca.
     """
 
     MISSAO_NAO_ENCONTRADA = "missao_nao_encontrada"
@@ -71,6 +76,10 @@ class CodigoDeErro(StrEnum):
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
+    MISSAO_EXPIRADA = "missao_expirada"
+    PLANO_EXISTENTE = "plano_existente"
+    SEMANA_ENCERRADA = "semana_encerrada"
+    SEMANA_DISTANTE = "semana_distante"
 
 
 def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:
@@ -202,6 +211,31 @@ def _prazo_expirado(request: Request, exc: PrazoExpiradoError) -> JSONResponse:
     return _erro(
         status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PRAZO_EXPIRADO
     )
+
+
+@app.exception_handler(MissaoExpiradaError)
+def _missao_expirada(request: Request, exc: MissaoExpiradaError) -> JSONResponse:
+    """409: o pedido esta certo, o relogio e que recusa. Nada a repetir."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.MISSAO_EXPIRADA)
+
+
+@app.exception_handler(PlanoExistenteError)
+def _plano_existente(request: Request, exc: PlanoExistenteError) -> JSONResponse:
+    """409: o cliente confirma o que existe com `GET /api/plans/current`."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PLANO_EXISTENTE)
+
+
+@app.exception_handler(SemanaEncerradaError)
+def _semana_encerrada(request: Request, exc: SemanaEncerradaError) -> JSONResponse:
+    """409, e nao 422: depende do relogio, e regra de relogio nao e validacao
+    de schema (spec, Erros)."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEMANA_ENCERRADA)
+
+
+@app.exception_handler(SemanaDistanteError)
+def _semana_distante(request: Request, exc: SemanaDistanteError) -> JSONResponse:
+    """409 pelo mesmo motivo de `_semana_encerrada`."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEMANA_DISTANTE)
 
 
 @app.get("/health")

@@ -1,24 +1,27 @@
 """Mapeamento SQLAlchemy da missao."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     Dialect,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Text,
     TypeDecorator,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from focusquest.core.base import Base
-from focusquest.modules.missions.domain import MissionState
+from focusquest.modules.missions.domain import MissionState, MissionType
 
 # Ao contrario da migracao -- que congelou a lista de estados de proposito,
 # porque migracao e historico --, o modelo DESCREVE a tabela de hoje, e por
@@ -28,6 +31,10 @@ from focusquest.modules.missions.domain import MissionState
 # migracao vai ver o PostgreSQL recusar o estado novo -- falha alta, e no
 # lugar certo, porque o modelo nao cria esquema nenhum.
 _ESTADOS_SQL = ", ".join(f"'{estado.value}'" for estado in MissionState)
+
+# Mesmo motivo de _ESTADOS_SQL: o modelo DESCREVE a tabela de hoje, e por isso
+# deriva do enum -- o CHECK que vive no banco so muda por migracao a mao.
+_TIPOS_SQL = ", ".join(f"'{tipo.value}'" for tipo in MissionType)
 
 
 class MissionStateText(TypeDecorator[MissionState]):
@@ -57,6 +64,45 @@ class MissionStateText(TypeDecorator[MissionState]):
         # silencio esconderia a divergencia atras de um AttributeError em
         # outro lugar.
         return MissionState(value)
+
+
+class MissionTypeText(TypeDecorator[MissionType]):
+    """TEXT no banco, MissionType no Python -- mesmo motivo de MissionStateText."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> MissionType:
+        return MissionType(value)
+
+
+class WeeklyPlan(Base):
+    """O plano de uma semana: 7 diarias e 1 especial (spec, C3).
+
+    Que o plano tem os 7 dias, e que o dia de cada diaria cai na semana dele,
+    e garantido SO pelo servico (`cycle_service.criar_plano`), e esta
+    declarado assim na spec: nenhuma restricao do banco o expressa.
+    """
+
+    __tablename__ = "weekly_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    week_start: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "week_start", name="uq_weekly_plans_user_id_week_start"
+        ),
+        UniqueConstraint("id", "user_id", name="uq_weekly_plans_id_user_id"),
+        CheckConstraint(
+            "EXTRACT(ISODOW FROM week_start) = 1",
+            name="ck_weekly_plans_week_start_segunda",
+        ),
+    )
 
 
 class User(Base):
@@ -96,7 +142,12 @@ class Mission(Base):
     completion_criterion: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[int] = mapped_column(Integer)
     estimated_minutes: Mapped[int] = mapped_column(Integer)
-    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # O tipo e passado por quem cria (sem default no modelo nem no banco),
+    # pelo mesmo motivo do `state` explicito em `criar_missao`.
+    mission_type: Mapped[MissionType] = mapped_column(MissionTypeText)
+    plan_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    day: Mapped[date | None] = mapped_column(Date, default=None)
     # O estado e texto no banco (TEXT + CHECK) e StrEnum no Python.
     state: Mapped[MissionState] = mapped_column(
         MissionStateText, server_default=MissionState.PENDENTE.value
@@ -121,6 +172,41 @@ class Mission(Base):
         CheckConstraint("difficulty >= 1", name="ck_missions_difficulty"),
         CheckConstraint("estimated_minutes > 0", name="ck_missions_estimated_minutes"),
         Index("ix_missions_user_id", "user_id"),
+        CheckConstraint(
+            f"mission_type IN ({_TIPOS_SQL})", name="ck_missions_mission_type"
+        ),
+        CheckConstraint(
+            "(mission_type = 'avulsa') = (plan_id IS NULL)",
+            name="ck_missions_plano_do_tipo",
+        ),
+        CheckConstraint(
+            "(mission_type = 'diaria') = (day IS NOT NULL)",
+            name="ck_missions_dia_do_tipo",
+        ),
+        CheckConstraint(
+            "(mission_type = 'avulsa') = (deadline IS NOT NULL)",
+            name="ck_missions_prazo_do_tipo",
+        ),
+        CheckConstraint(
+            "mission_type <> 'especial' OR difficulty = 5",
+            name="ck_missions_dificuldade_da_especial",
+        ),
+        CheckConstraint(
+            "mission_type = 'avulsa' OR estimated_minutes <= 1440",
+            name="ck_missions_estimativa_do_ciclo",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "user_id"],
+            ["weekly_plans.id", "weekly_plans.user_id"],
+            name="fk_missions_plano_do_usuario",
+        ),
+        UniqueConstraint("plan_id", "day", name="uq_missions_plan_id_day"),
+        Index(
+            "uq_missions_especial_por_plano",
+            "plan_id",
+            unique=True,
+            postgresql_where=text("mission_type = 'especial'"),
+        ),
     )
 
 

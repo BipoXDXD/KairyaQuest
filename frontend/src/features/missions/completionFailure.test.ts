@@ -34,6 +34,14 @@ describe('describeCompletionFailure', () => {
         recovery: 'retry-with-new-operation',
       },
     ],
+    [
+      'missao_expirada',
+      {
+        message:
+          'O prazo desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
+        recovery: 'refresh',
+      },
+    ],
   ])('traduz o code %s para a mensagem e a acao da tela', (code, esperado) => {
     const erro = new ApiError('O servidor respondeu 409.', 409, code)
 
@@ -51,7 +59,7 @@ describe('describeCompletionFailure', () => {
   it('cai na mensagem generica quando o code e desconhecido', () => {
     // Um code que a tela ainda nao conhece -- de um backend mais novo, por
     // exemplo -- nao pode virar texto cru nem tela quebrada.
-    const erro = new ApiError('O servidor respondeu 409.', 409, 'missao_expirada')
+    const erro = new ApiError('O servidor respondeu 409.', 409, 'codigo_futuro')
 
     expect(describeCompletionFailure(erro)).toEqual(UNCONFIRMED)
   })

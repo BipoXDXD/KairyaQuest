@@ -36,30 +36,31 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# A guarda de nome e a mesma segunda condicao de `exigir_banco_de_teste`
-# (tests/integration/conftest.py), pelo mesmo motivo e com a mesma mensagem:
-# uma FOCUSQUEST_TEST_DATABASE_URL mal configurada aponta a variavel de teste
-# para o banco errado, e ai a comparacao com a configuracao aprova -- porque e
-# a configuracao que esta errada. A convencao de nome do .env.example e o que
-# se pode conferir por fora dela.
+# A guarda e a MESMA de `tests/integration/banco_de_teste.exigir_banco_de_teste`
+# -- nao uma copia --, compartilhada tambem com a suite pytest e com o
+# `make reset-test-db` (C17). Ela confere o alvo contra a configuracao E o
+# nome terminado em `_test`; uma FOCUSQUEST_TEST_DATABASE_URL mal configurada
+# apontando para o banco de desenvolvimento e o caso que a segunda condicao
+# pega, porque a primeira sozinha aprovaria (a URL bate com a configuracao,
+# que e quem esta errada).
 #
-# Aqui a guarda protege escrita, nao DROP: o E2E cria missoes. Se ela recusar,
-# o comando nao roda -- `set -e` derruba o script na propria substituicao.
-url="$(uv run python - <<'PY'
+# Aqui a guarda protege escrita, nao DROP: o E2E cria planos e missoes. Se ela
+# recusar, o comando nao roda -- `set -e` derruba o script na propria
+# substituicao.
+url="$(PYTHONPATH=tests uv run python - <<'PY'
 from urllib.parse import urlsplit
 
-from sqlalchemy import make_url
-
 from focusquest.core.config import Settings
+from focusquest.core.database import create_engine_from_url
+from integration.banco_de_teste import exigir_banco_de_teste
 
-url = make_url(Settings().test_database_url)
-nome = url.database or ""
-if not nome.endswith("_test"):
-    raise SystemExit(
-        f"recusando subir a API do E2E contra o banco '{nome}'; esperado um "
-        "banco cujo nome termine em '_test' -- confira "
-        "FOCUSQUEST_TEST_DATABASE_URL"
-    )
+engine = create_engine_from_url(Settings().test_database_url)
+try:
+    exigir_banco_de_teste(engine)
+except RuntimeError as erro:
+    raise SystemExit(f"recusando subir a API do E2E: {erro}") from None
+finally:
+    engine.dispose()
 
 # O provedor da API do E2E tem de ser a MAQUINA LOCAL (o servidor falso).
 # Lista de permissao, e nao recusa de um nome. A chave real mora no Keychain
@@ -80,7 +81,7 @@ if host not in {"127.0.0.1", "localhost", "::1"}:
 
 # hide_password=False de proposito: o valor vai para uma variavel de ambiente
 # do processo filho, nao para log nem para mensagem de erro.
-print(url.render_as_string(hide_password=False))
+print(engine.url.render_as_string(hide_password=False))
 PY
 )"
 

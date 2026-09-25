@@ -10,8 +10,11 @@ const concluida: Mission = {
   completion_criterion: 'Resumo de uma pagina entregue',
   difficulty: 3,
   estimated_minutes: 45,
+  mission_type: 'avulsa',
+  day: null,
   deadline: '2026-09-20T13:00:00Z',
   state: 'concluida',
+  availability: 'concluida',
   started_at: null,
   completed_at: '2026-09-18T15:00:00Z',
   xp: 100,
@@ -30,11 +33,11 @@ const SEGUNDA_CHAVE = '00000000-0000-4000-8000-000000000002'
  * Assim a sequencia de chaves que o teste le e a que a tela mandaria. O
  * `reload` e um espiao: aqui so interessa se a conclusao avisa o registro.
  */
-function renderCompletion() {
+function renderCompletion(onCompleted?: () => void) {
   const reload = vi.fn()
   const rendered = renderHook(() => {
     const { registry, reload: requestReload } = useCompletionRegistry(reload)
-    return { ...useCompleteMission(7, registry), requestReload }
+    return { ...useCompleteMission(7, registry, onCompleted), requestReload }
   })
   return { ...rendered, reload }
 }
@@ -300,6 +303,39 @@ describe('useCompleteMission', () => {
     await waitFor(() => {
       expect(reload).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('chama onCompleted depois do sucesso, e não na falha', async () => {
+    const onCompleted = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluida)))
+    const { result } = renderCompletion(onCompleted)
+
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+    })
+    expect(onCompleted).toHaveBeenCalledTimes(1)
+
+    onCompleted.mockClear()
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+        ),
+    )
+    const { result: resultFalha } = renderCompletion(onCompleted)
+
+    act(() => {
+      resultFalha.current.complete()
+    })
+    await waitFor(() => {
+      expect(resultFalha.current.state.status).toBe('failed')
+    })
+    expect(onCompleted).not.toHaveBeenCalled()
   })
 
   it('avisa o fim do voo tambem quando o POST falha', async () => {

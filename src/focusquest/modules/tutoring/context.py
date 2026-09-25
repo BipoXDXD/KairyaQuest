@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Literal
 
+from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.tutoring.domain import Papel
 from focusquest.modules.tutoring.models import TutorMessage
@@ -43,7 +44,8 @@ def _contexto(agora: datetime, pendentes: Sequence[Mission]) -> str:
     if not pendentes:
         linhas.append("- nenhuma")
     linhas.extend(
-        f"- #{missao.id}: {missao.instructions} (prazo {missao.deadline.isoformat()})"
+        f"- #{missao.id}: {missao.instructions} "
+        f"(prazo {leitura_da_avulsa(missao).deadline.isoformat()})"
         for missao in pendentes
     )
     return "\n".join(linhas)

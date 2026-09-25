@@ -43,6 +43,13 @@ const FAILURE_BY_CODE: Record<MissionErrorCode, CompletionFailure> = {
     message: 'Não foi possível registrar esta tentativa. Tente de novo.',
     recovery: 'retry-with-new-operation',
   },
+  // m5: "prazo", e nao "dia" -- a janela da especial e de DOIS dias (README),
+  // entao "o dia desta missão" seria falso para ela.
+  missao_expirada: {
+    message:
+      'O prazo desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
+    recovery: 'refresh',
+  },
 }
 
 /**
