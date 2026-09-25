@@ -436,6 +436,28 @@ describe('MissionList -- concluir', () => {
     expect(screen.queryByTestId('reward-xp')).not.toBeInTheDocument()
   })
 
+  it('avisa a página quando uma avulsa é concluída', async () => {
+    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // (`refreshProgress`, em `Headquarters.tsx`) -- o quadro de avulsas nao
+    // tem `refresh` proprio (ao contrario de `CycleSection`), entao aqui so
+    // importa que o callback e chamado depois do sucesso.
+    const onMissionCompleted = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json([pendente]))
+        .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta)),
+    )
+    render(<MissionList onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    await waitFor(() => {
+      expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('numa falha de rede, avisa e deixa tentar de novo com a MESMA chave', async () => {
     const fetchMock = vi
       .fn()

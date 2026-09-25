@@ -19,11 +19,13 @@ function MissionsContent({
   registry,
   onReload,
   reloadWaiting,
+  onMissionCompleted,
 }: {
   state: MissionsState
   registry: CompletionRegistry
   onReload: () => void
   reloadWaiting: boolean
+  onMissionCompleted?: () => void
 }): ReactElement {
   switch (state.status) {
     case 'loading':
@@ -83,6 +85,7 @@ function MissionsContent({
               registry={registry}
               onReload={onReload}
               reloadWaiting={reloadWaiting}
+              onCompleted={onMissionCompleted}
             />
           ))}
         </ul>
@@ -115,8 +118,20 @@ export interface MissionListHandle {
  * "Atualizar o quadro" de um cartao e o "Tentar novamente" do erro -- passa
  * por ele, e espera a conclusao em voo. A recarga pedida pela PAGINA (pelo
  * `ref`, quando a Tifa cria uma missao) tambem.
+ *
+ * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao de
+ * uma avulsa -- repassado a cada `MissionCard` como `onCompleted` (Task 8,
+ * incremento D, para atualizar o painel de progresso). O quadro de avulsas
+ * nao tem `refresh` proprio (ao contrario da `CycleSection`): a lista so
+ * muda pelo `reload`/`requestReload` de sempre.
  */
-export function MissionList({ ref }: { ref?: Ref<MissionListHandle> }) {
+export function MissionList({
+  ref,
+  onMissionCompleted,
+}: {
+  ref?: Ref<MissionListHandle>
+  onMissionCompleted?: () => void
+}) {
   const { state, reload } = useMissions()
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
   // O `requestReload`, e nao o `reload` cru: com uma conclusao em voo, a
@@ -140,6 +155,7 @@ export function MissionList({ ref }: { ref?: Ref<MissionListHandle> }) {
         registry={registry}
         onReload={requestReload}
         reloadWaiting={waitingForCompletion}
+        onMissionCompleted={onMissionCompleted}
       />
     </section>
   )

@@ -158,6 +158,35 @@ describe('CycleSection', () => {
     expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
   })
 
+  it('avisa a página quando a missão de hoje é concluída', async () => {
+    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // (`refreshProgress`, em `Headquarters.tsx`) -- aqui so importa que o
+    // callback e chamado, e que o refresh do PROPRIO ciclo continua
+    // acontecendo do mesmo jeito (o segundo GET /api/cycle).
+    const onMissionCompleted = vi.fn()
+    const fetchMock = routeFetch({
+      'GET /api/cycle': (_init, call) =>
+        Response.json(
+          call === 1
+            ? ciclo()
+            : ciclo({ mission: diariaConcluida, streak: 4, days_to_milestone: 3 }),
+        ),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
+    })
+    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
+    )
+
+    await waitFor(() => {
+      expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
+    })
+  })
+
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
     render(<CycleSection />)
