@@ -96,7 +96,7 @@ function HistoryPlaceholder({
             <div
               key={n}
               aria-hidden="true"
-              className="h-12 animate-pulse rounded-lg bg-slate-800"
+              className="h-12 rounded-lg bg-slate-800 motion-safe:animate-pulse"
             />
           ))}
         </div>

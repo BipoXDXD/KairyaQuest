@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import CodigoDeErro, app
+from focusquest.modules.missions.schemas import TAMANHO_MAXIMO_DO_IDENTIFICADOR
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.domain import (
@@ -308,6 +309,28 @@ def test_confirmar_executada_com_chave_nova_responde_409(
     cliente_na_sessao.post(url, json={"operation_id": "op-1"})
     resposta = cliente_na_sessao.post(url, json={"operation_id": "op-2"})
     assert (resposta.status_code, resposta.json()["code"]) == (409, "transicao_ilegal")
+
+
+@pytest.mark.parametrize(
+    ("tamanho", "status"),
+    [
+        (TAMANHO_MAXIMO_DO_IDENTIFICADOR, 200),
+        (TAMANHO_MAXIMO_DO_IDENTIFICADOR + 1, 422),
+    ],
+)
+def test_confirmar_tem_teto_no_identificador_de_operacao(
+    cliente_na_sessao: TestClient, session: Session, tamanho: int, status: int
+) -> None:
+    """O `operation_id` no limite confirma; um caractere a mais e 422, sem `code`."""
+    acao_id = _acao_proposta(session)
+    resposta = cliente_na_sessao.post(
+        f"/api/tutoring/actions/{acao_id}/confirm", json={"operation_id": "o" * tamanho}
+    )
+    assert resposta.status_code == status, resposta.text
+    if status == 422:
+        assert "code" not in resposta.json()
+        locais = [erro["loc"] for erro in resposta.json()["detail"]]
+        assert ["body", "operation_id"] in locais
 
 
 def test_prazo_expirado_responde_422_e_a_falha_fica_gravada(
