@@ -10,6 +10,15 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Onda de correções da revisão do repositório.** Branch
+`fix/revisao-repositorio`, aberta a partir de `5b463b5` (a ponta de
+`feat/gate-paralelo`, a Frente 0 abaixo), num worktree próprio com banco de
+teste e portas do E2E próprios. Aplica os achados da revisão profunda do
+repositório de 2026-09-25 (backend e frontend/documentação, feita sobre a
+`main` em `8ab91ce`): três commits de código e este de documentação — ver
+"Alterações da onda de correções da revisão". Os commits foram autorizados
+pelo dono; push, PR e merge, não. **Estado de publicação: não publicado.**
+
 **Frente 0 — gate paralelo (pendência 19).** Branch `feat/gate-paralelo`,
 aberta a partir de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C),
 num worktree próprio. Objetivo: dois `make check` rodando ao mesmo tempo em
@@ -24,20 +33,21 @@ foram autorizados pelo dono; push, PR e merge, não.
 **Incremento C — a campanha.** Branch de integração `feat/incremento-c`,
 com dois worktrees de trabalho em paralelo, sem banco: `feat/incremento-c-nav`
 (Tasks 0 e 1) e `feat/incremento-c-trilha` (Tasks 2 e 3). Base: `9c2bd1e`
-(a ponta de `feat/incremento-b`, PR #13 aprovado pelo `quality-gate` e ainda
-não mesclado — Ruling R1 do controlador, 2026-09-25: o merge do PR #13 ficou
-para o dono, e o C parte da ponta do B em vez de esperar `origin/main`).
+(a ponta de `feat/incremento-b`, PR #13 aprovado pelo `quality-gate` e, na
+época, ainda não mesclado — Ruling R1 do controlador, 2026-09-25: o merge
+do PR #13 ficou para o dono, e o C parte da ponta do B em vez de esperar `origin/main`).
 Spec em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
 `docs/superpowers/plans/2026-09-25-incremento-c.md`. A branch soma, até
 este registro (fechamento da Task 7, antes deste commit), **9 commits**
 (Tasks 0–6 e o fix round 1 da Task 5, contados com
 `git log --oneline 9c2bd1e..HEAD | wc -l`, medido nesta sessão) — mais este
-commit de documentação, **10** no total. A base `9c2bd1e` já é a ponta do
-Incremento B, também ainda não publicada (ver o parágrafo abaixo); os
-commits do B **não** entram nesta contagem porque ainda não são ancestrais
-da `main`. **Estado de publicação: não publicado.** Push, PR e merge
-exigem autorização do dono, e o merge do C só pode acontecer **depois** do
-merge do B (Ruling R1).
+commit de documentação, **10** no total. A base `9c2bd1e` é a ponta do
+Incremento B (ver o parágrafo abaixo); os commits do B **não** entram nesta
+contagem porque, no registro, ainda não eram ancestrais da `main`.
+**Estado de publicação: publicado pelo PR #14, mesclado por merge commit em
+`8ab91ce` em 2026-09-25, depois do merge do B (Ruling R1); estado atual em
+`gh pr view 14`.** (Registro anterior, corrigido pela onda de correções da
+revisão: este parágrafo dizia "não publicado".)
 
 **Incremento B — o ciclo diário.** Branch `feat/incremento-b`, aberta a
 partir de `12288a2` (a `main`: o merge do PR #12, a camada 3 do 1b-2). Spec
@@ -52,9 +62,11 @@ este registro (fechamento final, depois da revisão da branch), **16
 commits** (Tasks 0–9, a documentação da Task 10 e o conserto final em dois
 commits — backend/E2E e frontend —, contados com
 `git log --oneline 12288a2..HEAD | wc -l`, medido nesta sessão) — mais este
-commit de documentação, **17** no total. **Estado de publicação: não
-publicado.** Push, PR e merge autorizados pelo dono em 2026-09-25 para este
-incremento.
+commit de documentação, **17** no total. **Estado de publicação: publicado
+pelo PR #13, mesclado por merge commit em `b0f9e8f` em 2026-09-25; estado
+atual em `gh pr view 13`.** Push, PR e merge foram autorizados pelo dono em
+2026-09-25 para este incremento. (Registro anterior, corrigido pela onda de
+correções da revisão: este parágrafo dizia "não publicado".)
 
 **Incremento 1b-2 — a tela da Tifa, o E2E e a chamada real.** Branch
 `feat/incremento-1b-2`, aberta a partir de `a795ee7` (a `main`: o merge do
@@ -64,10 +76,12 @@ PR #10, o 1b-1). Spec em
 `docs/superpowers/plans/2026-09-22-incremento-1b-2.md`. A branch soma, até
 este registro (Task 9), **10 commits** contados com
 `git log --oneline a795ee7..HEAD | wc -l`, medido nesta sessão — mais este
-commit de documentação. **Estado de publicação: não publicado.** Push, PR e
-merge exigem autorização do dono, um passo de cada vez; quando mesclado,
-esta linha passa ao padrão "publicado pelo PR #N, mesclado por `<forma>`;
-estado atual em `gh pr view N`".
+commit de documentação. **Estado de publicação: publicado pelo PR #11,
+mesclado por merge commit em `598f96b` em 2026-09-22; a camada 3 da Task 8
+(`feat/incremento-1b-2-camada3`) veio pelo PR #12, mesclado em `12288a2` no
+mesmo dia; estado atual em `gh pr view 11` e `gh pr view 12`.** (Registro
+anterior, corrigido pela onda de correções da revisão: este parágrafo dizia
+"não publicado".)
 
 **Incremento A — conclusão na tela.** Branch `feat/incremento-a`, aberta a
 partir de `49c17ac`, **empilhada sobre `docs/spec-ciclo-diario`** — o PR #6
@@ -1685,6 +1699,59 @@ nomes dos alvos do `Makefile` são os mesmos (paridade 1:1, `AGENTS.md` §4).
 Sem configurar nada, o comportamento é o de antes: `focusquest_test` e as
 portas 8100, 5273 e 8150 (medido, "Resultados"). Nenhuma dependência nova.
 
+## Alterações da onda de correções da revisão
+
+A revisão profunda do repositório de 2026-09-25 (dois revisores, sobre a
+`main` em `8ab91ce`) achou 0 Critical, 4 Important e 5 Minor. Cada achado foi
+conferido no código antes do conserto; todos se confirmaram. Três commits de
+código, cada um pelo hook (gate completo):
+
+- **`265c5e0` — tutoria: só a atualização silenciosa mais recente grava.**
+  `frontend/src/features/tutoring/useTutorConversation.ts`:
+  `refreshSilently` ganhou um número próprio (`silentRequest`, o desenho do
+  `requestId` de `useCycle.ts`/`useCurrentPlan.ts`), conferido junto com a
+  geração. Duas falhas seguidas disparavam duas atualizações com a mesma
+  geração, e a da primeira, chegando por último, apagava o segundo turno da
+  tela. A geração em si não é avançada ali de propósito: invalidaria uma
+  recarga explícita em voo, e a tela ficaria em "carregando". Teste novo com
+  promessas resolvidas à mão, sem relógio ("de duas atualizacoes
+  silenciosas, a mais antiga que chega por ultimo nao desfaz a mais nova"):
+  reprovou contra o código anterior (`[10, 11]` no lugar de `[10, 11, 13]`),
+  passa com o conserto, e volta a reprovar com a guarda retirada. Resolve um
+  dos dois casos da pendência 49.
+- **`e5750ad` — movimento reduzido (README §7).** O esqueleto de
+  carregamento da conversa (`TutorConversation.tsx`, a única animação que chega à
+  tela — o `App.css` órfão tem `transition`, mas nenhum módulo o importa) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
+  Tailwind emite dentro de `@media (prefers-reduced-motion:
+  no-preference)` (conferido no CSS do build). Teste novo em
+  `TutorPanel.test.tsx`, com mutação.
+- **`7bf2746` — teto do `operation_id`.** `MissionComplete.operation_id` e
+  `ActionConfirm.operation_id` ganharam `max_length=200`, o teto que o
+  `client_message_id` já tinha, agora numa constante única
+  (`TAMANHO_MAXIMO_DO_IDENTIFICADOR`, `missions/schemas.py`). Testes de
+  limite nas duas rotas (200 passa, 201 é 422 em `body.operation_id`);
+  reprovam sem o teto e, na conclusão, com o teto em 199. O frontend manda
+  `crypto.randomUUID()` (36 caracteres) nos dois lugares
+  (`useCompletionRegistry.ts`, `useActionKeys.ts`).
+
+E este commit de documentação:
+
+- `docs/ARCHITECTURE.md`: o cabeçalho da árvore (§1) dizia que B e C
+  "ainda não" tinham sido publicados — os dois foram mesclados em
+  2026-09-25 (PR #13 em `b0f9e8f`, PR #14 em `8ab91ce`); `Campaigns.tsx`
+  era descrita "sem props", mas tem a prop opcional `onOpenHeadquarters`
+  (K11 relaxada por R5); a ordem das recusas de `criar_plano` estava
+  invertida (o código checa `semana_distante` antes de `semana_encerrada`,
+  e é a de encerramento que estouraria em 9999 — medido de novo invertendo
+  as duas checagens: o teste do ano 9999 reprova com `OverflowError`); e o
+  teto de 200 dos identificadores entrou no contrato HTTP.
+- Este arquivo: estado de publicação do 1b-2, do B e do C na
+  "Revisão-base" e no "Próximo incremento" (os três diziam "não
+  publicado"); pendência 4 ampliada com `tutoring/service.py::_buscar_acao`;
+  pendência 49 com o caso resolvido riscado; pendência nova 77.
+- `frontend/index.html`: `<title>FocusQuest</title>` no lugar do
+  `frontend` do scaffold do Vite.
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -1917,7 +1984,13 @@ ninguém mexer.
    `concluir_missao` faz `SELECT ... FOR UPDATE` e só depois compara o
    `user_id`. Com usuário único é inofensivo; com autenticação, um pedido
    com o usuário errado seguraria a linha até o rollback. Resolver junto com
-   a autenticação.
+   a autenticação. **O mesmo padrão existe na tutoria**
+   (`src/focusquest/modules/tutoring/service.py`, `_buscar_acao`, chamada
+   por `confirmar_acao` e `rejeitar_acao`): trava a linha de `tutor_actions`
+   com `with_for_update=True` e só depois lê a mensagem para comparar o
+   `user_id` — achado da revisão do repositório de 2026-09-25. O 404 é o
+   mesmo de "não existe"; é janela de contenção, não vazamento. Resolver os
+   dois pontos juntos.
 5. **Autenticação e autorização por recurso não existem** (decisão A2). Entram
    antes de existirem contas reais (README §8).
 
@@ -2432,10 +2505,13 @@ que não tinham chegado aqui)
     então a frase diz menos do que se sabe. Não há texto genérico de falha
     no `messageFailure.ts`, e inventar um é decisão de texto de interface:
     fica para o dono. O "Tentar de novo" continua certo (mesmo id). Na mesma
-    revisão, o contador de geração do histórico deixou dois casos de fora,
-    raros e sem medição: duas atualizações silenciosas em voo que chegam
-    fora de ordem (a de uma falha anterior pode gravar por último), e o
-    `updateAction`, que não invalida um GET mais velho que a confirmação.
+    revisão, o contador de geração do histórico deixou dois casos de fora:
+    ~~duas atualizações silenciosas em voo que chegam fora de ordem (a de
+    uma falha anterior pode gravar por último)~~ — **resolvido** pela onda
+    de correções da revisão do repositório (`refreshSilently` ganhou número
+    próprio, com teste que reprovava antes); e o `updateAction`, que não
+    invalida um GET mais velho que a confirmação — raro, sem medição, ainda
+    aberto.
 50. **O campo acima do teclado virtual no celular
     (`interactive-widget=resizes-content`, folha ancorada em `bottom-0` com
     `max-h-[85dvh]`) não é medido por teste nenhum** (1b-2, Task 4): o
@@ -2715,6 +2791,22 @@ C".
     a `main` antes (`git fetch` e avanço da `main`). Deliberado: o script
     não vai à rede nem mexe em ref nenhuma além da branch nova.
 
+**Revisão do repositório (2026-09-25)**
+
+77. **`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
+    de pedidos.** Os dois abortam o pedido anterior na limpeza do efeito,
+    mas o `.then()` de sucesso não confere nada — nem um `requestId`, como
+    `useCycle.ts` e `useCurrentPlan.ts`, nem `controller.signal.aborted`,
+    que só o `.catch()` confere. Uma resposta já em processamento quando o
+    pedido é abortado ainda gravaria o estado por cima da carga mais nova.
+    Baixo risco prático: abortar um `fetch` real costuma rejeitar também a
+    leitura do corpo. Os gatilhos de recarga são o "Tentar novamente" do
+    estado de erro (`missions-retry`, `tutor-status-retry`) e, no quadro, a
+    recarga que o Quartel-General pede quando a Tifa cria uma missão
+    (`Headquarters.tsx`, `reloadBoard`). Não há teste de "dois pedidos, o
+    mais velho responde por último" nos dois hooks. Saída: replicar a guarda
+    de `requestId` (achado M1 da revisão de frontend).
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -2739,7 +2831,8 @@ B → C**. O desenho de A, B e C está em
   (a)–(c) está na pendência 42.
 - **B — o ciclo diário**, depois do 1b. **Entregue e comitado por
   inteiro** em `feat/incremento-b` (`12288a2`..`0b9197b`, Tasks 0–9 — ver
-  "Alterações do Incremento B"). Plano em
+  "Alterações do Incremento B"). **Publicado pelo PR #13**, mesclado em
+  `b0f9e8f` em 2026-09-25. Plano em
   `docs/superpowers/plans/2026-09-25-incremento-b.md`; decisões P1–P10 em
   "Decisões tomadas", acima.
 - **C — a campanha** (trilha em Campanhas, navegação lateral, axe na
@@ -2752,9 +2845,8 @@ B → C**. O desenho de A, B e C está em
   commit de documentação por cima — ver "Alterações do Incremento C").
   Plano em `docs/superpowers/plans/2026-09-25-incremento-c.md`; decisões
   K1–K11 e as Rulings R1–R10 em "Decisões tomadas", acima. **Estado de
-  publicação: não publicado — aguardando, nesta ordem, o merge do PR do B
-  (ainda bloqueado, Ruling R1) e, só depois, o push e o PR do C; os dois
-  passos exigem autorização do dono** (`AGENTS.md` §2).
+  publicação: publicado pelo PR #14**, mesclado em `8ab91ce` em 2026-09-25,
+  depois do merge do B, na ordem que a Ruling R1 exigia.
 
 **O que o C encontrou pronto do B, no início:**
 

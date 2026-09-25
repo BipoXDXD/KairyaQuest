@@ -19,11 +19,12 @@ os dois blocos nunca se misturam.
 ## 1. O que existe hoje
 
 Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim das
-Tasks 0–6 do Incremento C (`feat/incremento-c`, ainda não publicado — ver
-`docs/HANDOFF.md`), mais o fix round 1 da Task 5 (`9c2bd1e..e195128`, 9
-commits, antes do commit desta própria Task 7 de documentação) — a base
-`9c2bd1e` já é a ponta do Incremento B, também ainda não publicado; ver
-"Revisão-base" em `docs/HANDOFF.md`.
+Tasks 0–6 do Incremento C, mais o fix round 1 da Task 5 (`9c2bd1e..e195128`),
+e acrescida dos três arquivos que a Frente 0 (gate paralelo) criou
+(`scripts/novo-worktree.sh`, `tests/integration/test_novo_worktree.py` e
+`frontend/tests/unit/servers.test.ts`). Os Incrementos B e C já estão na
+`main`: o PR #13 (B) foi mesclado em `b0f9e8f` e o PR #14 (C) em `8ab91ce`,
+os dois em 2026-09-25; ver "Revisão-base" em `docs/HANDOFF.md`.
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -459,6 +460,12 @@ concluir missão ou confirmar recompensa por conta própria.
   teto de `estimated_minutes` é **técnico** — o maior valor da coluna int4,
   para o excesso virar 422 e não 500 —, e não responde "quanto tempo cabe
   numa missão", que é decisão de produto em aberto (`docs/HANDOFF.md`).
+- **Os identificadores gerados pelo cliente têm teto técnico de 200
+  caracteres** (`TAMANHO_MAXIMO_DO_IDENTIFICADOR`, em `missions/schemas.py`):
+  o `operation_id` de concluir uma missão e de confirmar uma ação da tutoria,
+  e o `client_message_id` da pergunta. Vazio ou acima de 200 é `422`. O
+  frontend manda `crypto.randomUUID()`, 36 caracteres; as colunas são
+  `Text`, e sem o teto qualquer tamanho seria gravado.
 - **`deadline` exige fuso.** O campo é `AwareDatetime`: um datetime sem fuso
   é recusado com 422, com `type: timezone_aware` no erro de validação.
   **O `/openapi.json` não expressa essa exigência** — o schema gerado diz
@@ -673,13 +680,17 @@ separadamente acabariam discordando uma da outra.
 | `week_start` mais de uma semana à frente | `semana_distante` |
 | Dia ou janela já passou, ou não era do plano (a diária de ontem, a diária `fora_do_plano`, a especial fora da janela) | `missao_expirada` |
 
-A ordem das duas recusas de `criar_plano` **importa**: `semana_encerrada` é
-checada **antes** de `semana_distante`, porque a checagem de distância soma
-`DIAS_DA_SEMANA - 1` ao `week_start` — para uma semana no último ano
+A ordem das duas recusas de `criar_plano` **importa**: `semana_distante` é
+checada **antes** de `semana_encerrada`, porque a checagem de encerramento
+soma `DIAS_DA_SEMANA - 1` ao `week_start` — para uma semana no último ano
 representável (`9999-12-27`, a última segunda-feira válida), essa soma
-estoura o `datetime` (`OverflowError`) se a recusa por distância for
-tentada primeiro. Testado com `test_semana_no_ano_9999_e_distante_e_nao_500`;
-invertida a ordem, o teste reprova com `500` em vez de `409`.
+estoura o `datetime` (`OverflowError`) se a recusa por encerramento for
+tentada primeiro. A de distância só soma dias à segunda-feira da semana
+atual, que nunca estoura, e recusa a semana de 9999 antes de qualquer conta
+sobre ela (`cycle_service.py`, `criar_plano`). Testado com
+`test_semana_no_ano_9999_e_distante_e_nao_500`; invertida a ordem, o teste
+reprova com o `OverflowError` da conta (em produção, um `500` no lugar do
+`409`) — medido na onda de correções da revisão do repositório.
 
 **A ordem completa da conclusão** (diária ou especial): trava
 (`SELECT ... FOR UPDATE`) → relógio (lido **depois** da trava, C13) →
@@ -724,8 +735,11 @@ quem ainda não concluiu).
   enquanto Campanhas está aberta — desmontá-lo abortaria um stream da Tifa
   em curso (decisão K2); Campanhas, ao contrário, desmonta ao sair, e cada
   abertura busca a trilha de novo. `Campaigns.tsx` tem o `<main>`, o `h1`
-  "Campanhas — planos de estudo" e compõe `<CampaignTrail />` sem props
-  (decisão K11) — o componente começa no `h2` e não tem `<main>` próprio.
+  "Campanhas — planos de estudo" e compõe `<CampaignTrail />` — o
+  componente começa no `h2` e não tem `<main>` próprio. A única prop,
+  `onOpenHeadquarters`, é opcional e só atravessa a página até a trilha
+  (decisão K11, "Campanhas sem props", relaxada pela Ruling R5; ver
+  `CampaignTrail.tsx`, abaixo).
 - **`src/features/<feature>/`** *(existe para `missions`, `tutoring` e,
   desde o C, `campaigns`; contrato para `rewards`)* — a feature é a unidade
   real de organização:
