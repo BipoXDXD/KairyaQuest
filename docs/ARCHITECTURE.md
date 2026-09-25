@@ -840,8 +840,9 @@ quem ainda não concluiu).
   partir de `"2026-09-24"`, sem conversão de fuso). Duas mutações mortas:
   `new Date(civil)` cru (a meia-noite UTC), que só um fuso a **oeste** de UTC
   pega (`TZ=America/Sao_Paulo`, Ruling R7); e tirar o `timeZone: 'UTC'` do
-  formatador, que só um fuso a **leste** de +12h pega — o meio-dia UTC de
-  `civilNoon` já é o dia seguinte em `Pacific/Kiritimati` (UTC+14), o caso
+  formatador, que qualquer fuso **a partir de +12h** pega — o meio-dia UTC de
+  `civilNoon` já é o dia seguinte em `Pacific/Auckland`, `Pacific/Fiji`,
+  `Pacific/Tongatapu` e `Pacific/Kiritimati` (UTC+12 a +14), o caso
   que os testes usam (achado m1 da revisão final do C; a afirmação anterior,
   de que nenhum fuso IANA cruzava a virada a partir do meio-dia, estava
   errada). Dois

@@ -6,9 +6,9 @@
  * "Datas civis versus instantes"). `new Date('2026-09-21')` e a meia-noite em
  * UTC, e formatada em Sao Paulo vira domingo, 20/09 -- o dia errado. Aqui a
  * data e montada ao MEIO-DIA em UTC e formatada em UTC: nenhum fuso entra na
- * conta. O meio-dia so da margem de -12h a +11h: a leste de +12h (Kiritimati
- * e UTC+14) ele ja e o dia seguinte, entao quem segura o dia la e o
- * `timeZone: 'UTC'` dos formatadores -- e o que os testes com
+ * conta. O meio-dia so da margem de -12h a +11h: a partir de +12h (Auckland,
+ * Fiji, Tonga, Kiritimati) ele ja e o dia seguinte, entao quem segura o dia
+ * la e o `timeZone: 'UTC'` dos formatadores -- e o que os testes com
  * `TZ=Pacific/Kiritimati` guardam.
  *
  * Mora em `shared/lib/` desde o Incremento C (`docs/ARCHITECTURE.md` §5,
@@ -27,7 +27,7 @@ const civilWeekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
   weekday: 'long',
 })
 
-/** O meio-dia em UTC da data civil: o instante que nenhum fuso tira do dia. */
+/** O meio-dia em UTC da data civil: da margem ampla ao dia, mas sozinho nao basta a partir de +12h (ver comentario do arquivo). */
 function civilNoon(civil: string): Date {
   const year = Number(civil.slice(0, 4))
   const month = Number(civil.slice(5, 7))

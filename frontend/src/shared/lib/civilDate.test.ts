@@ -16,7 +16,7 @@ describe('formatCivilDate', () => {
     expect(formatCivilDate('2027-01-01')).toBe('sexta-feira, 01/01')
   })
 
-  it('nao escorrega de dia a LESTE de UTC alem de +12h: o formatador fixa o fuso em UTC', async () => {
+  it('nao escorrega de dia a LESTE de UTC a partir de +12h: o formatador fixa o fuso em UTC', async () => {
     // Mesmo motivo do teste de `civilWeekday` abaixo: em Kiritimati (UTC+14)
     // o meio-dia UTC de 21/09 ja e 22/09, e so o `timeZone: 'UTC'` segura.
     vi.resetModules()
@@ -60,11 +60,12 @@ describe('civilWeekday', () => {
     expect(civilWeekdayEmSaoPaulo('2026-09-21')).toBe('segunda-feira')
   })
 
-  it('nao escorrega de dia a LESTE de UTC alem de +12h: o formatador fixa o fuso em UTC', async () => {
+  it('nao escorrega de dia a LESTE de UTC a partir de +12h: o formatador fixa o fuso em UTC', async () => {
     // Pacific/Kiritimati e UTC+14: o meio-dia UTC de 21/09 e 2h de 22/09 la.
     // Sem o `timeZone: 'UTC'` no formatador, a segunda-feira vira
-    // terca-feira -- e o unico fuso real em que a margem do meio-dia nao
-    // basta, e por isso e o que mata o mutante (achado m1 da revisao final
+    // terca-feira -- e nao e so em Kiritimati: todo fuso real a partir de
+    // +12h (Auckland, Fiji, Tonga, Kiritimati) tem essa mesma margem
+    // insuficiente, e por isso mata o mutante (achado m1 da revisao final
     // do Incremento C; Tokyo, +9h, e Sao Paulo, -3h, deixam ele vivo).
     vi.resetModules()
     vi.stubEnv('TZ', 'Pacific/Kiritimati')
