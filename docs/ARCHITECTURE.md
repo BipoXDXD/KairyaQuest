@@ -19,8 +19,9 @@ os dois blocos nunca se misturam.
 ## 1. O que existe hoje
 
 Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim do
-Incremento 1b-2 (`feat/incremento-1b-2`, ainda não publicado —
-ver `docs/HANDOFF.md`). Ficam de fora os caminhos ignorados pelo git — dependências
+Incremento B (`feat/incremento-b`, ainda não publicado — ver
+`docs/HANDOFF.md`), com as Tasks 0–9 comitadas (`12288a2..0b9197b`).
+Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
 `frontend/test-results/`, `htmlcov/`, `coverage.xml`), caches, estado de IDE
@@ -35,7 +36,8 @@ FocusQuest/
 ├── alembic/                       # migrações do banco
 │   ├── versions/
 │   │   ├── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
-│   │   └── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
+│   │   ├── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
+│   │   └── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
 │   ├── README
 │   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
 │   └── script.py.mako             # modelo de migração nova
@@ -54,15 +56,22 @@ FocusQuest/
 │   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
 │   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
+│   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc)
+│   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8)
+│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8)
 │   │   │   │   ├── MissionList.test.tsx
-│   │   │   │   ├── MissionList.tsx  # o quadro; expõe MissionListHandle (reload) por useImperativeHandle, para a página pedir recarga
+│   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle
+│   │   │   │   ├── civilDate.test.ts      # (B, Task 7, commit 242d677)
+│   │   │   │   ├── civilDate.ts           # formata "YYYY-MM-DD" sem conversão de fuso (B, Task 7 — Risco 3 do plano)
 │   │   │   │   ├── completionFailure.test.ts
-│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela
-│   │   │   │   ├── types.ts
+│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B)
+│   │   │   │   ├── types.ts             # ganhou MissionType, Availability, DAYS_PER_MILESTONE, Cycle (B)
 │   │   │   │   ├── useCompleteMission.test.tsx
-│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; pede e devolve a chave ao registro
+│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; ganhou onCompleted opcional (B, Task 8)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
 │   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
+│   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
+│   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, decisão P9)
 │   │   │   │   ├── useMissions.test.tsx
 │   │   │   │   └── useMissions.ts
 │   │   │   └── tutoring/          # a Tifa na tela (1b-2); importa só de shared/, nunca de features/missions/
@@ -94,7 +103,7 @@ FocusQuest/
 │   │   │       └── useTutorStatus.ts      # disponibilidade da Tifa, error separado de unavailable
 │   │   ├── pages/
 │   │   │   ├── Headquarters.test.tsx
-│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring, sem regra própria
+│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B)
 │   │   ├── shared/
 │   │   │   ├── api/
 │   │   │   │   ├── client.test.ts
@@ -115,6 +124,7 @@ FocusQuest/
 │   │   └── main.tsx
 │   ├── tests/
 │   │   └── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
+│   │       ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9, commit 0b9197b)
 │   │       ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
 │   │       ├── headquarters.spec.ts
 │   │       ├── servers.ts         # as portas dedicadas do E2E (API 8100, frontend 5273, falso 8150)
@@ -136,7 +146,7 @@ FocusQuest/
 │   └── vite.config.ts             # build, proxy de /api, coleta de teste e limiares de cobertura
 ├── scripts/                       # lógica de shell do gate, compartilhada entre local e CI
 │   ├── check-push.sh              # valida o topo de cada ref enviada, em worktree isolado
-│   ├── e2e-env.sh                 # sobe a API do E2E; desde o 1b-2, guarda de loopback e chave fictícia imposta
+│   ├── e2e-env.sh                 # sobe a API do E2E; guarda de loopback e chave fictícia (1b-2); guarda do banco compartilhada com tests/integration/banco_de_teste.py (B, Task 6)
 │   ├── init-test-db.sql           # cria o focusquest_test (compose e CI usam o mesmo arquivo)
 │   ├── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
 │   └── push-env.sh                # mecanismo de lista de permissão que o pre-push usa para exportar FOCUSQUEST_*
@@ -153,11 +163,15 @@ FocusQuest/
 │       │   ├── __init__.py
 │       │   ├── missions/
 │       │   │   ├── __init__.py
-│       │   │   ├── domain.py      # estados, transições, XP e duração real — sem FastAPI nem SQLAlchemy
-│       │   │   ├── models.py      # User, Mission e MissionOperation
+│       │   │   ├── cycle_domain.py  # regras puras do ciclo: dia, semana, disponibilidade, sequencia, marco, janela (B)
+│       │   │   ├── cycle_router.py  # POST /api/plans, GET /api/plans/current, GET /api/cycle (B)
+│       │   │   ├── cycle_schemas.py # contratos do plano semanal e do ciclo (B)
+│       │   │   ├── cycle_service.py # criar plano, ler plano/ciclo/missao, historico, ocultacao (B)
+│       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B) — sem FastAPI nem SQLAlchemy
+│       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B)
 │       │   │   ├── router.py      # as três rotas de /api/missions
-│       │   │   ├── schemas.py     # contratos de entrada e saída
-│       │   │   └── service.py     # casos de uso: criar, listar, concluir
+│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B)
+│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B)
 │       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
 │       │       ├── __init__.py
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
@@ -177,13 +191,20 @@ FocusQuest/
 │   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
 │   ├── integration/               # contra PostgreSQL real (focusquest_test), nunca SQLite
 │   │   ├── __init__.py
+│   │   ├── banco_de_teste.py    # guarda do banco de teste + recriar_esquema, compartilhada com make reset-test-db e scripts/e2e-env.sh (B, Task 6)
 │   │   ├── camada3.py             # grava a referência da camada 3 (chamada real, manual, do dono; nunca no gate) (1b-2)
-│   │   ├── conftest.py            # engine de teste, guarda do banco, DROP SCHEMA, migração, e as fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
+│   │   ├── conftest.py            # engine de teste; banco_migrado usa banco_de_teste.recriar_esquema + upgrade (B); fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
 │   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
 │   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável, com o bloco de thinking da API real por padrão (não é teste)
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
+│   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6)
+│   │   ├── test_cycle_api.py      # o contrato HTTP do ciclo: formas, recusas, códigos, ocultação por 404 (B, Task 5)
+│   │   ├── test_cycle_completion.py  # ocultação e regra do dia na conclusão, listagem só de avulsas (B, Task 4)
+│   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
+│   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
+│   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
 │   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2)
 │   │   ├── test_health.py
@@ -205,6 +226,8 @@ FocusQuest/
 │       ├── __init__.py
 │       ├── test_clock.py
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
+│       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
+│       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_tutoring_context.py  # montagem do turno
@@ -520,6 +543,131 @@ prazo proposto já passou — a ação vira `falhou` com esse código **antes**
 de a rota levantar o 422 (o commit vem antes do `raise`, ou a gravação
 morreria com a transação); `404 acao_nao_encontrada`.
 
+### O contrato HTTP do ciclo diário que existe (Incremento B)
+
+> **Fonte de verdade:** `src/focusquest/modules/missions/cycle_router.py`,
+> `cycle_schemas.py`, `cycle_service.py`, `models.py` (`WeeklyPlan`,
+> colunas novas de `Mission`) e `src/focusquest/main.py`. Backend comitado
+> (Tasks 0–5); ver `docs/HANDOFF.md` "Alterações do Incremento B" para o
+> estado de cada Task.
+
+**Por que o ciclo mora em `missions`, e não num módulo `cycle` próprio**
+(decisão P1): a diária e a especial **são** missões — mesma tabela, mesmo
+`state`, mesma rota de conclusão —, e um módulo `cycle` separado fecharia um
+ciclo de import: `missions/service.py` precisa das regras do ciclo dentro de
+`concluir_missao` (a ocultação e a regra do dia), e o ciclo precisa de
+`Mission` e de `User` (que mora em `missions/models.py`, pendência 8). A
+convenção de fronteira 2 (§5, "nada de dependência circular") proíbe
+exatamente essa forma. Por isso os quatro arquivos novos entram como
+`cycle_domain.py`/`cycle_service.py`/`cycle_schemas.py`/`cycle_router.py`
+dentro de `modules/missions/`, e não como `modules/cycle/`.
+
+**O modelo de dados novo.** `weekly_plans` (`id`, `user_id`, `week_start`,
+`created_at`) — o plano de uma semana, com `uq_weekly_plans_user_id_week_start`
+(um plano por semana), `uq_weekly_plans_id_user_id` (alvo da FK composta
+abaixo) e `ck_weekly_plans_week_start_segunda` (`EXTRACT(ISODOW FROM
+week_start) = 1`). `created_at` vem do **relógio injetável**, nunca do
+`now()` do banco (decisão P4) — é entrada da regra `fora_do_plano`, e
+misturar o relógio do banco com o dos testes faria a regra comparar dois
+relógios diferentes.
+
+`missions` ganhou três colunas e seis `CHECK`: `mission_type` (`avulsa` |
+`diaria` | `especial`, `ck_missions_mission_type`), `plan_id` (nulo só para
+avulsa, `ck_missions_plano_do_tipo`), `day` (preenchido só para diária,
+`ck_missions_dia_do_tipo`); `deadline` passou a nulável (obrigatório só
+para avulsa, `ck_missions_prazo_do_tipo` — a diária e a especial têm prazo
+**derivado**, nunca gravado, C10); `ck_missions_dificuldade_da_especial`
+(a especial é sempre dificuldade 5) e `ck_missions_estimativa_do_ciclo`
+(diária e especial ≤ 1440 minutos, C10 — a avulsa continua sem teto,
+pendência 26). A FK composta `fk_missions_plano_do_usuario`
+(`plan_id, user_id` → `weekly_plans.id, user_id`) usa **MATCH SIMPLE** (o
+padrão), de propósito: com `plan_id` nulo a FK não é verificada, e é isso
+que deixa a avulsa (sem plano) passar — MATCH FULL a recusaria. Mais duas
+restrições: `uq_missions_plan_id_day` (uma diária por dia do plano) e
+`uq_missions_especial_por_plano`, um **índice único parcial**
+(`WHERE mission_type = 'especial'`) — uma especial por plano, sem colidir
+com os `NULL` de `day` que ela também tem. Todas as onze restrições nomeadas
+são provadas por **recusa nomeada** (`tests/integration/test_cycle_models.py`
+insere o que a restrição deveria barrar e afirma o nome dela no erro do
+PostgreSQL); só os seis `CHECK` entram no teste de divergência
+modelo×migração — os `UNIQUE`, o índice parcial e a FK composta não
+(pendência 9, atualizada no B).
+
+**As três rotas novas**, todas em `/api`:
+
+| Método e caminho | Sucesso | O que faz |
+|---|---|---|
+| `POST /api/plans` | `201` com `PlanRead` | Cria o plano da semana: sete diárias e uma especial. Reenvio responde `409 plano_existente` — nunca duplica (README §6). |
+| `GET /api/plans/current` | `200` com `{"plan": PlanRead \| null}` | O plano da semana atual, na **mesma forma** do 201 acima (decisão P2) — "sem plano" é estado, não erro. |
+| `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco e a especial (se disponível). |
+
+**A forma da trilha (`PlanRead`)**: `{"week_start", "days": [{"day",
+"availability", "mission"} × 7], "special": {"availability", "progress",
+"mission"}}`. Cada dia carrega sua `availability`
+(`fora_do_plano`/`bloqueada`/`disponivel`/`concluida`/`perdida`) e a
+`mission` — **o baú fechado**: para um dia `bloqueada` (ainda não revelado),
+`mission` é `null` e a chave-forma do objeto é só `{"day", "availability",
+"mission"}`, sem vazar nenhum campo da missão futura. O mesmo vale para a
+especial `bloqueada`: `{"availability": "bloqueada", "progress": N,
+"mission": null}`, sem `id`, sem conteúdo, sem dificuldade.
+
+**`MissionRead` ganhou três campos** (`mission_type`, `day`, `availability`)
+e passou a ser construído por `MissionRead.da_leitura(lida: MissaoLida)`, em
+vez de `model_validate`/`from_attributes` — `deadline` e `availability` são
+**derivados** para a diária e a especial (C10, C2), e só o serviço
+(`ler_missao`, `leitura_da_avulsa`) sabe derivá-los. `xp` continua
+computado, agora chamando `xp_da_missao(mission_type, difficulty)` — a
+especial vale `3 × xp_para_dificuldade(5) = 660` (C9).
+
+**`GET /api/missions` (a rota do 1a) agora lista só avulsas** —
+`listar_missoes` filtra `Mission.mission_type == MissionType.AVULSA` — para
+não vazar a diária ainda não revelada nem a trilha da semana para quem só
+lista missões soltas. Isso também é o motivo da pendência nova sobre a Tifa
+não ver o ciclo no contexto (`docs/HANDOFF.md`, pendência 55): o contexto da
+tutoria é montado com `listar_missoes`.
+
+**A ocultação: 404 idêntico ao de missão inexistente (C11).** Tudo que
+ainda não foi revelado — um dia futuro da semana, uma semana seguinte já
+criada, a especial sem marco batido — responde ao `POST
+.../complete` com o **mesmo** corpo e `code` de um `mission_id` que não
+existe. `ler_missao` decide isso numa função só, chamada tanto pela leitura
+quanto pela conclusão (decisão P6): duas funções que decidissem "revelado"
+separadamente acabariam discordando uma da outra.
+
+**Quatro códigos de erro novos, todos `409`:**
+
+| Situação | `code` |
+|---|---|
+| Plano já existe para a semana | `plano_existente` |
+| `week_start` no passado (semana já encerrada) | `semana_encerrada` |
+| `week_start` mais de uma semana à frente | `semana_distante` |
+| Dia ou janela já passou, ou não era do plano (a diária de ontem, a diária `fora_do_plano`, a especial fora da janela) | `missao_expirada` |
+
+A ordem das duas recusas de `criar_plano` **importa**: `semana_encerrada` é
+checada **antes** de `semana_distante`, porque a checagem de distância soma
+`DIAS_DA_SEMANA - 1` ao `week_start` — para uma semana no último ano
+representável (`9999-12-27`, a última segunda-feira válida), essa soma
+estoura o `datetime` (`OverflowError`) se a recusa por distância for
+tentada primeiro. Testado com `test_semana_no_ano_9999_e_distante_e_nao_500`;
+invertida a ordem, o teste reprova com `500` em vez de `409`.
+
+**A ordem completa da conclusão** (diária ou especial): trava
+(`SELECT ... FOR UPDATE`) → relógio (lido **depois** da trava, C13) →
+ocultação (`ler_missao`) → reenvio (o `operation_id` já usado devolve o
+mesmo 200) → regra do dia (`NAO_CONCLUIVEIS`: `fora_do_plano`, `perdida`,
+`expirada` → `409 missao_expirada`) → transição de estado. A rota relê a
+missão com `ler_missao(session, missao, clock())` **depois do commit**, com
+uma segunda chamada ao relógio, para montar a `availability` da resposta
+(pendência nova 56, `docs/HANDOFF.md`).
+
+**Reenvio depois da meia-noite continua `200`, nunca `missao_expirada`.**
+Uma diária concluída às 23:59:59 e reenviada com a mesma chave às 00:00:01
+do dia seguinte devolve o mesmo 200 — a disponibilidade `concluida` nunca
+está em `NAO_CONCLUIVEIS`, porque "concluída" é fato permanente, e a
+checagem de disponibilidade vem **antes** da checagem de reenvio na ordem
+acima só na leitura da ocultação, não na regra do dia (que só se aplica a
+quem ainda não concluiu).
+
 ### Frontend — parte descrição, parte contrato
 
 - **`src/app/`** *(contrato)* — inicialização, rotas e providers. Hoje o papel
@@ -547,6 +695,23 @@ morreria com a transação); `404 acao_nao_encontrada`.
   botão fica desabilitado em "Aguardando a conclusão em andamento…" e o quadro
   recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
   React; nada disso sai da feature.
+
+  **Desde o Incremento B** (Tasks 7–8, commits `242d677` e `08b3dcc`),
+  `missions` ganhou o ciclo diário: `useCycle.ts` busca
+  `GET /api/cycle` e expõe um `refresh` que **não** passa por "carregando"
+  (decisão P9 — recarregar assim desmontaria o cartão e apagaria o anúncio
+  "Missão concluída."); `civilDate.ts` formata a data civil `"YYYY-MM-DD"`
+  que a API devolve **sem** conversão de fuso — `new Date(civil)` sozinho
+  levaria a tela num fuso a oeste de UTC a mostrar o dia anterior (Risco 3
+  do plano); `CycleSection.tsx` desenha a "Missão de hoje", a sequência
+  ("Sequência: N dia(s) seguido(s)") e o progresso até o marco ("N de 7"),
+  ou o cartão da especial vigente no lugar dele. `MissionCard.tsx` foi
+  extraído de `MissionList.tsx` para ser reaproveitado pelo cartão da
+  missão de hoje, com o `onCompleted` opcional de `useCompleteMission.ts`
+  acionando o `refresh` do ciclo depois de concluir. O quadro de avulsas
+  (`MissionList.tsx`) passou a se chamar "Outras missões — tarefas com
+  prazo" (decisão P8), e `Headquarters.tsx` compõe `<CycleSection />`
+  **acima** dele.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no
@@ -694,6 +859,12 @@ legitimamente pertence a ele — nunca antes.
    extraída. Extraia-a em vez de fechar o ciclo. Foi por isso que
    `get_engine` e `get_session` moram em `core/database.py`, e não em
    `main.py`: `main.py` importa o router, e o router precisa da sessão.
+   Foi por isso também que o ciclo diário (Incremento B) mora em
+   `modules/missions/cycle_*.py`, e não num módulo `modules/cycle/` próprio
+   (decisão P1, `docs/HANDOFF.md`): um módulo separado fecharia o ciclo —
+   `missions/service.py` precisa das regras do ciclo dentro de
+   `concluir_missao`, e o ciclo precisa de `Mission` e de `User`, que moram
+   em `missions/models.py`.
 3. **Só sobe para `shared/` o que é realmente compartilhado.** O critério é
    uso real por mais de uma feature, não expectativa de reúso futuro. Regra
    específica de uma feature fica na feature — mesmo que pareça genérica.

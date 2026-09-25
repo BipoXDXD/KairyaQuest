@@ -18,9 +18,12 @@ Linux** (x86_64): o repositório chegou como arquivo ZIP, sem `.git`; o
 histórico foi religado por um clone sem checkout do remoto, e a árvore
 conferiu idêntica a `12288a2` (`git status` limpo). Hooks instalados por
 `uv run pre-commit install --install-hooks`; `make check` na base, sem
-mudança nenhuma: aprovado, EXIT 0 (ver "Resultados"). **Estado de
-publicação: não publicado.** Push, PR e merge autorizados pelo dono em
-2026-09-25 para este incremento.
+mudança nenhuma: aprovado, EXIT 0 (ver "Resultados"). A branch soma, até
+este registro (Task 10), **13 commits** (Tasks 0–9, contados com
+`git log --oneline 12288a2..HEAD | wc -l`, medido nesta sessão) — mais este
+commit de documentação, **14** no total. **Estado de publicação: não
+publicado.** Push, PR e merge autorizados pelo dono em 2026-09-25 para este
+incremento.
 
 **Incremento 1b-2 — a tela da Tifa, o E2E e a chamada real.** Branch
 `feat/incremento-1b-2`, aberta a partir de `a795ee7` (a `main`: o merge do
@@ -340,6 +343,97 @@ nesta sessão).
 - **Endpoints:** nenhum novo na aplicação. O `/_control/*` do falso não é
   endpoint de produto — é infraestrutura de teste, exposta só pelo processo
   `tests/integration/falso_do_e2e.py`.
+
+### Incremento B — decisões que a spec não fixava
+
+Transcritas da tabela "Decisões que a spec não fixava" do plano
+(`docs/superpowers/plans/2026-09-25-incremento-b.md`), à medida que as
+tarefas as põem em código.
+
+| # | Decisão | Motivo |
+|---|---|---|
+| P1 | O ciclo mora no módulo `missions`, em arquivos `cycle_*.py`, e não num módulo próprio | A diária e a especial **são** missões, e a conclusão é a mesma rota. Um módulo `cycle` separado fecharia um ciclo de import: `missions.service` precisa das regras do ciclo na conclusão, e o ciclo precisa de `Mission` e de `User` (que mora em `missions/models.py`, pendência 8). `docs/ARCHITECTURE.md` §5 regra 2 proíbe o ciclo. |
+| P2 | `GET /api/plans/current` entra no B, e não no C | O 201 do `POST /api/plans` devolve o plano "na mesma forma do `GET /api/plans/current`" (spec, Endpoints), então o serializador existe no B de qualquer jeito; e a spec manda o cliente que recebe `409 plano_existente` confirmar com esse GET. O C fica com a tela da trilha, a navegação lateral e o axe em Campanhas. |
+| P3 | A `availability` da avulsa é `concluida` se o estado é `concluida`, e `disponivel` nos outros | A spec põe `availability` no `MissionRead` e só tabela a diária e a especial. A avulsa não tem regra de dia (o prazo dela nunca bloqueou a conclusão, desde o 1a). |
+| P4 | `weekly_plans.created_at` vem do **relógio injetável**, e não do `now()` do banco | É entrada de regra (`fora_do_plano`), como o `created_at` das mensagens da tutoria (1b-1). Misturar o `now()` do banco com o relógio dos testes faria a regra comparar dois relógios. |
+| P5 | O `bonus` do `POST /api/plans` recusa campo desconhecido (`extra="forbid"`) | A spec diz "1 missão, sem `difficulty`". Um cliente que mandasse `difficulty` acharia que foi respeitado; o 422 diz que não. |
+| P6 | Ocultação implementada por **leitura**: `ler_missao` levanta `MissaoNaoEncontradaError` para o que não foi revelado, e a conclusão chama `ler_missao` logo depois do relógio | Uma função só decide "revelado" para a leitura e para a conclusão; duas acabariam discordando. A ordem da spec (trava, relógio, ocultação, reenvio, regra do dia, transição) continua literal. |
+| P7 | A guarda do banco de teste e o recomeço do esquema moram em `tests/integration/banco_de_teste.py`, e rodam como `PYTHONPATH=tests uv run python -m integration.banco_de_teste` | É infraestrutura destrutiva de teste: em `src/` ela poderia ser chamada pela aplicação. O arranjo `PYTHONPATH=tests` já é o do servidor falso do E2E. Task 6 (commit `50e2150`). |
+| P8 | O quadro de avulsas passa a se chamar "Outras missões — tarefas com prazo" | A spec, seção Frontend: "'Outras missões', com as avulsas". |
+| P9 | Depois de concluir a diária ou a especial, a seção do ciclo **atualiza em silêncio** (`refresh`), sem passar por "carregando" | Recarregar com "carregando" desmontaria o cartão e apagaria o anúncio "Missão concluída.". Se a atualização silenciosa falha, a tela mantém o que tinha e avisa que a sequência pode estar desatualizada, com "Atualizar". |
+| P10 | `DAYS_PER_MILESTONE = 7` no frontend espelha `DIAS_POR_MARCO` à mão | Mesmo desenho dos outros espelhos (pendência 32): a tela precisa do número para "N de 7". |
+
+### Incremento B — decisões tomadas durante a execução
+
+Divergências entre o pseudocódigo/texto do plano e o que a execução exigiu,
+descobertas nas Tasks 1 a 5 e 7 a 8, e dois achados de teste vacuamente verde
+corrigidos nas rodadas de correção da revisão.
+
+| Decisão | Motivo |
+|---|---|
+| `MissaoLida`, `dia_da_diaria` e `leitura_da_avulsa` (Ruling R1 do ledger) entram na **Task 2**, e não na Task 3/5 como o plano previa | Com `Mission.deadline: Mapped[datetime \| None]` (mudança da própria Task 2), `tutoring/context.py` fazia `missao.deadline.isoformat()` direto e reprovava o mypy estrito; `leitura_da_avulsa` é a forma tipada de ler o prazo da avulsa, e o `make check` da Task 2 precisava passar. O código é o mesmo que a Task 3 já previa (copiado dela, sem adaptação); só a Task que o introduz mudou. |
+| `dias_para_o_marco` recebe o parâmetro **`sequencia_atual`**, não `sequencia` (Task 1, achado de revisão) | O nome `sequencia` sombrearia a função homônima do módulo; toda chamada do plano já é posicional, então nada quebrou, mas uma chamada futura por keyword exigia o nome sem colisão. |
+| `test_tipo_invalido_e_recusado` (`test_cycle_models.py`) passou a criar um plano e inserir com `plan_id`/`deadline`/`day` compatíveis com os outros CHECK (Task 2, fix round 1) | O INSERT original violava **três** `CHECK` ao mesmo tempo (`ck_missions_mission_type`, `ck_missions_plano_do_tipo` e `ck_missions_prazo_do_tipo`) e só passava porque o PostgreSQL relata um só, por acidente de ordem — não provava o CHECK que o nome do teste afirma. |
+| `test_a_ocultacao_vem_antes_do_reuso` foi parametrizado em três cenários (diária de dia futuro, especial bloqueada, diária de semana seguinte) (Task 4, fix round 1) | O teste original só cobria um cenário; o revisor pediu prova de que a ocultação vale nos três casos que a spec lista para "o que não foi revelado". |
+| `BonusCreate`, `DailyCreate` e `PlanCreate` recusam campo desconhecido (`extra="forbid"`) (Task 5, ruling do controlador) | Mesmo motivo da decisão P5, generalizado: um `deadline` ou `day` mandado numa diária seria ignorado em silêncio pelo Pydantic sem a diretiva. Custo: um cliente que mande campo a mais recebe 422 — comportamento desejado, não regressão. |
+| O ponto do revisor da Task 4 sobre checar `NaoPertenceAoUsuario` antes da ocultação foi recusado (ruling do controlador) | `main.py` já responde o **mesmo** corpo/`code` 404 para missão inexistente e para missão alheia (decisão herdada do Incremento A); com usuário único isso é observacionalmente idêntico a checar a posse primeiro. |
+| Commit `b233a84` da Task 2 ficou com **dois** `Co-Authored-By` (o Opus do plano e o Sonnet do implementador), sem `amend` | Mesma decisão do 1b-1: atribuição verdadeira vale mais que uniformidade, e reescrever histórico não valia o risco. Sem efeito funcional. |
+
+**Achado: o teste de concorrência da Task 4 era vacuamente verde em relação
+à trava.** `test_conclusao_concorrente_na_virada_do_dia_conclui_uma_vez`
+(`tests/integration/test_cycle_concorrencia.py`) usa dois relógios dos dois
+lados da meia-noite (23:59:59 e 00:00:01 em São Paulo); cada thread decide
+seu próprio resultado pela **regra do dia**, sem nunca disputar de verdade a
+transição de estado — por isso passava com **0 de 5** execuções mesmo com o
+`with_for_update` removido do `_buscar`. A mutação foi vista reprovando pelo
+motivo certo (a regra do dia), mas a trava (`FOR UPDATE`) ficou sem prova
+neste teste. Corrigido com um segundo teste,
+`test_duas_conclusoes_do_mesmo_lado_da_meia_noite_produzem_uma_so`, com os
+dois relógios do **mesmo** lado da meia-noite: as duas threads leem a mesma
+disponibilidade, e só a trava decide quem conclui primeiro — **5 de 5**
+execuções reprovaram sem o `with_for_update`. A docstring do módulo foi
+corrigida para não afirmar que o teste original prova o mecanismo da trava;
+quem prova o mecanismo por construção continua sendo
+`test_concluir_trava_a_linha_da_missao`
+(`tests/integration/test_missions_concorrencia.py`, do Incremento 1a).
+
+**Achado: um teste do `useCycle` do frontend era vacuamente verde.** O caso
+"um pedido cancelado na desmontagem não vira erro" (Task 7) checava
+`result.current` **depois** de `unmount()` — e o `renderHook` do Testing
+Library para de re-renderizar depois da desmontagem, então o valor fica
+congelado e o teste não tinha como observar se a guarda
+`if (controller.signal.aborted) { return }` rodou ou não. Passava com a
+guarda removida (mutação aplicada de propósito), confirmando a suspeita.
+Reescrito como `'um pedido cancelado que so rejeita DEPOIS do bom ja ter
+assentado nao vira erro'`: monta em `StrictMode` (duplo efeito), espera o
+`loaded` do segundo pedido e só então rejeita manualmente o primeiro, com o
+componente **vivo** — esse teste reprova (`error` em vez de `loaded`) sem a
+guarda, e passa com ela.
+
+### Dependências e infraestrutura que entraram no B
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço.
+
+- **Dependência nova: `tzdata==2026.4`.** A spec do ciclo diário (C1) exige a
+  base de fusos IANA para calcular o dia civil em `America/Sao_Paulo` com
+  `zoneinfo`. O pacote **garante** a base em qualquer máquina — inclusive uma
+  sem base do sistema instalada —, e não substitui a base do sistema quando
+  ela existe: `zoneinfo.ZoneInfo` procura primeiro a base do sistema
+  operacional e só recorre ao pacote `tzdata` quando ela falta (a estratégia
+  documentada do próprio `zoneinfo`). Nenhuma outra dependência nova, nem em
+  `pyproject.toml` nem em `frontend/package.json`.
+- **Endpoints novos:** `POST /api/plans` (cria o plano semanal, 201),
+  `GET /api/plans/current` (200, `{"plan": PlanRead | null}`) e `GET
+  /api/cycle` (200, o ciclo derivado do relógio). Nenhum serviço novo: os
+  três rodam no mesmo processo FastAPI, sobre o mesmo PostgreSQL.
+- **Infraestrutura de teste:** o alvo `make reset-test-db` (Task 6, guarda
+  compartilhada em `tests/integration/banco_de_teste.py`) recria o esquema
+  do banco de teste do zero antes do `check-e2e` — necessário porque o plano
+  semanal é único por semana (C3/`uq_weekly_plans_user_id_week_start`), e sem
+  esquema limpo um segundo `check-e2e` seguido reprovaria com `409
+  plano_existente`. Task 6, commit `50e2150` — ver "Alterações do
+  Incremento B" e `docs/QUALITY.md` §4.
 
 ### Incrementos anteriores
 
@@ -951,6 +1045,180 @@ Criada na Task 1 e completada na Task 9 (plano
     e duas correções no plano (a contagem do `-k` do Step 5 e o motivo real
     da mutação 2 do Step 7).
 
+## Alterações do Incremento B
+
+Plano em `docs/superpowers/plans/2026-09-25-incremento-b.md`. Todas as
+Tasks 0–9 estão comitadas em `feat/incremento-b`
+(`git log --oneline 12288a2..HEAD`): backend nas Tasks 0–5 (`3544344` até
+`6b42962`, o fix round da Task 5), `check-e2e` de esquema limpo na Task 6
+(`50e2150`), frontend do ciclo nas Tasks 7–8 (`242d677`, `08b3dcc`) e o E2E
+do ciclo na Task 9 (`0b9197b`, HEAD).
+
+- **Task 0** — revisão-base no Linux e o plano deste incremento
+  (commits `12288a2`..`3544344`): primeira sessão nesta máquina Linux, o
+  repositório religado por clone sem checkout, `make check` na base sem
+  mudança aprovado; as nove "Interpretações a confirmar" da spec marcadas
+  como confirmadas pelo dono em 2026-09-25.
+- **Task 1** — o domínio puro do ciclo (commit `b9bc937`):
+  `tzdata==2026.4` acrescentado (`uv add`); `domain.py` ganhou `MissionType`
+  (`avulsa`/`diaria`/`especial`), `DIFICULDADE_DA_ESPECIAL = 5`,
+  `MULTIPLICADOR_DA_ESPECIAL = 3` e `xp_da_missao`; criado
+  `cycle_domain.py` — `FUSO_DO_CICLO`, `DIAS_DA_SEMANA`, `DIAS_POR_MARCO`,
+  `MINUTOS_DO_DIA`, `Availability`, `NAO_CONCLUIVEIS`, `DiaDoPlano`,
+  `Historico` e as funções puras de dia, semana, disponibilidade da diária,
+  sequência, marco e disponibilidade/janela da especial. `tests/unit/test_cycle_domain.py`
+  criado, 47 casos; as 7 mutações do brief aplicadas, vistas reprovando e
+  restauradas.
+- **Task 2** — migração `0003_ciclo_diario` e modelos (commits
+  `b9bc937`..`b233a84` + fix `dabc674`): tabela `weekly_plans`
+  (`id`, `user_id`, `week_start`, `created_at`, com
+  `uq_weekly_plans_user_id_week_start`, `uq_weekly_plans_id_user_id` e
+  `ck_weekly_plans_week_start_segunda`); `missions` ganhou `mission_type`,
+  `plan_id`, `day`, e `deadline` virou nulável, com seis `CHECK` novos
+  (`ck_missions_mission_type`, `ck_missions_plano_do_tipo`,
+  `ck_missions_dia_do_tipo`, `ck_missions_prazo_do_tipo`,
+  `ck_missions_dificuldade_da_especial`, `ck_missions_estimativa_do_ciclo`),
+  a FK composta `fk_missions_plano_do_usuario` (MATCH SIMPLE, deixa a
+  avulsa sem plano passar) e `uq_missions_plan_id_day` +
+  `uq_missions_especial_por_plano` (índice único parcial). `models.py`
+  ganhou `MissionTypeText` e `WeeklyPlan`, com as mesmas restrições
+  nomeadas no `__table_args__`. `criar_missao` passou a gravar
+  `mission_type=AVULSA`. Criado `cycle_service.py` (**só** `MissaoLida`,
+  `dia_da_diaria`, `leitura_da_avulsa` — o resto é da Task 3, ruling R1 do
+  ledger) e `tests/unit/test_cycle_invariantes.py`; `tutoring/context.py`
+  passou a ler o prazo por `leitura_da_avulsa`. Testes de restrição em
+  `tests/integration/test_cycle_models.py` (16 casos, cada um afirmando o
+  **nome** da restrição violada); `test_missions_models.py` ganhou o
+  espelho de `weekly_plans` e o teste de divergência modelo×migração;
+  `test_migrations.py` ganhou os três testes da migração 0003, inclusive o
+  downgrade que falha alto com diária/especial em pé. Quatro `Mission(...)`
+  de teste existentes (`test_missions_models.py`, `test_missions_api.py`,
+  `test_tutoring_models.py`) ganharam `mission_type=MissionType.AVULSA` —
+  mudança aditiva do contrato, não acomodação de defeito. Fix round 1:
+  `test_o_downgrade_da_0003_leva_so_o_ciclo` passou a afirmar o `NOT NULL`
+  de `deadline` de volta (não provava isso antes); `test_tipo_invalido_e_recusado`
+  reescrito para violar um `CHECK` só (ver "Decisões da execução").
+- **Task 3** — serviço do ciclo: criar o plano e ler o ciclo derivado do
+  relógio (commit `9e65e71`): quatro erros novos em `core/errors.py`
+  (`MissaoExpiradaError`, `PlanoExistenteError`, `SemanaEncerradaError`,
+  `SemanaDistanteError`); `cycle_service.py` completo — `NovaDiaria`,
+  `NovaEspecial`, `DiaLido`, `EspecialLida`, `PlanoLido`, `CicloLido`,
+  `carregar_historico`, `ler_missao` (a ocultação: 404 idêntico para o que
+  não foi revelado), `criar_plano` (recusa `plano_existente`,
+  `semana_encerrada` — semana no passado — e `semana_distante` — mais de
+  uma semana à frente, nesta ordem, para a checagem de estouro do
+  `datetime` no ano 9999 nunca ser alcançada antes da recusa por distância),
+  `ler_plano_atual`, `ler_ciclo`. `tests/integration/test_cycle_service.py`
+  criado, com dois testes a mais que o brief para fechar os ramos de
+  `ler_missao` da avulsa e da especial já revelada (cobertura 100%).
+- **Task 4** — as regras do ciclo na conclusão (commits `dabc674`..`710044d`
+  + fix `53ddc3f`): `service.py` — `listar_missoes` filtra só `AVULSA`;
+  `concluir_missao` ganhou, entre a trava e o reenvio, a ocultação
+  (`ler_missao` logo depois do relógio) e, entre o reenvio e a transição, a
+  regra do dia (`if lida.availability in NAO_CONCLUIVEIS: raise
+  MissaoExpiradaError`) — a ordem final é trava → relógio → ocultação →
+  reenvio → regra do dia → transição, literal à spec.
+  `tests/integration/test_cycle_completion.py` (ocultação, expiração,
+  reenvio depois da meia-noite, listagem só de avulsas) e
+  `tests/integration/test_cycle_concorrencia.py` criados. Fix round 1:
+  segundo teste de concorrência e docstring corrigida (ver "Decisões da
+  execução"); `test_a_ocultacao_vem_antes_do_reuso` parametrizado em três
+  cenários; `test_conclui_a_especial_dentro_da_janela` acrescentado
+  (caminho positivo da especial, que só tinha teste do lado negativo).
+- **Task 5** — a API do ciclo (commit `4f2ec40` + fix round `6b42962`): `MissionRead`
+  (`schemas.py`) reescrita — ganhou `mission_type`, `day`, `availability`;
+  deixou de usar `from_attributes`; construída por `MissionRead.da_leitura(lida)`;
+  `xp` passou a chamar `xp_da_missao`. Criados `cycle_schemas.py`
+  (`DailyCreate`, `BonusCreate` com `extra="forbid"`, `PlanCreate`,
+  `DayRead`, `SpecialRead`, `PlanRead`, `CurrentPlanRead`, `CycleRead`) e
+  `cycle_router.py` (`POST /api/plans`, `GET /api/plans/current`,
+  `GET /api/cycle`). `router.py` das missões e `tutoring/router.py`
+  passaram a publicar via `MissionRead.da_leitura(leitura_da_avulsa(...))`;
+  a rota de concluir relê a missão com `ler_missao(session, missao,
+  clock())` **depois do commit** (ver pendência nova, abaixo). `main.py`
+  ganhou o router do ciclo e os quatro `code` novos (`missao_expirada`,
+  `plano_existente`, `semana_encerrada`, `semana_distante`), cada um com
+  handler próprio, 409. `tests/integration/test_cycle_api.py` criado (**29**
+  casos, contados com `pytest --collect-only`: a trilha sem revelar o
+  futuro, o baú fechado, os 422 de validação, os 409 dos quatro códigos —
+  inclusive o ano 9999 sem 500 —, o reenvio idempotente, a especial de 660
+  XP e a listagem só de avulsas — mais os casos de fechamento de revisão do
+  fix round da Task 5, `6b42962`: `extra="forbid"` em `DailyCreate` e
+  `PlanCreate`, o `progress` da especial, a especial revelada na trilha, e
+  os 422 que faltavam — dificuldade 0, diária/bônus de 0 minutos, critério
+  vazio). Nenhum teste existente de missão ou de tutoria precisou de
+  alteração — a mudança de contrato foi puramente aditiva.
+- **Task 6** — `check-e2e` de esquema limpo (commit `50e2150`):
+  `tests/integration/banco_de_teste.py` (novo) recebe, **sem mudar corpo
+  nem docstring**, a função `exigir_banco_de_teste` que morava em
+  `conftest.py`, e ganha `recriar_esquema(engine)` (a guarda **antes** do
+  `DROP SCHEMA public CASCADE` — verificação depois do comando destrutivo
+  seria autópsia, não guarda) e `main()`, invocável como `PYTHONPATH=tests
+  uv run python -m integration.banco_de_teste`. `conftest.py` passa a
+  montar `banco_migrado` por `recriar_esquema` + `upgrade`;
+  `test_migrations.py` importa a guarda de lá. `scripts/e2e-env.sh` troca a
+  cópia da guarda por essa versão compartilhada. `Makefile` ganha o alvo
+  `reset-test-db` (DESTRUTIVO: recria o banco de teste do zero e aplica as
+  migrações) como **pré-requisito** do `check-e2e`, no lugar de
+  `migrate-test` — motivo em `docs/QUALITY.md` §4. Testes novos em
+  `tests/integration/test_banco_de_teste.py` (3 casos: a guarda recusa o
+  banco de desenvolvimento; `recriar_esquema` apaga tudo do banco de teste;
+  o comando como módulo recusa o banco errado). As duas mutações do brief
+  foram aplicadas e vistas reprovando (Step 7 do brief; sem tocar o banco
+  de desenvolvimento — a primeira usou uma porta fechada de propósito).
+  `make check-e2e` rodado duas vezes seguidas sobre esta Task: **11
+  passed** nas duas (ainda sem `cycle.spec.ts`, que é da Task 9) —
+  confirma o critério de aceite da C17: o segundo `check-e2e` seguido não
+  reprova com `409 plano_existente`. `task-6-report.md`.
+- **Task 7** — frontend: contrato, data civil e hook do ciclo (commit
+  `242d677`): `types.ts` ganhou `MissionType`,
+  `Availability`, `DAYS_PER_MILESTONE = 7` (decisão P10), a interface
+  `Cycle`, e em `Mission`: `mission_type`, `day`, `availability`;
+  `MissionErrorCode` ganhou `'missao_expirada'`.
+  `completionFailure.ts`/`.test.ts` ganharam a entrada `missao_expirada`
+  (mensagem + `recovery: 'refresh'`) — o teste existente de "code
+  desconhecido", que usava `missao_expirada` como exemplo, trocou o exemplo
+  para `'codigo_futuro'` (agora que o código é conhecido, o teste antigo
+  passaria pela mensagem específica, não a genérica: falso positivo).
+  Criados `civilDate.ts`/`.test.ts` (formata uma data civil `"YYYY-MM-DD"`
+  sem conversão de fuso — a armadilha do Risco 3 do plano) e
+  `useCycle.ts`/`.test.tsx` (busca `GET /api/cycle`, com `refresh` que
+  atualiza sem passar por "carregando", decisão P9). Literais `Mission` de
+  teste existentes (`MissionList.test.tsx`, `useMissions.test.tsx`,
+  `useCompleteMission.test.tsx`, `Headquarters.test.tsx`) ganharam os três
+  campos novos. 100% de cobertura nos quatro eixos; achado de teste
+  vacuamente verde descrito em "Decisões da execução".
+- **Task 8** — "Missão de hoje" no Quartel-General (commit `08b3dcc`):
+  `useCompleteMission` ganhou o parâmetro opcional
+  `onCompleted`, chamado só no sucesso. `MissionCard.tsx` extraído de
+  `MissionList.tsx` (mesmo conteúdo, com a prop `onCompleted?` repassada);
+  `MissionList.tsx` teve o título do quadro trocado para "Outras missões —
+  tarefas com prazo" (decisão P8). Criados `CycleSection.tsx`/`.test.tsx` —
+  a "Missão de hoje", a sequência ("Sequência: N dia(s) seguido(s)"), o
+  progresso até o marco ("N de 7") ou o cartão da especial vigente no lugar
+  dele, e a atualização silenciosa via `onCompleted={refresh}`.
+  `Headquarters.tsx` passou a renderizar `<CycleSection />` **entre** o
+  cabeçalho e o quadro de avulsas; `Headquarters.test.tsx` ganhou a rota
+  `GET /api/cycle` e o teste de ordem no DOM. 100% de cobertura nos quatro
+  eixos; as duas provas de mutação que faltavam (`onCompleted` e a
+  contagem/ordem em `Headquarters.test.tsx`) foram fechadas no fix round 1.
+- **Task 9** — E2E do ciclo (commit `0b9197b`, HEAD):
+  `frontend/tests/e2e/cycle.spec.ts` (novo, **2 cenários**) semeia o plano
+  da semana a partir do `today` que a própria API devolve (nunca do relógio
+  do navegador, que roda em `Asia/Tokyo` no `playwright.config.ts` — o
+  Risco 3 do plano), abre o Quartel-General, confere a missão de hoje e a
+  data civil, conclui pelo botão, confere a sequência (`1 dia seguido`,
+  `1 de 7`) e que ela sobrevive a um `page.reload()` (lida do servidor), e
+  passa o axe nos dois estados. Limitação conhecida, documentada no próprio
+  cenário: se a semeadura e a conclusão caírem em lados diferentes da
+  meia-noite de São Paulo, o cenário reprova — sem nova tentativa
+  automática. `make check-e2e` rodado duas vezes seguidas com o cenário
+  novo: **13 passed** nas duas (os 11 antigos mais os 2 novos), exit 0. As
+  duas mutações do Step 3 do brief foram aplicadas e vistas reprovando
+  (tirar o `refresh` do `onCompleted`; `civilDate.ts` com `timeZone: 'UTC'`
+  e `new Date(civil)` direto) e restauradas. `make check` completo passou
+  antes do commit. `task-9-report.md`.
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -963,8 +1231,9 @@ incremento:
 | `make migrate` | Aplica as migrações no banco de desenvolvimento. |
 | `make migrate-test` | Aplica as migrações no banco de teste. |
 | `make check-api` | `uv lock --check`, Ruff, mypy estrito e pytest com cobertura de 100%. |
-| `make check-e2e` | `migrate-test`, build do frontend e Playwright com axe-core. |
+| `make check-e2e` | Desde o Incremento B: `reset-test-db` (não mais `migrate-test`), build do frontend e Playwright com axe-core. |
 | `PYTHONPATH=tests uv run python -m integration.falso_do_e2e --porta 8150` | Sobe o servidor falso do E2E à mão, fora do Playwright (que o sobe sozinho no `make check-e2e`). Não precisa de chave nenhuma. |
+| `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: recria o esquema `public` do banco de teste do zero e aplica as migrações — pré-requisito do `check-e2e`, porque o plano semanal é único por semana (C3) e um segundo `check-e2e` seguido, sem esquema limpo, reprovaria com `409 plano_existente`. |
 
 Para rodar a aplicação em desenvolvimento (não faz parte do gate):
 
@@ -1037,11 +1306,20 @@ e de revisões diferentes, e a mais recente fica por último:
 | Efeito cascata do thinking no falso, antes dos ajustes (suíte pytest, `--no-cov`) | 10 reprovações: 7 de índice (as contagens de 3 caíam dentro do thinking) e 3 da camada 2 (a `Message` do SDK com o bloco `thinking` na frente). Depois dos ajustes de índice e da expectativa da camada 2 (opção (A)), nenhuma. Lista em "Alterações", Task 8. |
 | Mutações da Task 8 (backup em `/tmp/fq-mutacao-t8c.bak`, restaurado por `cp`) | **Mutação 1 do plano:** `message_delta` → `message_deltaX` na referência reprova `test_o_falso_emite_a_sequencia_da_api_real` (diferença no índice 11) e `test_a_referencia_gravada_nao_tem_conteudo` (o regex recusa o `X`). **Mutação 2 do plano:** sem a checagem de `_API_REAL`, `test_a_captura_recusa_gravar_o_que_nao_e_a_api_real` reprova, mas **não** pelo motivo que o plano previa: sem a chave no ambiente (o caso do gate), o `main()` para antes, na checagem da chave (`sem FOCUSQUEST_ANTHROPIC_API_KEY no ambiente; nada foi gravado`); só com a chave exportada no shell ele chegaria ao `APIConnectionError` de `127.0.0.1:9`. Nos dois casos a mensagem não casa com `so grava a API real`. **Adaptador tratando thinking como texto** (mutação temporária em `src/`, restaurada): `test_o_thinking_da_api_nao_chega_ao_dominio` reprova nos dois casos, `Delta('raciocinio interno do falso…') != Delta('Bora, ')`. **Falso emitindo o thinking como `text_delta`:** reprova só a camada 3 (`'content_block_delta:text_delta' != 'content_block_delta:thinking_delta'`); o teste do adaptador passa, porque o próprio SDK ignora um `text_delta` dentro de um bloco `thinking`. **`pensar` desligado por padrão:** reprovam a checagem de não vacuidade do teste novo e a camada 3. **E2E com `cut_after_events: 3`:** reprova `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`. |
 | `make check`, duas vezes seguidas, sobre a Task 8 Steps 2–8 do 1b-2 (árvore antes do commit; esta linha escrita entre as duas) | Aprovado, EXIT 0 nas duas. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas) — inalterado, a Task 8 não toca `frontend/src/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 69 arquivos já formatados. mypy sem problemas em 65 arquivos. Backend: **322 testes** (313 da Task 8 Step 1, mais os 6 de `test_camada3.py`, os 2 casos de `test_o_thinking_da_api_nao_chega_ao_dominio` e `test_o_e2e_segura_e_corta_no_mesmo_ponto_que_o_pytest`), 1 aviso, cobertura total de 100% (742 instruções, 104 ramificações — `src/focusquest/` não mudou). E2E: 11 cenários aprovados em Chromium, com os índices 7. Gitleaks sem achados. |
+| `make check` sobre a base `12288a2`, no Linux, antes de qualquer mudança do Incremento B (ruling da Task 0 no ledger) | Aprovado, EXIT 0, 1m47s. Frontend: 279 testes em 22 arquivos, cobertura de 100% nos quatro eixos (497/497 instruções, 332/332 ramificações, 147/147 funções, 481/481 linhas). Backend: 322 testes, cobertura total de 100%. E2E: 11 cenários. Gitleaks sem achados. |
+| `make check` duas vezes seguidas, sobre a árvore final do Incremento B (Tasks 0–9 integradas, HEAD `0b9197b`) | Aprovado, EXIT 0 nas duas, ~1m31s de relógio cada. Frontend: 301 testes em 25 arquivos, cobertura de 100% nos quatro eixos (537/537 instruções, 351/351 ramificações, 165/165 funções, 519/519 linhas) — idêntico nas duas rodadas. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: **465 testes**, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — idêntico nas duas rodadas. E2E: **13 cenários** aprovados em Chromium (12,8 s e 13,1 s). Gitleaks sem achados nas duas. |
+| `make check-e2e` duas vezes seguidas, sobre a árvore final (prova do C17: o segundo `check-e2e` também aprova, de esquema limpo) | Aprovado, EXIT 0 nas duas (~19,4 s e ~18,6 s de relógio, incluindo `reset-test-db` + build + Playwright). **13 passed** nas duas (14,6 s e 13,6 s de Playwright) — os 11 cenários antigos mais os 2 do `cycle.spec.ts`; o segundo `check-e2e`, rodado imediatamente depois do primeiro sem `check-api` no meio, não reprovou com `409 plano_existente`, confirmando que `reset-test-db` recria o esquema do zero a cada execução. |
 
 ## Ambiente verificado
 
 Node 24.21.0 / npm 11.19.0; Python 3.14.7 (o do `.venv`); uv 0.12.13;
 Docker 29.7.2 com daemon rodando; Compose v5.5.1; git 2.55.0; gh 2.100.0.
+
+**Máquina Linux (x86_64, kernel 7.0), desde o Incremento B** — a máquina em
+que o B foi medido, e não substitui a linha acima (macOS), que registra onde
+os incrementos anteriores foram medidos: Node v24.21.0, npm 11.19.0,
+Python 3.14.7, uv 0.12.15, Docker 29.8.1, Compose v5.5.1, git 2.43.0,
+gh 2.101.0, GNU Make 4.3.
 
 **Versões fixadas do gate:** Gitleaks 8.30.1 (checksums do tarball e do
 binário extraído em `scripts/install-gitleaks.sh` — os dois valores ficam
@@ -1189,6 +1467,17 @@ ninguém mexer.
    (`compare_metadata` do Alembic, que de todo modo não compara `CHECK`); um
    `CHECK` novo em `mission_operations`, ou outra divergência fora dos
    `CHECK` de `missions`, não é detectado por teste dedicado.
+   **Cresceu no Incremento B:** os `UNIQUE` (`uq_weekly_plans_id_user_id`,
+   `uq_missions_plan_id_day`), o índice único parcial
+   (`uq_missions_especial_por_plano`) e a FK composta
+   (`fk_missions_plano_do_usuario`, MATCH SIMPLE) **não** entram no teste de
+   divergência — só os `CHECK`. São provados por **recusa nomeada** (cada
+   teste de `test_cycle_models.py` insere o que a restrição deveria barrar e
+   afirma o nome dela no erro do PostgreSQL), não pelo teste que compara
+   modelo e migração. Medido na Task 2: remover
+   `op.alter_column("missions", "mission_type", server_default=None)` da
+   migração (um `server_default`, não um `CHECK`) não reprova o teste de
+   divergência — só o teste de INSERT cru dedicado o pega.
 10. **`run_migrations_offline()` do `alembic/env.py` não é exercitado** por
     nenhum teste. `alembic/` está fora do denominador de cobertura e o
     projeto não usa o modo offline.
@@ -1242,8 +1531,11 @@ ninguém mexer.
     fixture do pytest faz `DROP SCHEMA` no banco que a API do E2E usa, e o
     E2E usa **três** portas fixas: 8100 (API), 5273 (frontend) e 8150
     (servidor falso, desde a Task 6 do 1b-2). No CI não há corrida: cada job
-    tem o seu PostgreSQL.
-20. **Cada execução do E2E deixa linhas no `focusquest_test`**, que só somem
+    tem o seu PostgreSQL. **Continua aberta no Incremento B** — o
+    `reset-test-db` novo (pendência 20) não muda esta restrição: ele
+    recria o esquema, mas ainda é o mesmo banco `focusquest_test`
+    compartilhado, e ainda reprova alto se rodar junto com um `check-api`.
+20. ~~**Cada execução do E2E deixa linhas no `focusquest_test`**, que só somem
     no próximo `DROP SCHEMA` da suíte pytest. Medido depois de um `make
     check` completo, na Task 7 do 1b-2: **6 missões** (as 4 do
     `headquarters.spec.ts`, duas delas concluídas, a confirmada em (a) e a
@@ -1253,7 +1545,19 @@ ninguém mexer.
     mensagens e +2 ações (12/14/4 depois da segunda). A conversa da tutoria
     é uma só, e a tela mostra as últimas 50 mensagens: por isso todo texto
     que um cenário localiza, inclusive o que o falso devolve, carrega o
-    sufixo `EXECUCAO`.
+    sufixo `EXECUCAO`.~~ **Resolvida no Incremento B (Task 6):** o
+    `check-e2e` passou a ter `reset-test-db` como pré-requisito — recria o
+    esquema `public` do banco de teste do zero e reaplica as migrações antes
+    de cada execução, no lugar de `migrate-test` (que só migrava, sem
+    apagar). Um `make check-e2e` seguido de outro, sem `check-api` no meio,
+    volta a partir de esquema limpo em vez de acumular linhas — necessário
+    porque o plano semanal do ciclo diário é único por semana
+    (`uq_weekly_plans_user_id_week_start`), e sem isso o segundo
+    `check-e2e` reprovaria com `409 plano_existente` ao semear o mesmo
+    plano de novo (spec do ciclo diário, C17). **Confirmado**, commit
+    `50e2150`: `make check-e2e` rodado duas vezes seguidas (antes do
+    `cycle.spec.ts` da Task 9) — **11 passed** nas duas, o critério de
+    aceite do brief da Task 6.
 21. **O axe audita quatro estados** — a lista carregada, o erro de
     carregamento, a missão recém-concluída e o aviso de falha da conclusão
     —, **mas não o de carregando, nem o de envio** ("Concluindo…"), **nem o
@@ -1301,6 +1605,15 @@ que não tinham chegado aqui)
     revelação semanal distribui as missões. Os limites de negócio entram no
     incremento que introduzir o ciclo diário, e esse incremento começa por
     design próprio.
+    **Parte implementada pelo Incremento B:** as missões **diárias** e a
+    **especial** têm agora teto de negócio e prazo derivado — teto de 1440
+    minutos (`MINUTOS_DO_DIA`/`ck_missions_estimativa_do_ciclo`) e prazo
+    igual ao fim do dia civil em São Paulo para a diária
+    (`fim_do_dia`/`dia_da_diaria`), ou ao fim do dia seguinte ao marco para a
+    especial (`fim_da_janela_da_especial`, C8). **A avulsa continua em
+    aberto:** ela não ganhou teto nem janela novos — `estimated_minutes`
+    dela segue limitado só pelo int4, e `deadline` só pelo que cabe no
+    `datetime` em UTC, exatamente como antes do B.
 27. ~~**A guarda da faixa do prazo supõe a sessão do PostgreSQL em UTC.** O
     banco devolve o `timestamptz` no `TimeZone` da **sessão**, e o psycopg
     não lê um instante que, nesse fuso, cai fora dos anos 1 a 9999. Medido:
@@ -1392,6 +1705,16 @@ que não tinham chegado aqui)
     repetir com a mesma chave — mas impreciso. Amarrar continua pedindo
     gerar os tipos do OpenAPI, e os códigos do stream nem estão no OpenAPI
     (viajam dentro de um 200).
+    **Cresceu no Incremento B:** `DAYS_PER_MILESTONE = 7`
+    (`frontend/src/features/missions/types.ts`) espelha `DIAS_POR_MARCO` de
+    `cycle_domain.py` à mão, mesmo desenho — a tela precisa do número para
+    "N de 7" (decisão P10). E `MissionErrorCode` ganhou a entrada
+    `'missao_expirada'`, espelhando o quarto `code` novo do ciclo
+    (`missao_expirada`, `plano_existente`, `semana_encerrada`,
+    `semana_distante`) — só este chega à tela pela rota de concluir; os
+    outros três só aparecem em `POST /api/plans`, que o B ainda não tem
+    formulário nenhum (não há tela de criar plano no B; a spec não
+    pede uma, e o C encontra pronto o `GET /api/plans/current`).
 33. **`crypto.randomUUID` só existe em contexto seguro** (HTTPS, `localhost`,
     `127.0.0.1`). O servidor de desenvolvimento (`localhost`) e o do E2E
     (`127.0.0.1`) são contextos seguros; o E2E prova o segundo, e o
@@ -1615,6 +1938,58 @@ que não tinham chegado aqui)
     `test_sem_chave_responde_503_e_nao_grava`). O `503
     provedor_nao_configurado` do `POST`, na tela, só no Vitest (P7).
 
+**Criadas pelo Incremento B**
+
+53. **A chave real da Anthropic mora no Keychain do macOS (decisão D-a), e
+    esta sessão roda em Linux.** Não há cofre documentado nesta máquina —
+    `secret-tool` (a alternativa usual de chaveiro no Linux) não está
+    instalado, e a decisão D-a nunca previu onde a chave mora fora do
+    macOS. Consequência medida: a chamada real à Anthropic pela tela
+    (a mesma peça que gravou a referência da camada 3 no 1b-2, roteiro na
+    pendência 42) **não é reproduzível nesta máquina** até o dono decidir
+    onde a chave do Linux mora. Continua valendo, sem exceção, que ela
+    **nunca** vai no `.env` (decisão D-a) — o Gitleaks do gate a acusaria, e
+    o `pre-push` a levaria ao worktree do gate inteiro (mesma exposição
+    medida no 1b-2). O ciclo diário em si não depende da Tifa nem da chave;
+    a pendência é só sobre reproduzir aquele roteiro manual nesta máquina.
+54. **O E2E do ciclo (`cycle.spec.ts`, Task 9) tem uma janela de corrida
+    conhecida perto da meia-noite de São Paulo** (spec, "Riscos"): o
+    cenário semeia o plano a partir do `today` que a própria API devolve e
+    conclui a missão de hoje logo em seguida, mas se a semeadura e a
+    conclusão caírem em lados diferentes da virada do dia civil em São
+    Paulo, o cenário reprova — a diária que era "de hoje" na semeadura
+    passa a ser "de ontem" (`perdida`) na conclusão. Ler o `today` da API
+    em vez do relógio do navegador (que roda em `Asia/Tokyo` no
+    `playwright.config.ts`) estreita a janela a poucos segundos ao redor da
+    meia-noite de SP, mas não a fecha: não há nova tentativa automática nem
+    teste pulado. Ficou assim de propósito — a spec já registra o risco
+    como conhecido e aceito, não como defeito a corrigir no B.
+55. **A Tifa não vê as diárias e a especial no contexto da conversa.**
+    `tutoring/context.py` monta o turno com `listar_missoes`, que agora só
+    devolve avulsas (decisão da Task 4: a listagem do módulo `missions`
+    passou a filtrar por `mission_type == AVULSA`, para não vazar a diária
+    ainda não revelada nem a trilha da semana para quem só lista missões).
+    A Tifa, portanto, propõe e conversa sabendo só das avulsas pendentes —
+    ela não sabe se o usuário já tem um plano semanal, quantas diárias
+    faltam hoje, nem se a especial está disponível. Ligar o ciclo à tutoria
+    (por exemplo, incluir o resumo do `GET /api/cycle` no contexto do
+    turno) é trabalho do incremento que implementar `propose_plan` — fora
+    do escopo do B, que não muda `tutoring/`.
+56. **A rota de concluir relê a missão com `clock()` chamado de novo depois
+    do commit** (`cycle_router.py`, achado registrado no ledger da Task 5,
+    minor deferido): `concluir_missao` grava a conclusão com um relógio,
+    faz o commit, e a rota então relê a missão chamando `ler_missao(session,
+    missao, clock())` com uma **segunda** leitura do relógio, para montar a
+    disponibilidade da resposta. Hoje isso é inofensivo, porque a
+    disponibilidade de uma missão já `concluida` é sempre `concluida`,
+    qualquer que seja o instante — mas um relógio que andasse **para trás**
+    entre as duas leituras (por exemplo, um ajuste de NTP bem no instante da
+    virada da meia-noite) poderia, em teoria, fazer essa segunda leitura
+    calcular uma disponibilidade diferente da que a conclusão gravou, para
+    um tipo de missão cuja regra dependa do instante de outro jeito no
+    futuro. Não medido; registrado porque o ledger pediu o registro
+    explícito, não porque haja um caso reproduzido de resposta errada.
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -1637,11 +2012,45 @@ B → C**. O desenho de A, B e C está em
   (Keychain, roteiro manual pela tela, captura da camada 3) foi feita; a
   camada 3 existe (pendência 40 resolvida), e o registro do roteiro
   (a)–(c) está na pendência 42.
-- **B — o ciclo diário** e **C — a campanha** (trilha, missão especial,
-  navegação lateral), depois do 1b. **B começa por design próprio**
+- **B — o ciclo diário**, depois do 1b. **Entregue e comitado por
+  inteiro** em `feat/incremento-b` (`12288a2`..`0b9197b`, Tasks 0–9 — ver
+  "Alterações do Incremento B"). Plano em
+  `docs/superpowers/plans/2026-09-25-incremento-b.md`; decisões P1–P10 em
+  "Decisões tomadas", acima.
+- **C — a campanha** (trilha em Campanhas, navegação lateral, axe na
+  trilha), o próximo depois do B. **B começa por design próprio**
   (pendência 26: teto de negócio para `estimated_minutes`, janela de negócio
   para `deadline`, missões diárias reveladas semanalmente e a missão especial
-  com bônus de XP).
+  com bônus de XP — parte implementada pelo B, avulsa continua aberta).
+
+**O que o C encontra pronto do B:**
+
+- **`GET /api/plans/current`** (decisão P2): o C não precisa serializar o
+  plano semanal de novo — a rota já devolve a trilha completa, com o baú
+  fechado para o que não foi revelado.
+- **O ciclo inteiro no backend**: `cycle_domain.py` (regras puras de dia,
+  semana, sequência, marco e janela da especial), `cycle_service.py` (criar
+  o plano, ler o plano/ciclo/missão) e as três rotas de `cycle_router.py`.
+  Ver `docs/ARCHITECTURE.md` §3 ("O contrato HTTP do ciclo diário").
+- **O cartão "Missão de hoje" no Quartel-General** (`CycleSection.tsx`,
+  Task 8), com a sequência e o progresso até o marco — o C reaproveita o
+  mesmo padrão de atualização silenciosa (`refresh`, decisão P9) para a
+  trilha da semana.
+- **`formatCivilDate`** (`frontend/src/features/missions/civilDate.ts`,
+  Task 7) — a única forma correta de formatar uma data civil `"YYYY-MM-DD"`
+  sem conversão de fuso (o Risco 3 do plano); o C precisa dela para os sete
+  dias da trilha.
+
+**O que o C (ou quem terminar as Tasks 6 e 9) precisa saber, porque morde:**
+
+- **A pendência 55** (a Tifa não vê o ciclo no contexto): continua aberta
+  no B, de propósito — ligar o ciclo à tutoria é do incremento que
+  implementar `propose_plan`.
+- **A pendência 54** (janela de corrida do E2E perto da meia-noite de SP):
+  vale para qualquer cenário futuro que semeie e conclua no mesmo teste
+  perto da virada do dia.
+- **A pendência 56** (a rota de concluir relê com `clock()` depois do
+  commit): registrada, não medida como bug reproduzido.
 
 **O que o B encontra pronto do 1b:**
 
