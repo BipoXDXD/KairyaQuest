@@ -72,3 +72,27 @@ class NaoPertenceAoUsuarioError(DomainError):
     Quem esta do outro lado da rede recebe o mesmo status justamente para nao
     conseguir descobrir a diferenca.
     """
+
+
+class MissaoExpiradaError(DomainError):
+    """O dia (ou a janela) da missao ja passou -- ou o dia nem era do plano.
+
+    A requisicao esta correta; e o relogio que recusa. Nao ha o que repetir.
+    """
+
+
+class PlanoExistenteError(DomainError):
+    """Ja existe plano para esta semana. O reenvio da criacao cai aqui, e nao
+    num plano duplicado: o cliente confirma com `GET /api/plans/current`."""
+
+
+class SemanaEncerradaError(DomainError):
+    """A semana pedida ja terminou: nao ha dia nela que ainda possa ser feito."""
+
+
+class SemanaDistanteError(DomainError):
+    """A semana pedida fica alem da seguinte a atual.
+
+    Alem de reduzir o que da para esconder, e o que impede o 500 de uma semana
+    no ano 9999, em que o fim do domingo estouraria o `datetime`.
+    """
