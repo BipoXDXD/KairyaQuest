@@ -10,6 +10,17 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento D — a progressão.** Branch `feat/incremento-d`, aberta a partir
+de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C), + a spec (1551ea8)
++ o merge da Frente 0 (d2125d5, `feat/gate-paralelo`). Objetivo: saldo de XP,
+nível e conquistas no Quartel-General, com anúncio de recompensa no cartão e
+retroativamente para as missões já concluídas. Recorte: saldo, nível,
+conquistas; entrega e avaliação ficam para o E. Spec em
+`docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`; plano em
+`docs/superpowers/plans/2026-09-25-incremento-d.md`. **Estado de publicação:
+não publicado.** Este worktree tem banco de teste (`focusquest_d_test`) e portas
+do E2E próprias, pelo desenho da Frente 0.
+
 **Frente 0 — gate paralelo (pendência 19).** Branch `feat/gate-paralelo`,
 aberta a partir de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C),
 num worktree próprio. Objetivo: dois `make check` rodando ao mesmo tempo em
