@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { isInaccessible, render, screen, within } from '@testing-library/react'
 import { createRef } from 'react'
 import { act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -57,6 +57,16 @@ describe('ProgressPanel', () => {
     expect(barra).toHaveAttribute('aria-valuenow', '340')
     expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP até o nível 6')
     expect(screen.getByTestId('progress-bar-text')).toHaveTextContent('340 de 500 XP até o nível 6')
+  })
+
+  it('a barra tem nome acessivel e o texto visivel nao e anunciado duas vezes', async () => {
+    serve(progress(1340, 5, 1000, 1500))
+    render(<ProgressPanel />)
+    const barra = await screen.findByRole('progressbar', { name: 'Progresso até o nível 6' })
+    expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP até o nível 6')
+    const texto = screen.getByTestId('progress-bar-text')
+    expect(texto).toHaveTextContent('340 de 500 XP até o nível 6')
+    expect(isInaccessible(texto)).toBe(true)
   })
 
   it('o piso do nivel mostra a barra vazia do nivel novo', async () => {

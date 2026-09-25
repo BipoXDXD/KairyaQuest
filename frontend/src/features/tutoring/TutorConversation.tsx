@@ -236,7 +236,15 @@ export function TutorConversation({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* A regiao rola; sem nada focavel dentro (sem proposta nem Tentar de
+          novo), so o tabIndex deixa quem usa teclado rola-la (axe
+          scrollable-region-focusable). O nome diz o que o foco alcancou. */}
+      <div
+        role="region"
+        aria-label="Conversa com a Tifa"
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+      >
         {unavailable && (
           <p data-testid="tutor-unavailable" className="mb-3 text-sm font-medium text-amber-200">
             {UNAVAILABLE_TEXT}

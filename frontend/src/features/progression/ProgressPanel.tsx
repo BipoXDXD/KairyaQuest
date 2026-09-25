@@ -48,6 +48,7 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       <div
         role="progressbar"
         data-testid="progress-bar"
+        aria-label={`Progresso até o nível ${String(progress.level + 1)}`}
         aria-valuemin={0}
         aria-valuemax={span}
         aria-valuenow={into}
@@ -59,7 +60,8 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
           style={{ width: `${String((into / span) * 100)}%` }}
         />
       </div>
-      <p data-testid="progress-bar-text" className="mt-1 text-sm text-slate-300">
+      {/* o mesmo texto ja e o aria-valuetext da barra: fora da arvore, para nao ser lido duas vezes */}
+      <p data-testid="progress-bar-text" aria-hidden="true" className="mt-1 text-sm text-slate-300">
         {text}
       </p>
       <h3 className="mt-4 mb-2 text-sm font-semibold text-slate-200">Conquistas</h3>
