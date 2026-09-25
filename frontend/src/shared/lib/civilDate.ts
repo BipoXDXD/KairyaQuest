@@ -1,5 +1,6 @@
 /**
- * Datas CIVIS do ciclo (`today`, `day`): "2026-09-25", sem hora e sem fuso.
+ * Datas CIVIS do ciclo (`today`, `day`, `week_start`): "2026-09-25", sem hora
+ * e sem fuso.
  *
  * Nao sao instantes, e nao passam por conversao de fuso (spec do ciclo, secao
  * "Datas civis versus instantes"). `new Date('2026-09-21')` e a meia-noite em
@@ -7,6 +8,10 @@
  * data e montada ao MEIO-DIA em UTC e formatada em UTC: nenhum fuso entra na
  * conta, e o meio-dia deixa margem de doze horas mesmo se alguem tirar o
  * `timeZone` daqui por engano.
+ *
+ * Mora em `shared/lib/` desde o Incremento C (`docs/ARCHITECTURE.md` §5,
+ * regra 3): nasceu em `features/missions/` para a "Missão de hoje" e passou a
+ * ter um segundo usuario real, a trilha de `features/campaigns/`.
  */
 const civilDateFormatter = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'UTC',
@@ -15,9 +20,25 @@ const civilDateFormatter = new Intl.DateTimeFormat('pt-BR', {
   month: '2-digit',
 })
 
-export function formatCivilDate(civil: string): string {
+const civilWeekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'UTC',
+  weekday: 'long',
+})
+
+/** O meio-dia em UTC da data civil: o instante que nenhum fuso tira do dia. */
+function civilNoon(civil: string): Date {
   const year = Number(civil.slice(0, 4))
   const month = Number(civil.slice(5, 7))
   const day = Number(civil.slice(8, 10))
-  return civilDateFormatter.format(new Date(Date.UTC(year, month - 1, day, 12)))
+  return new Date(Date.UTC(year, month - 1, day, 12))
+}
+
+/** "segunda-feira, 21/09". */
+export function formatCivilDate(civil: string): string {
+  return civilDateFormatter.format(civilNoon(civil))
+}
+
+/** So o dia da semana, sem o resto da data: "quinta-feira" (o bau da trilha). */
+export function civilWeekday(civil: string): string {
+  return civilWeekdayFormatter.format(civilNoon(civil))
 }
