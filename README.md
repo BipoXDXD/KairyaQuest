@@ -147,7 +147,7 @@ No desktop, use navegação lateral, conteúdo principal e painel expansível da
 
 Planeje estas áreas; implemente só o recorte inicial:
 
-- **Quartel-general:** próxima missão, pendências, XP e progresso.
+- **Quartel-General:** próxima missão, pendências, XP e progresso.
 - **Campanhas:** planos, objetivos, disponibilidade e etapas.
 - **Missões:** instruções, prazos, entregas e pré-requisitos.
 - **Matérias:** habilidades e dependências de aprendizagem.

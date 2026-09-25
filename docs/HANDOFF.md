@@ -559,7 +559,7 @@ entre o pedido de correção e o desenho necessário.
 | R13 | Grafia única **"Quartel-General"** (a da spec do ciclo diário) no rótulo da navegação, no `h1` do QG, na trilha e nos testes (Vitest e E2E) | A interface tinha as duas grafias ("Quartel-general" no rótulo e no `h1`, "Quartel-General" na trilha). Nos documentos, só onde citam o texto da tela. O README §7 (linha "**Quartel-general:** …") não cita texto de tela e não foi mexido. Custo: *churn* de texto nos testes. |
 | R14 | `caixasSeSobrepoem` (E2E do celular) passa a **afirmar** que as duas caixas de `boundingBox()` não são nulas | Antes, uma caixa nula (elemento oculto, sem caixa) contava como "sem sobreposição", e um botão escondido passaria. Uma linha, do revisor final. Custo: nenhum. |
 | R15 | O *minor* m5 (`MAX_DIFFICULTY` × o "de 5" literal) e os *minors* "pode ficar" da triagem final viram pendências neste documento (R11); a pendência da Task 3 sobre `TrailContent` exportada fica **fechada** (resolvida na Task 5) | Registro honesto do que ficou, separado entre dívida pequena aberta, aceito sem ação e verificado. Custo: nenhum. |
-| R16 | O `README.md` §7 (linha ~150) continua escrevendo "Quartel-general" | O README é a especificação do dono e não foi alterado sem ele (mesma reserva já feita na R13). Custo: grafia diferente entre o README e a tela. |
+| R16 | O `README.md` §7 (linha ~150) continua escrevendo "Quartel-general" | O README é a especificação do dono e não foi alterado sem ele (mesma reserva já feita na R13). Custo: grafia diferente entre o README e a tela. **Superada pela decisão do dono em 2026-09-25:** "Quartel-General" é a grafia correta; README corrigido (pendência 72). |
 | R17 | A afirmação falsa sobre fusos ("único fuso"/"a leste de +12h") apareceu na re-revisão da onda final e foi corrigida numa correção só de texto | O AGENTS.md §3 trata afirmação falsa em documentação como defeito grave. Custo: um commit a mais. |
 
 **Achado fora do escopo de qualquer Task, registrado pela Task 6 e resolvido
@@ -2569,8 +2569,9 @@ C".
     "Campanhas abre pela navegacao: o titulo dela recebe o foco…").
     Nenhuma mutação da Task 1 fica sem prova na branch integrada.
 
-72. **Grafia do README §7 ("Quartel-general") diverge da tela e da spec
-    ("Quartel-General")**; decidir com o dono.
+72. ~~**Grafia do README §7 ("Quartel-general") diverge da tela e da spec
+    ("Quartel-General")**; decidir com o dono.~~ **Resolvida:** o dono
+    decidiu "Quartel-General" em 2026-09-25; README corrigido.
 
 ## Próximo incremento
 
