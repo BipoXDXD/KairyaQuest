@@ -7,7 +7,7 @@ teardown de cada um remove so a PROPRIA chave -- a mesma licao registrada la.
 """
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -42,6 +42,24 @@ def relogio_fixo() -> Iterator[datetime]:
     app.dependency_overrides.pop(get_clock, None)
 
 
+# A semana do plano do teste do ciclo: segunda-feira, 21/09/2026.
+SEGUNDA = date(2026, 9, 21)
+
+
+def _ao_meio_dia(dia: date) -> datetime:
+    return datetime(dia.year, dia.month, dia.day, 15, tzinfo=UTC)
+
+
+@pytest.fixture
+def relogio_movel() -> Iterator[list[datetime]]:
+    """Um relogio que o teste move (`relogio_movel[0] = ...`), como o de
+    `test_cycle_api.py`; o teardown remove so a propria chave."""
+    instante = [_ao_meio_dia(SEGUNDA)]
+    app.dependency_overrides[get_clock] = lambda: lambda: instante[0]
+    yield instante
+    app.dependency_overrides.pop(get_clock, None)
+
+
 def _corpo(**ajustes: Any) -> dict[str, Any]:
     """O corpo de criacao valido de uma missao avulsa, dificuldade 5."""
     corpo: dict[str, Any] = {
@@ -68,6 +86,27 @@ def _concluir(client: TestClient, mission_id: int, operation_id: str) -> dict[st
     assert resposta.status_code == 200, resposta.text
     corpo: dict[str, Any] = resposta.json()
     return corpo
+
+
+def _plano(semana: date) -> dict[str, Any]:
+    """Um plano semanal valido (o mesmo formato de `test_cycle_api.py`)."""
+    return {
+        "week_start": semana.isoformat(),
+        "days": [
+            {
+                "instructions": f"Diaria {i}",
+                "completion_criterion": f"Criterio {i}",
+                "difficulty": 2,
+                "estimated_minutes": 30,
+            }
+            for i in range(7)
+        ],
+        "bonus": {
+            "instructions": "Prova simulada",
+            "completion_criterion": "Nota registrada",
+            "estimated_minutes": 120,
+        },
+    }
 
 
 # Os sete achievements do catalogo, todos travados: `code` na ordem do
@@ -195,8 +234,15 @@ def test_openapi_publica_reward_e_progress(client: TestClient) -> None:
     assert "reward" in schema_da_resposta["required"]
 
 
-def test_get_missions_e_ciclo_nao_mudam(client: TestClient) -> None:
-    """D14: `reward` e exclusivo da conclusao -- listagem e ciclo nao ganham a chave."""
+def test_get_missions_e_ciclo_nao_mudam(
+    client: TestClient, relogio_movel: list[datetime]
+) -> None:
+    """D14: `reward` e exclusivo da conclusao -- listagem e ciclo nao ganham a chave.
+
+    O ciclo precisa de um plano com a diaria de HOJE e a especial CONCLUIDAS:
+    sem plano, `mission` e `special` voltam nulos e a metade do ciclo nao
+    afirmaria nada; a especial so aparece depois de sete dias seguidos.
+    """
     criada = _criar(client)
     _concluir(client, criada["id"], "op-abc")
 
@@ -205,8 +251,17 @@ def test_get_missions_e_ciclo_nao_mudam(client: TestClient) -> None:
     for item in missoes:
         assert "reward" not in item
 
+    plano = client.post("/api/plans", json=_plano(SEGUNDA))
+    assert plano.status_code == 201, plano.text
+    for i in range(7):
+        relogio_movel[0] = _ao_meio_dia(SEGUNDA + timedelta(days=i))
+        de_hoje = client.get("/api/cycle").json()["mission"]
+        assert "reward" in _concluir(client, de_hoje["id"], f"op-dia-{i}")
+    especial = client.get("/api/cycle").json()["special"]
+    assert "reward" in _concluir(client, especial["id"], "op-especial")
+
     ciclo = client.get("/api/cycle").json()
+    assert ciclo["mission"]["state"] == "concluida"
+    assert ciclo["special"]["state"] == "concluida"
     for chave in ("mission", "special"):
-        item = ciclo.get(chave)
-        if item is not None:
-            assert "reward" not in item
+        assert "reward" not in ciclo[chave]

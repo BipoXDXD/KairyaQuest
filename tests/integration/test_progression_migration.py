@@ -879,3 +879,32 @@ def test_as_restricoes_novas_dizem_nao(
     with pytest.raises(IntegrityError) as recusa:
         caso(session)
     assert restricao in str(recusa.value.orig)
+
+
+# Usuario que so este teste usa (os outros do arquivo sao 1, 2 e 3).
+SO_DO_CHECK = 4
+
+
+@pytest.mark.parametrize("codigo", list(Codigo), ids=[c.value for c in Codigo])
+def test_o_check_da_migracao_aceita_cada_codigo_do_dominio(
+    session: Session, codigo: Codigo
+) -> None:
+    """O CHECK `ck_user_achievements_code` da 0004 e uma lista CONGELADA; o
+    modelo e o catalogo DERIVAM de `Codigo`. Um codigo novo no enum sem uma
+    migracao que amplie o CHECK passaria no resto da suite e so apareceria em
+    producao, como 500 na primeira conclusao que o destravasse. Aqui ele
+    reprova no gate: cada valor de `Codigo` vira uma linha no banco migrado
+    (a sessao desfaz tudo no fim).
+
+    O usuario e proprio: a fixture `cenario`, de escopo de modulo, deixa o
+    ESTUDANTE com conquistas ja destravadas, e a chave primaria (user_id,
+    code) recusaria a linha antes de o CHECK ser consultado."""
+    session.add(User(id=SO_DO_CHECK, display_name="So do CHECK"))
+    session.flush()
+    missao = _missao_concluida(session, user_id=SO_DO_CHECK)
+    entrada = _entrada(session, missao, user_id=SO_DO_CHECK)
+    _conquista(session, entrada, user_id=SO_DO_CHECK, code=codigo.value)
+    guardado = session.scalars(
+        select(UserAchievement.code).where(UserAchievement.user_id == SO_DO_CHECK)
+    ).one()
+    assert guardado == codigo.value

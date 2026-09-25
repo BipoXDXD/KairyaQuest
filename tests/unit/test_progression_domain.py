@@ -22,7 +22,23 @@ SEGUNDA = date(2026, 9, 21)
 
 @pytest.mark.parametrize(
     ("xp", "nivel"),
-    [(0, 1), (99, 1), (100, 2), (299, 2), (300, 3), (999, 4), (1000, 5), (19000, 20)],
+    [
+        (0, 1),
+        (99, 1),
+        (100, 2),
+        (299, 2),
+        (300, 3),
+        (999, 4),
+        (1000, 5),
+        (19000, 20),
+        # Um XP abaixo do piso do nivel 8388609: a raiz em ponto flutuante de
+        # 1 + 4*xp/50 arredonda para cima e erra o nivel (R4 corrigida).
+        (3518437628313599, 8388608),
+        # Um XP abaixo do piso do nivel 83886081: aqui nem a divisao inteira
+        # salva o float -- int(math.sqrt(1 + 4*(xp//50))) erra por um. Ainda
+        # cabe num inteiro de 64 bits.
+        (351843725082623999, 83886080),
+    ],
 )
 def test_nivel_do_saldo_nas_bordas(xp: int, nivel: int) -> None:
     assert nivel_do_saldo(xp) == nivel

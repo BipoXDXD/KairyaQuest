@@ -12,7 +12,7 @@ from focusquest.modules.missions.cycle_service import (
     NovaEspecial,
     criar_plano,
 )
-from focusquest.modules.missions.domain import MissionType, xp_da_missao
+from focusquest.modules.missions.domain import MissionState, MissionType, xp_da_missao
 from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.missions.service import concluir_missao, criar_missao
 from focusquest.modules.progression.domain import CATALOGO, Codigo, FaixaDoNivel
@@ -224,6 +224,24 @@ def test_tifa_partnership_so_com_create_mission_executada(session: Session) -> N
         )
     )
     assert Codigo.TIFA_PARTNERSHIP.value not in ainda_sem
+
+    # A acao executada criou a missao, mas ela ainda esta PENDENTE: concluir
+    # OUTRA avulsa nao pode destravar a parceria (guarda Mission.state).
+    pendente_da_tifa = _avulsa(session)
+    _acao_da_tifa(
+        session,
+        cid="c-pendente",
+        missao=pendente_da_tifa,
+        estado=EstadoDaAcao.EXECUTADA,
+    )
+    _concluir(session, _avulsa(session))
+    com_a_pendente = set(
+        session.scalars(
+            select(UserAchievement.code).where(UserAchievement.user_id == ESTUDANTE)
+        )
+    )
+    assert pendente_da_tifa.state is MissionState.PENDENTE
+    assert Codigo.TIFA_PARTNERSHIP.value not in com_a_pendente
 
     missao_da_tifa = _avulsa(session)
     _acao_da_tifa(
