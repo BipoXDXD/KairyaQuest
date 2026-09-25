@@ -91,6 +91,19 @@ async function settle() {
   })
 }
 
+/**
+ * Esvazia a fila de microtarefas sem relogio: uma resposta ja resolvida a mao
+ * atravessa o `json()` e o `.then` do hook. Nao espera tempo nenhum -- quem
+ * prova que basta e o teste que reprova sem a guarda.
+ */
+async function flushPromises() {
+  await act(async () => {
+    for (let n = 0; n < 50; n += 1) {
+      await Promise.resolve()
+    }
+  })
+}
+
 describe('useTutorConversation: historico', () => {
   it('carrega o historico e o expoe em messages', async () => {
     const q1 = question(1, 'Oi', 'c1')
@@ -1092,6 +1105,64 @@ describe('useTutorConversation: envio', () => {
     await settle()
     expect(result.current.messages.map((m) => m.id)).toEqual([10, -1, 12])
     expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+  })
+
+  it('de duas atualizacoes silenciosas, a mais antiga que chega por ultimo nao desfaz a mais nova', async () => {
+    // Duas falhas seguidas: cada uma dispara uma atualizacao silenciosa, e
+    // nenhum `done` entre elas avanca a geracao. Se a da PRIMEIRA falha chega
+    // depois da da segunda, traz a lista de antes do segundo turno e nao pode
+    // sobrescrever a mais nova.
+    const q10 = question(10, 'Me explica recursão', 'x')
+    const a11 = answer(11, 10, 'Meio', 'falhou')
+    const a13 = answer(13, 10, 'Outro meio', 'falhou')
+    const silent: ((response: Response) => void)[] = []
+    const failingTurn = (text: string) =>
+      streamResponse([
+        sseFrame('user_message', q10),
+        sseFrame('delta', { text }),
+        sseFrame('error', { code: 'provedor_indisponivel' }),
+      ])
+    const { result, fetchMock } = await mountWith(
+      (_init, call) =>
+        call === 1
+          ? Response.json([])
+          : new Promise<Response>((resolve) => {
+              silent.push(resolve)
+            }),
+      (_init, call) => failingTurn(call === 1 ? 'Meio' : 'Outro meio'),
+    )
+
+    act(() => {
+      result.current.setDraft('Me explica recursão')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+    })
+    act(() => {
+      result.current.retry()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
+    })
+    expect(result.current.send.status).toBe('failed')
+
+    // A mais nova chega primeiro e vale.
+    act(() => {
+      silent[1]?.(Response.json([q10, a11, a13]))
+    })
+    await waitFor(() => {
+      expect(result.current.messages.map((m) => m.id)).toEqual([10, 11, 13])
+    })
+
+    // A mais antiga chega depois e e descartada.
+    act(() => {
+      silent[0]?.(Response.json([q10, a11]))
+    })
+    await flushPromises()
+    expect(result.current.messages.map((m) => m.id)).toEqual([10, 11, 13])
   })
 
   it('o done com a recarga em voo pede o historico de novo', async () => {

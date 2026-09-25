@@ -207,6 +207,8 @@ export function useTutorConversation(): UseTutorConversationResult {
 
   // Ids das respostas provisorias (-1, -2, ...): nunca colidem com os do banco.
   const placeholderIds = useRef(0)
+  // O numero da atualizacao silenciosa mais recente (ver `refreshSilently`).
+  const silentRequest = useRef(0)
 
   /**
    * Busca o historico SEM passar por `loading`: a lista da tela fica ate a do
@@ -215,11 +217,18 @@ export function useTutorConversation(): UseTutorConversationResult {
    */
   const refreshSilently = useCallback(() => {
     // Nao pega geracao nova: uma recarga em voo e tao nova quanto ela, e e a
-    // fonte (a lista so e gravada aqui se ja estiver carregada).
+    // fonte (a lista so e gravada aqui se ja estiver carregada) -- invalida-la
+    // deixaria a tela em "carregando" para sempre.
     const requested = generation.current
+    // Entre si, as atualizacoes silenciosas usam o proprio numero (o
+    // `requestId` de `useCycle`/`useCurrentPlan`): duas falhas seguidas, sem
+    // `done` entre elas, disparam duas com a MESMA geracao, e so a mais
+    // recente pode gravar -- a mais antiga, chegando por ultimo, traria a
+    // lista de antes do segundo turno.
+    const id = (silentRequest.current += 1)
     requestJson<MessageRead[]>('/tutoring/messages', lifetime.current!.signal)
       .then((messages) => {
-        if (requested === generation.current) {
+        if (requested === generation.current && id === silentRequest.current) {
           setHistory((current) =>
             current.status === 'loaded' ? { status: 'loaded', messages } : current,
           )
