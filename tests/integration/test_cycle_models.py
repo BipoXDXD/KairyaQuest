@@ -76,13 +76,23 @@ def test_um_plano_por_semana(session: Session) -> None:
 
 
 def test_tipo_invalido_e_recusado(session: Session) -> None:
+    """So `ck_missions_mission_type` pode cair aqui: com `plan_id` do plano
+    (satisfaz `ck_missions_plano_do_tipo`, que so exige avulsa <=> sem plano)
+    e `deadline`/`day` nulos (satisfazem `ck_missions_prazo_do_tipo` e
+    `ck_missions_dia_do_tipo`, que so exigem avulsa <=> tem prazo e
+    diaria <=> tem dia -- 'semanal' nao e nenhum dos dois, entao as duas
+    igualdades valem com o lado direito falso), a logica de tres valores
+    do CHECK deixa toda restricao passar, exceto a do tipo em si."""
+    plano = _plano(session)
     with pytest.raises(IntegrityError) as erro:
         session.execute(
             text(
                 "INSERT INTO missions (user_id, instructions, completion_criterion, "
-                "difficulty, estimated_minutes, deadline, state, mission_type) VALUES "
-                "(1, 'x', 'y', 1, 30, now(), 'pendente', 'semanal')"
-            )
+                "difficulty, estimated_minutes, deadline, state, mission_type, "
+                "plan_id) VALUES "
+                "(1, 'x', 'y', 1, 30, NULL, 'pendente', 'semanal', :plan_id)"
+            ),
+            {"plan_id": plano.id},
         )
     assert "ck_missions_mission_type" in str(erro.value.orig)
 
@@ -197,4 +207,4 @@ def test_a_missao_sem_tipo_e_recusada_pelo_banco(session: Session) -> None:
                 "(1, 'x', 'y', 1, 30, now(), 'pendente')"
             )
         )
-    assert "mission_type" in str(erro.value.orig)
+    assert 'null value in column "mission_type"' in str(erro.value.orig)

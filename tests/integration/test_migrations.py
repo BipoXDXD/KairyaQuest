@@ -328,9 +328,15 @@ def test_o_downgrade_da_0003_leva_so_o_ciclo(banco_migrado: Engine) -> None:
     command.downgrade(alembic_config(), "0002")
     try:
         tabelas = set(inspect(banco_migrado).get_table_names())
-        colunas = {c["name"] for c in inspect(banco_migrado).get_columns("missions")}
+        colunas_da_missao = inspect(banco_migrado).get_columns("missions")
+        nomes_das_colunas = {c["name"] for c in colunas_da_missao}
+        (deadline,) = [c for c in colunas_da_missao if c["name"] == "deadline"]
         assert "weekly_plans" not in tabelas
         assert {"tutor_messages", "tutor_actions", "missions"} <= tabelas
-        assert not ({"mission_type", "plan_id", "day"} & colunas)
+        assert not ({"mission_type", "plan_id", "day"} & nomes_das_colunas)
+        # O downgrade da 0003 devolve o NOT NULL que a 0002 exigia: sem esta
+        # asserção, remover o `alter_column(..., nullable=False)` do
+        # downgrade nao reprovaria teste nenhum.
+        assert deadline["nullable"] is False
     finally:
         command.upgrade(alembic_config(), "head")
