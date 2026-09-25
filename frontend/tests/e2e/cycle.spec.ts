@@ -126,6 +126,10 @@ test('a missao de hoje do plano semeado aparece com a data civil da API, e passa
   // sequencia comeca do zero.
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/0 de 7/)
 
+  // D16/Task 9: o axe roda com o painel de progresso ja carregado, e nao so
+  // com o ciclo.
+  await expect(page.getByTestId('progress-level')).toBeVisible()
+
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])
 })
@@ -135,16 +139,83 @@ test('concluir a missao de hoje leva a sequencia a 1, no servidor, e a tela conc
 }) => {
   const ciclo = await abrirCiclo(page)
 
+  // P6: os numeros da recompensa vem da API, e nao de uma constante fixa --
+  // outros arquivos do E2E tambem concluem missoes contra o mesmo usuario, e
+  // um numero fixo quebraria com a ordem em que os arquivos rodam.
+  const antes = (await (await page.request.get('/api/progress')).json()) as { xp_total: number }
+  const xp = ((await (await page.request.get('/api/cycle')).json()) as { mission: { xp: number } })
+    .mission.xp
+
   await ciclo.getByRole('button', { name: `Concluir a missão: ${missaoDeHoje}` }).click()
 
   await expect(ciclo.getByTestId('mission-state')).toHaveText('Concluída')
   await expect(ciclo.getByTestId('cycle-streak')).toHaveText('Sequência: 1 dia seguido')
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/1 de 7/)
 
-  // Recarregar le do servidor: a conclusao e a sequencia sao do banco.
+  // R11: o texto fixo pelo testid do filho, e o anuncio de verdade pelo
+  // `reward-xp` -- a mesma mudanca que a Task 8 fez em headquarters.spec.ts e
+  // tutoring.spec.ts na integracao do painel.
+  await expect(ciclo.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
+  const rewardXp = ciclo.getByTestId('reward-xp')
+  await expect(rewardXp).toHaveText(`+${String(xp)} XP`)
+  await expect(page.getByTestId('progress-total')).toHaveText(
+    `${(antes.xp_total + xp).toLocaleString('pt-BR')} XP no total`,
+  )
+
+  // R12: espera a animacao de entrada do anuncio assentar antes do axe. Sem
+  // isto, o axe podia auditar o anuncio no meio do fade-in (opacidade
+  // parcial) e acusar contraste insuficiente -- a cor final passa com folga.
+  await expect
+    .poll(() => ciclo.getByTestId('reward').evaluate((el) => getComputedStyle(el).opacity))
+    .toBe('1')
+
+  const resultado = await new AxeBuilder({ page }).analyze()
+  expect(resultado.violations).toEqual([])
+
+  // Recarregar le do servidor: a conclusao, a sequencia e o total do painel
+  // sao do banco.
   await page.reload()
   await expect(ciclo.getByTestId('mission-state')).toHaveText('Concluída')
   await expect(ciclo.getByTestId('cycle-streak')).toHaveText('Sequência: 1 dia seguido')
+  await expect(page.getByTestId('progress-total')).toHaveText(
+    `${(antes.xp_total + xp).toLocaleString('pt-BR')} XP no total`,
+  )
+})
+
+/**
+ * D16/Task 9: o painel de progresso do Quartel-General, depois de o cenario
+ * anterior ter concluido a primeira missao da vida deste usuario -- a
+ * conquista `first_steps` ja esta destravada, e as outras seis continuam
+ * bloqueadas, com o texto que diz isso.
+ */
+test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) => {
+  await page.goto('/')
+  const painel = page.getByTestId('progress')
+  await expect(painel.getByTestId('progress-level')).toBeVisible()
+
+  const conquistas = painel.getByTestId('progress-achievement')
+  const codigos = await conquistas.evaluateAll((itens) =>
+    itens.map((item) => item.getAttribute('data-code')),
+  )
+  // A ordem do catalogo (Global Constraints), nao a ordem alfabetica nem a de
+  // desbloqueio.
+  expect(codigos).toEqual([
+    'first_steps',
+    'streak_7',
+    'streak_30',
+    'veteran_10',
+    'veteran_50',
+    'veteran_100',
+    'tifa_partnership',
+  ])
+
+  const primeirosPassos = painel.locator(
+    '[data-testid="progress-achievement"][data-code="first_steps"]',
+  )
+  await expect(primeirosPassos).toHaveAttribute('data-unlocked', 'true')
+
+  const bloqueada = painel.locator('[data-testid="progress-achievement"][data-unlocked="false"]')
+  await expect(bloqueada.first()).toContainText('Bloqueada:')
 
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])
