@@ -121,8 +121,16 @@ nascem depois deles.
    `unlocked_at = completed_at` daquela missão e `xp_entry_id` = o lançamento
    dela.
 
-Uma missão `concluida` sem `completed_at` não existe (o `CHECK` do 0001 amarra
-os dois); a migração falha alto se encontrar uma, em vez de inventar data.
+Uma missão `concluida` sem `completed_at` não deveria existir (o `CHECK` do
+0001 amarraria os dois) **(corrigido na execução: essa restrição não existe
+em nenhuma migração — conferido por leitura direta de `0001_esquema_inicial.py`,
+`0002_tutoria.py` e `0003_ciclo_diario.py`, Task 2 do plano; só existem
+`ck_missions_state`, `ck_missions_difficulty` e `ck_missions_estimated_minutes`
+em 0001, mais as restrições de tipo/dia/prazo do 0003. A migração `0004`
+falha alto do mesmo jeito — ver abaixo —, mas por uma guarda própria no
+código do backfill, não porque o banco impeça o estado. Ver
+`docs/HANDOFF.md`, "Decisões tomadas", Incremento D)**; a migração falha alto
+se encontrar uma, em vez de inventar data.
 
 **Downgrade:** remove `user_achievements` e depois `xp_entries`. Não há perda
 de dado de origem: missões e conclusões continuam intactas, e um novo

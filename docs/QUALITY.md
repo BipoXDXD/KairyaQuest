@@ -383,16 +383,49 @@ mesmos criaram.
   da Task 6 confere só `side-nav` visível, ausência de rolagem horizontal
   (README §7) e ausência de sobreposição com "Falar com a Tifa" — ao
   contrário do `describe('(e) celular')` da tutoria (1b-2), que já chama
-  `semViolacoes` dentro do viewport móvel. **Continuam fora**, cobertos só
-  no Vitest: o carregando do painel (esqueleto), o "Enviando…" antes do
+  `semViolacoes` dentro do viewport móvel. **Desde o Incremento D** (Task 9),
+  também o painel de progresso no Quartel-General: o cenário que conclui a
+  diária pela tela espera o painel e o anúncio da recompensa assentarem
+  antes de chamar o axe — inclusive a **espera da opacidade** do anúncio
+  chegar a 1 (`expect.poll` sobre `getComputedStyle(el).opacity`, Ruling
+  R12), porque o axe pego no meio do `motion-safe:animate-[reward-in…]`
+  relatava uma violação de contraste que só existia naquele instante do
+  fade-in (a cor final mede 14,73:1, bem acima do exigido); e um cenário
+  novo confere as sete conquistas do painel (destravadas e bloqueadas, cada
+  uma com texto, nunca só ícone ou cor) sem violação. A barra de progresso
+  (`role="progressbar"`) só ganhou o `aria-label` que o axe exige
+  (`aria-progressbar-name`) depois que ela foi montada pela primeira vez
+  dentro de um E2E de página inteira, na integração da Task 8 — o Vitest da
+  Task 6, sob jsdom, nunca a tinha auditado com axe. **Continuam fora**,
+  cobertos só no Vitest: o carregando do painel de progresso
+  (`progress-loading`) e o estado dele em erro quando `GET /api/progress`
+  falha sozinho (`progress-error`; o E2E só exercitou esse estado **junto**
+  com outra falha da página — ver `docs/HANDOFF.md`, o diagnóstico da
+  Task 8 sobre dois `role="alert"` simultâneos que a integração pegou); o
+  carregando do painel da Tifa (esqueleto), o "Enviando…" antes do
   `user_message`, os estados do cartão depois da decisão (executada,
   recusada, falhou) e o aviso de falha do envio (herdados do 1b-2); e, novos
   do C, o celular de Campanhas (acima), o carregando (`trail-loading`), o
   erro (`trail-error`) e o "sem plano" (`trail-no-plan`) da trilha, o aviso
   `trail-stale` de atualização falha, e o botão "Ir ao Quartel-General" da
   trilha (`trail-go-headquarters`) — nenhum dos quatro últimos é alcançado
-  pelo cenário semeado do E2E, que sempre tem um plano carregado com sucesso
-  (pendência, `docs/HANDOFF.md`).
+  pelo cenário semeado do E2E, que sempre tem um plano carregado com
+  sucesso (pendência, `docs/HANDOFF.md`).
+
+**Limitação registrada do Incremento D: a mutação `xp_awarded` ↔ `xp_total`
+em `RewardAnnouncement` só é provada morta no teste de unidade, não no
+E2E.** `RewardAnnouncement.test.tsx` (Task 7) usa uma fixture em que o saldo
+anterior (220) e o total depois da conclusão (1340) divergem, e mata a
+mutação de verdade. No E2E (`cycle.spec.ts`, Task 9), a mesma mutação foi
+aplicada e **não** reprovou: esse arquivo roda primeiro entre os arquivos de
+teste (ordem alfabética, `playwright.config.ts` com `workers: 1`), e a
+conclusão do cenário é a primeira de toda a suíte E2E — o saldo do usuário
+antes dela é 0, então `xp_awarded` e `xp_total` coincidem numericamente e a
+asserção `+${xp} XP` passa com qualquer um dos dois campos. Não é uma
+lacuna estrutural do E2E — é uma dependência da ordem dos arquivos, já
+prevista no brief da Task 9 e registrada como pendência em
+`docs/HANDOFF.md`. Quem precisa da garantia de que o anúncio usa o valor
+certo lê o teste de unidade, não o E2E.
 
 **O E2E divide o banco de teste do worktree com a suíte pytest** (o
 `focusquest_test`, por padrão). É uma decisão deliberada, e duas exigências estruturais a tornam segura: o cenário semeia

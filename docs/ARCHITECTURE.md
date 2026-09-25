@@ -22,9 +22,14 @@ os dois blocos nunca se misturam.
 Tasks 0–6 do Incremento C, mais o fix round 1 da Task 5 (`9c2bd1e..e195128`),
 e acrescida dos três arquivos que a Frente 0 (gate paralelo) criou
 (`scripts/novo-worktree.sh`, `tests/integration/test_novo_worktree.py` e
-`frontend/tests/unit/servers.test.ts`). Os Incrementos B e C já estão na
-`main`: o PR #13 (B) foi mesclado em `b0f9e8f` e o PR #14 (C) em `8ab91ce`,
-os dois em 2026-09-25; ver "Revisão-base" em `docs/HANDOFF.md`.
+`frontend/tests/unit/servers.test.ts`), e agora também dos arquivos do
+Incremento D (a progressão de RPG), acrescentados ou modificados entre
+`a53733f` e `HEAD` — o módulo `progression` no backend e no frontend, a
+migração `0004`, `shared/types/reward.ts` e os testes correspondentes; ver
+"Alterações do Incremento D" em `docs/HANDOFF.md`. Os Incrementos B, C e D já
+estão na branch de integração: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR
+#14 (C) em `8ab91ce`, os dois em 2026-09-25, e o D (`feat/incremento-d`)
+segue **não publicado** (ver "Revisão-base" em `docs/HANDOFF.md`).
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -41,7 +46,8 @@ FocusQuest/
 │   ├── versions/
 │   │   ├── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
 │   │   ├── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
-│   │   └── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
+│   │   ├── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
+│   │   └── 0004_progressao.py     # xp_entries e user_achievements, com o backfill retroativo por cópias congeladas (D8) (D)
 │   ├── README
 │   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
 │   └── script.py.mako             # modelo de migração nova
@@ -73,25 +79,35 @@ FocusQuest/
 │   │   │   │   └── useCurrentPlan.ts     # busca GET /api/plans/current; reload/refresh/refreshFailed (C, Tasks 2 e 5)
 │   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
 │   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc)
-│   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8)
-│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8)
+│   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8); onMissionCompleted opcional avisa o painel de progressão (D, Task 8)
+│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4)
 │   │   │   │   ├── MissionList.test.tsx
-│   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle
+│   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle; onMissionCompleted repassado a cada MissionCard (D, Task 8)
 │   │   │   │   ├── completionFailure.test.ts
 │   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B)
+│   │   │   │   ├── RewardAnnouncement.test.tsx
+│   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
 │   │   │   │   ├── types.ts             # Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
 │   │   │   │   ├── useCompleteMission.test.tsx
-│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; ganhou onCompleted opcional (B, Task 8)
+│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
 │   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
 │   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
 │   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, P9); atualiza sozinho na volta à aba (C, Task 5); só a resposta do pedido mais recente decide (C, fix round 1, commit e195128)
 │   │   │   │   ├── useMissions.test.tsx
 │   │   │   │   └── useMissions.ts
+│   │   │   ├── progression/       # saldo, nível e conquistas (D); o contrato do reward da conclusão mora em shared/types/reward.ts e é consumido por missions, não por esta feature
+│   │   │   │   ├── ProgressPanel.test.tsx
+│   │   │   │   ├── ProgressPanel.tsx      # role="progressbar" com aria-label (Ruling R13) e aria-valuetext; a lista de conquistas; ProgressPanelHandle.refresh via useImperativeHandle (D, Tasks 6 e 8)
+│   │   │   │   ├── types.ts               # o contrato de GET /api/progress (D, Task 6)
+│   │   │   │   ├── unlockedDate.test.ts
+│   │   │   │   ├── unlockedDate.ts        # data da conquista em America/Sao_Paulo, sem conversão de fuso do navegador (D, decisão P5)
+│   │   │   │   ├── useProgress.test.tsx
+│   │   │   │   └── useProgress.ts         # busca GET /api/progress; mesmo desenho do useCycle (reload/refresh/refreshFailed, guarda de sequência, useRefreshOnReturn) (D, Task 6)
 │   │   │   └── tutoring/          # a Tifa na tela (1b-2); importa só de shared/, nunca de features/missions/
 │   │   │       ├── ProposalCard.test.tsx
 │   │   │       ├── ProposalCard.tsx       # o cartão de proposta: Confirmar/Recusar, um ramo por Outcome
-│   │   │       ├── TutorConversation.tsx  # a conversa: histórico, campo, região viva de status
+│   │   │       ├── TutorConversation.tsx  # a conversa: histórico, campo, região viva de status; a região rolável ganhou role="region", aria-label="Conversa com a Tifa" e tabIndex={0} (D, Ruling R13 — defeito latente, anterior ao D, achado pela integração da Task 8)
 │   │   │       ├── TutorPanel.test.tsx
 │   │   │       ├── TutorPanel.tsx         # o painel: lateral (desktop) ou folha modal (celular), hooks no topo
 │   │   │       ├── actionFailure.test.ts
@@ -120,7 +136,7 @@ FocusQuest/
 │   │   │   ├── Campaigns.tsx      # o main de Campanhas: h1 focável + <CampaignTrail /> (C, Tasks 1 e 4)
 │   │   │   ├── headings.ts        # HEADQUARTERS_HEADING_ID, CAMPAIGNS_HEADING_ID (C, Task 1)
 │   │   │   ├── Headquarters.test.tsx
-│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B); hidden na raiz e no main quando Campanhas está aberta (C, K2)
+│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B); hidden na raiz e no main quando Campanhas está aberta (C, K2); ProgressPanel no topo, com refreshProgress (ref, decisão P3) repassado ao onCompleted de CycleSection e MissionList (D, Task 8)
 │   │   ├── shared/
 │   │   │   ├── api/
 │   │   │   │   ├── client.test.ts
@@ -134,7 +150,8 @@ FocusQuest/
 │   │   │   │   ├── deadline.test.ts
 │   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
 │   │   │   └── types/              # tipos compartilhados por mais de uma feature (C, docs/ARCHITECTURE.md §5)
-│   │   │       └── mission.ts      # Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
+│   │   │       ├── mission.ts      # Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
+│   │   │       └── reward.ts       # Reward, UnlockedAchievement, MissionCompletion — o contrato do reward da conclusão, usado por features/missions (D, Task 7); reward é `Reward | null | undefined` de propósito (Ruling R6)
 │   │   ├── test/                  # infraestrutura de teste, não código de aplicação (docs/QUALITY.md §3)
 │   │   │   ├── fetchRoutes.ts     # routeFetch: fetch falso roteado por metodo/URL, um Response novo por chamada
 │   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
@@ -143,14 +160,14 @@ FocusQuest/
 │   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
 │   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
-│   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx
+│   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx; @keyframes reward-in, usado só sob motion-safe: (D, Task 7)
 │   │   ├── main.test.tsx
 │   │   └── main.tsx
 │   ├── tests/
 │   │   ├── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
-│   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1)
+│   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1); lê GET /api/progress antes de concluir e confere o reward/painel contra antes + xp da missão (D, Task 9, decisão P6); espera a opacidade do anúncio chegar a 1 antes do axe (D, Ruling R12)
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
-│   │   │   ├── headquarters.spec.ts
+│   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
 │   │   │   └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
@@ -196,9 +213,16 @@ FocusQuest/
 │       │   │   ├── cycle_service.py # criar plano, ler plano/ciclo/missao, historico, ocultacao (B)
 │       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B) — sem FastAPI nem SQLAlchemy
 │       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B)
-│       │   │   ├── router.py      # as três rotas de /api/missions
-│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B)
-│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B)
+│       │   │   ├── router.py      # as três rotas de /api/missions; concluir devolve MissionCompletionRead, com reward reconstruído do banco depois do commit (D, decisão D10)
+│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B); MissionCompletionRead(MissionRead) com reward: RewardRead (D)
+│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B); concluir_missao chama progression.registrar_conclusao depois do try/flush da MissionOperation (D, decisão P1)
+│       │   ├── progression/       # saldo, nível e conquistas (D); ver §3, "O módulo progression e a direção das dependências"
+│       │   │   ├── __init__.py
+│       │   │   ├── domain.py      # puro: xp_para_o_nivel/nivel_do_saldo (curva D4, aritmética inteira), faixa_do_nivel, Codigo, CATALOGO, conquistas_satisfeitas, maior_sequencia — sem banco nem relógio
+│       │   │   ├── models.py      # XpEntry (o livro-razão, D2) e UserAchievement (D5), com os nomes de restrição do plano
+│       │   │   ├── router.py      # GET /api/progress, sem commit (é leitura)
+│       │   │   ├── schemas.py     # AchievementRead, ProgressRead, UnlockedAchievementRead, RewardRead
+│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10), ler_progresso; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
 │       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
 │       │       ├── __init__.py
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
@@ -206,14 +230,14 @@ FocusQuest/
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros
 │       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
-│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido
+│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
 │       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar
 │       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
 │       │       ├── dependencies.py  # get_tutoria() -> Tutoria | None ("sem chave" é None, não exceção)
 │       │       └── router.py      # as cinco rotas de /api/tutoring
 │       ├── __init__.py
-│       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready e a tutoria
+│       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready, a tutoria e a progressão (include_router de progression.router, D)
 ├── tests/
 │   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
 │   ├── integration/               # contra PostgreSQL real (o banco de teste do worktree, focusquest_test por padrão), nunca SQLite
@@ -238,10 +262,14 @@ FocusQuest/
 │   │   ├── test_install_gitleaks.py  # o script de download do Gitleaks, verificação de checksum e retentativa
 │   │   ├── test_migrations.py
 │   │   ├── test_novo_worktree.py  # scripts/novo-worktree.sh num repositório git temporário, com make falso (Frente 0)
-│   │   ├── test_missions_api.py
+│   │   ├── test_missions_api.py    # ganhou test_reenviar_a_mesma_operacao_devolve_o_mesmo_200 conferindo reward também (D)
 │   │   ├── test_missions_concorrencia.py
 │   │   ├── test_missions_models.py
 │   │   ├── test_missions_service.py
+│   │   ├── test_progression_api.py         # o contrato de GET /api/progress e o reward no 200 da conclusão e do reenvio (D, Task 4)
+│   │   ├── test_progression_concorrencia.py  # duas primeiras conclusões em paralelo destravam uma conquista só; falha injetada no crédito desfaz a conclusão; a trava do usuário é tomada (D, Task 3, conexões reais)
+│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3)
+│   │   ├── test_progression_service.py     # o crédito na conclusão, a recompensa reconstruída (inclusive o reenvio antigo) e a leitura (D, Task 3)
 │   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
 │   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh; o isolamento do gate do push (Frente 0)
 │   │   ├── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
@@ -258,7 +286,8 @@ FocusQuest/
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
-│       ├── test_tutoring_context.py  # montagem do turno
+│       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
+│       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
 │       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
 │       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
@@ -381,21 +410,40 @@ isso para não mudar nenhum comportamento. A decisão já está registrada em
 Onde o restante deste documento cita um caminho da árvore-alvo sob `web/`,
 leia `frontend/`.
 
+### Divergência deliberada: `progression/`, não `progress/`
+
+Pela mesma razão: a árvore-alvo do README §3 chama o módulo de recompensa de
+`progress/`; a spec do Incremento D (decisão D1) escolheu `progression/`,
+nos dois lados (`src/focusquest/modules/progression/` e
+`frontend/src/features/progression/`), porque o módulo é dono de mais do que
+uma leitura de progresso — grava o livro-razão de XP e as conquistas. O
+módulo **existe** hoje, com esse nome, nos dois lados (ver §1 e §3, abaixo);
+onde o restante deste documento cita `progress/` na árvore-alvo, leia
+`progression/`.
+
+A árvore-alvo também previa `features/rewards/` no frontend; o anúncio da
+recompensa acabou dentro de `features/missions/` (`RewardAnnouncement.tsx`),
+porque é o cartão de missão concluída quem o mostra (decisão D16, "o anúncio
+no cartão") — e não uma tela ou painel próprio. Não existe `features/rewards/`
+neste repositório; o que existe é `features/progression/` (o painel de
+saldo/nível/conquistas) e `shared/types/reward.ts` (o contrato do `reward`,
+consumido por `missions`).
+
 ## 3. Responsabilidades por camada
 
-### Backend — `missions` e `tutoring` existem; o resto é contrato
+### Backend — `missions`, `tutoring` e `progression` existem; o resto é contrato
 
 Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
 real, e em qual módulo.
 
 | Camada | Responsabilidade | O que **não** faz | Estado |
 |---|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`) |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`) |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`) |
-| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`) |
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`) |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`) |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`) |
+| `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
-| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`) |
+| `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
 | `provider.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
@@ -407,6 +455,26 @@ sentido — confirmar ou recusar uma ação segue o desenho de concluir uma
 missão). Nada em `modules/missions/` importa nada de `modules/tutoring/`; a
 convenção de fronteira 2 (§5, "nada de dependência circular") proíbe o
 sentido inverso.
+
+**O módulo `progression` (Incremento D) e a direção das dependências.**
+`missions.service` → `progression.service`: `concluir_missao`
+(`missions/service.py`) chama `progression.registrar_conclusao` depois do
+`try/flush` que grava a `MissionOperation` (decisão P1) e antes do `return`,
+com a missão já travada. No sentido contrário, `progression.service` só
+**lê** — nunca escreve em — `missions.models` (`Mission`, `User`),
+`missions.cycle_service` (`carregar_historico`), `missions.cycle_domain`
+(`sequencia_ate`), `missions.domain` (`xp_da_missao`) e o modelo de ação da
+tutoria, `tutoring.models.TutorAction` (mais os enums `tutoring.domain.EstadoDaAcao`
+e `tutoring.domain.TipoDeAcao`, para comparar `state`/`kind` sem literais
+soltos — a spec previa "só o modelo"; a implementação real também usa os
+dois enums, registrado como pendência 82 em `docs/HANDOFF.md`).
+`progression.service` **não** importa `missions.service` nem nada de
+`tutoring` além do que está listado — não há caminho do chat até o saldo
+(D15, README §6: "pedir pontos no chat não altera saldo"). Não há ciclo de
+import entre os três módulos: `missions` não importa nada de `progression`
+nem de `tutoring` de volta.
+`tutoring.context` também consome `progression.ler_progresso` (só leitura,
+direto, sem HTTP) para montar a linha de progresso do turno da Tifa (D15).
 
 Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
 `commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
@@ -709,6 +777,43 @@ checagem de disponibilidade vem **antes** da checagem de reenvio na ordem
 acima só na leitura da ocultação, não na regra do dia (que só se aplica a
 quem ainda não concluiu).
 
+### O contrato HTTP da progressão que existe (Incremento D)
+
+> **Fonte de verdade:** `src/focusquest/modules/progression/router.py`,
+> `src/focusquest/modules/progression/schemas.py`,
+> `src/focusquest/modules/missions/schemas.py` (`MissionCompletionRead`) e
+> `src/focusquest/modules/missions/router.py`.
+
+| Método e caminho | Sucesso | O que faz |
+|---|---|---|
+| `GET /api/progress` | `200` com o saldo, o nível e o catálogo | O único endpoint novo do D (decisão D14). Leitura, sem trava; usa `USUARIO_UNICO`, como as rotas de `missions`. |
+| `POST /api/missions/{mission_id}/complete` | `200` com a missão, agora com `reward` | Sem mudança de rota: o corpo (`MissionCompletionRead`, que estende `MissionRead`) ganhou o campo `reward` (`RewardRead`), reconstruído do banco **depois** do `commit` (D10), no primeiro envio e no reenvio. |
+
+**`GET /api/progress`** devolve `xp_total`, `level`, `level_floor_xp`,
+`next_level_xp` e `achievements` — a lista **sempre** com os sete códigos do
+catálogo, na ordem dele, cada um com `code`, `title`, `description` e
+`unlocked_at` (instante ISO com `Z`, ou `null` para o que não foi
+destravado). Sem nenhuma conclusão: `xp_total` 0, `level` 1,
+`level_floor_xp` 0, `next_level_xp` 100, as sete conquistas com
+`unlocked_at` nulo. Sem caminho de erro de negócio — só o tratamento
+genérico de falha de banco.
+
+**`reward` no corpo da conclusão** (`RewardRead`): `xp_awarded` (o XP desta
+missão, congelado, D2), `xp_total` (o saldo do usuário **no momento daquela
+conclusão**, não o atual — a semântica do reenvio, D10;
+`docs/HANDOFF.md`, pendência 79), `level_before`, `level_after` e
+`achievements_unlocked` (as conquistas que **esta** conclusão destravou,
+`code`/`title`/`description`, sem `unlocked_at` — o instante já é o
+`credited_at` do lançamento). O reenvio da mesma operação devolve
+exatamente o mesmo corpo, `reward` incluído — um caminho só constrói os
+dois casos (`recompensa_da_missao`), então o corpo do reenvio é idêntico ao
+original **por construção**, não por comparação.
+
+O `GET /api/missions`, o `GET /api/cycle` e o `GET /api/plans/current` **não**
+mudam — nenhum dos três pode ganhar `reward` ou `achievements`, porque os
+tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
+`MissionCompletionRead`.
+
 ### Frontend — parte descrição, parte contrato
 
 - **`src/app/`** *(existe, desde o Incremento C)* — inicialização e
@@ -949,9 +1054,9 @@ legitimamente pertence a ele — nunca antes.
 | Vou criar… | Vai em | Estado |
 |---|---|---|
 | Componente visual reutilizável, sem regra de negócio (botão, cartão, barra de progresso) | `frontend/src/shared/ui/<Componente>.tsx` | contrato |
-| Componente específico de uma feature (cartão de missão, painel da Tifa, trilha da semana) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`, `campaigns` desde o C) |
+| Componente específico de uma feature (cartão de missão, painel da Tifa, trilha da semana, painel de progresso) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`, `campaigns` desde o C; `progression` desde o D) |
 | Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | existe |
-| Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | existe (`mission.ts`, desde o C) |
+| Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | existe (`mission.ts`, desde o C; `reward.ts`, desde o D — o contrato do `reward` da conclusão, consumido por `missions`) |
 | Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`, `tutoring/types.ts`, `campaigns/types.ts`) |
 | Hook genérico | `frontend/src/shared/hooks/` | existe (`useRefreshOnReturn.ts`, desde o C) |
 | Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`, `tutoring/useTutorConversation.ts`, `campaigns/useCurrentPlan.ts`) |
@@ -969,20 +1074,20 @@ legitimamente pertence a ele — nunca antes.
 
 | Vou criar… | Vai em | Estado |
 |---|---|---|
-| Rota HTTP | `src/focusquest/modules/<módulo>/router.py`, registrada em `src/focusquest/main.py` com `include_router` | existe (`missions`) |
+| Rota HTTP | `src/focusquest/modules/<módulo>/router.py`, registrada em `src/focusquest/main.py` com `include_router` | existe (`missions`, `progression`) |
 | Tradução de erro de domínio em status HTTP | `src/focusquest/main.py`, com `exception_handler` — em um lugar só, não por rota | existe |
 | Código de erro (`code`) do contrato HTTP | `src/focusquest/main.py`, enum `CodigoDeErro`, junto dos handlers — nunca nas exceções do domínio | existe |
-| Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` | existe (`missions`) |
-| Caso de uso | `src/focusquest/modules/<módulo>/service.py` | existe (`missions`) |
-| Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` | existe (`missions`) |
+| Contrato de entrada/saída da API | `src/focusquest/modules/<módulo>/schemas.py` | existe (`missions`, `progression`) |
+| Caso de uso | `src/focusquest/modules/<módulo>/service.py` | existe (`missions`, `progression`) |
+| Regra de domínio | `src/focusquest/modules/<módulo>/domain.py` | existe (`missions`, `progression`) |
 | Erro de domínio comum a mais de um módulo | `src/focusquest/core/errors.py` | existe |
-| Modelo (tabela SQLAlchemy) | `src/focusquest/modules/<módulo>/models.py` | existe (`missions`) |
+| Modelo (tabela SQLAlchemy) | `src/focusquest/modules/<módulo>/models.py` | existe (`missions`, `progression`) |
 | Consulta ou gravação no banco | `src/focusquest/modules/<módulo>/repository.py` | contrato |
 | Migração | `alembic/versions/` | existe |
 | Configuração, conexão, infraestrutura comum | `src/focusquest/core/` | existe |
 | Teste unitário (sem banco) / de integração (PostgreSQL real) | `tests/unit/` / `tests/integration/` | existe |
 | Adaptador de um provedor externo (ex.: o SDK `anthropic`) | `src/focusquest/modules/<módulo>/<provedor>_provider.py`, atrás de um `Protocol` que o serviço consome | existe (`tutoring/anthropic_provider.py`) |
-| Módulo `progress` ou outro do README §8 ainda não iniciado | `src/focusquest/modules/<módulo>/` | contrato |
+| Módulo do README §8 ainda não iniciado (entrega e avaliação, o Incremento E) | `src/focusquest/modules/<módulo>/` | contrato |
 
 ### Fora da aplicação
 
