@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
+import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
@@ -9,12 +10,17 @@ import type { CompletionRegistry } from './useCompletionRegistry'
  *
  * `completed` carrega a missao que a API devolveu, e nao so um "deu certo": e
  * ela que a tela passa a mostrar, com o estado e o `completed_at` do servidor.
+ * O `reward` vem A PARTE, e nao dentro de `mission`: e o `RewardAnnouncement`
+ * quem le, e a missao guardada aqui NAO leva a chave `reward` (D16) -- ela e
+ * um `Mission` de verdade, e nao o `MissionCompletion` cru da resposta.
+ * `reward` pode faltar (deploy defasado ou contrato violado, ver
+ * `MissionCompletion`): a conclusao vale do mesmo jeito, so nao ha anuncio.
  * `failed` carrega a traducao da falha -- mensagem e acao --, e nao o erro cru.
  */
 export type CompletionState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'completed'; mission: Mission }
+  | { status: 'completed'; mission: Mission; reward: Reward | undefined }
   | { status: 'failed'; failure: CompletionFailure }
 
 export interface UseCompleteMissionResult {
@@ -76,12 +82,13 @@ export function useCompleteMission(
     // ja encontra esta conclusao em voo.
     registry.started()
 
-    postJson<Mission>(`/missions/${String(missionId)}/complete`, {
+    postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
       operation_id: operationId,
     })
-      .then((mission) => {
+      .then((completion) => {
         registry.release(missionId)
-        setState({ status: 'completed', mission })
+        const { reward, ...mission } = completion
+        setState({ status: 'completed', mission, reward })
         onCompleted?.()
       })
       .catch((error: unknown) => {

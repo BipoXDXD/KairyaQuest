@@ -1,5 +1,6 @@
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { RewardAnnouncement } from './RewardAnnouncement'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
@@ -122,9 +123,16 @@ function CompletionControls({
           {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
         </button>
       )}
-      <p role="status" data-testid="mission-completion-status" className="text-sm text-emerald-300">
-        {statusText(completion)}
-      </p>
+      <div
+        role="status"
+        data-testid="mission-completion-status"
+        className="text-sm text-emerald-300"
+      >
+        <p data-testid="mission-completion-text">{statusText(completion)}</p>
+        {completion.status === 'completed' && completion.reward !== undefined && (
+          <RewardAnnouncement reward={completion.reward} />
+        )}
+      </div>
       {failure !== null && (
         <p
           role="alert"

@@ -3,6 +3,7 @@ import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { Mission } from '../../shared/types/mission'
+import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { MissionList, type MissionListHandle } from './MissionList'
 
 const pendente: Mission = {
@@ -40,6 +41,24 @@ const concluida: Mission = {
 }
 
 const emAndamento: Mission = { ...pendente, id: 9, state: 'em_andamento' }
+
+/**
+ * A recompensa que os testes de conclusao usam quando o CONTEUDO dela nao e o
+ * que o teste prova -- isso e `RewardAnnouncement.test.tsx`. Aqui so importa
+ * que o POST de conclusao devolve `reward` desde o incremento D.
+ */
+const recompensaPadrao: Reward = {
+  xp_awarded: 220,
+  xp_total: 1340,
+  level_before: 4,
+  level_after: 4,
+  achievements_unlocked: [],
+}
+
+/** Embrulha a missao concluida no `MissionCompletion` que o POST devolve. */
+function comRecompensa(mission: Mission, reward: Reward = recompensaPadrao): MissionCompletion {
+  return { ...mission, reward }
+}
 
 function stubFetchResolving(body: unknown, init?: ResponseInit) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body, init)))
@@ -238,6 +257,8 @@ describe('MissionList -- concluir', () => {
     state: 'concluida',
     completed_at: '2026-09-18T15:00:00Z',
   }
+  // O corpo do POST de conclusao desde o incremento D: a missao com `reward`.
+  const pendenteConcluidaResposta = comRecompensa(pendenteConcluida)
 
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -273,7 +294,11 @@ describe('MissionList -- concluir', () => {
 
     const status = await screen.findByTestId('mission-completion-status')
     expect(status).toHaveAttribute('role', 'status')
-    expect(status).toBeEmptyDOMElement()
+    // A regiao ja tem o `<p>` do texto (P4: ela precisa existir com o mesmo
+    // elemento desde antes do clique, e nao nascer so na conclusao) -- so que
+    // ele esta vazio, e sem `reward` nenhum.
+    expect(within(status).getByTestId('mission-completion-text')).toBeEmptyDOMElement()
+    expect(within(status).queryByTestId('reward')).not.toBeInTheDocument()
   })
 
   it('a missao que ja vem concluida nao tem regiao viva nenhuma', async () => {
@@ -323,7 +348,39 @@ describe('MissionList -- concluir', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('depois do sucesso, mostra a missao concluida, anuncia e tira o botao', async () => {
+  it('depois do sucesso, mostra a missao concluida, anuncia o texto e o reward, e tira o botao', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json([pendente]))
+        .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta)),
+    )
+    render(<MissionList />)
+    // P4: a regiao viva e o MESMO elemento de antes do clique -- um `role`
+    // novo que nasce ja com texto nao e anunciado por todo leitor de tela.
+    const statusAntes = await screen.findByTestId('mission-completion-status')
+
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+
+    // O rotulo sai da missao que a API DEVOLVEU, e nao de um palpite da tela.
+    const statusDepois = await screen.findByTestId('mission-completion-status')
+    expect(statusDepois).toBe(statusAntes)
+    expect(statusDepois).toHaveAttribute('role', 'status')
+    expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
+      'Missão concluída.',
+    )
+    expect(within(statusDepois).getByTestId('reward-xp')).toHaveTextContent('+220 XP')
+    expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mission-completion-error')).not.toBeInTheDocument()
+  })
+
+  it('uma conclusao SEM reward (deploy defasado) mantem o quadro, anuncia o texto e nao mostra XP', async () => {
+    // O `postJson` nao valida a resposta em tempo de execucao: um backend
+    // anterior ao incremento D (ou um contrato violado) devolve a missao sem
+    // `reward`. Sem guarda, o anuncio lia `reward.xp_awarded` de `undefined`
+    // e, sem error boundary, o quadro inteiro saia do DOM.
     vi.stubGlobal(
       'fetch',
       vi
@@ -332,14 +389,21 @@ describe('MissionList -- concluir', () => {
         .mockResolvedValueOnce(Response.json(pendenteConcluida)),
     )
     render(<MissionList />)
+    const statusAntes = await screen.findByTestId('mission-completion-status')
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
-    // O rotulo sai da missao que a API DEVOLVEU, e nao de um palpite da tela.
-    expect(await screen.findByText('Missão concluída.')).toHaveAttribute('role', 'status')
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
+    expect(statusDepois).toBe(statusAntes)
+    expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
+      'Missão concluída.',
+    )
+    expect(screen.getByTestId('missions-list')).toBeInTheDocument()
+    expect(screen.getByTestId('mission-item')).toBeInTheDocument()
     expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
-    expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('mission-completion-error')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('reward')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('reward-xp')).not.toBeInTheDocument()
   })
 
   it('numa falha de rede, avisa e deixa tentar de novo com a MESMA chave', async () => {
@@ -347,7 +411,7 @@ describe('MissionList -- concluir', () => {
       .fn()
       .mockResolvedValueOnce(Response.json([pendente]))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(Response.json(pendenteConcluida))
+      .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
     render(<MissionList />)
 
@@ -359,8 +423,13 @@ describe('MissionList -- concluir', () => {
       'Não foi possível confirmar a conclusão. Tentar de novo é seguro: a missão não será concluída duas vezes.',
     )
     // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
-    // completed, nunca do texto da falha (que ja esta no alert).
-    expect(screen.getByTestId('mission-completion-status')).toBeEmptyDOMElement()
+    // completed, nunca do texto da falha (que ja esta no alert). O `<p>` do
+    // texto continua no DOM (P4), so que vazio.
+    expect(
+      within(screen.getByTestId('mission-completion-status')).getByTestId(
+        'mission-completion-text',
+      ),
+    ).toBeEmptyDOMElement()
     const tentarDeNovo = screen.getByRole('button', {
       name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
     })
@@ -379,7 +448,7 @@ describe('MissionList -- concluir', () => {
       .mockResolvedValueOnce(
         Response.json({ detail: 'x', code: 'operacao_reutilizada' }, { status: 409 }),
       )
-      .mockResolvedValueOnce(Response.json(pendenteConcluida))
+      .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
     render(<MissionList />)
 
@@ -594,7 +663,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(ESPERA_ANUNCIO)
 
     await act(async () => {
-      postA.resolve(Response.json(missaoAConcluida))
+      postA.resolve(Response.json(comRecompensa(missaoAConcluida)))
       await postA.promise
     })
 
@@ -632,7 +701,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(within(card(8)).getByTestId('mission-reload')).toHaveTextContent(ESPERA_BOTAO)
 
     await act(async () => {
-      postC.resolve(Response.json({ ...missaoC, state: 'concluida' }))
+      postC.resolve(Response.json(comRecompensa({ ...missaoC, state: 'concluida' })))
       await postC.promise
     })
 
@@ -646,7 +715,10 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
   it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o novo Concluir manda a MESMA chave', async () => {
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
-      posts: { 7: [networkFailure, ok(missaoAConcluida)], 8: [conflict('transicao_ilegal')] },
+      posts: {
+        7: [networkFailure, ok(comRecompensa(missaoAConcluida))],
+        8: [conflict('transicao_ilegal')],
+      },
     })
     render(<MissionList />)
     await screen.findByTestId('missions-list')
@@ -680,7 +752,10 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     const postA = deferred()
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
-      posts: { 7: [postA.reply, ok(missaoAConcluida)], 8: [conflict('transicao_ilegal')] },
+      posts: {
+        7: [postA.reply, ok(comRecompensa(missaoAConcluida))],
+        8: [conflict('transicao_ilegal')],
+      },
     })
     render(<MissionList />)
     await screen.findByTestId('missions-list')
@@ -731,7 +806,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
       posts: {
-        7: [conflict('operacao_reutilizada'), networkFailure, ok(missaoAConcluida)],
+        7: [conflict('operacao_reutilizada'), networkFailure, ok(comRecompensa(missaoAConcluida))],
         8: [conflict('transicao_ilegal')],
       },
     })
@@ -887,7 +962,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
     )
 
     await act(async () => {
-      resolver(Response.json({ ...pendente, state: 'concluida' }))
+      resolver(Response.json(comRecompensa({ ...pendente, state: 'concluida' })))
       await post
     })
 
