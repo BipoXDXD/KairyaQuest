@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
+import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
 
@@ -20,6 +21,21 @@ const concluida: Mission = {
   xp: 100,
   actual_duration_minutes: null,
 }
+
+/** A recompensa desta conclusao, como a API a devolve junto da missao. */
+const recompensa: Reward = {
+  xp_awarded: 100,
+  xp_total: 1340,
+  level_before: 4,
+  level_after: 4,
+  achievements_unlocked: [],
+}
+
+// O corpo do POST de conclusao desde o incremento D: a missao com `reward` a
+// mais (`MissionCompletion`). A missao guardada no estado NAO leva essa
+// chave -- e o que o teste "chega em completed com a missao que a API
+// devolveu" prova.
+const concluidaResposta: MissionCompletion = { ...concluida, reward: recompensa }
 
 // Dois identificadores fixos, na ordem em que `crypto.randomUUID` os devolve.
 // Fixos para que o teste diga QUAL chave foi enviada em cada tentativa, e nao
@@ -93,7 +109,7 @@ describe('useCompleteMission', () => {
   })
 
   it('conclui pelo POST da missao e chega em completed com a missao que a API devolveu', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json(concluida))
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(concluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
     const { result } = renderCompletion()
 
@@ -102,7 +118,11 @@ describe('useCompleteMission', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
     })
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/missions/7/complete')
     expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
@@ -115,7 +135,7 @@ describe('useCompleteMission', () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(Response.json(concluida))
+      .mockResolvedValueOnce(Response.json(concluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
     const { result } = renderCompletion()
 
@@ -130,7 +150,11 @@ describe('useCompleteMission', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
     })
     expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
   })
@@ -143,7 +167,7 @@ describe('useCompleteMission', () => {
       .mockResolvedValueOnce(
         Response.json({ detail: 'x', code: 'operacao_reutilizada' }, { status: 409 }),
       )
-      .mockResolvedValueOnce(Response.json(concluida))
+      .mockResolvedValueOnce(Response.json(concluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
     const { result } = renderCompletion()
 
@@ -164,7 +188,11 @@ describe('useCompleteMission', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
     })
     expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
   })
@@ -194,7 +222,7 @@ describe('useCompleteMission', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(respostaDeFalha())
-        .mockResolvedValueOnce(Response.json(concluida))
+        .mockResolvedValueOnce(Response.json(concluidaResposta))
       vi.stubGlobal('fetch', fetchMock)
       const { result } = renderCompletion()
 
@@ -209,7 +237,11 @@ describe('useCompleteMission', () => {
       })
 
       await waitFor(() => {
-        expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+        expect(result.current.state).toEqual({
+          status: 'completed',
+          mission: concluida,
+          reward: recompensa,
+        })
       })
       expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
     },
@@ -242,7 +274,7 @@ describe('useCompleteMission', () => {
   })
 
   it.each<[string, () => Response]>([
-    ['o sucesso', () => Response.json(concluida)],
+    ['o sucesso', () => Response.json(concluidaResposta)],
     [
       'transicao_ilegal',
       () => Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
@@ -296,7 +328,7 @@ describe('useCompleteMission', () => {
     expect(reload).not.toHaveBeenCalled()
 
     await act(async () => {
-      responder(Response.json(concluida))
+      responder(Response.json(concluidaResposta))
       await Promise.resolve()
     })
 
@@ -307,14 +339,18 @@ describe('useCompleteMission', () => {
 
   it('chama onCompleted depois do sucesso, e não na falha', async () => {
     const onCompleted = vi.fn()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluida)))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluidaResposta)))
     const { result } = renderCompletion(onCompleted)
 
     act(() => {
       result.current.complete()
     })
     await waitFor(() => {
-      expect(result.current.state).toEqual({ status: 'completed', mission: concluida })
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
     })
     expect(onCompleted).toHaveBeenCalledTimes(1)
 
@@ -361,7 +397,7 @@ describe('useCompleteMission', () => {
       'fetch',
       vi
         .fn()
-        .mockResolvedValueOnce(Response.json(concluida))
+        .mockResolvedValueOnce(Response.json(concluidaResposta))
         .mockImplementationOnce(pendingForever),
     )
     const { result, reload } = renderCompletion()

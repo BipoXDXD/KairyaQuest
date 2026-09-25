@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { Mission } from '../../shared/types/mission'
+import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { CycleSection } from './CycleSection'
 import type { Cycle } from './types'
 
@@ -36,6 +37,24 @@ const especial: Mission = {
   xp: 660,
   instructions: 'Prova simulada',
   deadline: '2026-09-29T00:00:00-03:00',
+}
+
+/**
+ * A recompensa que os testes de conclusao usam quando o CONTEUDO dela nao e o
+ * que o teste prova -- isso e `RewardAnnouncement.test.tsx`. Aqui so importa
+ * que o POST de conclusao devolve `reward` desde o incremento D.
+ */
+const recompensaPadrao: Reward = {
+  xp_awarded: 40,
+  xp_total: 1180,
+  level_before: 3,
+  level_after: 3,
+  achievements_unlocked: [],
+}
+
+/** Embrulha a missao concluida no `MissionCompletion` que o POST devolve. */
+function comRecompensa(mission: Mission, reward: Reward = recompensaPadrao): MissionCompletion {
+  return { ...mission, reward }
 }
 
 const ciclo = (ajustes: Partial<Cycle> = {}): Cycle => ({
@@ -114,16 +133,23 @@ describe('CycleSection', () => {
             ? ciclo()
             : ciclo({ mission: diariaConcluida, streak: 4, days_to_milestone: 3 }),
         ),
-      'POST /api/missions/31/complete': () => Response.json(diariaConcluida),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
     render(<CycleSection />)
+    // P4: a regiao viva e o MESMO elemento de antes do clique -- um `role`
+    // novo que nasce ja com texto nao e anunciado por todo leitor de tela.
+    const statusAntes = await screen.findByTestId('mission-completion-status')
+
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
 
-    expect(await screen.findByTestId('mission-completion-status')).toHaveTextContent(
+    const statusDepois = await screen.findByTestId('mission-completion-status')
+    expect(statusDepois).toBe(statusAntes)
+    expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
       'Missão concluída.',
     )
+    expect(within(statusDepois).getByTestId('reward-xp')).toHaveTextContent('+40 XP')
     await waitFor(() => {
       expect(screen.getByTestId('cycle-streak')).toHaveTextContent('Sequência: 4 dias seguidos')
     })
@@ -221,7 +247,7 @@ describe('CycleSection', () => {
             : ciclo({ mission: diariaConcluida, streak: 4, days_to_milestone: 3 }),
         )
       },
-      'POST /api/missions/31/complete': () => Response.json(diariaConcluida),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
     render(<CycleSection />)
     fireEvent.click(
@@ -282,7 +308,7 @@ describe('CycleSection', () => {
         Response.json(
           call === 1 ? ciclo() : ciclo({ mission: diaria32, streak: 4, days_to_milestone: 3 }),
         ),
-      'POST /api/missions/31/complete': () => Response.json(diariaConcluida),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
     render(<CycleSection />)
     fireEvent.click(
