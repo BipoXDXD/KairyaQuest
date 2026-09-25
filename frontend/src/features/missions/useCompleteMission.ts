@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { postJson } from '../../shared/api/client'
+import type { Mission } from '../../shared/types/mission'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
-import type { Mission } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
 /**

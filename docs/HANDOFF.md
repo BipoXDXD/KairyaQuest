@@ -10,6 +10,24 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento C — a campanha.** Branch de integração `feat/incremento-c`,
+com dois worktrees de trabalho em paralelo, sem banco: `feat/incremento-c-nav`
+(Tasks 0 e 1) e `feat/incremento-c-trilha` (Tasks 2 e 3). Base: `9c2bd1e`
+(a ponta de `feat/incremento-b`, PR #13 aprovado pelo `quality-gate` e ainda
+não mesclado — Ruling R1 do controlador, 2026-09-25: o merge do PR #13 ficou
+para o dono, e o C parte da ponta do B em vez de esperar `origin/main`).
+Spec em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
+`docs/superpowers/plans/2026-09-25-incremento-c.md`. A branch soma, até
+este registro (fechamento da Task 7, antes deste commit), **9 commits**
+(Tasks 0–6 e o fix round 1 da Task 5, contados com
+`git log --oneline 9c2bd1e..HEAD | wc -l`, medido nesta sessão) — mais este
+commit de documentação, **10** no total. A base `9c2bd1e` já é a ponta do
+Incremento B, também ainda não publicada (ver o parágrafo abaixo); os
+commits do B **não** entram nesta contagem porque ainda não são ancestrais
+da `main`. **Estado de publicação: não publicado.** Push, PR e merge
+exigem autorização do dono, e o merge do C só pode acontecer **depois** do
+merge do B (Ruling R1).
+
 **Incremento B — o ciclo diário.** Branch `feat/incremento-b`, aberta a
 partir de `12288a2` (a `main`: o merge do PR #12, a camada 3 do 1b-2). Spec
 em `docs/superpowers/specs/2026-09-18-ciclo-diario-design.md`; plano em
@@ -494,6 +512,80 @@ serviço.
   esquema limpo um segundo `check-e2e` seguido reprovaria com `409
   plano_existente`. Task 6, commit `50e2150` — ver "Alterações do
   Incremento B" e `docs/QUALITY.md` §4.
+
+### Incremento C — decisões que a spec não fixava
+
+Transcritas da tabela "Decisões que a spec não fixava" do plano
+(`docs/superpowers/plans/2026-09-25-incremento-c.md`); o motivo de cada uma
+está também no comentário do arquivo citado.
+
+| # | Decisão | Motivo |
+|---|---|---|
+| K1 | A área ativa mora num `useState<Area>` do **`App.tsx`**, que vira o roteador; a barra lateral é `src/app/SideNav.tsx` e a lista das áreas, `src/app/areas.ts` | C15 manda estado local e sem biblioteca de rotas; `docs/ARCHITECTURE.md` §5 regra 6: "o que entra no `App.tsx` é um roteador, não o conteúdo da segunda tela". `src/app/` é o lugar de "inicialização, rotas e providers" (§3). A URL não muda: a rota por URL entra quando houver a terceira área (C15). Custo: recarregar a página volta ao Quartel-General. |
+| K2 | O **Quartel-General fica montado e oculto** (`hidden`) enquanto Campanhas está aberta; Campanhas **desmonta** ao sair | Desmontar o Quartel-General desmontaria o painel da Tifa: o rascunho não enviado se perderia, e um stream em andamento seria abortado — o `useTutorConversation` aborta na desmontagem, e o backend grava a resposta como `interrompida`. Campanhas, ao contrário, **deve** remontar: cada abertura busca a trilha de novo, e uma conclusão feita no Quartel-General aparece na trilha sem recarregar. Custo: o ciclo do Quartel-General oculto não se atualiza sozinho por troca de área (ver K7 e a pendência 60). |
+| K3 | O painel da Tifa continua **dentro do Quartel-General**; Campanhas não tem painel no C | Tirar o painel da página exigiria um canal do shell até o quadro de avulsas (`onMissionCreated`, `boardHref`) com o quadro às vezes desmontado — mudança na feature `tutoring` sem pedido de produto. Fica como pendência para o incremento que ligar a Tifa ao plano (`propose_plan`, pendência 59). |
+| K4 | Os itens da navegação são **`<button>`** com `aria-current="page"` no ativo, dentro de `<nav aria-label="Áreas">` | Sem URL (K1) não há `href` para um link de verdade, e `<a>` sem `href` não recebe foco. `aria-current` é atributo global de ARIA. O ativo também se distingue **sem cor**: marcador `▸` visível (com `aria-hidden`, porque o leitor de tela já ouve o `aria-current`), barra lateral e peso da fonte (README §7, avisos além da cor). |
+| K5 | Depois de navegar, o **foco vai ao título de nível 1** da área aberta (`tabIndex={-1}`, `id` em `src/pages/headings.ts`) | Sem troca de URL nem de documento, o leitor de tela não percebe que o conteúdo mudou; o foco no título anuncia a área nova e põe o teclado no começo dela. Os `id` moram em `pages/headings.ts` (e não no `App.tsx`) porque são das páginas, e o `App` os importa na direção certa (app → pages). |
+| K6 | No **celular** (< `lg`), a navegação é uma **barra no topo, no fluxo** (`flex-wrap`, sem `position: fixed`); no desktop, coluna lateral `sticky`. Decidido **só por CSS** | README §7: no celular nada pode cobrir botões nem exigir rolagem horizontal. Uma barra fixa embaixo disputaria o canto com o botão fixo "Falar com a Tifa"; uma gaveta exigiria diálogo modal, foco preso e Esc para duas opções. Ao contrário do painel da Tifa (`useIsDesktop`, onde a semântica ARIA muda com o layout), aqui a semântica é a mesma nas duas larguras — o mesmo `nav` com os mesmos botões —, então media query basta. |
+| K7 | O ciclo (`useCycle`) e a trilha (`useCurrentPlan`) **atualizam em silêncio** quando a aba volta a ficar visível (`visibilitychange`) ou a janela recebe foco (`focus`) — Task 5 | Fecha a pendência 57 (achado m2 da revisão final do B: "aba aberta na virada do dia mostra o dia anterior até recarregar"). Silencioso pelo mesmo motivo da P9: passar por "carregando" desmontaria os cartões. O gancho mora em `shared/hooks/useRefreshOnReturn.ts` porque tem dois usuários reais, um em cada feature (§5 regra 3). Custo declarado: trocar de área **dentro** do app depois da meia-noite não dispara nenhum dos dois eventos — o Quartel-General oculto (K2) continua no dia anterior até a aba sair e voltar, ou até um recarregamento (pendência 60). |
+| K8 | A trilha **só mostra**: não tem botão Concluir. O dia de hoje disponível diz "Disponível — conclua no Quartel-general" | O Quartel-General já conclui a diária e a especial, com registro de chaves próprio. Um segundo lugar de conclusão criaria um segundo registro para a mesma missão, com outra chave (`operation_id`) — a API não duplicaria (a segunda operação recebe `transicao_ilegal`), mas a tela mostraria erro para uma conclusão que deu certo. C14 diz que a tela "lê, conclui e mostra a campanha": a conclusão fica onde já está. |
+| K9 | O marcador **"Hoje"** da trilha é o **último dia não `bloqueada`** da semana | `PlanRead` não tem `today`. Todo dia depois de hoje é `bloqueada`, e todo dia até hoje é revelado (`fora_do_plano`, `disponivel`, `concluida` ou `perdida`) — então o último revelado é hoje, e nenhuma segunda requisição (`GET /api/cycle`) é necessária. `GET /api/plans/current` é sempre a semana de hoje. |
+| K10 | O contrato da trilha mora em `features/campaigns/types.ts`; o tipo `Mission` (e `MissionState`, `MissionType`, `Availability`, `MISSION_STATE_LABELS`) **sobe para `shared/types/mission.ts`**, e `formatCivilDate` sobe para **`shared/lib/civilDate.ts`**, que ganha `civilWeekday` | A trilha mostra o conteúdo de uma `MissionRead` e formata `day`: dois usos reais, um em `missions` e outro em `campaigns` (§5 regras 1 e 3). Mover, e não reexportar: um lugar só para o contrato. `DAYS_PER_MILESTONE` sobe junto (o "N de 7" é das duas features). |
+| K11 | A página `Campaigns.tsx` e o componente `CampaignTrail` têm fronteira fixa: a página tem o `<main>`, o `h1` "Campanhas — planos de estudo" (`id` de `pages/headings.ts`) e compõe **`<CampaignTrail />`** de `features/campaigns/CampaignTrail.tsx`, sem props; o componente começa no `h2` e não renderiza `<main>` | Os dois agentes trabalham em paralelo: a página nasce na Task 1 com um espaço reservado honesto, e a Task 4 troca o espaço reservado pelo componente — uma linha de import e uma de JSX. Fixar o nome, a ausência de props e o nível de título aqui evita a divergência na integração. **Relaxada pela Ruling R5** (abaixo): a Task 4 acrescentou a prop opcional `onOpenHeadquarters` para o botão "Ir ao Quartel-General" — `Campaigns` deixou de ser estritamente sem props, mas continua sem props **obrigatórias**, e sem ela o componente funciona do mesmo jeito (texto no lugar do botão). |
+
+### Incremento C — decisões tomadas durante a execução
+
+Quinze rulings do controlador, registradas no ledger da sessão
+(`.superpowers/sdd/2026-09-25-incremento-c/progress.md`) à medida que a
+varredura prévia e a execução das Tasks encontravam divergência entre o
+plano e o que já existia (os worktrees `feat/incremento-c-nav` e
+`feat/incremento-c-trilha`, escritos sem commit antes da integração) ou
+entre o pedido de correção e o desenho necessário.
+
+| # | Decisão | Motivo e custo |
+|---|---|---|
+| R1 | A base do C é `9c2bd1e` (a ponta verde do B), **não** `origin/main` | O merge do PR #13 (B) foi bloqueado pelo classificador de permissões em 2026-09-25 e ficou para o dono; o C parte da ponta do B em vez de esperar. Quando o dono mesclar o B, os commits dele viram ancestrais da `main` e o PR do C passa a mostrar só o C. **O C precisa ser mesclado depois do B.** Custo se errado: rebase do C sobre a `main`, se o B mudar antes do merge. |
+| R2 | As Tasks 0+1 e 2+3 são "aterrissagem" do trabalho **sem commit** dos worktrees `feat/incremento-c-nav` e `feat/incremento-c-trilha` (um despacho por par), com o gate completo no hook a cada commit e revisão de tarefa normal | O trabalho já tinha sido feito e provado por mutação nos dois worktrees de trabalho (README §1: "aterrissagem" traz o resultado para a branch de integração); faltava só commit, gate e revisão. Custo: se o transporte perder alguma coisa do trabalho original, a revisão da Task pega. |
+| R3 | Seguir a K10 do plano ao pé da letra: **mover** (sem reexportar) `Mission`, `MissionState`, `MissionType`, `Availability`, `MISSION_STATE_LABELS` e `DAYS_PER_MILESTONE` para `shared/types/mission.ts`, e atualizar todos os imports | "Um lugar só para o contrato" — a alternativa (reexportar de `features/missions/types.ts`) manteria dois caminhos válidos para o mesmo tipo. É mecânico. Custo: *churn* de imports em 10 arquivos. |
+| R4 | `useCurrentPlan` ganha `refresh()` silencioso e `refreshFailed` já na Task 2 (a interface que o plano só desenhava para lá), e a trilha ganha o aviso `trail-stale` já na Task 3 | A Task 5 (atualizar na volta à aba) depende dessa interface existir; adiantá-la evita reabrir `useCurrentPlan` na Task 5. Custo: um pouco de código a mais na aterrissagem das Tasks 2+3, sem consumidor ainda (fechado só na Task 5). |
+| R5 | Manter a prop **opcional** `onOpenHeadquarters` da trilha (vira o botão "Ir ao Quartel-General"), e ligá-la na Task 4 (`Campaigns` recebe o retorno de chamada do `App`, que usa `navigate('headquarters')` com foco no `h1` do QG) | Melhor experiência que um texto solto sem ação, sem criar um segundo registro de conclusão (K8 continua preservado — o botão só navega, não conclui). Sem a prop, o componente continua funcionando (mostra o texto). Custo: `Campaigns` deixa de ser estritamente sem props (K11 relaxado, ver a nota na tabela acima). |
+| R6 | Os `data-testid` da trilha ficam como o worktree de trabalho já tinha implementado (`trail-availability`, não `trail-day-availability` do plano), mais `trail-stale` (novo); o E2E da Task 6 usa os nomes reais | O plano é só o contrato **entre** tarefas — quando a tarefa que produz o nome já está feita e provada, o nome dela vence sobre o nome hipotético do plano. Custo: nenhum, é só nomenclatura. |
+| R7 | A prova de `civilWeekday` por mutação usa um caso que o teste mata de fato: `new Date(civil)` com `getDay` local sob um fuso a **oeste** de UTC (mesmo padrão do teste "data civil a oeste de utc" de `5d250b3`) — não só remover `timeZone: 'UTC'` do formatador. Nome final: `civilWeekday` (o nome do plano) | A mutação que a spec teme de verdade (`new Date(civil)` cru) é a que precisa estar provada morta. **Corrigido na onda final (achado m1):** a justificativa original dizia que só tirar `timeZone: 'UTC'` mantendo `civilNoon` "não muda o resultado em nenhum fuso IANA real"; é falso — o deslocamento máximo é +14h, e o meio-dia UTC em `Pacific/Kiritimati` já é o dia seguinte. Tokyo (+9h) e São Paulo (-3h) deixavam esse mutante vivo; o teste com `TZ=Pacific/Kiritimati` o mata (ver "Alterações do Incremento C", onda final de correções). Custo: nenhum — é a forma certa da prova, não uma mudança de escopo. |
+| R8 | Ícones SVG inline com `aria-hidden` aceitos no lugar de glifos Unicode que o plano pedia | O objetivo da restrição original (nenhuma dependência nova; ícone sempre acompanhado de texto) é cumprido do mesmo jeito — SVG inline não é biblioteca. Custo: nenhum funcional. |
+| R9 | O texto "Sem plano nesta semana." fica como o worktree de trabalho já tinha, **não** "Nenhum plano nesta semana" que o plano pedia (achado Important da revisão das Tasks 2+3) | A spec do ciclo diário (linha 419) diz "sem plano nesta semana", e o próprio plano pede o mesmo texto de garantia do Quartel-General, cujo `CycleSection` diz "Sem plano nesta semana: …" — a spec é a autoridade sobre o plano quando os dois divergem. Custo se errado: trocar uma palavra e um teste. |
+| R10 | Na correção de corrida do `refresh` (Task 5, fix round 1, commit `e195128`): "só o pedido mais recente decide" vale **também** para falha — se o pedido mais antigo teve sucesso e o mais recente falha depois, o resultado é `refreshFailed: true` (o aviso reflete a última tentativa; o dado mostrado continua o do sucesso mais antigo) | Regra única e simétrica para sucesso e falha, sem caso especial — a alternativa ("sucesso é sempre a última palavra sobre o aviso") exigiria tratar as duas respostas de jeitos diferentes na mesma guarda. Custo se errado: um aviso de desatualizado pessimista num caso raro (sucesso seguido de falha tardia); a correção seria trocar por uma guarda assimétrica e um teste novo para ela. |
+| R11 | A correção pedida pela revisão da Task 7 (os *minors* adiados do ledger não tinham virado pendências neste documento) entra no despacho único de correção da revisão final, e não num despacho próprio: só os *minors* que a triagem final mantivesse abertos viram pendências | Evita documentar como pendente o que a onda final ia consertar (ex.: o aviso `act()` de `Campaigns.test.tsx`, a grafia, o `caixasSeSobrepoem`). Custo: a Task 7 ficou aberta até a onda final. |
+| R12 | Achado Important I1 da revisão final: o `refresh()` que falha com a tela ainda em "carregando" leva ao estado de **erro** (com "Tentar novamente"), nos dois hooks (`useCycle`, `useCurrentPlan`), como o revisor propôs; os testes passam a deixar a carga inicial **assentar** depois da falha | O `refresh` incrementa a sequência e a resposta da carga inicial passa a ser descartada; o `catch` só marcava `refreshFailed` em `loaded` e devolvia `loading` intacto — o QG e a trilha ficavam em "Consultando…" para sempre, sem saída. Estado sem saída é defeito de usuário. Os dois testes antigos passavam vacuamente (a carga inicial nunca assentava). Custo: nenhum. |
+| R13 | Grafia única **"Quartel-General"** (a da spec do ciclo diário) no rótulo da navegação, no `h1` do QG, na trilha e nos testes (Vitest e E2E) | A interface tinha as duas grafias ("Quartel-general" no rótulo e no `h1`, "Quartel-General" na trilha). Nos documentos, só onde citam o texto da tela. O README §7 (linha "**Quartel-general:** …") não cita texto de tela e não foi mexido. Custo: *churn* de texto nos testes. |
+| R14 | `caixasSeSobrepoem` (E2E do celular) passa a **afirmar** que as duas caixas de `boundingBox()` não são nulas | Antes, uma caixa nula (elemento oculto, sem caixa) contava como "sem sobreposição", e um botão escondido passaria. Uma linha, do revisor final. Custo: nenhum. |
+| R15 | O *minor* m5 (`MAX_DIFFICULTY` × o "de 5" literal) e os *minors* "pode ficar" da triagem final viram pendências neste documento (R11); a pendência da Task 3 sobre `TrailContent` exportada fica **fechada** (resolvida na Task 5) | Registro honesto do que ficou, separado entre dívida pequena aberta, aceito sem ação e verificado. Custo: nenhum. |
+| R16 | O `README.md` §7 (linha ~150) continua escrevendo "Quartel-general" | O README é a especificação do dono e não foi alterado sem ele (mesma reserva já feita na R13). Custo: grafia diferente entre o README e a tela. **Superada pela decisão do dono em 2026-09-25:** "Quartel-General" é a grafia correta; README corrigido (pendência 72). |
+| R17 | A afirmação falsa sobre fusos ("único fuso"/"a leste de +12h") apareceu na re-revisão da onda final e foi corrigida numa correção só de texto | O AGENTS.md §3 trata afirmação falsa em documentação como defeito grave. Custo: um commit a mais. |
+
+**Achado fora do escopo de qualquer Task, registrado pela Task 6 e resolvido
+pela Task 5 (fix round 1):** durante a Task 6, `git status --short` mostrou
+`frontend/src/features/missions/useCycle.ts` modificado e não comitado,
+cerca de dois minutos e meio depois do commit da Task 6 — uma edição
+concorrente de outra sessão/processo na mesma árvore, contrariando a
+instrução dada à Task 6 ("um revisor está lendo a Task 5, só leitura") e o
+`AGENTS.md` §2 ("revisar o trabalho de outro agente não autoriza editar a
+árvore dele"). A Task 6 não tocou o arquivo e registrou o achado para o
+controlador; a mudança era, de fato, a correção da Task 5 (fix round 1,
+`e195128`, ver R10 acima) — nenhum trabalho foi perdido, mas o processo que
+a escreveu **não deveria** ter tocado a árvore compartilhada enquanto a
+Task 6 trabalhava nela.
+
+### Dependências e infraestrutura que entraram no C
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço. **Nenhuma dependência nova, nem endpoint novo, nem infraestrutura
+nova** — conferido: `git diff 9c2bd1e..HEAD -- pyproject.toml
+frontend/package.json frontend/package-lock.json uv.lock` vazio (medido
+nesta sessão). O C é puramente frontend, sobre um endpoint que o B já
+publicou (`GET /api/plans/current`, decisão P2); nenhuma rota nova, nenhum
+serviço de infraestrutura novo, e as duas dependências de teste
+(`@playwright/test`, `@axe-core/playwright`) já estavam no projeto desde o
+1a.
 
 ### Incrementos anteriores
 
@@ -1334,6 +1426,183 @@ backend/E2E (`5d250b3`) e frontend (`71a2001`, HEAD) — descritos abaixo.
     check` rodado depois, com o banco e as portas do E2E — ambos EXIT 0,
     números em "Resultados". `fix-final-front-report.md`.
 
+## Alterações do Incremento C
+
+Plano em `docs/superpowers/plans/2026-09-25-incremento-c.md`. Nove commits em
+`feat/incremento-c` (`git log --oneline 9c2bd1e..HEAD`, base já descrita em
+"Revisão-base"): a base do incremento e o plano na Task 0 (`bb6497c`), a
+navegação lateral na Task 1 (`c51149c`), o contrato/data civil e o hook do
+plano na Task 2 (`f26b47d`, `0d9b5f3`), a trilha na Task 3 (`a8e899e`), a
+integração na Task 4 (`c6153af`), atualizar na volta à aba na Task 5
+(`69b5dc4`), o E2E na Task 6 (`9c8cd65`) e a correção de corrida da Task 5
+por cima do commit da Task 6 (`e195128`, fix round 1 — ver Ruling R10).
+Depois deles, a documentação da Task 7 (`c15318a`) e a onda final de
+correções da revisão final da branch, em dois commits: o conserto do I1
+(`f1c2276`) e o das demais correções mais esta documentação (ver "Onda
+final de correções", ao fim desta seção).
+
+- **Task 0** — revisão-base e o plano (commit `bb6497c`): `docs/HANDOFF.md`
+  ganhou o parágrafo "Incremento C — a campanha" (ver "Revisão-base");
+  `docs/superpowers/plans/2026-09-25-incremento-c.md` entrou no `git add`
+  (já estava copiado, não rastreado, na árvore). `task-1-report.md` (Tasks
+  0 e 1 juntas).
+- **Task 1** — a navegação lateral (commit `c51149c`, transportada do
+  worktree `feat/incremento-c-nav`, Ruling R2): criados
+  `frontend/src/app/areas.ts` (`Area`, `AREAS`), `frontend/src/app/SideNav.tsx`
+  e `SideNav.test.tsx` (`<nav aria-label="Áreas">`, `aria-current`, marcador
+  `▸`, decisão K4), `frontend/src/pages/headings.ts`
+  (`HEADQUARTERS_HEADING_ID`, `CAMPAIGNS_HEADING_ID`),
+  `frontend/src/pages/Campaigns.tsx` e `Campaigns.test.tsx` (o `main` com o
+  `h1` "Campanhas — planos de estudo" e, por ora, o parágrafo reservado
+  `campaigns-placeholder`, decisão K11). Modificados: `frontend/src/App.tsx`
+  e `App.test.tsx` (o roteador de duas áreas por estado local, decisão K1;
+  foco no título depois de navegar, decisão K5; o rascunho da Tifa sobrevive
+  à ida e volta por Campanhas, decisão K2),
+  `frontend/src/pages/Headquarters.tsx` e `Headquarters.test.tsx` (`hidden`
+  na raiz **e** no `<main>` — um só `main` visível, Review Focus 2). Sete
+  mutações do brief aplicadas e restauradas — `task-1-report.md` (§1 e §2
+  do relatório, que também cobre a Task 0).
+- **Task 2** — o contrato da trilha, a data civil compartilhada e o hook do
+  plano (commits `f26b47d`, `0d9b5f3`, transportados do worktree
+  `feat/incremento-c-trilha`, Ruling R2): o movimento puro primeiro
+  (`f26b47d`) — `git mv` de `features/missions/civilDate.ts`/`.test.ts` para
+  `frontend/src/shared/lib/`; criado `frontend/src/shared/types/mission.ts`
+  (`Mission`, `MissionState`, `MissionType`, `Availability`,
+  `MISSION_STATE_LABELS`, `DAYS_PER_MILESTONE`, sem `MAX_DIFFICULTY` ainda);
+  `frontend/src/features/missions/types.ts` perdeu os símbolos movidos, sem
+  reexportar (Ruling R3); imports ajustados em 10 arquivos de
+  `features/missions/*`. Nenhuma asserção de teste mudou nesse commit.
+  Depois, o comportamento (`0d9b5f3`): `civilWeekday` em
+  `shared/lib/civilDate.ts` (o dia da semana a partir da data civil, sem
+  fuso — a prova de mutação da Ruling R7);
+  `frontend/src/features/campaigns/types.ts` (`Plan`, `PlanDay`,
+  `PlanSpecial`, `CurrentPlan`); `useCurrentPlan.ts` e `.test.tsx` — busca
+  `GET /api/plans/current`, com `reload`/`refresh`/`refreshFailed` e o
+  estado `no-plan` (Ruling R4, adiantada da Task 5). `task-3-report.md`
+  (§1–§4, que cobre as Tasks 2 e 3 juntas).
+- **Task 3** — a trilha (commit `a8e899e`, mesmo transporte): criados
+  `frontend/src/features/campaigns/availability.ts` e `.test.ts`
+  (`AVAILABILITY_DISPLAY: Record<Availability, {label, icon}>`, exaustivo,
+  sem o campo `tone` que o worktree original tinha — separado num
+  `AVAILABILITY_TONE` local, não exportado) e `CampaignTrail.tsx` e
+  `.test.tsx` — os 7 dias (`<ol>`, `trail-day`), o baú fechado por
+  `mission === null` (nunca desenha conteúdo, C11), o marcador "Hoje" no
+  último dia não `bloqueada` (decisão K9, testado também com o domingo), a
+  especial com "N de 7" (`trail-special-progress`) e os estados
+  `expirada`/`perdida` com conteúdo e texto de estado (fecha a pendência
+  T3-EXPIRADA/PERDIDA do B **no frontend**; ver pendência 58); o aviso
+  `trail-stale` quando `refreshFailed` (testado via `TrailContent` exportada
+  temporariamente — fechado de verdade na Task 5); o texto "Sem plano nesta
+  semana." com a garantia "um dia sem plano não quebra a sequência" (Ruling
+  R9); `MAX_DIFFICULTY` entrou em `shared/types/mission.ts` neste commit (é
+  quem o usa). Ícones SVG inline com `aria-hidden` (Ruling R8). Sete
+  mutações do brief mais as de `civilWeekday`/`useCurrentPlan`, todas
+  aplicadas e restauradas. `task-3-report.md` (§5–§10).
+- **Task 4** — Campanhas compõe a trilha (commit `c6153af`): "juntar as
+  branches" (Step 1 do brief) já tinha sido feito antes da Task pelo
+  controlador; a Task cobriu os Steps 2–5.
+  `frontend/src/pages/Campaigns.tsx` trocou `campaigns-placeholder` por
+  `<CampaignTrail onOpenHeadquarters={onOpenHeadquarters} />`, com a prop
+  opcional nova (Ruling R5, relaxa K11); `Campaigns.test.tsx` — o teste do
+  placeholder virou "compõe a trilha da semana" (`GET /api/plans/current`
+  → `{"plan": null}`, `trail-no-plan` na tela). `frontend/src/App.tsx`
+  passou a chamar `<Campaigns onOpenHeadquarters={() => navigate('headquarters')} />`
+  (a mesma função que já focava o `h1` do QG); `App.test.tsx` ganhou a rota
+  `GET /api/plans/current` no `stubPage` e dois testes: "cada abertura de
+  Campanhas busca a trilha de novo" (K2: ida, volta, ida → 2 pedidos) e o
+  botão "Ir ao Quartel-General" da trilha (Ruling R5) voltando ao QG com
+  foco no título. Nenhum arquivo de `features/campaigns/*` tocado (só
+  leitura pelo revisor das Tasks 2+3 no mesmo worktree). Duas mutações
+  aplicadas e restauradas (Campanhas oculta em vez de desmontada; `App` sem
+  passar `onOpenHeadquarters`). `task-4-report.md`.
+- **Task 5** — atualizar na volta à aba (commit `69b5dc4`, decisão K7):
+  criado `frontend/src/shared/hooks/useRefreshOnReturn.ts` e
+  `.test.tsx` — ouve `visibilitychange` (só quando visível) e `focus`,
+  chama sempre o `refresh` mais recente (guardado numa `ref`, não como
+  dependência do efeito), remove os ouvintes na desmontagem. Ligado a
+  `frontend/src/features/missions/useCycle.ts` e
+  `frontend/src/features/campaigns/useCurrentPlan.ts` (+ testes) — fecha a
+  pendência 57 do B, para os dois hooks de uma vez (a trilha tinha o mesmo
+  problema em escala maior). De brinde, fechou a pendência que a Task 3
+  tinha deixado: `CampaignTrail.test.tsx` passou a provar `trail-stale`
+  pelo caminho real (a aba volta a ficar visível, o `GET` falha), e o
+  export `TrailContent` (que só existia para o teste antigo) voltou a ser
+  interno. Quatro mutações do brief aplicadas e restauradas.
+  `task-5-report.md` (parte 1).
+
+  **Fix round 1** (commit `e195128`, por cima do commit da Task 6 — Ruling
+  R10): achado Important da revisão — `useCycle.ts` e `useCurrentPlan.ts`
+  não tinham nenhum sequenciamento no `refresh()`; duas respostas em voo
+  (uma de `visibilitychange`, outra de `focus`) podiam assentar fora de
+  ordem, e a mais velha, chegando por último, sobrescrevia o dado (e o
+  `refreshFailed`) da mais nova. Corrigido com um contador de sequência por
+  hook (`useRef(0)`, compartilhado entre a carga do efeito e o `refresh`):
+  cada pedido captura um `id` antes do `await`, e todo `.then`/`.catch`
+  descarta a resposta se `requestId.current !== id`. Doze testes novos (seis
+  por hook), todos com promessas controladas — nunca timer real. Regra
+  única para sucesso e falha (Ruling R10): só o pedido mais recente por
+  início decide, mesmo se ele falhar depois de outro ter tido sucesso.
+  `task-5-report.md` (§"Rodada de correção 1/5").
+- **Task 6** — E2E: Campanhas, axe nas duas áreas e o celular (commit
+  `9c8cd65`): três cenários novos em `frontend/tests/e2e/cycle.spec.ts`, em
+  série depois dos dois do B (o plano é único por semana, semeado uma vez
+  no `beforeAll`) — abrir Campanhas pela navegação com a trilha do plano
+  semeado (7 dias, hoje concluído, dias futuros como baú, especial
+  bloqueada com "1 de 7"), axe sem violações nas duas áreas (Campanhas
+  carregada e o Quartel-General depois da volta); abrir Campanhas pelo
+  teclado (Tab, Tab, Enter, foco no título); e um `describe('celular')` a
+  390×844 (navegação visível, sem rolagem horizontal nas duas áreas, sem
+  sobreposição entre "Falar com a Tifa" e a navegação — sem axe dentro
+  deste `describe`, ver pendência 21/61). Testids reais da trilha usados
+  (Ruling R6). Três mutações do brief (`SideNav.tsx`) aplicadas e
+  restauradas. Achado fora do escopo, registrado nesta Task: edição
+  concorrente na árvore (ver "Incremento C — decisões tomadas durante a
+  execução", acima — era o fix round 1 da Task 5). `task-6-report.md`.
+- **Task 7** — documentação (commit `c15318a`): este documento
+  (revisão-base, decisões, alterações, resultados, pendências 59–61),
+  `docs/ARCHITECTURE.md` (a árvore e as seções de `app/`, `pages/`,
+  `features/campaigns/`, `shared/lib/`, `shared/hooks/`, `shared/types/`) e
+  `docs/QUALITY.md`. `task-7-report.md`.
+- **Onda final de correções** (revisão final da branch e revisão da Task 7;
+  Rulings R11–R15). Relatório: `final-fix-report.md` no diretório da sessão.
+  - **I1 (Important), commit `f1c2276`** — `useCycle.ts` e
+    `useCurrentPlan.ts`: no `catch` do `refresh`, um estado `loading` vira
+    `{ status: 'error', message }` (Ruling R12); antes ficava `loading` para
+    sempre, sem "Tentar novamente", quando um `focus`/`visibilitychange`
+    durante a carga inicial disparava um `GET` que falhava. Os dois testes
+    vácuos (a carga inicial nunca assentava) foram reescritos para a carga
+    inicial **assentar** depois da falha, com sucesso e com falha
+    (`it.each`, nos dois hooks), mais um teste do terceiro ramo (erro
+    continua erro) em cada hook e um teste de componente no `CycleSection`
+    (`focus`) e na trilha (`visibilitychange`) com o "Tentar novamente".
+    RED medido (os quatro testes de hook e os dois de componente reprovando
+    com `{ status: 'loading' }`/sem `cycle-error`/`trail-error`), GREEN, e
+    a mutação que reverte o conserto reprova três testes por hook.
+  - **m1** — `shared/lib/civilDate.test.ts`: casos com
+    `TZ=Pacific/Kiritimati` (UTC+14) para `civilWeekday` e para
+    `formatCivilDate`; tirar o `timeZone: 'UTC'` de qualquer um dos dois
+    formatadores agora reprova (`'terça-feira'` no lugar de
+    `'segunda-feira'`), e antes passava a suíte inteira. O comentário do
+    teste a oeste deixou de dizer que ele prova o `timeZone`, e o comentário
+    de `civilDate.ts` (o meio-dia não dá margem a partir de +12h) foi
+    corrigido, assim como a justificativa da Ruling R7 e o parágrafo de
+    `shared/lib/` do `docs/ARCHITECTURE.md`, que diziam o contrário.
+  - **m2** — os avisos `act()` de arquivos do C: `Campaigns.test.tsx`
+    ("anuncia Campanhas…") e `App.test.tsx` (os dois testes que clicam em
+    Campanhas) agora aguardam `trail-no-plan`. Na suíte inteira, de 4 avisos
+    para 1 — o que sobra é o do B, em `MissionList.test.tsx`.
+  - **m3** — `tests/e2e/cycle.spec.ts`, cenário do celular: espera os 7
+    `trail-day` antes de medir a rolagem horizontal de Campanhas.
+  - **m4 / R13** — "Quartel-General" em todo o frontend (rótulo da
+    navegação em `app/areas.ts`, `h1` do QG, comentários e testes, inclusive
+    o E2E); os testes do `h1` trocaram `/quartel-general/i` pela grafia
+    exata, para travá-la. No `docs/ARCHITECTURE.md`, os dois lugares que
+    citam o rótulo.
+  - **R14** — `caixasSeSobrepoem` afirma que as duas caixas não são nulas.
+  - **Documentação** — as Rulings R11–R15 (acima), as pendências 62–71, o
+    `civilDate.ts` em `shared/lib/` indicado no parágrafo de `missions` do
+    `docs/ARCHITECTURE.md`, e a linha desta onda em "Resultados".
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -1426,6 +1695,11 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check-e2e` duas vezes seguidas, sobre a árvore final (prova do C17: o segundo `check-e2e` também aprova, de esquema limpo) | Aprovado, EXIT 0 nas duas (~19,4 s e ~18,6 s de relógio, incluindo `reset-test-db` + build + Playwright). **13 passed** nas duas (14,6 s e 13,6 s de Playwright) — os 11 cenários antigos mais os 2 do `cycle.spec.ts`; o segundo `check-e2e`, rodado imediatamente depois do primeiro sem `check-api` no meio, não reprovou com `409 plano_existente`, confirmando que `reset-test-db` recria o esquema do zero a cada execução. |
 | `make check` do hook `pre-commit` no commit `71a2001` (conserto final do frontend, passo 1 do fechamento) — número visto rodando `pre-commit run gate --verbose` logo depois, sobre a mesma árvore (o hook, sem `--verbose`, só imprime "Passed") | Aprovado, EXIT 0, 100,17 s de relógio. Frontend: **305 testes em 25 arquivos**, cobertura de 100% nos quatro eixos (538/538 instruções, 355/355 ramificações, 165/165 funções, 520/520 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: **465 testes**, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações). E2E: **13 cenários** aprovados em Chromium (15,9 s de Playwright). Gitleaks sem achados. |
 | `make check` rodado por mim direto (sem o hook), logo depois do anterior, sobre a mesma árvore (ainda commit `71a2001`) | Aprovado, EXIT 0, 94,2 s de relógio. Frontend: 305 testes em 25 arquivos, cobertura de 100% nos quatro eixos (538/538 instruções, 355/355 ramificações, 165/165 funções, 520/520 linhas) — idêntico ao anterior. `uv lock --check` aprovado. Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — idêntico. E2E: 13 cenários aprovados em Chromium (13,6 s de Playwright). Gitleaks sem achados. |
+| `make check`, duas vezes seguidas, sobre a árvore final do Incremento C (Tasks 0–6 integradas mais o fix round 1 da Task 5, HEAD `e195128`, antes deste commit de documentação) | Aprovado, EXIT 0 nas duas, ~1m37s e ~1m33s de relógio. Frontend: **376 testes em 31 arquivos**, cobertura de 100% nos quatro eixos (641/641 instruções, 412/412 ramificações, 204/204 funções, 620/620 linhas) — idêntico nas duas rodadas. `uv lock --check` aprovado. Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — inalterado pelo C, que não toca `src/focusquest/`. E2E: **16 cenários** aprovados em Chromium (17,1 s e 14,5 s de Playwright) — os 13 do B mais os 3 novos da Task 6 do C. Gitleaks sem achados nas duas. |
+| `make check-e2e`, duas vezes seguidas, sobre a mesma árvore (prova de que a trilha, semeada uma vez por semana, não reprova com `409 plano_existente` na segunda rodada) | Aprovado, EXIT 0 nas duas (~21,8 s e ~19,2 s de relógio, incluindo `reset-test-db` + build + Playwright). **16 passed** nas duas (17,0 s e 14,6 s de Playwright) — idêntico à contagem das duas rodadas de `make check` acima. |
+| `make check`, rodado por mim direto, sobre a árvore da onda final de correções do C (HEAD `f1c2276` com as correções m1–m4, R14 e esta documentação por cima, antes do commit) | Aprovado, EXIT 0, 99,5 s de relógio. Frontend: **384 testes em 31 arquivos** (os 376 da Task 7 mais os da onda final), cobertura de 100% nos quatro eixos (641/641 instruções, 416/416 ramificações, 204/204 funções, 622/622 linhas). ESLint e Prettier sem achados. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 83 arquivos já formatados. mypy sem problemas em 79 arquivos. Backend: 465 testes, 1 aviso, cobertura total de 100% (1076 instruções, 180 ramificações) — inalterado. E2E: **16 cenários** aprovados em Chromium (15,9 s de Playwright). Gitleaks sem achados. |
+| `make check-e2e` sozinho, logo depois, sobre a mesma árvore (depois das mudanças no E2E: m3, R13, R14) | Aprovado, EXIT 0, 19,8 s de relógio (`reset-test-db` + build + Playwright). **16 passed** (15,2 s de Playwright). |
+| `npx vitest run --reporter=verbose 2>&1 \| grep -c "not wrapped in act"` no frontend, antes e depois da onda final | **4 antes** (HEAD `c15318a`): 2 de `App.test.tsx`, 1 de `Campaigns.test.tsx` e 1 de `MissionList.test.tsx`. **1 depois**: só o de `MissionList.test.tsx` ("T7: se operationIdFor lancar antes do POST…"), que já existia na base do B. Nenhum aviso vem de arquivo do C. |
 
 ## Ambiente verificado
 
@@ -1686,10 +1960,25 @@ ninguém mexer.
     focado perde o foco assim que ele desabilita. Nem o E2E nem o axe
     auditam isso. **Desde a Task 7 do 1b-2**, o axe audita também a tutoria
     nos estados escrevendo (resposta presa no meio pelo falso), proposta,
-    indisponível e a folha aberta do celular. **Continuam fora**, cobertos
-    só no Vitest: o carregando do painel (esqueleto), o "Enviando…" antes do
-    `user_message`, os estados do cartão depois da decisão (executada,
-    recusada, falhou) e o aviso de falha do envio.
+    indisponível e a folha aberta do celular. **Desde a Task 6 do
+    Incremento C**, o axe audita também Campanhas — a trilha da semana
+    carregada, com o plano semeado (7 dias, hoje concluído, dias futuros
+    como baú, especial bloqueada) — e o Quartel-General de novo, **depois
+    de voltar** a ele pela navegação (não só o primeiro carregamento), os
+    dois no viewport padrão (desktop). **O celular de Campanhas (390×844)
+    não é auditado pelo axe**: o cenário mede só navegação visível, ausência
+    de rolagem horizontal e ausência de sobreposição de botões (README §7)
+    — ao contrário do `describe('(e) celular')` da tutoria (1b-2), que já
+    chama o axe dentro do viewport móvel; ver pendência 61. **Continuam
+    fora**, cobertos só no Vitest: o carregando do painel (esqueleto), o
+    "Enviando…" antes do `user_message`, os estados do cartão depois da
+    decisão (executada, recusada, falhou) e o aviso de falha do envio
+    (herdados do 1b-2); e, novos do C, o carregando (`trail-loading`), o
+    erro (`trail-error`) e o "sem plano" (`trail-no-plan`) da trilha, o
+    aviso `trail-stale` de atualização falha, e o botão "Ir ao
+    Quartel-General" da trilha (`trail-go-headquarters`) — nenhum é
+    alcançado pelo cenário semeado do E2E, que sempre tem um plano
+    carregado com sucesso.
 22. **Um `package-lock.json` defasado passa no `make check` local e reprova no
     CI** — assimetria declarada em `docs/QUALITY.md` §4.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
@@ -2106,16 +2395,25 @@ que não tinham chegado aqui)
     um tipo de missão cuja regra dependa do instante de outro jeito no
     futuro. Não medido; registrado porque o ledger pediu o registro
     explícito, não porque haja um caso reproduzido de resposta errada.
-57. **A seção do ciclo não se atualiza sozinha na virada do dia com a aba
+57. ~~**A seção do ciclo não se atualiza sozinha na virada do dia com a aba
     aberta** (achado m2 da revisão final da branch, diferido de propósito).
     `useCycle` só refaz o `GET /api/cycle` por `refresh()` explícito
     (chamado depois de concluir uma missão); não há refetch em
     `visibilitychange` nem em `focus`. Consequência: uma aba deixada aberta
     de um lado para o outro da meia-noite de São Paulo continua mostrando o
     dia anterior — missão de hoje, sequência e progresso — até um `refresh`
-    manual (recarregar a página ou concluir algo). Fica para o **Incremento
-    C**, junto com a trilha da semana, que tem o mesmo problema em escala
-    maior (sete dias, não um).
+    manual (recarregar a página ou concluir algo). Fica para o Incremento
+    C, junto com a trilha da semana, que tem o mesmo problema em escala
+    maior (sete dias, não um).~~ **Resolvida no Incremento C** (Task 5,
+    decisão K7): `shared/hooks/useRefreshOnReturn.ts` chama `refresh()` em
+    silêncio no `visibilitychange` (só quando `document.visibilityState ===
+    'visible'`) e no `focus` da janela, ligado a `useCycle` **e** a
+    `useCurrentPlan` (a trilha tem o mesmo problema, agora fechado junto).
+    **Resíduo que a resolução não cobre, registrado como pendência 60
+    abaixo:** trocar de área **dentro** do app (sem sair da aba) depois da
+    meia-noite não dispara nenhum dos dois eventos — o Quartel-General
+    oculto (K2) continua mostrando o dia anterior até a aba sair e voltar,
+    ou até um recarregamento.
 58. **Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
     e para a diária PERDIDA na trilha** (triagem da revisão final da branch;
     já estava listado como "minor" diferido da Task 3, promovido a pendência
@@ -2124,10 +2422,156 @@ que não tinham chegado aqui)
     **expirada** (janela dos dois dias fechada) nem o de uma diária aparecer
     **perdida** na trilha da semana devolvida por `ler_plano_atual`/
     `ler_ciclo`. Nenhum dos dois estados é inalcançável — `Availability` já
-    os modela —, só não tem teste que force a trilha a exibi-los. Fica para
-    o **Incremento C**, que consome a trilha (`GET /api/plans/current`) para
-    a tela de Campanhas e precisa dos dois estados cobertos antes de
-    renderizá-los.
+    os modela —, só não tem teste que force a trilha a exibi-los.
+    **Parcialmente fechada no Incremento C, só do lado do frontend** (Task
+    3): `CampaignTrail.test.tsx` prova as duas exibições — "a especial
+    expirada mostra a missão e 'Expirada'" e um dia revelado `perdida` com
+    conteúdo — a partir de um `Plan` construído à mão no teste, não de uma
+    resposta real de `ler_missao`/`ler_plano_atual`. **O que faltava
+    continua faltando:** o teste de **serviço**, contra o PostgreSQL real,
+    que force `ler_missao`/`ler_plano_atual` a produzir os dois estados —
+    isso é backend, e o Incremento C, por desenho, não muda
+    `src/focusquest/` (Autorrevisão do plano do C, "Pendências do B
+    absorvidas"). Continua aberta.
+
+**Criadas pelo Incremento C**
+
+59. **O painel da Tifa não existe em Campanhas** (decisão K3, plano do C). A
+    trilha da semana **só mostra**: nenhuma conversa, nenhuma proposta. Tirar
+    o painel de `Headquarters.tsx` e colocá-lo em algum lugar comum às duas
+    áreas exigiria um canal do shell da aplicação até o quadro de avulsas
+    (`onMissionCreated`, `boardHref`) com o quadro às vezes desmontado —
+    mudança na feature `tutoring` sem pedido de produto (K3 registra que é
+    dívida deliberada, não descuido). Fica para o incremento que ligar a
+    Tifa ao plano semanal (`propose_plan`), o mesmo que fecha a pendência 55
+    (a Tifa não vê o ciclo no contexto da conversa) — as duas pendências
+    convergem para a mesma peça de trabalho futuro.
+60. **A troca de área *dentro* do app depois da meia-noite não atualiza o
+    Quartel-General oculto** (decisão K7, custo declarado do plano do C).
+    `useRefreshOnReturn` (pendência 57, acima) fecha o caso de a **aba**
+    voltar a ficar visível ou receber foco — mas trocar de Quartel-General
+    para Campanhas e voltar, sem a aba nunca perder o foco do sistema
+    operacional, não dispara `visibilitychange` nem `focus`: nenhum dos
+    dois eventos existe para "trocar de área dentro da mesma aba". Se a
+    meia-noite de São Paulo cair enquanto alguém navega só entre as duas
+    áreas sem trocar de aba nem de janela, o Quartel-General oculto continua
+    mostrando o dia anterior (missão de hoje, sequência, progresso) até a
+    aba sair de foco e voltar, ou até um recarregamento. Consequência
+    aceita pelo plano (K7); resolver pediria um terceiro gatilho — por
+    exemplo, `useRefreshOnReturn` reagir também à própria navegação de
+    `App.tsx` — não desenhado nem medido aqui.
+61. **A revisão visual de desktop e celular do README §7 não foi feita num
+    navegador de verdade, por uma pessoa, nesta sessão** — nem para a
+    navegação lateral (Task 1) nem para a trilha da semana (Tasks 3/4). O
+    README §7 pede essa revisão **além** dos testes automatizados
+    ("Revise visualmente desktop e celular, além dos testes automatizados"),
+    e o pedido continua em aberto. **O que o E2E mede de fato, e cobre parte
+    do risco:** `cycle.spec.ts` (Task 6) confere, a 390×844, que a barra de
+    navegação fica visível, que não há rolagem horizontal
+    (`document.documentElement.scrollWidth <=
+    document.documentElement.clientWidth`) nas duas áreas, e que a caixa de
+    `boundingBox()` dos dois botões da navegação não se sobrepõe à do botão
+    fixo "Falar com a Tifa". **O que isso não mede:** aparência — contraste
+    de cor real (o axe confere contraste **programático**, não julga a
+    paleta do RPG), alinhamento e espaçamento visual, se o texto quebra de
+    um jeito legível, se o marcador `▸` e os ícones SVG da trilha
+    renderizam do tamanho e na posição pretendidos, e qualquer coisa que só
+    um olho humano nota num navegador de verdade (Chromium do Playwright
+    roda headless nesta máquina). Mesma lacuna, mesmo motivo, das Tasks
+    anteriores que tocaram layout (Task 1, `c-nav-report.md`: "o layout do
+    celular/desktop segue sem inspeção visual manual").
+
+**Criadas pelo Incremento C — *minors* das revisões (Rulings R11 e R15)**
+
+Os *minors* que as revisões de Task e a revisão final deixaram registrados
+no ledger da sessão, um por item. Estão separados em três grupos, sem
+inflar nenhum: dívida pequena **aberta** (vale fazer um dia), **aceita sem
+ação** (a decisão é deixar como está, com motivo) e **verificada** (não é
+pendência; fica o registro). Os que a onda final consertou (os avisos
+`act()`, a grafia, o `caixasSeSobrepoem`, a medida do E2E do celular e o
+caso de `civilWeekday`) não estão aqui: estão em "Alterações do Incremento
+C".
+
+*Abertas — dívida pequena*
+
+62. **A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
+    (`frontend/src/pages/Headquarters.tsx`, a `div` raiz: `min-h-screen
+    bg-slate-950 text-slate-100 lg:flex`). Desde a Task 1 o `App.tsx` já
+    envolve as duas áreas numa `div` com as mesmas classes; dentro dele, as
+    da raiz do QG são redundantes (inofensivas: mesma cor, mesma altura
+    mínima). Ficou da aterrissagem da Task 1 para não mexer em layout sem
+    inspeção visual (pendência 61).
+63. **`CampaignTrail.tsx` tem cerca de 370 linhas** (371, medido), com dez
+    subcomponentes num arquivo só
+    (`frontend/src/features/campaigns/CampaignTrail.tsx`). Candidato a
+    decomposição (por exemplo, o dia, o baú e a especial em arquivos
+    próprios) quando a trilha crescer; hoje está coberto a 100% e não há
+    segundo usuário de nenhum subcomponente.
+64. **Três títulos de teste E2E com acento fora de citação literal**
+    (`frontend/tests/e2e/cycle.spec.ts`, os três cenários da Task 6:
+    "Campanhas abre pela navegação…", "…Tab ate a navegação, Enter, e o
+    foco vai para o título" e "a navegação fica visível no topo, sem
+    rolagem horizontal, e não cobre…"). A convenção do arquivo é título sem
+    acento, com acento só dentro de citação literal do texto da tela.
+    Cosmético; trocar muda o nome do teste no relatório do Playwright.
+65. **Não há teste com três ou mais pedidos concorrentes** em `useCycle` e
+    `useCurrentPlan` (`frontend/src/features/missions/useCycle.test.tsx`,
+    `frontend/src/features/campaigns/useCurrentPlan.test.tsx`). Os testes
+    de corrida usam dois pedidos em voo (os dois eventos de
+    `useRefreshOnReturn`). O contador de sequência é monotônico e a guarda
+    compara com o valor corrente, então o caso de N pedidos se reduz ao de
+    dois por construção — mas isso é argumento, não teste.
+66. **`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
+    lugares** (achado m5 da revisão final):
+    `frontend/src/shared/types/mission.ts` exporta `MAX_DIFFICULTY = 5`, que
+    a trilha usa; `frontend/src/features/missions/MissionCard.tsx` ("de 5"
+    no `mission-difficulty`) e `frontend/src/features/tutoring/ProposalCard.tsx`
+    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão. Nada
+    amarra nenhum dos três ao `DIFICULDADE_MAXIMA` do backend. Não foi
+    trocado aqui porque o C não mexe nas features `missions`/`tutoring` por
+    estética; o comentário de `Mission.difficulty` foi corrigido para
+    apontar os dois arquivos certos (antes citava `MissionList.tsx`).
+
+*Aceitas, sem ação*
+
+67. **O subtítulo de Campanhas não estava na spec**
+    (`frontend/src/pages/Campaigns.tsx`: "A semana inteira, dia a dia, e a
+    missão especial."). Veio do worktree da Task 1; a revisão o registrou e
+    ele foi **aceito** como está — descreve a área sem prometer nada que a
+    tela não faça.
+68. **A *fixture* da Task 3 difere da do plano**
+    (`frontend/src/features/campaigns/CampaignTrail.test.tsx`: hoje na
+    quinta, progresso 3; o plano pedia quarta, progresso 1). **Aceita:**
+    exercita mais ramos — uma semana só cobre `fora_do_plano`, `perdida`,
+    `concluida`, `disponivel` e `bloqueada`, com um dia revelado a mais que
+    a do plano — e os casos que o plano pedia continuam provados.
+69. **`reload()` gasta dois números de sequência** (`useCycle.ts` e
+    `useCurrentPlan.ts`: um incremento no próprio `reload`, outro no
+    efeito que ele dispara). **Necessário, não cosmético:** o incremento no
+    `reload` invalida na hora um `refresh` em voo (antes de o efeito rodar),
+    e o do efeito é o `id` da nova carga. Um só dos dois deixaria uma janela
+    em que a resposta atrasada do `refresh` ainda casaria.
+70. **`refresh()` não tem guarda de desmontagem** (`useCycle.ts`,
+    `useCurrentPlan.ts`): uma resposta que chega depois de o componente
+    desmontar chama `setState` num componente que não existe mais. No
+    React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
+    pedido não tem efeito colateral. Aceito; um `AbortController` no
+    `refresh` seria a saída se um dia importar.
+
+*Verificada — registro, não pendência*
+
+71. **As mutações da navegação (Task 1).** A aterrissagem da Task 1 refez 4
+    das 7 mutações do relatório original (M1, M4, M5, M6); M2, M3 e M8
+    tinham sido feitas só no worktree antigo. A revisão final refez M2
+    (marcador `▸` em todos os itens) e M3 (`onNavigate('headquarters')`
+    fixo), e a onda final refez M8 (o `h1` de Campanhas sem `tabIndex`):
+    dois testes reprovam ("anuncia Campanhas no titulo de nivel 1…" e
+    "Campanhas abre pela navegacao: o titulo dela recebe o foco…").
+    Nenhuma mutação da Task 1 fica sem prova na branch integrada.
+
+72. ~~**Grafia do README §7 ("Quartel-general") diverge da tela e da spec
+    ("Quartel-General")**; decidir com o dono.~~ **Resolvida:** o dono
+    decidiu "Quartel-General" em 2026-09-25; README corrigido.
 
 ## Próximo incremento
 
@@ -2161,35 +2605,76 @@ B → C**. O desenho de A, B e C está em
   (pendência 26: teto de negócio para `estimated_minutes`, janela de negócio
   para `deadline`, missões diárias reveladas semanalmente e a missão especial
   com bônus de XP — parte implementada pelo B, avulsa continua aberta).
+  **Entregue e comitado por inteiro** em `feat/incremento-c`
+  (`9c2bd1e`..`e195128`, Tasks 0–6 mais o fix round 1 da Task 5, e este
+  commit de documentação por cima — ver "Alterações do Incremento C").
+  Plano em `docs/superpowers/plans/2026-09-25-incremento-c.md`; decisões
+  K1–K11 e as Rulings R1–R10 em "Decisões tomadas", acima. **Estado de
+  publicação: não publicado — aguardando, nesta ordem, o merge do PR do B
+  (ainda bloqueado, Ruling R1) e, só depois, o push e o PR do C; os dois
+  passos exigem autorização do dono** (`AGENTS.md` §2).
 
-**O que o C encontra pronto do B:**
+**O que o C encontrou pronto do B, no início:**
 
-- **`GET /api/plans/current`** (decisão P2): o C não precisa serializar o
-  plano semanal de novo — a rota já devolve a trilha completa, com o baú
+- **`GET /api/plans/current`** (decisão P2): o C não precisou serializar o
+  plano semanal de novo — a rota já devolvia a trilha completa, com o baú
   fechado para o que não foi revelado.
 - **O ciclo inteiro no backend**: `cycle_domain.py` (regras puras de dia,
   semana, sequência, marco e janela da especial), `cycle_service.py` (criar
   o plano, ler o plano/ciclo/missão) e as três rotas de `cycle_router.py`.
-  Ver `docs/ARCHITECTURE.md` §3 ("O contrato HTTP do ciclo diário").
+  Ver `docs/ARCHITECTURE.md` §3 ("O contrato HTTP do ciclo diário"). O C não
+  mudou nada em `src/focusquest/`.
 - **O cartão "Missão de hoje" no Quartel-General** (`CycleSection.tsx`,
-  Task 8), com a sequência e o progresso até o marco — o C reaproveita o
-  mesmo padrão de atualização silenciosa (`refresh`, decisão P9) para a
-  trilha da semana.
-- **`formatCivilDate`** (`frontend/src/features/missions/civilDate.ts`,
-  Task 7) — a única forma correta de formatar uma data civil `"YYYY-MM-DD"`
-  sem conversão de fuso (o Risco 3 do plano); o C precisa dela para os sete
-  dias da trilha.
+  Task 8 do B), com a sequência e o progresso até o marco — o C reaproveitou
+  o mesmo padrão de atualização silenciosa (`refresh`, decisão P9) para a
+  trilha da semana, e foi além: `useRefreshOnReturn` (Task 5 do C, decisão
+  K7) liga esse `refresh` a eventos de verdade (`visibilitychange`, `focus`)
+  nos dois hooks.
+- **`formatCivilDate`**, em `frontend/src/features/missions/civilDate.ts`
+  no fim do B (Task 7 do B) — a única forma correta de formatar uma data
+  civil `"YYYY-MM-DD"` sem conversão de fuso (o Risco 3 do plano do B). **O
+  C moveu o arquivo** para `frontend/src/shared/lib/civilDate.ts` (`git mv`,
+  Task 2 do C, decisão K10) e acrescentou `civilWeekday` — quem precisar
+  dele hoje encontra em `shared/lib/`, não mais em `features/missions/`.
 
-**O que o C (ou quem terminar as Tasks 6 e 9) precisa saber, porque morde:**
+**O que o C mudou de estrutura, que qualquer incremento futuro precisa
+saber:**
 
-- **A pendência 55** (a Tifa não vê o ciclo no contexto): continua aberta
-  no B, de propósito — ligar o ciclo à tutoria é do incremento que
-  implementar `propose_plan`.
+- **`Mission`, `MissionState`, `MissionType`, `Availability`,
+  `MISSION_STATE_LABELS` e `DAYS_PER_MILESTONE`** moraram em
+  `features/missions/types.ts` até o fim do B; desde o C moram em
+  `frontend/src/shared/types/mission.ts`, **sem reexport** de
+  `features/missions/`. Um import antigo (`from '../missions/types'` para
+  esses seis nomes) não compila mais.
+- **`App.tsx` deixou de devolver só `<Headquarters />`**: desde o C, é o
+  roteador de duas áreas (decisão K1) — quem for adicionar uma terceira área
+  (ou a rota por URL que C15 adia) mexe em `app/areas.ts` e em `App.tsx`,
+  não cria uma segunda peça de navegação.
+
+**O que o C (ou quem retomar depois dele) precisa saber, porque morde:**
+
+- **A pendência 55** (a Tifa não vê o ciclo no contexto): continua aberta,
+  de propósito — ligar o ciclo à tutoria é do incremento que implementar
+  `propose_plan`. **Cresceu no C**: a pendência 59 (o painel da Tifa não
+  existe em Campanhas, decisão K3) converge para o mesmo trabalho futuro.
 - **A pendência 54** (janela de corrida do E2E perto da meia-noite de SP):
   vale para qualquer cenário futuro que semeie e conclua no mesmo teste
-  perto da virada do dia.
+  perto da virada do dia — inclusive o `cycle.spec.ts` que o C estendeu.
 - **A pendência 56** (a rota de concluir relê com `clock()` depois do
   commit): registrada, não medida como bug reproduzido.
+- **A pendência 58** (faltam testes de **serviço**, backend, para a
+  especial EXPIRADA e a diária PERDIDA na trilha): o C fechou a parte do
+  **frontend** (Task 3, `CampaignTrail.test.tsx`), mas o teste de serviço
+  contra o PostgreSQL real continua faltando — é backend, e o C não mudou
+  `src/focusquest/`.
+- **A pendência 60** (troca de área dentro do app depois da meia-noite não
+  atualiza o Quartel-General oculto, custo declarado de K7): residual da
+  correção da pendência 57, registrado para quem decidir se vale a pena
+  fechar.
+- **A pendência 61** (a revisão visual de desktop e celular do README §7
+  não foi feita num navegador de verdade): vale tanto para a navegação
+  lateral (Task 1) quanto para a trilha (Tasks 3/4) — o E2E prova estrutura
+  e ausência de rolagem/sobreposição, não aparência.
 
 **O que o B encontra pronto do 1b:**
 

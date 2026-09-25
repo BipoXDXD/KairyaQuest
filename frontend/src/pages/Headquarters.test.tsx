@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Mission } from '../features/missions/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
+import type { Mission } from '../shared/types/mission'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { stubViewport } from '../test/viewport'
 import { Headquarters } from './Headquarters'
+import { HEADQUARTERS_HEADING_ID } from './headings'
 
 /** A pagina busca quatro recursos na montagem: ciclo, missoes, status e historico da Tifa. */
 function stubPage() {
@@ -34,7 +35,7 @@ describe('Headquarters', () => {
 
     render(<Headquarters />)
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/quartel-general/i)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
     // Espera os efeitos das features assentarem, para o teste nao terminar no
     // meio de uma atualizacao de estado.
     await screen.findByTestId('missions-empty')
@@ -72,6 +73,33 @@ describe('Headquarters', () => {
       screen.getByTestId('cycle').compareDocumentPosition(screen.getByTestId('missions')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0)
+  })
+
+  it('o titulo de nivel 1 e focavel por programa, com o id combinado com o App', async () => {
+    stubPage()
+
+    render(<Headquarters />)
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveAttribute('id', HEADQUARTERS_HEADING_ID)
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByTestId('headquarters')).toBeVisible()
+    await screen.findByTestId('missions-empty')
+    await screen.findByTestId('tutor-greeting')
+  })
+
+  it('oculta, esconde o main e o painel da Tifa, sem desmontar', async () => {
+    stubPage()
+
+    render(<Headquarters hidden />)
+
+    // O `main` leva o proprio `hidden` (so um `main` sem ele por documento);
+    // o painel da Tifa, fora do `main`, some pela raiz.
+    expect(screen.getByTestId('headquarters')).toHaveAttribute('hidden')
+    expect(screen.getByTestId('tutor-panel')).not.toBeVisible()
+    // Montado: as features buscaram os dados mesmo ocultas.
+    await screen.findByTestId('missions-empty')
+    await screen.findByTestId('tutor-greeting')
   })
 
   it('compoe o painel da Tifa ao lado do quadro', async () => {

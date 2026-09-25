@@ -327,10 +327,27 @@ mesmos criaram.
   de o servidor concluir). **Desde o 1b-2** (Task 7), também na tutoria: o
   estado "escrevendo" (resposta presa no meio pelo falso, região viva em
   "Tifa está escrevendo…"), o cartão de proposta, o indisponível (campo e
-  Enviar desabilitados) e a folha aberta no celular. **Continuam fora**,
-  cobertos só no Vitest: o carregando do painel (esqueleto), o "Enviando…"
-  antes do `user_message`, os estados do cartão depois da decisão (executada,
-  recusada, falhou) e o aviso de falha do envio.
+  Enviar desabilitados) e a folha aberta no celular. **Desde o Incremento C**
+  (Task 6), também em Campanhas, **no viewport padrão (desktop)**: a trilha
+  da semana carregada, com o plano já semeado (7 dias, hoje concluído, dias
+  futuros como baú, especial bloqueada); e o Quartel-General de novo,
+  **depois de voltar** a ele pela navegação (o `main` recém-reexibido, não
+  só o primeiro carregamento) — as duas auditorias do mesmo cenário (Review
+  Focus 2 do plano do C: um só `main` visível por vez). **O celular
+  (390×844) de Campanhas não é auditado pelo axe**: o `describe('celular')`
+  da Task 6 confere só `side-nav` visível, ausência de rolagem horizontal
+  (README §7) e ausência de sobreposição com "Falar com a Tifa" — ao
+  contrário do `describe('(e) celular')` da tutoria (1b-2), que já chama
+  `semViolacoes` dentro do viewport móvel. **Continuam fora**, cobertos só
+  no Vitest: o carregando do painel (esqueleto), o "Enviando…" antes do
+  `user_message`, os estados do cartão depois da decisão (executada,
+  recusada, falhou) e o aviso de falha do envio (herdados do 1b-2); e, novos
+  do C, o celular de Campanhas (acima), o carregando (`trail-loading`), o
+  erro (`trail-error`) e o "sem plano" (`trail-no-plan`) da trilha, o aviso
+  `trail-stale` de atualização falha, e o botão "Ir ao Quartel-General" da
+  trilha (`trail-go-headquarters`) — nenhum dos quatro últimos é alcançado
+  pelo cenário semeado do E2E, que sempre tem um plano carregado com sucesso
+  (pendência, `docs/HANDOFF.md`).
 
 **O E2E divide o banco `focusquest_test` com a suíte pytest.** É uma decisão
 deliberada, e duas exigências estruturais a tornam segura: o cenário semeia

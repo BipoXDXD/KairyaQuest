@@ -2,9 +2,10 @@ import { useCallback, useRef } from 'react'
 import { CycleSection } from '../features/missions/CycleSection'
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
+import { HEADQUARTERS_HEADING_ID } from './headings'
 
 /**
- * Quartel-general — a tela inicial.
+ * Quartel-General — a tela inicial.
  *
  * A pagina COMPOE: ela decide o layout e junta as features, e nao contem regra
  * nenhuma (`docs/ARCHITECTURE.md` §3). Quem busca as missoes, decide os estados
@@ -20,8 +21,14 @@ import { TutorPanel } from '../features/tutoring/TutorPanel'
  * que pede ao quadro para recarregar, pelo `ref` do `MissionList`. Estrutura
  * vazia esperando conteudo seria interface
  * que promete o que nao existe.
+ *
+ * `hidden`: desde o C, o `App` OCULTA esta pagina quando Campanhas esta
+ * aberta, em vez de desmonta-la -- desmontar levaria junto o painel da Tifa,
+ * com o rascunho e o stream em andamento (decisao K2 do plano do C). O
+ * atributo vai na raiz (o painel da Tifa fica fora do `main`) e no proprio
+ * `main`: o HTML proibe mais de um `main` sem `hidden` no documento.
  */
-export function Headquarters() {
+export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   const board = useRef<MissionListHandle>(null)
   // O `!`: o quadro monta junto com a pagina, antes de qualquer clique que
   // chegue aqui. Um `?.` criaria um ramo que nenhum uso real alcanca.
@@ -29,17 +36,22 @@ export function Headquarters() {
     board.current!.reload()
   }, [])
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
+    <div hidden={hidden} className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
       {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
           baixo, e sem a folga cobriria os botoes do ultimo cartao do quadro
           (README §7: a conversa nao cobre botoes). */}
       <main
         data-testid="headquarters"
+        hidden={hidden}
         className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-24 lg:pb-8"
       >
         <header className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-50">
-            Quartel-general — seu painel de estudos
+          <h1
+            id={HEADQUARTERS_HEADING_ID}
+            tabIndex={-1}
+            className="rounded text-2xl font-bold tracking-tight text-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+          >
+            Quartel-General — seu painel de estudos
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             O que está em aberto, com prazo e recompensa.

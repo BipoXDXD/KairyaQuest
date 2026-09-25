@@ -1,5 +1,5 @@
 import { formatDeadline } from '../../shared/lib/deadline'
-import { MISSION_STATE_LABELS, type Mission } from './types'
+import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 

@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import type { Mission } from '../../shared/types/mission'
 import { CycleSection } from './CycleSection'
-import type { Cycle, Mission } from './types'
+import type { Cycle } from './types'
 
 const diaria: Mission = {
   id: 31,
@@ -171,6 +172,42 @@ describe('CycleSection', () => {
     const erro = await screen.findByTestId('cycle-error')
     expect(erro).toHaveTextContent('Falha ao carregar o ciclo.')
     fireEvent.click(screen.getByTestId('cycle-retry'))
+    expect(await screen.findByTestId('mission-item')).toBeInTheDocument()
+  })
+
+  it('I1: a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+    // O cenario medido pela revisao final: o `focus` chega enquanto a carga
+    // inicial esta em voo, o `refresh` dele falha, e a carga inicial so
+    // assenta DEPOIS (e e descartada, por ser mais velha). Antes do conserto
+    // a secao ficava em "Consultando o ciclo..." para sempre, sem botao.
+    let resolverInicial: (resposta: Response) => void = () => undefined
+    routeFetch({
+      'GET /api/cycle': (_init, call) => {
+        if (call === 1)
+          return new Promise<Response>((resolve) => {
+            resolverInicial = resolve
+          })
+        if (call === 2) return new Response(null, { status: 503 })
+        return Response.json(ciclo())
+      },
+    })
+    render(<CycleSection />)
+    expect(screen.getByTestId('cycle-loading')).toBeInTheDocument()
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    const erro = await screen.findByTestId('cycle-error')
+    expect(erro).toHaveTextContent('O servidor respondeu 503.')
+
+    await act(async () => {
+      resolverInicial(Response.json(ciclo()))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(screen.getByTestId('cycle-error')).toBeInTheDocument()
+    expect(screen.queryByTestId('cycle-loading')).not.toBeInTheDocument()
+
+    fireEvent.click(within(erro).getByRole('button', { name: 'Tentar novamente' }))
     expect(await screen.findByTestId('mission-item')).toBeInTheDocument()
   })
 
