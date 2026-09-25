@@ -424,8 +424,13 @@ antes dela é 0, então `xp_awarded` e `xp_total` coincidem numericamente e a
 asserção `+${xp} XP` passa com qualquer um dos dois campos. Não é uma
 lacuna estrutural do E2E — é uma dependência da ordem dos arquivos, já
 prevista no brief da Task 9 e registrada como pendência em
-`docs/HANDOFF.md`. Quem precisa da garantia de que o anúncio usa o valor
-certo lê o teste de unidade, não o E2E.
+`docs/HANDOFF.md`. **Atualização da onda final de correções do D
+(`9b7b4ac`):** o cenário do reenvio de `headquarters.spec.ts` passou a
+conferir o `+XP` contra o XP da missão lido da API, e ali o saldo anterior
+não é 0 — a mesma mutação, aplicada de novo sobre a suíte inteira, reprovou
+("+120 XP" no lugar de "+40 XP"). A garantia principal continua sendo o
+teste de unidade, que não depende de ordem nenhuma; a pendência 87 foi
+riscada.
 
 **O E2E divide o banco de teste do worktree com a suíte pytest** (o
 `focusquest_test`, por padrão). É uma decisão deliberada, e duas exigências estruturais a tornam segura: o cenário semeia

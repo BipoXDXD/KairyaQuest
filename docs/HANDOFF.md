@@ -727,7 +727,7 @@ trabalho em andamento (WIP) da Task 1 no mesmo worktree. Ver Ruling R3.
 | R1 | Base do D = `8ab91ce` + spec (`1551ea8`) + merge da Frente 0 (`d2125d5`), não `8ab91ce` puro | Sem a Frente 0, os worktrees paralelos do D colidiriam no banco e nas portas; ela já tinha passado por revisão e re-revisão e estava sendo publicada. Custo: se o PR da Frente 0 mudasse, a `main` traria a mudança e o D mesclaria de novo (foi o que aconteceu, no merge de `a53733f`). |
 | R2 | Paralelismo por worktree: backend (Tasks 1–5) em `FocusQuest-d`; Task 6 em `FocusQuest-dpainel` e Task 7 em `FocusQuest-danuncio`, criados por `scripts/novo-worktree.sh` e avançados (fast-forward) até `feat/incremento-d` depois da Task 0; o controlador mescla na ordem do diagrama do plano | Três implementadores no pico (backend, painel, anúncio), sem disputar o mesmo gate. Custo: merges extras, cada um rodando o gate completo de novo. |
 | R3 | Nenhum modelo Haiku como implementador neste projeto (o incidente da Task 0); todo revisor de tarefa que envolve commit de documento **aprovado** confere o **conteúdo** contra a fonte (ex.: `wc -l`/`diff`), não só o texto novo da tarefa | O Haiku reescreveu um artefato aprovado sem avisar, e o primeiro revisor só olhou o que mudava, não o documento inteiro. Custo: um pouco mais de token por tarefa que toque documento aprovado. |
-| R4 | A mutação `isqrt` → `math.sqrt` em `nivel_do_saldo` (Task 1) **é** atingível com inteiros de 64 bits — diverge a partir de `xp ≈ 3.518.437.628.313.599` (nível 8.388.608 pela fórmula inteira; 8.388.609 pelo float) — mas é impraticável em qualquer saldo real do produto. A suíte da Task 1 não tem um caso de teste nessa borda, então não mata essa mutação hoje | A docstring de `domain.py` sobre o risco do ponto flutuante está **correta** e não foi suavizada. Um teste de borda com esse valor de XP mataria a mutação; a correção entra numa onda de correções posterior a este commit, não nesta Task. Custo hoje: nenhum prático — nenhum saldo do produto chega perto dessa ordem de grandeza. |
+| R4 | A mutação `isqrt` → `math.sqrt` em `nivel_do_saldo` (Task 1) **é** atingível com inteiros de 64 bits — com a divisão real (`xp / metade`), diverge em `xp = 3.518.437.628.313.599` (nível 8.388.608 pela fórmula inteira; 8.388.609 pelo float); com a troca pura, mantendo `xp // metade`, em `xp = 351.843.725.082.623.999` (83.886.080 contra 83.886.081) — mas é impraticável em qualquer saldo real do produto | A docstring de `domain.py` sobre o risco do ponto flutuante está **correta** e não foi suavizada. **Corrigida na onda final de correções (`c1b879c`):** os dois valores entraram em `test_nivel_do_saldo_nas_bordas`, e as duas formas da mutação reprovam. Custo: nenhum. |
 | R5 | (Superada pela R6.) O commit da Task 7 esperaria a Task 4: depois de a 4 entrar, mesclar `feat/incremento-d` no branch do anúncio, rodar o gate e comitar | A Task 7 estava bloqueada no `check-e2e` porque o backend real do worktree ainda não devolvia `reward` (Task 4 não tinha chegado lá) — ver "Alterações", Task 7. Custo: a Task 8 atrasaria até a Task 4. |
 | R6 | Acrescentar, contra o código literal do brief da Task 7, uma guarda no frontend (`reward` ausente ou nulo = sem anúncio; o cartão continua "Missão concluída.") | Defesa contra deploy defasado ou contrato violado (achado Critical da revisão: sem a guarda, `RewardAnnouncement` lançava `TypeError` e derrubava o quadro inteiro sem `reward`). Com a guarda, o `check-e2e` da Task 7 passa mesmo antes da Task 4 existir naquele worktree, então a Task 7 comita já (supera a R5). Custo: um ramo a mais no componente, com teste. |
 | R7 | A Task 8 roda no worktree do painel (`feat/incremento-d-painel`, com a Task 7 já mesclada nele), porque `FocusQuest-d` estava ocupado pelo WIP da Task 3; tudo entra em `feat/incremento-d` depois das Tasks 3 e 4 | Um `git merge` ali rodaria o hook do gate sobre trabalho em andamento de outra tarefa. Custo: um merge a mais na integração final. |
@@ -1819,8 +1819,8 @@ quatro worktrees paralelos (`FocusQuest-d`, `FocusQuest-dpainel`,
   piso" passou a valer só a partir do nível 2. Sete mutações do Step 4
   aplicadas: seis reprovaram como esperado; a terceira (`isqrt` → `int(math.sqrt(...))`)
   não reprovou nada nesta suíte — ver Ruling R4, corrigida pelo controlador
-  (a mutação **é** atingível, a partir de `xp ≈ 3,5×10¹⁵`, não "inatingível
-  com 64 bits" como a Task tinha registrado). `tests/unit/test_progression_domain.py`
+  (a mutação **é** atingível com 64 bits, não "inatingível" como a Task tinha
+  registrado; os casos de borda que a matam entraram na onda final). `tests/unit/test_progression_domain.py`
   criado. `task-1-report.md`.
 - **Task 2** — modelos e a migração `0004` com o backfill retroativo (commit
   `db8276d`): `src/focusquest/modules/progression/models.py` (`XpEntry`,
@@ -1951,6 +1951,54 @@ quatro worktrees paralelos (`FocusQuest-d`, `FocusQuest-dpainel`,
   coincidem numericamente) — caso previsto pelo próprio brief; a garantia
   real dessa mutação é `RewardAnnouncement.test.tsx` (fixture 220 vs. 1340,
   Task 7), não o E2E. `task-9-report.md`.
+- **Onda final de correções da revisão da branch** (Ruling R14; a revisão
+  final achou 2 Important e 7 Minor; M3, M5, a parte de custo do M6 e M7
+  viraram pendências na Task 10). Três commits de código, cada um pelo hook
+  (gate completo), cada conserto visto reprovando por RED ou por mutação:
+  - **`c1b879c` — `test(progressao)`, quatro guardas sem teste.**
+    **I2:** `test_tifa_partnership_so_com_create_mission_executada` ganhou o
+    caso de uma ação `create_mission` executada com a missão ainda
+    **pendente**, mais a conclusão de outra avulsa — `tifa_partnership`
+    continua ausente. Tirar `Mission.state == MissionState.CONCLUIDA` de
+    `_fatos` faz o teste reprovar (`'tifa_partnership' not in {'first_steps',
+    'tifa_partnership'}`). **M1:** `test_nivel_do_saldo_nas_bordas` ganhou
+    `(3518437628313599, 8388608)` e `(351843725082623999, 83886080)`. O
+    primeiro mata a raiz em ponto flutuante com divisão real
+    (`int(math.sqrt(1 + 4 * xp / metade))` dá 8388609); a troca **pura** de
+    `isqrt` por `int(math.sqrt(...))`, mantendo `xp // metade`, **não**
+    diverge ali (dá 8388608, medido) — por isso o segundo valor, o primeiro
+    que uma busca achou em que a troca pura erra por um (83886081), ainda
+    dentro de 64 bits. As duas mutações reprovam. A docstring de `domain.py`
+    não mudou. **M2:** `test_o_check_da_migracao_aceita_cada_codigo_do_dominio`
+    (`test_progression_migration.py`) insere, no banco migrado e com um
+    usuário próprio, uma conquista para **cada** valor de `Codigo`. Um oitavo
+    código no enum sem migração reprova esse teste (`CheckViolation` em
+    `ck_user_achievements_code`) — e, medido, a suíte inteira sem ele passava
+    com o código a mais (591 passed). **M4:** a metade do ciclo de
+    `test_get_missions_e_ciclo_nao_mudam` era vazia (sem plano, `mission` e
+    `special` nulos, os `if` nunca afirmavam). Agora cria o plano, conclui as
+    sete diárias com um relógio móvel e a especial, e afirma que `GET
+    /api/cycle` traz as duas concluídas e sem `reward`. Mutação: um
+    serializador em `CycleRead` que injeta `reward` nas duas reprova o teste
+    novo e passa no antigo.
+  - **`299895a` — `refactor(progressao)` (M6, só a parte barata).**
+    `registrar_conclusao` calcula `conquistas_satisfeitas` uma vez, antes do
+    laço do catálogo, em vez de uma vez por conquista. Sem mudança de
+    comportamento; o custo O(D) da maior sequência continua na pendência 80.
+  - **`9b7b4ac` — `test(e2e)` (I1).** O cenário do reenvio de
+    `headquarters.spec.ts` afirmava o texto fixo "Subiu para o nível 2!".
+    RED medido: rodando `headquarters.spec.ts` sozinho, de esquema limpo, o
+    saldo não cruza o nível 2 e o cenário reprovava. Agora segue a decisão
+    P6: lê `GET /api/progress` antes do clique (a primeira resposta,
+    descartada, já conclui no servidor) e depois da conclusão, confere que o
+    saldo subiu exatamente o XP da missão, e afirma `reward-level-up` com o
+    nível lido se ele mudou, ou a ausência dele se não mudou; o `+XP` passa
+    a ser o da missão, e não só o formato. Mutações em
+    `RewardAnnouncement.tsx`: mostrar a subida sempre (`>=`) reprova o
+    arquivo rodado sozinho (`toHaveCount(0)`, recebeu 1); mostrar
+    `level_before` reprova a suíte inteira ("nível 1" no lugar de "nível 2");
+    `xp_total` no lugar de `xp_awarded` também reprova a suíte inteira ("+120
+    XP" no lugar de "+40 XP") — o que resolve a pendência 87.
 
 ## Alterações da Frente 0
 
@@ -2164,6 +2212,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check`, **segunda execução**, rodada em seguida, mesma árvore | Aprovado, EXIT 0, 1m39,6s de relógio — idêntico à primeira em toda contagem: frontend 36 arquivos/444 testes, 100% nos quatro eixos (702/702, 452/452, 227/227, 681/681); `uv lock --check`, Ruff (96 arquivos formatados), mypy (92 arquivos) sem achados; backend 589 passed, 1 aviso, 100%; E2E 17 passed (16,3 s); Gitleaks sem achados. |
 | `make check-e2e`, **primeira execução**, mesma árvore (prova de que um segundo `check-e2e` também aprova, de esquema limpo) | Aprovado, EXIT 0, 20,6 s de relógio (`reset-test-db` + build + Playwright). **17 passed** (16,2 s de Playwright). |
 | `make check-e2e`, **segunda execução**, rodada em seguida, sem `check-api` no meio | Aprovado, EXIT 0, 20,7 s de relógio. **17 passed** (16,4 s de Playwright) — mesma contagem da primeira. |
+| `make check`, rodado por mim direto, sobre a árvore da onda final de correções do D (HEAD `9b7b4ac`, antes deste commit de documentação) | Aprovado, EXIT 0. Frontend: **36 arquivos, 444 testes**, cobertura de 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas) — inalterado, a onda não toca `frontend/src/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 96 arquivos já formatados. mypy sem problemas em 92 arquivos. Backend: **598 passed** (os 589 da Task 10 mais 9 novos: 2 casos do M1 e 7 do M2; I2 e M4 estenderam testes que já existiam), 1 aviso, cobertura total de 100% (1254 instruções, 188 ramificações). E2E: **17 cenários** aprovados em Chromium (16,3 s de Playwright). Gitleaks sem achados. |
+| `make check-e2e`, duas vezes seguidas, sobre a mesma árvore (I1) | Aprovado, EXIT 0 nas duas. **17 passed** nas duas (16,4 s e 16,2 s de Playwright). |
 
 ## Ambiente verificado
 
@@ -3164,7 +3214,7 @@ C".
 86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
     repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
     N"). Redundante para quem usa leitor de tela, não incorreto.
-87. **No E2E, a mutação que troca `xp_awarded` por `xp_total` em
+87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
     `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
     tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
     entre os arquivos (ordem alfabética, `workers: 1`), a conclusão do
@@ -3172,7 +3222,10 @@ C".
     leituras coincidem numericamente — a mutação não é pega ali. A garantia
     real de que o anúncio usa `xp_awarded`, e não `xp_total`, é
     `RewardAnnouncement.test.tsx` (Task 7, fixture com saldo anterior 220 e
-    total 1340, onde os dois números divergem) — ver `docs/QUALITY.md` §4.
+    total 1340, onde os dois números divergem) — ver `docs/QUALITY.md` §4.~~ **Resolvida na onda final de correções do D (`9b7b4ac`):** o
+    cenário do reenvio de `headquarters.spec.ts` confere o `+XP` contra o XP
+    da missão com saldo anterior não nulo, e a mutação reprova ali ("+120
+    XP" no lugar de "+40 XP").
 
 ## Próximo incremento
 
