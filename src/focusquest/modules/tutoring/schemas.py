@@ -5,7 +5,10 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from focusquest.modules.missions.schemas import MissionRead
+from focusquest.modules.missions.schemas import (
+    TAMANHO_MAXIMO_DO_IDENTIFICADOR,
+    MissionRead,
+)
 from focusquest.modules.tutoring.domain import (
     EstadoDaAcao,
     Papel,
@@ -20,7 +23,9 @@ TAMANHO_MAXIMO_DA_PERGUNTA = 4000
 
 
 class MessageCreate(BaseModel):
-    client_message_id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    client_message_id: Annotated[
+        str, StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    ]
     # `strip_whitespace`: uma pergunta so de espacos e uma pergunta vazia.
     content: Annotated[
         str,
@@ -56,7 +61,7 @@ class MessageRead(BaseModel):
 
 
 class ActionConfirm(BaseModel):
-    operation_id: str = Field(min_length=1)
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
 
 
 class ConfirmRead(BaseModel):

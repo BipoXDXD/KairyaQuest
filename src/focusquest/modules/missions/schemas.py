@@ -129,6 +129,13 @@ class MissionCreate(BaseModel):
     deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
 
 
+# Teto TECNICO de um identificador gerado pelo cliente (`operation_id` aqui e
+# na confirmacao da tutoria, `client_message_id` na pergunta): o frontend
+# manda um `crypto.randomUUID()`, 36 caracteres, e 200 sobra com folga. Sem
+# teto, a coluna `Text` guardaria qualquer tamanho que o corpo trouxesse.
+TAMANHO_MAXIMO_DO_IDENTIFICADOR = 200
+
+
 class MissionComplete(BaseModel):
     """O identificador de operacao que torna a conclusao idempotente.
 
@@ -137,7 +144,7 @@ class MissionComplete(BaseModel):
     primeira ou uma tentativa nova.
     """
 
-    operation_id: str = Field(min_length=1)
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
 
 
 class MissionRead(BaseModel):
