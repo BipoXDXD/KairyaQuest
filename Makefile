@@ -81,7 +81,10 @@ check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-co
 	cd $(WEB) && VITE_API_URL=/api npm run build
 	cd $(WEB) && npx playwright test
 
-reset-test-db: ## DESTRUTIVO: recria o banco de TESTE do zero e aplica as migracoes
+# Desde a pendencia 19 o banco de teste e POR WORKTREE (o nome vem do .env), e
+# por isso o primeiro passo tambem CRIA o banco se ele ainda nao existir -- atras
+# da mesma guarda de nome do DROP SCHEMA (tests/integration/banco_de_teste.py).
+reset-test-db: ## DESTRUTIVO: cria se faltar, recria o banco de TESTE do zero e migra
 	PYTHONPATH=tests uv run python -m integration.banco_de_teste
 	uv run alembic -x test=true upgrade head
 
