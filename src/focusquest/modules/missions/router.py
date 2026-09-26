@@ -21,6 +21,7 @@ from focusquest.modules.missions.cycle_service import leitura_da_avulsa, ler_mis
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
     MissionComplete,
+    MissionCompletionRead,
     MissionCreate,
     MissionRead,
 )
@@ -29,6 +30,8 @@ from focusquest.modules.missions.service import (
     criar_missao,
     listar_missoes,
 )
+from focusquest.modules.progression.schemas import RewardRead
+from focusquest.modules.progression.service import recompensa_da_missao
 
 # O usuario unico do incremento 1a, semeado pela migracao (README s8). O
 # recorte de usuario unico e EXPLICITO, e nao ha autenticacao improvisada: o
@@ -98,7 +101,7 @@ def concluir(
     dados: MissionComplete,
     session: SessaoDaRequisicao,
     clock: Annotated[Clock, Depends(get_clock)],
-) -> MissionRead:
+) -> MissionCompletionRead:
     """Conclui a missao, de forma idempotente pelo identificador de operacao.
 
     200 e nao 201: nao nasce recurso novo, muda o estado de um que ja existia.
@@ -118,4 +121,8 @@ def concluir(
     # Relida depois do commit, com o relogio lido de novo: a disponibilidade de
     # uma missao concluida e `concluida` em qualquer instante, e o prazo nao
     # depende do instante -- ler a hora de novo nao muda a resposta.
-    return MissionRead.da_leitura(ler_missao(session, missao, clock()))
+    lida = ler_missao(session, missao, clock())
+    # A recompensa sai SEMPRE do banco, depois do commit, no primeiro envio e
+    # no reenvio (D10): e o que torna os dois corpos identicos.
+    recompensa = RewardRead.da_recompensa(recompensa_da_missao(session, missao))
+    return MissionCompletionRead.da_leitura_e_recompensa(lida, recompensa)

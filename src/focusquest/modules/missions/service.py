@@ -28,6 +28,7 @@ from focusquest.modules.missions.domain import (
     validar_transicao,
 )
 from focusquest.modules.missions.models import Mission, MissionOperation
+from focusquest.modules.progression.service import registrar_conclusao
 
 # O tipo da operacao registrada em `mission_operations.kind`: QUAL operacao
 # aquele identificador nomeou. Hoje so existe a conclusao; havera pelo menos
@@ -208,6 +209,12 @@ def concluir_missao(
         if UNICIDADE_DA_OPERACAO not in str(erro.orig):
             raise
         raise OperacaoReutilizadaError(_reuso(operation_id)) from erro
+
+    # O credito da progressao, na MESMA transacao (D3) e com a missao ja
+    # travada. Depois do `flush` da operacao, e nao antes (decisao P1 do plano
+    # do D): antes, o autoflush das consultas da progressao gravaria a
+    # operacao FORA do `try` que traduz o reuso de chave.
+    registrar_conclusao(session, missao, agora)
     return missao
 
 

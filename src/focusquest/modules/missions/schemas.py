@@ -32,6 +32,7 @@ from focusquest.modules.missions.domain import (
     duracao_real,
     xp_da_missao,
 )
+from focusquest.modules.progression.schemas import RewardRead
 
 # O teto da dificuldade aceita na ENTRADA. Escolhido em 5 por dois motivos que
 # se somam:
@@ -217,3 +218,37 @@ class MissionRead(BaseModel):
         """
         duracao = duracao_real(self.started_at, self.completed_at)
         return None if duracao is None else int(duracao.total_seconds() // 60)
+
+
+class MissionCompletionRead(MissionRead):
+    """A resposta da conclusao: o MissionRead de sempre e a recompensa (D14).
+
+    `da_leitura_e_recompensa` monta os campos explicitamente, como
+    `MissionRead.da_leitura` -- e nao com `model_dump(exclude=...)` sobre um
+    `MissionRead` ja pronto, que dependeria dos nomes exatos dos dois campos
+    computados (`xp`, `actual_duration_minutes`) continuarem os mesmos para
+    nao duplica-los ou esquece-los.
+    """
+
+    reward: RewardRead
+
+    @classmethod
+    def da_leitura_e_recompensa(
+        cls, lida: MissaoLida, recompensa: RewardRead
+    ) -> MissionCompletionRead:
+        missao = lida.missao
+        return cls(
+            id=missao.id,
+            instructions=missao.instructions,
+            completion_criterion=missao.completion_criterion,
+            difficulty=missao.difficulty,
+            estimated_minutes=missao.estimated_minutes,
+            mission_type=missao.mission_type,
+            day=missao.day,
+            deadline=lida.deadline,
+            availability=lida.availability,
+            state=missao.state,
+            started_at=missao.started_at,
+            completed_at=missao.completed_at,
+            reward=recompensa,
+        )

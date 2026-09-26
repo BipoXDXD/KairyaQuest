@@ -32,6 +32,7 @@ from focusquest.core.errors import (
 from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
+from focusquest.modules.progression.router import router as progression_router
 from focusquest.modules.tutoring.router import router as tutoring_router
 
 _log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ _log = logging.getLogger(__name__)
 app = FastAPI(title="FocusQuest")
 app.include_router(missions_router)
 app.include_router(cycle_router)
+app.include_router(progression_router)
 app.include_router(tutoring_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de

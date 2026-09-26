@@ -6,6 +6,7 @@ from typing import Literal
 
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.models import Mission
+from focusquest.modules.progression.service import Progresso
 from focusquest.modules.tutoring.domain import Papel
 from focusquest.modules.tutoring.models import TutorMessage
 from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
@@ -21,21 +22,26 @@ def montar_turno(
     persona: str,
     agora: datetime,
     pendentes: Sequence[Mission],
+    progresso: Progresso,
     historico: Sequence[TutorMessage],
 ) -> Turno:
     """O turno inteiro.
 
     O "agora" vai no sistema porque a Tifa precisa propor um prazo, e o prazo
     e obrigatorio. As missoes pendentes sao o `get_study_context` do README s6,
-    so leitura: no 1b entram no prompt, e nao viram ferramenta.
+    so leitura: no 1b entram no prompt, e nao viram ferramenta. O progresso e
+    a mesma coisa (D15): a Tifa SABE o nivel, o saldo e as conquistas, mas
+    nenhuma ferramenta muda nada disso.
     """
     return Turno(
-        sistema=f"{persona}\n\n{_contexto(agora, pendentes)}",
+        sistema=f"{persona}\n\n{_contexto(agora, pendentes, progresso)}",
         mensagens=_mensagens(historico),
     )
 
 
-def _contexto(agora: datetime, pendentes: Sequence[Mission]) -> str:
+def _contexto(
+    agora: datetime, pendentes: Sequence[Mission], progresso: Progresso
+) -> str:
     linhas = [
         "## Contexto desta conversa",
         f"Agora (UTC): {agora.isoformat()}",
@@ -48,7 +54,24 @@ def _contexto(agora: datetime, pendentes: Sequence[Mission]) -> str:
         f"(prazo {leitura_da_avulsa(missao).deadline.isoformat()})"
         for missao in pendentes
     )
+    linhas.append(_linha_de_progresso(progresso))
     return "\n".join(linhas)
+
+
+def _linha_de_progresso(progresso: Progresso) -> str:
+    """Nivel, saldo e conquistas, so leitura (D15). Nenhuma ferramenta muda o
+    saldo: pedir XP no chat nao altera nada (README s6)."""
+    saldo = f"{progresso.xp_total:,}".replace(",", ".")
+    destravadas = [c.conquista.titulo for c in progresso.conquistas if c.unlocked_at]
+    conquistas = (
+        f"conquistas: {', '.join(destravadas)}."
+        if destravadas
+        else "nenhuma conquista ainda."
+    )
+    return (
+        f"Progresso do estudante: nível {progresso.faixa.nivel}, {saldo} XP; "
+        f"{conquistas}"
+    )
 
 
 def _texto(mensagem: TutorMessage) -> str:

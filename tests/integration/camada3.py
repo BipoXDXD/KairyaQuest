@@ -30,6 +30,8 @@ from urllib.parse import urlsplit
 import anthropic
 
 from focusquest.core.config import Settings
+from focusquest.modules.progression.domain import CATALOGO, FaixaDoNivel
+from focusquest.modules.progression.service import ConquistaNoPainel, Progresso
 from focusquest.modules.tutoring.anthropic_provider import (
     DESCRICAO_DA_FERRAMENTA,
     esquema_da_proposta,
@@ -37,6 +39,15 @@ from focusquest.modules.tutoring.anthropic_provider import (
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import TipoDeAcao
 from focusquest.modules.tutoring.persona import PERSONA
+
+# O quadro de progresso vazio (D15), pelo mesmo motivo do quadro de missoes
+# vazio abaixo: a camada 3 so compara a SEQUENCIA de tipos de evento, e nao o
+# texto do sistema.
+_SEM_PROGRESSO = Progresso(
+    xp_total=0,
+    faixa=FaixaDoNivel(1, 0, 100),
+    conquistas=tuple(ConquistaNoPainel(c, None) for c in CATALOGO),
+)
 
 REFERENCIA = Path(__file__).with_name("referencia_da_api_real.json")
 
@@ -90,7 +101,11 @@ def capturar(
         model=modelo,
         max_tokens=max_tokens,
         system=montar_turno(
-            persona=PERSONA, agora=agora, pendentes=[], historico=[]
+            persona=PERSONA,
+            agora=agora,
+            pendentes=[],
+            progresso=_SEM_PROGRESSO,
+            historico=[],
         ).sistema,
         messages=[{"role": "user", "content": _PEDIDO}],
         tools=[

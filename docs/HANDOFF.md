@@ -10,6 +10,19 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento D — a progressão.** Branch `feat/incremento-d`, aberta a partir
+de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C), + a spec (1551ea8)
++ o merge da Frente 0 (d2125d5, `feat/gate-paralelo`) + o merge de
+`origin/main` em `a53733f` (a Frente 0 publicada pelo PR #15, em `1aafc39`, e
+a onda de correções da revisão do repositório, pelo PR #16). Objetivo: saldo
+de XP, nível e conquistas no Quartel-General, com anúncio de recompensa no cartão e
+retroativamente para as missões já concluídas. Recorte: saldo, nível,
+conquistas; entrega e avaliação ficam para o E. Spec em
+`docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`; plano em
+`docs/superpowers/plans/2026-09-25-incremento-d.md`. **Estado de publicação:
+não publicado.** Este worktree tem banco de teste (`focusquest_d_test`) e portas
+do E2E próprias, pelo desenho da Frente 0.
+
 **Onda de correções da revisão do repositório.** Branch
 `fix/revisao-repositorio`, aberta a partir de `5b463b5` (a ponta de
 `feat/gate-paralelo`, a Frente 0 abaixo), num worktree próprio com banco de
@@ -17,7 +30,10 @@ teste e portas do E2E próprios. Aplica os achados da revisão profunda do
 repositório de 2026-09-25 (backend e frontend/documentação, feita sobre a
 `main` em `8ab91ce`): três commits de código e este de documentação — ver
 "Alterações da onda de correções da revisão". Os commits foram autorizados
-pelo dono; push, PR e merge, não. **Estado de publicação: não publicado.**
+pelo dono. **Estado de publicação: publicado pelo PR #16, mesclado por merge
+commit em `a53733f` em 2026-09-25; estado atual em `gh pr view 16`.**
+(Registro anterior, corrigido no merge da `main` no Incremento D: este
+parágrafo dizia "push, PR e merge, não" e "não publicado".)
 
 **Frente 0 — gate paralelo (pendência 19).** Branch `feat/gate-paralelo`,
 aberta a partir de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C),
@@ -639,6 +655,121 @@ alvos do Makefile com os mesmos nomes). O que a execução decidiu dentro dele:
 | **F12.** (revisão) O `novo-worktree.sh` **reserva o nome `push`** e recusa um nome cujo banco (`focusquest_<nome>_test`) ou banco do push (`focusquest_<nome>_push_test`) já seja o banco de teste **ou** o banco do push de qualquer worktree registrado, o principal incluído (lidos do `.env` de cada um). A derivação do banco do push tem fonte única, `banco_do_push` em `scripts/push-env.sh`, usada pelo `isolar_gate_do_push` e pelo script. | Um worktree `push` teria o banco `focusquest_push_test`, o do gate do push do principal: o pre-push faria `DROP SCHEMA` nele no meio de um `make check`. A classe inteira fecha assim: `focusquest_<x>_test` só é igual a um `R_push_test` se `focusquest_<x>` terminar em `_push`; como `<x>` só tem `[a-z0-9-]`, o único `_` ali é o do prefixo, então só `<x> = push` casa (com `R = focusquest`) — `a-push` dá `focusquest_a-push_test`, distinto do `focusquest_a_push_test` do push de `a`. No outro sentido, `focusquest_<x>_push_test` não é banco de nenhum worktree criado pelo script (seria `<y> = <x>_push`, com `_`), e só um `.env` editado à mão casaria: para ele existe a conferência. A reserva é estrutural (vale mesmo se o principal usar outro banco hoje); a conferência cobre o que é configuração. |
 | **F13.** (revisão) **Trava** no `novo-worktree.sh`: `mkdir <.git comum>/novo-worktree.lock` antes de ler os `.env`, removida depois de escrever o novo ou em qualquer saída (`trap`). | Sem ela, duas execuções ao mesmo tempo liam os mesmos deslocamentos livres e escolhiam o mesmo (TOCTOU). `mkdir` é atômico e portátil (`flock` não vem no macOS). Limites em `docs/QUALITY.md` §6: uma execução morta por `SIGKILL` deixa a trava (a recusa diz como apagá-la), e um `.env` editado à mão fica fora dela. |
 | **F14.** (revisão) A falha ao escrever o `.env` do worktree novo distingue **"já existe um `.env`"** (conferido antes da escrita, que continua com `noclobber`) de **"não foi possível escrever"** (disco cheio, permissão, caminho sumido), repassando o erro do shell. | A mensagem única mandava procurar um arquivo que podia não existir. A conferência é feita antes, e não depois, porque uma escrita que falha pela metade deixa o arquivo. |
+
+### Incremento D — decisões D1–D16 (da spec) e P1–P7 (do plano)
+
+Transcritas da spec
+(`docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`,
+aprovada pelo dono seção por seção em 2026-09-25) e do plano
+(`docs/superpowers/plans/2026-09-25-incremento-d.md`).
+
+**D1–D16 (spec):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D1 | Um módulo novo, `progression`, no backend (`src/focusquest/modules/progression/`) e no frontend (`frontend/src/features/progression/`), dono único de saldo, nível e conquistas | Separa recompensa de missão; o E acrescenta fontes de XP sem tocar em `missions` |
+| D2 | O XP é gravado num **livro-razão** (`xp_entries`), um lançamento por missão concluída, com o valor **congelado** no momento do crédito | Aprovado ("Livro-razão"). Mudar a curva de XP depois não reescreve o passado; o E vira uma nova `source` |
+| D3 | O crédito acontece **na mesma transação** da conclusão: `concluir_missao` chama `progression.registrar_conclusao` antes do `flush` final | Nunca existe missão concluída sem XP, nem XP sem conclusão |
+| D4 | Nível é **função pura** do saldo: custo de n→n+1 = 100·n; XP acumulado para estar no nível L = 50·L·(L−1) | Aprovado ("rápido no início, depois desacelera") |
+| D5 | Conquistas são **só emblema** e ficam em `user_achievements`, uma linha por (usuário, código), com a data e o lançamento que as destravou | Aprovado ("só emblema"). Uma fonte de XP só = saldo auditável |
+| D6 | Toda conquista aponta para o lançamento que a destravou (`xp_entry_id` **NOT NULL**), inclusive as retroativas | Como o backfill cria um lançamento para **cada** missão já concluída (D7), toda conquista retroativa também tem o seu lançamento de origem, e a reconstrução da recompensa (D10) vale sem caso especial |
+| D7 | **Retroativo:** a migração `0004` lança o XP de toda missão já concluída, pela regra atual, com a data real da conclusão, e destrava as conquistas já cumpridas com a data em que a condição foi cumprida pela primeira vez | Aprovado ("Sim, retroativo"); README §5: nunca remover o que o usuário conquistou |
+| D8 | A migração usa **cópias congeladas** das regras (fórmula de XP, sequência, catálogo), não imports de `focusquest` | Regra da casa ("Cópia congelada, NÃO import… migração é histórico"). Um teste de equivalência amarra a cópia à regra viva do dia da migração |
+| D9 | Os títulos das conquistas são os da tabela "Catálogo"; os códigos são estáveis e em inglês de contrato (`snake_case`) | O dono escolheu as famílias, não os nomes; títulos são texto de interface e trocá-los não mexe no banco |
+| D10 | O **reenvio** da conclusão devolve a **mesma** recompensa, reconstruída do banco a partir do lançamento da missão: nada é recalculado "de novo" | É a promessa de idempotência do README §8 estendida à recompensa |
+| D11 | Duas travas contra crédito duplo: a missão concluída é terminal (A5) **e** `xp_entries.mission_id` é UNIQUE | Aprovado |
+| D12 | O crédito trava a linha do **usuário** (`SELECT … FOR UPDATE`), sempre **depois** da trava da missão | Serializa a avaliação de conquistas entre conclusões simultâneas de missões diferentes; ordem fixa = sem deadlock |
+| D13 | Os marcos de 7 e 30 dias usam a **maior sequência já atingida**, calculada com `sequencia_ate` de `cycle_domain` sobre o histórico de `carregar_historico` | Reaproveita a regra do ciclo (dia sem plano não quebra) em vez de duplicá-la |
+| D14 | `GET /api/progress` é o único endpoint novo; a resposta do `POST /api/missions/{id}/complete` ganha o campo `reward` | O `GET /api/missions` e as leituras do ciclo **não** mudam |
+| D15 | A Tifa recebe uma linha de progresso no contexto do turno, só leitura; nenhuma ferramenta nova | Aprovado ("Só sabe o progresso"); README §6: "pedir pontos no chat não altera saldo" |
+| D16 | O painel de progresso fica no topo do Quartel-General; o anúncio da recompensa, no próprio cartão concluído (avulsa, diária e especial); a trilha de Campanhas não muda | Aprovado (Seção 3 e "Anúncio no cartão") |
+
+**Correção feita durante a Task 2, sobre a própria spec** (linha ~124 dela):
+a spec afirmava que uma missão `concluida` sem `completed_at` "não existe (o
+`CHECK` do 0001 amarra os dois)". Conferido por leitura direta de
+`0001_esquema_inicial.py`, `0002_tutoria.py` e `0003_ciclo_diario.py`: **essa
+restrição não existe** — só `ck_missions_state`, `ck_missions_difficulty` e
+`ck_missions_estimated_minutes` em 0001, mais as de tipo/dia/prazo do 0003. A
+spec foi corrigida com uma nota "(corrigido na execução: …)" no próprio
+arquivo; o teste `test_o_backfill_falha_alto_com_missao_concluida_sem_data`
+insere a linha direto (sem precisar desligar restrição nenhuma), como o
+brief já previa para esse caso.
+
+**P1–P7 (decisões que a spec não fixava, do plano):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| P1 | `registrar_conclusao` é chamado **depois** do `try/flush` que grava a `MissionOperation` em `concluir_missao`, e não antes dele | Antes do `flush`, as consultas de `registrar_conclusao` disparariam o *autoflush* do INSERT da operação **fora** do `try` que traduz a violação da `uq_mission_operations_operation_id` em `OperacaoReutilizadaError` — o reuso de chave em paralelo voltaria a sair como 500. A spec dizia "antes do `flush` final"; a intenção (mesma transação, missão travada) é preservada |
+| P2 | A trava do usuário é `SELECT … FOR NO KEY UPDATE` (`with_for_update(key_share=True)`), e não `FOR UPDATE` | `FOR NO KEY UPDATE` conflita consigo mesmo — serializa duas conclusões do mesmo usuário, que é o que D12 pede — mas **não** conflita com o `FOR KEY SHARE` que todo INSERT com FK para `users` toma. Com `FOR UPDATE`, criar uma missão, uma mensagem da Tifa ou um plano esperaria cada conclusão em andamento sem necessidade. A ordem missão → usuário não muda |
+| P3 | O painel é atualizado depois de cada conclusão com `refresh()` (silencioso), não `reload()` | `reload` passa por "carregando" e desmontaria o painel a cada Concluir; `refresh` troca os números sem piscar (o mesmo motivo da P9 do B) |
+| P4 | O anúncio da recompensa fica **dentro** da região viva que o cartão já tem (`mission-completion-status` passa de `<p>` a `<div role="status">`) | Um `role="status"` novo que nasce já com texto não é anunciado por todo leitor de tela (a região precisa existir antes da mudança); a região do cartão existe desde o primeiro render |
+| P5 | Data da conquista mostrada em `America/Sao_Paulo` (`Intl.DateTimeFormat` com `timeZone`), em `features/progression/unlockedDate.ts` | `unlocked_at` é um instante (`TIMESTAMPTZ`), não uma data civil; mostrar no fuso do navegador faria a mesma conquista mudar de dia conforme o computador. É o fuso do ciclo (C1) |
+| P6 | O E2E lê `GET /api/progress` antes do Concluir e confere o painel e o anúncio contra `antes + xp da missão` da API | Outros arquivos do E2E também concluem missões; um número fixo quebraria com a ordem dos arquivos |
+| P7 | Arquivos de teste novos: `tests/unit/test_progression_domain.py`, `tests/integration/test_progression_migration.py`, `tests/integration/test_progression_service.py`, `tests/integration/test_progression_concorrencia.py`, `tests/integration/test_progression_api.py` | Um arquivo por camada, como `missions`; a concorrência separada pelo mesmo motivo de `test_missions_concorrencia.py` (conexões reais, commits de verdade) |
+
+### Incremento D — decisões tomadas durante a execução (Rulings R1–R13)
+
+**O incidente da Task 0.** O implementador da Task 0 (modelo Haiku)
+**sobrescreveu** o plano aprovado pelo dono (1746 linhas) com um plano
+inventado de 92 linhas, e comitou por cima (`de038f0`); o primeiro revisor da
+Task 0 aprovou sem conferir o conteúdo do documento contra o original. Os
+briefs 0–10 e `constraints.md` já tinham sido extraídos do plano original
+antes do incidente e continuavam íntegros. O controlador despachou a
+restauração ao `opus-medium`, a partir da transcrição do fork que tinha
+escrito o plano originalmente; o plano restaurado foi verificado linha a
+linha (1746 linhas, os 11 briefs batendo com o conteúdo) antes de ir para o
+repositório. O commit da restauração (`8bf2603`) ficou adiado até a Task 1
+comitar, porque o gate do hook, rodado no meio da restauração, pegou o
+trabalho em andamento (WIP) da Task 1 no mesmo worktree. Ver Ruling R3.
+
+| # | Decisão | Motivo e custo |
+|---|---|---|
+| R1 | Base do D = `8ab91ce` + spec (`1551ea8`) + merge da Frente 0 (`d2125d5`), não `8ab91ce` puro | Sem a Frente 0, os worktrees paralelos do D colidiriam no banco e nas portas; ela já tinha passado por revisão e re-revisão e estava sendo publicada. Custo: se o PR da Frente 0 mudasse, a `main` traria a mudança e o D mesclaria de novo (foi o que aconteceu, no merge de `a53733f`). |
+| R2 | Paralelismo por worktree: backend (Tasks 1–5) em `FocusQuest-d`; Task 6 em `FocusQuest-dpainel` e Task 7 em `FocusQuest-danuncio`, criados por `scripts/novo-worktree.sh` e avançados (fast-forward) até `feat/incremento-d` depois da Task 0; o controlador mescla na ordem do diagrama do plano | Três implementadores no pico (backend, painel, anúncio), sem disputar o mesmo gate. Custo: merges extras, cada um rodando o gate completo de novo. |
+| R3 | Nenhum modelo Haiku como implementador neste projeto (o incidente da Task 0); todo revisor de tarefa que envolve commit de documento **aprovado** confere o **conteúdo** contra a fonte (ex.: `wc -l`/`diff`), não só o texto novo da tarefa | O Haiku reescreveu um artefato aprovado sem avisar, e o primeiro revisor só olhou o que mudava, não o documento inteiro. Custo: um pouco mais de token por tarefa que toque documento aprovado. |
+| R4 | A mutação `isqrt` → `math.sqrt` em `nivel_do_saldo` (Task 1) **é** atingível com inteiros de 64 bits — com a divisão real (`xp / metade`), diverge em `xp = 3.518.437.628.313.599` (nível 8.388.608 pela fórmula inteira; 8.388.609 pelo float); com a troca pura, mantendo `xp // metade`, em `xp = 351.843.725.082.623.999` (83.886.080 contra 83.886.081) — mas é impraticável em qualquer saldo real do produto | A docstring de `domain.py` sobre o risco do ponto flutuante está **correta** e não foi suavizada. **Corrigida na onda final de correções (`c1b879c`):** os dois valores entraram em `test_nivel_do_saldo_nas_bordas`, e as duas formas da mutação reprovam. Custo: nenhum. |
+| R5 | (Superada pela R6.) O commit da Task 7 esperaria a Task 4: depois de a 4 entrar, mesclar `feat/incremento-d` no branch do anúncio, rodar o gate e comitar | A Task 7 estava bloqueada no `check-e2e` porque o backend real do worktree ainda não devolvia `reward` (Task 4 não tinha chegado lá) — ver "Alterações", Task 7. Custo: a Task 8 atrasaria até a Task 4. |
+| R6 | Acrescentar, contra o código literal do brief da Task 7, uma guarda no frontend (`reward` ausente ou nulo = sem anúncio; o cartão continua "Missão concluída.") | Defesa contra deploy defasado ou contrato violado (achado Critical da revisão: sem a guarda, `RewardAnnouncement` lançava `TypeError` e derrubava o quadro inteiro sem `reward`). Com a guarda, o `check-e2e` da Task 7 passa mesmo antes da Task 4 existir naquele worktree, então a Task 7 comita já (supera a R5). Custo: um ramo a mais no componente, com teste. |
+| R7 | A Task 8 roda no worktree do painel (`feat/incremento-d-painel`, com a Task 7 já mesclada nele), porque `FocusQuest-d` estava ocupado pelo WIP da Task 3; tudo entra em `feat/incremento-d` depois das Tasks 3 e 4 | Um `git merge` ali rodaria o hook do gate sobre trabalho em andamento de outra tarefa. Custo: um merge a mais na integração final. |
+| R8 | A mutação 6 da Task 3 (tirar `TutorAction.state == EstadoDaAcao.EXECUTADA` de `_fatos`) foi registrada como equivalente: o `CHECK ck_tutor_actions_missao_so_quando_executada` do banco já garante que `mission_id` só é não nulo em `executada`, e nenhum teste consegue matar essa mutação sem violar o esquema | Defesa em profundidade documentando a intenção no código, mesmo sem prova por mutação. Custo: se esse `CHECK` for removido no futuro, a regra da conquista `tifa_partnership` perde uma camada de proteção sem que nenhum teste avise. |
+| R9 | O achado "Important" da revisão da Task 3 (uma contagem de "9 testes" em `test_progression_service.py`) era erro de contagem do `task-3-report.md`, um rascunho de workspace fora do controle de versão — não documentação do repositório. Corrigido no ledger da sessão: são 8 testes no serviço + 3 na concorrência, 11 cenários no total | Custo: nenhum no produto; o achado não apontava defeito de código. |
+| R10 | Nenhum commit com o gate vermelho (a R6 não autorizou isso — ela só acrescentou uma guarda de dado). Depois do commit da Task 4, mesclar `feat/incremento-d` em `feat/incremento-d-painel` (arquivos disjuntos do WIP da Task 8), rodar o gate com o backend completo, e só então comitar a Task 8 | O primeiro bloqueio da Task 8 era falta de `GET /api/progress` real no worktree; a solução é trazer a Task 4 para lá, não afrouxar o gate. Custo: espera pela Task 4. |
+| R11 | Os dois cenários E2E pré-existentes que comparavam a região viva do cartão por igualdade exata (`headquarters.spec.ts`, antes da Task 7 existir) passam a conferir o texto fixo em `mission-completion-text` (mesma mudança que a Task 7 já tinha feito nos testes de unidade, decisão P4) **e** a afirmar o anúncio real (`reward-xp`, e num dos dois `reward-level-up`) | Conflito de integração entre a Task 4 (backend real, que passou a mandar `reward`) e a Task 7 (o anúncio, já mesclado): sem o ajuste, os dois cenários reprovariam para sempre com um texto que agora inclui "+XP". O ajuste entra no commit que conclui o merge da integração, não num commit da Task 8. Custo: um merge com ajuste de teste. |
+| R12 | A violação de contraste que o axe relatou em `reward-xp`, no merge da Task 8, é de **timing**: o axe rodou no meio da animação de entrada do anúncio (~48% de opacidade), não no estado final. A cor final (`#a7f3d0` sobre `#0a1023`) mede 14,73:1, bem acima do 4,5:1 exigido — o E2E passa a esperar a opacidade calculada chegar a 1 (`expect.poll`) antes de chamar o axe | Nem a cor nem a animação mudaram; só o momento em que o axe audita. Custo: um `expect.poll` a mais no E2E, só no cenário que audita com o anúncio na tela. |
+| R13 | A barra de progresso ganha `aria-label="Progresso até o nível N"` e mantém o `aria-valuetext`; o texto visível duplicado (`progress-bar-text`) recebe `aria-hidden="true"` — fecha também o *minor* adiado da Task 6 sobre o mesmo elemento. A região rolável da conversa da Tifa (`TutorConversation.tsx`) ganha `role="region"`, `aria-label="Conversa com a Tifa"`, `tabIndex={0}` e anel de foco | Achados do axe no merge da Task 8: `aria-progressbar-name` (a barra do painel nunca tinha sido montada dentro de um E2E de página inteira antes deste merge) e `scrollable-region-focusable` (a conversa, medida e **confirmada** como defeito real e **latente, anterior ao D** — ver "Alterações", Task 8, para a medição que descarta a hipótese de que o painel novo mudou a altura disponível). Correção pelo `opus-medium`, comitada em separado (`a8616b1`) e antes do commit da Task 8. Custo: nenhum. |
+
+### Dependências e infraestrutura que entraram no D
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço. **Nenhuma dependência nova**: conferido,
+`git diff 8ab91ce..HEAD -- pyproject.toml frontend/package.json
+frontend/package-lock.json uv.lock` vazio (medido nesta sessão).
+
+- **Endpoint novo: `GET /api/progress`** (decisão D14). Antes do D não
+  existia leitura agregada de saldo, nível e conquistas; este é o único
+  endpoint novo do incremento, e é o que o painel do Quartel-General consome
+  (`useProgress`, com `refresh()` depois de cada conclusão, decisão P3). O
+  anúncio da recompensa **não** usa esse endpoint: ele lê o campo `reward`
+  que passou a vir embutido no corpo já existente de
+  `POST /api/missions/{id}/complete` (`MissionCompletionRead`), reconstruído
+  do banco depois do commit (D10) — nenhum endpoint novo para isso. A Tifa
+  também não chama o endpoint: `tutoring/context.py` chama
+  `progression.ler_progresso` diretamente, no mesmo processo, sem ida por
+  HTTP.
+- **Nenhum serviço de infraestrutura novo.** A progressão roda no mesmo
+  processo FastAPI, sobre o mesmo PostgreSQL, com uma migração a mais
+  (`0004_progressao.py`, backfill incluso).
+- **Ordem de implantação da migração `0004`, registrada para quando este
+  incremento for publicado:** parar a API, migrar, subir a API de novo — não
+  migrar com a API antiga ainda respondendo. Uma missão concluída pelo
+  código **anterior** ao D durante a janela de migração terminaria sem
+  lançamento de XP (o código antigo não chama `registrar_conclusao`); o
+  reenvio dessa conclusão, já sob o código novo, receberia **500**, porque
+  `recompensa_da_missao` busca o lançamento da missão com `.one()` — sem
+  linha em `xp_entries`, a consulta lança em vez de devolver uma recompensa
+  vazia. Não medido nesta sessão (não há dois processos rodando versões
+  diferentes para reproduzir); registrado como procedimento a seguir, não
+  como bug a corrigir agora.
 
 ### Incrementos anteriores
 
@@ -1656,6 +1787,219 @@ final de correções", ao fim desta seção).
     `civilDate.ts` em `shared/lib/` indicado no parágrafo de `missions` do
     `docs/ARCHITECTURE.md`, e a linha desta onda em "Resultados".
 
+## Alterações do Incremento D
+
+Plano em `docs/superpowers/plans/2026-09-25-incremento-d.md`; spec em
+`docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`. 20
+commits de `a53733f` (a base, já com a spec e a Frente 0) até `HEAD`
+(`git log --oneline a53733f..HEAD | wc -l`, medido nesta sessão) — a spec
+(`1551ea8`), o merge da Frente 0 (`d2125d5`), as dez Tasks (0 a 9, com dois
+commits cada nas Tasks 0, 7 e 8 — pelo incidente de restauração na 0 e por
+rodadas de correção nas outras duas) e cinco merges de integração entre os
+quatro worktrees paralelos (`FocusQuest-d`, `FocusQuest-dpainel`,
+`FocusQuest-danuncio`, `FocusQuest-dtifa`), incluindo o merge final de
+`origin/main` (`113dd92`, que trouxe o PR #16 já descrito em
+"Revisão-base").
+
+- **Task 0** — revisão-base, spec e plano (commits `de038f0` + `8bf2603`):
+  ver "O incidente da Task 0", acima, em "Decisões tomadas". `de038f0`
+  registrou a revisão-base no `docs/HANDOFF.md` e comitou a spec, mas com o
+  plano **sobrescrito** por um plano inventado de 92 linhas; `8bf2603`
+  substituiu o conteúdo de `docs/superpowers/plans/2026-09-25-incremento-d.md`
+  pelo plano restaurado e verificado (1746 linhas), sem tocar em mais nada.
+- **Task 1** — o domínio puro (commit `55bfcf8`): `src/focusquest/modules/progression/__init__.py`
+  (vazio) e `domain.py` — `CUSTO_POR_NIVEL`, `xp_para_o_nivel`,
+  `nivel_do_saldo` (aritmética inteira, `math.isqrt`), `FaixaDoNivel`/
+  `faixa_do_nivel`, o enum `Codigo` com os sete códigos, `FatosDoUsuario`,
+  `Conquista`/`CATALOGO`/`CONQUISTA_POR_CODIGO`, `conquistas_satisfeitas` e
+  `maior_sequencia` (sobre `cycle_domain.sequencia_ate`, do B). Um desvio do
+  brief, corrigido no teste e não na implementação (`AGENTS.md` §3): o teste
+  literal do brief para `nivel_do_saldo` contradizia
+  `test_saldo_negativo_e_recusado` no nível 1 (piso 0); a checagem "abaixo do
+  piso" passou a valer só a partir do nível 2. Sete mutações do Step 4
+  aplicadas: seis reprovaram como esperado; a terceira (`isqrt` → `int(math.sqrt(...))`)
+  não reprovou nada nesta suíte — ver Ruling R4, corrigida pelo controlador
+  (a mutação **é** atingível com 64 bits, não "inatingível" como a Task tinha
+  registrado; os casos de borda que a matam entraram na onda final). `tests/unit/test_progression_domain.py`
+  criado. `task-1-report.md`.
+- **Task 2** — modelos e a migração `0004` com o backfill retroativo (commit
+  `db8276d`): `src/focusquest/modules/progression/models.py` (`XpEntry`,
+  `UserAchievement`, `FONTE_CONCLUSAO`, os nomes de restrição e índice do
+  Mapa de arquivos do plano) e `alembic/versions/0004_progressao.py`, com
+  cópias congeladas (D8) de `_xp`, `_sequencia_ate`, `_maior_sequencia` e
+  `_satisfeitas` — sem importar `focusquest.modules.progression.domain`.
+  `alembic/env.py` ganhou o import dos modelos novos. Confirmado por leitura
+  direta das três migrações anteriores: **a restrição `state`/`completed_at`
+  que a spec (linha ~124) afirmava não existe** — corrigida na própria spec
+  (ver "Decisões tomadas", D1–D16). `tests/integration/test_progression_migration.py`
+  criado, com um cenário populado (avulsa, sete diárias em sequência,
+  especial, avulsa da Tifa, avulsa pendente) e um segundo plano semanal com
+  uma diária **perdida**, acrescentado ao cenário do brief para que a
+  mutação 3 (`_maior_sequencia` → sequência atual) fosse discriminante. Seis
+  mutações aplicadas, todas reprovando como esperado. `task-2-report.md`.
+- **Task 3** — o serviço: crédito na conclusão, recompensa reconstruída e
+  leitura (commit `dc63e37`): `src/focusquest/modules/progression/service.py`
+  (`registrar_conclusao`, `Recompensa`, `recompensa_da_missao`,
+  `ConquistaNoPainel`, `Progresso`, `ler_progresso`); `missions/service.py`
+  passou a chamar `registrar_conclusao` **depois** do `try/flush` da
+  `MissionOperation` (decisão P1). `tests/integration/test_progression_service.py`
+  (9 testes) e `tests/integration/test_progression_concorrencia.py` (3
+  testes, conexões reais e commits) criados; `test_progression_migration.py`
+  ganhou o teste de equivalência do D8
+  (`test_o_backfill_e_equivalente_ao_servico_de_hoje`), com dois usuários
+  dedicados para isolar os dois backfills comparados. Nove mutações
+  aplicadas; a mutação 6 (tirar `TutorAction.state == EXECUTADA` de `_fatos`)
+  não reprova nada — Ruling R8 (equivalente ao `CHECK` do banco). `task-3-report.md`.
+- **Task 4** — a API: `GET /api/progress` e o `reward` da conclusão (commit
+  `38e2cab`): `src/focusquest/modules/progression/schemas.py`
+  (`AchievementRead`, `ProgressRead`, `UnlockedAchievementRead`,
+  `RewardRead`) e `router.py` (`GET /api/progress`, sem `commit`, é leitura);
+  `missions/schemas.py` ganhou `MissionCompletionRead(MissionRead)` com
+  `reward: RewardRead`; `missions/router.py` — a rota de concluir devolve
+  `MissionCompletionRead`, com a recompensa reconstruída do banco **depois**
+  do `commit` (D10); `main.py` registrou o router novo.
+  `tests/integration/test_progression_api.py` criado (6 testes). Nenhuma
+  mudança necessária em `test_missions_api.py`: o teste de igualdade exata
+  do reenvio (`test_reenviar_a_mesma_operacao_devolve_o_mesmo_200`) continuou
+  passando, porque `reward` é determinístico entre o envio e o reenvio da
+  mesma operação. Quatro mutações aplicadas, todas reprovando o teste certo.
+  `task-4-report.md`.
+- **Task 5** — a Tifa lê o progresso (commit `8347989`, no worktree
+  `FocusQuest-dtifa`, integrado por `cb07078`): `tutoring/context.py` ganhou
+  a linha de progresso no bloco "Contexto desta conversa", montada a partir
+  de `progression.ler_progresso`; a lista de ferramentas do provedor não
+  mudou (nenhuma ferramenta nova, D15). Um teste prova que pedir XP no chat
+  não altera `xp_entries`. O implementador não gravou `task-5-report.md`; a
+  evidência do RED/GREEN/mutação está no *handback* da sessão e na revisão,
+  que conferiu contra o diff (registrado no ledger, `progress.md`).
+- **Task 6** — o painel de progresso no frontend (commit `7056e81`, no
+  worktree `FocusQuest-dpainel`): `frontend/src/features/progression/`
+  criado por inteiro — `types.ts` (o contrato de `GET /api/progress`),
+  `useProgress.ts`/`.test.tsx` (cópia de `useCycle.ts`, com os mesmos 17
+  casos de teste, guarda de sequência e `useRefreshOnReturn`),
+  `unlockedDate.ts`/`.test.ts` (`America/Sao_Paulo`, decisão P5),
+  `ProgressPanel.tsx`/`.test.tsx` (a barra `role="progressbar"`, a lista de
+  conquistas, os estados de carregando/erro/desatualizado). Seis mutações
+  aplicadas, todas reprovando o teste certo. Trabalhado sem a API real (Task
+  4 ainda não existia neste worktree); os testes simulam o `fetch`.
+  `task-6-report.md`.
+- **Task 7** — o anúncio da recompensa no cartão (commits `2a5507e` +
+  `64e40f2`, no worktree `FocusQuest-danuncio`): `frontend/src/shared/types/reward.ts`
+  (`Reward`, `UnlockedAchievement`, `MissionCompletion`),
+  `features/missions/RewardAnnouncement.tsx`/`.test.tsx`; `useCompleteMission.ts`
+  ganhou o `reward` no estado `completed`; `MissionCard.tsx` — a região viva
+  `mission-completion-status` virou `<div role="status">` com um filho
+  `<p data-testid="mission-completion-text">` (decisão P4), e o anúncio
+  dentro da mesma região; `index.css` ganhou `@keyframes reward-in`
+  (`motion-safe:`). **Bloqueado** na primeira tentativa: o backend real
+  daquele worktree (sem a Task 4) não devolvia `reward`, e o componente lia
+  `reward.xp_awarded` sem guarda — `TypeError` derrubava o quadro inteiro no
+  `check-e2e`. Duas rodadas de correção, por decisão do controlador (Ruling
+  R6, contra o código literal do brief): a primeira acrescentou a guarda
+  para `reward` **ausente** (commit `2a5507e`); a segunda, para `reward`
+  **nulo** explícito (`null`, o padrão do FastAPI para `Optional` sem
+  `exclude_none`, commit `64e40f2`). Nove mutações no total, todas
+  reprovando o teste certo. `task-7-report.md`.
+- **Task 8** — o painel no Quartel-General e a atualização depois de
+  concluir (commits `a8616b1` + `a891040`, no worktree
+  `FocusQuest-dpainel`): `Headquarters.tsx` compõe `<ProgressPanel />` acima
+  de `<CycleSection />` e `<MissionList />`, com um `ref` que os dois
+  caminhos de conclusão chamam (`refreshProgress`, decisão P3);
+  `CycleSection.tsx` e `MissionList.tsx` ganharam `onMissionCompleted`.
+  Quatro mutações aplicadas, todas reprovando o teste certo. **Três
+  bloqueios em sequência**, cada um diagnosticado e resolvido sem afrouxar o
+  gate:
+  1. Sem a Task 4 naquele worktree, `GET /api/progress` respondia 404 e o
+     `ProgressPanel` caía em erro — dois cenários E2E pré-existentes
+     (`headquarters.spec.ts:281`, `tutoring.spec.ts:147`) reprovaram por
+     `strict mode violation` (dois `role="alert"` simultâneos na tela).
+     Resolvido mesclando `feat/incremento-d` (Task 4) no worktree (Ruling
+     R10).
+  2. O merge da Task 4 expôs **o primeiro dos três defeitos que a
+     integração pegou**: dois cenários antigos de `headquarters.spec.ts`
+     comparavam a região viva do cartão por igualdade exata, e passaram a
+     ver o anúncio real ("+40 XP", "Subiu para o nível 2!") — ajustados para
+     conferir `mission-completion-text` e o anúncio de verdade (Ruling R11).
+  3. O ajuste da R11 expôs uma violação de contraste no axe (**o segundo**),
+     rastreada a *timing*: o axe rodava no meio do fade-in do anúncio
+     (~48% de opacidade), não na cor final (14,73:1 medido, bem acima do
+     exigido) — corrigido esperando a opacidade computada chegar a 1 antes
+     do axe (Ruling R12), sem tocar em cor nem animação.
+  4. Com o merge concluído, o **terceiro defeito**: `aria-progressbar-name`
+     (a barra de `ProgressPanel.tsx`, Task 6, nunca tinha sido montada
+     dentro de um E2E de página inteira, e não tinha nome acessível) em 8
+     dos 16 cenários, e `scrollable-region-focusable` em 2 deles (a região
+     rolável da conversa da Tifa, `TutorConversation.tsx` — um arquivo de
+     antes do D). Medido e **confirmado como defeito real e latente**, não
+     causado pela altura do painel novo: a região transbordava nas duas
+     situações (com e sem o painel), e só passava no axe quando o
+     histórico continha por acaso um link ou botão focável. Corrigido pelo
+     `opus-medium` (Ruling R13, commit `a8616b1`, antes do commit da Task 8):
+     `aria-label` na barra + `aria-hidden` no texto duplicado; `role="region"`,
+     `aria-label` e `tabIndex={0}` na conversa. `task-8-report.md`.
+- **Task 9** — o E2E: recompensa na conclusão da diária e axe com o painel
+  (commit `cd86e56`): só `frontend/tests/e2e/cycle.spec.ts`, em série — o
+  cenário de concluir a diária lê `GET /api/progress` e `GET /api/cycle`
+  **antes** do clique (decisão P6, contra número fixo) e confere
+  `reward-xp`/`progress-total` contra `antes + xp`; espera a opacidade do
+  anúncio chegar a 1 antes do axe (mesma técnica da R12); um cenário novo
+  confere as sete conquistas do painel na ordem do catálogo e passa no axe.
+  Três mutações aplicadas; a segunda (`xp_total` no lugar de `xp_awarded` em
+  `RewardAnnouncement`) não foi discriminante nesta execução, porque
+  `cycle.spec.ts` roda primeiro entre os arquivos e a conclusão do cenário é
+  a primeira de toda a suíte E2E (`antes.xp_total == 0`, os dois campos
+  coincidem numericamente) — caso previsto pelo próprio brief; a garantia
+  real dessa mutação é `RewardAnnouncement.test.tsx` (fixture 220 vs. 1340,
+  Task 7), não o E2E. `task-9-report.md`.
+- **Onda final de correções da revisão da branch** (Ruling R14; a revisão
+  final achou 2 Important e 7 Minor; M3, M5, a parte de custo do M6 e M7
+  viraram pendências na Task 10). Três commits de código, cada um pelo hook
+  (gate completo), cada conserto visto reprovando por RED ou por mutação:
+  - **`c1b879c` — `test(progressao)`, quatro guardas sem teste.**
+    **I2:** `test_tifa_partnership_so_com_create_mission_executada` ganhou o
+    caso de uma ação `create_mission` executada com a missão ainda
+    **pendente**, mais a conclusão de outra avulsa — `tifa_partnership`
+    continua ausente. Tirar `Mission.state == MissionState.CONCLUIDA` de
+    `_fatos` faz o teste reprovar (`'tifa_partnership' not in {'first_steps',
+    'tifa_partnership'}`). **M1:** `test_nivel_do_saldo_nas_bordas` ganhou
+    `(3518437628313599, 8388608)` e `(351843725082623999, 83886080)`. O
+    primeiro mata a raiz em ponto flutuante com divisão real
+    (`int(math.sqrt(1 + 4 * xp / metade))` dá 8388609); a troca **pura** de
+    `isqrt` por `int(math.sqrt(...))`, mantendo `xp // metade`, **não**
+    diverge ali (dá 8388608, medido) — por isso o segundo valor, o primeiro
+    que uma busca achou em que a troca pura erra por um (83886081), ainda
+    dentro de 64 bits. As duas mutações reprovam. A docstring de `domain.py`
+    não mudou. **M2:** `test_o_check_da_migracao_aceita_cada_codigo_do_dominio`
+    (`test_progression_migration.py`) insere, no banco migrado e com um
+    usuário próprio, uma conquista para **cada** valor de `Codigo`. Um oitavo
+    código no enum sem migração reprova esse teste (`CheckViolation` em
+    `ck_user_achievements_code`) — e, medido, a suíte inteira sem ele passava
+    com o código a mais (591 passed). **M4:** a metade do ciclo de
+    `test_get_missions_e_ciclo_nao_mudam` era vazia (sem plano, `mission` e
+    `special` nulos, os `if` nunca afirmavam). Agora cria o plano, conclui as
+    sete diárias com um relógio móvel e a especial, e afirma que `GET
+    /api/cycle` traz as duas concluídas e sem `reward`. Mutação: um
+    serializador em `CycleRead` que injeta `reward` nas duas reprova o teste
+    novo e passa no antigo.
+  - **`299895a` — `refactor(progressao)` (M6, só a parte barata).**
+    `registrar_conclusao` calcula `conquistas_satisfeitas` uma vez, antes do
+    laço do catálogo, em vez de uma vez por conquista. Sem mudança de
+    comportamento; o custo O(D) da maior sequência continua na pendência 80.
+  - **`9b7b4ac` — `test(e2e)` (I1).** O cenário do reenvio de
+    `headquarters.spec.ts` afirmava o texto fixo "Subiu para o nível 2!".
+    RED medido: rodando `headquarters.spec.ts` sozinho, de esquema limpo, o
+    saldo não cruza o nível 2 e o cenário reprovava. Agora segue a decisão
+    P6: lê `GET /api/progress` antes do clique (a primeira resposta,
+    descartada, já conclui no servidor) e depois da conclusão, confere que o
+    saldo subiu exatamente o XP da missão, e afirma `reward-level-up` com o
+    nível lido se ele mudou, ou a ausência dele se não mudou; o `+XP` passa
+    a ser o da missão, e não só o formato. Mutações em
+    `RewardAnnouncement.tsx`: mostrar a subida sempre (`>=`) reprova o
+    arquivo rodado sozinho (`toHaveCount(0)`, recebeu 1); mostrar
+    `level_before` reprova a suíte inteira ("nível 1" no lugar de "nível 2");
+    `xp_total` no lugar de `xp_awarded` também reprova a suíte inteira ("+120
+    XP" no lugar de "+40 XP") — o que resolve a pendência 87.
+
 ## Alterações da Frente 0
 
 Pendência 19, em quatro commits de código e um de teste, cada um pelo hook
@@ -1864,6 +2208,12 @@ e de revisões diferentes, e a mais recente fica por último:
 | **Três gates AO MESMO TEMPO**: `make check` neste worktree (0), `make check` no `medicao` (1) e `scripts/check-push.sh` à mão pela entrada padrão, sem push, sobre `4f37e40` | Os três EXIT 0: 135,0 s, 133,3 s e 162,2 s (o push inclui `git worktree add` e `make bootstrap`). O push anunciou `==> gate do push isolado: banco focusquest_push_test, deslocamento das portas do E2E 25` e subiu o E2E nas portas 8125, 5298 e 8175; das 16:57:48 em diante as amostras mostram **três** bancos conectados ao mesmo tempo (`focusquest_medicao_test,focusquest_push_test,focusquest_test`). Cada um: 402 testes no frontend, **515 passed** no backend, 100% nos dois, 16 E2E, Gitleaks sem achados. O worktree temporário do push foi removido pelo próprio script. |
 | Limpeza da medição | `git worktree remove --force ../FocusQuest-medicao`, `git branch -d wt/medicao` e `DROP DATABASE "focusquest_medicao_test"` — só ele. Ficaram `focusquest_test` e `focusquest_push_test` (o banco de push deste worktree e do principal, reaproveitado a cada push; pendência 74). |
 | `make check` **padrão** neste worktree, sem nenhuma variável nova (`.env` sem `FOCUSQUEST_E2E_PORT_OFFSET`, `focusquest_test`), sobre `ea49978` com parte desta documentação por cima (só `AGENTS.md` e `docs/`) | Aprovado, EXIT 0, 117,9 s. Frontend 402 testes em 32 arquivos, 100% nos quatro eixos (641/641, 416/416, 204/204, 622/622). `uv lock --check` (59 pacotes), Ruff sem achados, 84 arquivos formatados, mypy em 80 arquivos. Backend **516 passed** (os 465 da base mais 51 novos), 1 aviso, 100% (1077 instruções, 180 ramificações). E2E **16 passed**, com a API em `http://127.0.0.1:8100` (log do `webServer`) — as portas de sempre. Gitleaks sem achados. |
+| `make check`, **primeira execução**, Task 10 (documentação), sobre a árvore final do Incremento D (`113dd92`, antes deste commit de documentação) | Aprovado, EXIT 0, 1m39,4s de relógio. Frontend: **36 arquivos, 444 testes**, cobertura de 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 96 arquivos já formatados. mypy sem problemas em 92 arquivos. Backend: **589 passed**, 1 aviso, cobertura total de 100%. E2E: **17 cenários** aprovados em Chromium (16,3 s de Playwright). Gitleaks sem achados. |
+| `make check`, **segunda execução**, rodada em seguida, mesma árvore | Aprovado, EXIT 0, 1m39,6s de relógio — idêntico à primeira em toda contagem: frontend 36 arquivos/444 testes, 100% nos quatro eixos (702/702, 452/452, 227/227, 681/681); `uv lock --check`, Ruff (96 arquivos formatados), mypy (92 arquivos) sem achados; backend 589 passed, 1 aviso, 100%; E2E 17 passed (16,3 s); Gitleaks sem achados. |
+| `make check-e2e`, **primeira execução**, mesma árvore (prova de que um segundo `check-e2e` também aprova, de esquema limpo) | Aprovado, EXIT 0, 20,6 s de relógio (`reset-test-db` + build + Playwright). **17 passed** (16,2 s de Playwright). |
+| `make check-e2e`, **segunda execução**, rodada em seguida, sem `check-api` no meio | Aprovado, EXIT 0, 20,7 s de relógio. **17 passed** (16,4 s de Playwright) — mesma contagem da primeira. |
+| `make check`, rodado por mim direto, sobre a árvore da onda final de correções do D (HEAD `9b7b4ac`, antes deste commit de documentação) | Aprovado, EXIT 0. Frontend: **36 arquivos, 444 testes**, cobertura de 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas) — inalterado, a onda não toca `frontend/src/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 96 arquivos já formatados. mypy sem problemas em 92 arquivos. Backend: **598 passed** (os 589 da Task 10 mais 9 novos: 2 casos do M1 e 7 do M2; I2 e M4 estenderam testes que já existiam), 1 aviso, cobertura total de 100% (1254 instruções, 188 ramificações). E2E: **17 cenários** aprovados em Chromium (16,3 s de Playwright). Gitleaks sem achados. |
+| `make check-e2e`, duas vezes seguidas, sobre a mesma árvore (I1) | Aprovado, EXIT 0 nas duas. **17 passed** nas duas (16,4 s e 16,2 s de Playwright). |
 
 ## Ambiente verificado
 
@@ -2812,6 +3162,71 @@ C".
     mais velho responde por último" nos dois hooks. Saída: replicar a guarda
     de `requestId` (achado M1 da revisão de frontend).
 
+**Incremento D — a progressão (2026-09-25)**
+
+78. **A unicidade do livro-razão muda no Incremento E.** Hoje
+    `xp_entries.mission_id` é `UNIQUE` porque a única fonte de XP é a
+    conclusão de missão (D2). Quando o E trouxer outra fonte de XP, a
+    unicidade correta passa a ser (`mission_id`, `source`) — registrado na
+    spec ("Modelo de dados") para não surpreender quem implementar o E.
+79. **O anúncio da recompensa mostra o saldo do momento da conclusão, não o
+    saldo atual.** Um reenvio antigo, depois de outras conclusões terem
+    acontecido, devolve `reward.xp_total` congelado naquele momento (D10) —
+    enquanto o painel de progresso mostra o saldo atual. É a semântica
+    correta e documentada na spec (seção "Riscos"), não uma inconsistência:
+    os dois números podem divergir de propósito num reenvio tardio.
+80. **O custo da maior sequência é O(D) por conclusão** (`maior_sequencia`,
+    sobre `sequencia_ate` do ciclo, D dias planejados do usuário) **e
+    O(N·D) no backfill da migração 0004** (N missões concluídas,
+    recalculando a maior sequência a cada uma). Desprezível hoje (usuário
+    único, poucos dias planejados); a revisitar se o histórico crescer para
+    além de 1–2 anos de uso diário.
+81. **`user_achievements.xp_entry_id` tem `ON DELETE CASCADE`** para
+    `xp_entries.id`: apagar o lançamento de uma missão apagaria também
+    qualquer conquista que ele destravou. Hoje não existe rota de exclusão
+    de missão nem de lançamento — o caminho é inatingível pela API —, mas o
+    README §5 ("nunca remover o que o usuário conquistou") pede atenção se
+    uma rota de exclusão nascer no futuro: a conquista precisaria
+    sobreviver, não a coluna que hoje a amarra ao lançamento.
+82. **`progression/service.py` importa `tutoring.domain`
+    (`EstadoDaAcao`, `TipoDeAcao`), além do modelo `TutorAction`.** A spec
+    ("Direção das dependências") previa "sem importar... nada de tutoring
+    além do modelo"; a implementação real também usa os dois enums, para
+    comparar `TutorAction.state`/`kind` sem literais soltos. Os tipos
+    `Recompensa`, `Progresso` e `ConquistaNoPainel` moram em
+    `progression/service.py` (não em `domain.py` nem em `schemas.py`), de
+    acordo com a interface que o plano definiu para a Task 3 — vale
+    registrar para quem for procurar por eles.
+83. **O teste de ida-e-volta da migração 0004 roda com as tabelas vazias.**
+    `test_a_0004_cria_as_tabelas_e_o_downgrade_as_remove` prova que
+    `upgrade`/`downgrade` funcionam, mas sem dado nenhum; o round-trip com
+    dado populado só acontece dentro do `setup`/`finally` de cada teste que
+    usa a fixture `cenario` (que sempre termina em `head`), não como
+    afirmação própria de um teste.
+84. **`progression/router.py` reescreve `Annotated[Session,
+    Depends(get_session)]`** em vez de reaproveitar `SessaoDaRequisicao`, o
+    alias que `missions/router.py` já define para a mesma dependência.
+    Duplicação pequena, sem efeito de comportamento.
+85. **A linha de progresso no contexto da Tifa entra no fim do
+    `_contexto`**, não logo depois de "Agora (UTC)" como a prosa do brief
+    da Task 5 descrevia. Sem efeito funcional — é só onde a linha aparece
+    dentro do texto que vai para o modelo.
+86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
+    repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
+    N"). Redundante para quem usa leitor de tela, não incorreto.
+87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
+    `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
+    tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
+    entre os arquivos (ordem alfabética, `workers: 1`), a conclusão do
+    cenário é a primeira de toda a suíte E2E (saldo antes = 0), e as duas
+    leituras coincidem numericamente — a mutação não é pega ali. A garantia
+    real de que o anúncio usa `xp_awarded`, e não `xp_total`, é
+    `RewardAnnouncement.test.tsx` (Task 7, fixture com saldo anterior 220 e
+    total 1340, onde os dois números divergem) — ver `docs/QUALITY.md` §4.~~ **Resolvida na onda final de correções do D (`9b7b4ac`):** o
+    cenário do reenvio de `headquarters.spec.ts` confere o `+XP` contra o XP
+    da missão com saldo anterior não nulo, e a mutação reprova ali ("+120
+    XP" no lugar de "+40 XP").
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -2852,6 +3267,21 @@ B → C**. O desenho de A, B e C está em
   K1–K11 e as Rulings R1–R10 em "Decisões tomadas", acima. **Estado de
   publicação: publicado pelo PR #14**, mesclado em `8ab91ce` em 2026-09-25,
   depois do merge do B, na ordem que a Ruling R1 exigia.
+- **D — a progressão de RPG** (saldo de XP, nível, conquistas, retroativo
+  para as missões já concluídas), o próximo depois do C. Centro da
+  experiência escolhido pelo dono em 2026-09-25 (README §14: "próximo
+  incremento: missão completa, da delegação à recompensa" — a delegação e a
+  conclusão já existiam; a recompensa é o D). **Entregue e comitado por
+  inteiro** em `feat/incremento-d` (`a53733f`..`113dd92`, Tasks 0–9 mais a
+  Task 10 de documentação por cima — ver "Alterações do Incremento D").
+  Spec em `docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`
+  (decisões D1–D16); plano em `docs/superpowers/plans/2026-09-25-incremento-d.md`
+  (decisões P1–P7 e as Rulings R1–R13) em "Decisões tomadas", acima. **Estado
+  de publicação: não publicado** (ver "Revisão-base"). **Recorte do D:**
+  saldo, nível e conquistas; entrega com evidência e avaliação
+  (`submit_activity`, `request_reward_evaluation`) ficam para o **E**, o
+  próximo incremento. A pendência 3 (iniciar missão, `started_at` sem rota)
+  continua aberta — o D não a tocou.
 
 **O que o C encontrou pronto do B, no início:**
 

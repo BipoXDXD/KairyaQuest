@@ -285,6 +285,22 @@ describe('TutorPanel: estados da conversa', () => {
     expect(await screen.findByTestId('tutor-greeting')).toBeInTheDocument()
     expect(screen.queryByTestId('tutor-history-error')).not.toBeInTheDocument()
   })
+
+  it('P32 a conversa rolavel e alcancavel pelo teclado e tem nome, mesmo sem link nem botao', async () => {
+    // Sem proposta nem Tentar de novo, a regiao que rola nao tem nada focavel
+    // dentro: sem tabIndex, quem usa teclado nao consegue rolar o historico.
+    mountPanel({
+      [HISTORY]: () => Response.json([question(1, 'Oi, Tifa', 'c1'), answer(2, 1, 'Oi!')]),
+    })
+
+    const conversa = await screen.findByRole('region', { name: 'Conversa com a Tifa' })
+    expect(conversa).toHaveAttribute('tabindex', '0')
+    expect(within(conversa).getByTestId('tutor-messages')).toBeInTheDocument()
+    expect(within(conversa).queryAllByRole('button')).toHaveLength(0)
+    expect(within(conversa).queryAllByRole('link')).toHaveLength(0)
+    conversa.focus()
+    expect(document.activeElement).toBe(conversa)
+  })
 })
 
 describe('TutorPanel: o envio', () => {
