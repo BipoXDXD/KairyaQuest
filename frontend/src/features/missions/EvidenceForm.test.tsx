@@ -146,9 +146,38 @@ describe('EvidenceForm', () => {
   it('so com link, avisa que falta contar o que foi feito', () => {
     render(<Controlado inicial={{ text: '  ', link: 'https://x.dev' }} />)
 
-    expect(screen.getByTestId('evidence-text-missing')).toHaveTextContent(
-      'Para entregar o link, conte também o que você fez.',
+    const aviso = screen.getByTestId('evidence-text-missing')
+    expect(aviso).toHaveTextContent('Para entregar o link, conte também o que você fez.')
+    // Ligado ao campo que falta preencher (fix-1, item 5).
+    expect(screen.getByLabelText('O que você fez').getAttribute('aria-describedby')).toContain(
+      aviso.id,
     )
+  })
+
+  it('o toggle mantem o nome exato e ganha a missao como descricao (describedBy)', () => {
+    render(
+      <>
+        <h3 id="titulo-7">Ler o capitulo 3</h3>
+        <EvidenceForm
+          draft={VAZIO}
+          onChange={() => undefined}
+          disabled={false}
+          describedBy="titulo-7"
+        />
+      </>,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    ).toHaveAccessibleDescription('Ler o capitulo 3')
+  })
+
+  it('sem describedBy, o toggle nao tem descricao', () => {
+    render(<Controlado />)
+
+    expect(
+      screen.getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    ).not.toHaveAttribute('aria-describedby')
   })
 
   it('com texto, nao mostra o aviso de texto faltando', () => {

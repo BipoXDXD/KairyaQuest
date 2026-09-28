@@ -85,8 +85,9 @@ const VERDICT_DISPLAY: Record<Verdict, { label: string; icon: ReactElement; tone
  *   O botao continua habilitado: o backend retoma a orfa, ou responde
  *   `avaliacao_em_andamento`, que tem mensagem propria.
  * - `failed`: a falha do pedido, ou a `falhou` gravada, pelo MESMO mapa.
- * - `concluded`: o veredito. `fresh` diz se ele veio da resposta agora (com o
- *   `reward`) ou da leitura da missao (sem o valor do bonus, EM1).
+ * - `concluded`: o veredito. `fresh` diz se ele veio da resposta agora (a
+ *   regiao viva anuncia) ou da leitura da missao; `reward` so vem na resposta
+ *   que acabou de creditar o bonus (EM1).
  */
 type EvaluationView =
   | { kind: 'none' }
@@ -192,9 +193,10 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
       <p data-testid="evaluation-label" className="text-xs text-slate-400">
         {MODEL_LABEL}
       </p>
-      {/* EM1: depois de recarregar nao ha o numero; o saldo esta no painel de
-          progresso. Na resposta fresca, quem fala do bonus e o anuncio. */}
-      {!view.fresh && view.verdict === 'atende' && (
+      {/* EM1: sem `reward` (a leitura depois de recarregar, ou a resposta
+          idempotente de uma avaliacao ja concluida) nao ha o numero; o saldo
+          esta no painel de progresso. Com `reward`, quem fala e o anuncio. */}
+      {view.verdict === 'atende' && view.reward === null && (
         <p data-testid="evaluation-bonus-credited" className="text-emerald-200">
           Bônus de XP creditado ao seu saldo.
         </p>
@@ -217,10 +219,16 @@ function EvidenceAndEvaluation({
   mission,
   evidence,
   onRewarded,
+  onReload,
+  reloadLabel,
+  describedBy,
 }: {
   mission: Mission
   evidence: Evidence
   onRewarded?: () => void
+  onReload?: () => void
+  reloadLabel: string
+  describedBy?: string
 }) {
   const { state: request, request: requestEvaluation } = useRequestEvaluation(
     mission.id,
@@ -254,9 +262,20 @@ function EvidenceAndEvaluation({
             data-testid="evaluation-request"
             disabled={view.kind === 'requesting' || failure?.recovery === 'unavailable'}
             onClick={requestEvaluation}
+            aria-describedby={describedBy}
             className={REQUEST_BUTTON_CLASS}
           >
             {failure?.recovery === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Tifa'}
+          </button>
+        )}
+        {failure?.recovery === 'refresh' && onReload !== undefined && (
+          <button
+            type="button"
+            data-testid="evaluation-reload"
+            onClick={onReload}
+            className={REQUEST_BUTTON_CLASS}
+          >
+            {reloadLabel}
           </button>
         )}
         <div role="status" data-testid="evaluation-status" className="text-sm text-sky-200">
@@ -285,13 +304,24 @@ function EvidenceAndEvaluation({
  *
  * `onRewarded` e o mesmo aviso da conclusao (P3 do D): o bonus mexe no saldo,
  * e a pagina atualiza o painel de progresso em silencio.
+ *
+ * `onReload` e o mesmo recarregamento que a falha de conclusao usa: a falha
+ * `refresh` da avaliacao manda atualizar, e o painel oferece o botao.
+ * `describedBy` e o id do titulo da missao, que descreve o "Pedir avaliação
+ * da Tifa" sem mudar o nome exato dele.
  */
 export function EvaluationPanel({
   mission,
   onRewarded,
+  onReload,
+  reloadLabel = 'Atualizar o quadro',
+  describedBy,
 }: {
   mission: Mission
   onRewarded?: () => void
+  onReload?: () => void
+  reloadLabel?: string
+  describedBy?: string
 }) {
   // `== null` de proposito: uma API anterior ao E nem manda as chaves.
   if (mission.verification == null) {
@@ -312,6 +342,9 @@ export function EvaluationPanel({
           mission={mission}
           evidence={mission.evidence}
           onRewarded={onRewarded}
+          onReload={onReload}
+          reloadLabel={reloadLabel}
+          describedBy={describedBy}
         />
       )}
     </div>

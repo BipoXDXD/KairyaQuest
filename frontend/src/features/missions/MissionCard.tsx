@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
-import { describeEvidence } from './evidenceLimit'
+import { describeEvidence, MAX_EVIDENCE_LENGTH } from './evidenceLimit'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
@@ -40,6 +40,27 @@ function statusText(completion: CompletionState): string {
     return 'Concluindo a missão…'
   }
   return completion.status === 'completed' ? 'Missão concluída.' : ''
+}
+
+/**
+ * Por que o rascunho em uso nao pode sair, ou `null` se pode (ou nao ha
+ * rascunho). O texto mora JUNTO do Concluir, fora do disclosure: com o
+ * formulario recolhido, o botao desabilitado continua com o motivo a vista e
+ * ligado por `aria-describedby` (fix-1 da Task 7).
+ */
+function blockedReason(draft: EvidenceDraft): string | null {
+  const inUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const described = describeEvidence(draft)
+  if (!inUse || described.sendable) {
+    return null
+  }
+  if (described.linkError !== null) {
+    return `Corrija o link da evidência para concluir. ${described.linkError}`
+  }
+  if (draft.text.trim() === '') {
+    return 'Conte o que você fez para concluir com o link.'
+  }
+  return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
 }
 
 /**
@@ -83,7 +104,7 @@ function CompletionControls({
   mission,
   completion,
   onComplete,
-  completeBlocked,
+  blocked,
   onReload,
   reloadWaiting,
   reloadLabel,
@@ -91,12 +112,13 @@ function CompletionControls({
   mission: Mission
   completion: CompletionState
   onComplete: () => void
-  /** O rascunho da evidencia tem conteudo que nao pode ser enviado. */
-  completeBlocked: boolean
+  /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
+  blocked: string | null
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
 }) {
+  const blockedId = useId()
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
   // rotulo de estado ja diz "Concluída".
   if (mission.state === 'concluida' && completion.status === 'idle') {
@@ -112,13 +134,19 @@ function CompletionControls({
         <button
           type="button"
           data-testid="mission-complete"
-          disabled={completion.status === 'submitting' || completeBlocked}
+          disabled={completion.status === 'submitting' || blocked !== null}
+          aria-describedby={blocked === null ? undefined : blockedId}
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
           {completeLabel(completion)}{' '}
           <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
+      )}
+      {canComplete && blocked !== null && (
+        <p id={blockedId} data-testid="mission-complete-blocked" className="text-sm text-amber-200">
+          {blocked}
+        </p>
       )}
       {failure?.recovery === 'refresh' && (
         <button
@@ -205,7 +233,7 @@ export function MissionCard({
   // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
   // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
   const draftInUse = draft.text.trim() !== '' || draft.link.trim() !== ''
-  const completeBlocked = draftInUse && !describeEvidence(draft).sendable
+  const titleId = useId()
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
@@ -221,6 +249,7 @@ export function MissionCard({
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-4">
         <HeadingTag
+          id={titleId}
           data-testid="mission-instructions"
           className="text-base font-semibold text-slate-100"
         >
@@ -281,6 +310,7 @@ export function MissionCard({
           draft={draft}
           onChange={changeDraft}
           disabled={completion.status === 'submitting'}
+          describedBy={titleId}
         />
       )}
 
@@ -290,14 +320,20 @@ export function MissionCard({
         onComplete={() => {
           complete(draftInUse ? draft : undefined)
         }}
-        completeBlocked={completeBlocked}
+        blocked={blockedReason(draft)}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
       />
 
       {mission.state === 'concluida' && (
-        <EvaluationPanel mission={mission} onRewarded={onRewarded} />
+        <EvaluationPanel
+          mission={mission}
+          onRewarded={onRewarded}
+          onReload={onReload}
+          reloadLabel={reloadLabel}
+          describedBy={titleId}
+        />
       )}
     </li>
   )

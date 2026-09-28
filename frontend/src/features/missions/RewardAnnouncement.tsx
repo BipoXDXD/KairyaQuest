@@ -7,7 +7,7 @@ import type { Reward } from '../../shared/types/reward'
  * (README s7: movimento reduzido).
  *
  * `bonus` e o anuncio do bonus da avaliacao da Tifa (incremento E): o mesmo
- * desenho, com "de bônus" junto do XP para nao parecer uma segunda conclusao.
+ * desenho, com "de bonus" junto do XP para nao parecer uma segunda conclusao.
  */
 export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; bonus?: boolean }) {
   return (

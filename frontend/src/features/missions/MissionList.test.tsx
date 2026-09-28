@@ -1259,4 +1259,75 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+50 XP de bônus')
     expect(onMissionCompleted).toHaveBeenCalledTimes(1)
   })
+
+  it('fix-1: com o formulario RECOLHIDO e rascunho invalido, o motivo do Concluir desabilitado fica a vista e ligado', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Fiz', link: 'ftp://x' })
+
+    fireEvent.click(
+      within(card(7)).getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    )
+
+    expect(within(card(7)).queryByLabelText('Link (opcional)')).not.toBeInTheDocument()
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    expect(concluir).toBeDisabled()
+    const motivo = within(card(7)).getByTestId('mission-complete-blocked')
+    expect(motivo).toBeVisible()
+    expect(motivo).toHaveTextContent('Corrija o link da evidência para concluir.')
+    expect(concluir.getAttribute('aria-describedby')).toContain(motivo.id)
+  })
+
+  it('fix-1: o motivo cobre o link sem texto e o texto acima do limite, e some com o rascunho valido', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
+    expect(concluir).not.toHaveAttribute('aria-describedby')
+
+    preencher(7, { link: 'https://x.dev' })
+    expect(within(card(7)).getByTestId('mission-complete-blocked')).toHaveTextContent(
+      'Conte o que você fez para concluir com o link.',
+    )
+
+    preencher(7, { text: 'a'.repeat(4001) })
+    expect(within(card(7)).getByTestId('mission-complete-blocked')).toHaveTextContent(
+      'Encurte o texto da evidência para concluir: o limite é de 4000 caracteres.',
+    )
+
+    preencher(7, { text: 'Fiz' })
+    expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
+  })
+
+  it('fix-1: a falha refresh da avaliacao oferece "Atualizar o quadro", que recarrega', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendenteComEvidencia]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({ detail: 'x', code: 'sem_evidencia' }, { status: 409 }),
+    })
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar o quadro' }))
+
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+  })
+
+  it('fix-1: o toggle e o pedir avaliacao sao descritos pelo titulo da missao', async () => {
+    const outra: Mission = { ...pendenteComEvidencia, id: 9, instructions: 'Revisar grafos' }
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente, outra]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    expect(
+      within(card(7)).getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    ).toHaveAccessibleDescription(pendente.instructions)
+    expect(
+      within(card(9)).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).toHaveAccessibleDescription('Revisar grafos')
+  })
 })

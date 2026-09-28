@@ -11,6 +11,12 @@ const FIELD_CLASS =
   'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ' +
   'disabled:opacity-60'
 
+/** Os ids de `aria-describedby` presentes, juntos; `undefined` sem nenhum. */
+function joinIds(...ids: (string | null)[]): string | undefined {
+  const present = ids.filter((id) => id !== null)
+  return present.length === 0 ? undefined : present.join(' ')
+}
+
 /**
  * A entrega com evidencia, recolhida por padrao (E17): Concluir continua a um
  * clique, e quem quer mostrar o que fez abre o disclosure.
@@ -26,15 +32,20 @@ const FIELD_CLASS =
  *
  * Os campos ficam FORA do documento quando recolhido (e nao so escondidos):
  * nada invisivel entra na ordem de tabulacao.
+ *
+ * `describedBy` e o id do titulo da missao: o nome do toggle e o mesmo em
+ * todos os cartoes (o E2E depende dele), e a descricao diz DE QUAL missao.
  */
 export function EvidenceForm({
   draft,
   onChange,
   disabled,
+  describedBy,
 }: {
   draft: EvidenceDraft
   onChange: (draft: EvidenceDraft) => void
   disabled: boolean
+  describedBy?: string
 }) {
   const [expanded, setExpanded] = useState(() => draft.text !== '' || draft.link !== '')
   const id = useId()
@@ -43,6 +54,7 @@ export function EvidenceForm({
   const linkId = `${id}-link`
   const counterId = `${id}-counter`
   const linkErrorId = `${id}-link-error`
+  const textMissingId = `${id}-text-missing`
   const described = describeEvidence(draft)
   const textMissing = draft.text.trim() === '' && draft.link.trim() !== ''
 
@@ -53,6 +65,7 @@ export function EvidenceForm({
         data-testid="evidence-toggle"
         aria-expanded={expanded}
         aria-controls={regionId}
+        aria-describedby={describedBy}
         onClick={() => {
           setExpanded((open) => !open)
         }}
@@ -72,7 +85,10 @@ export function EvidenceForm({
               rows={3}
               value={draft.text}
               disabled={disabled}
-              aria-describedby={described.counter === null ? undefined : counterId}
+              aria-describedby={joinIds(
+                described.counter === null ? null : counterId,
+                textMissing ? textMissingId : null,
+              )}
               onChange={(event) => {
                 onChange({ ...draft, text: event.target.value })
               }}
@@ -82,7 +98,11 @@ export function EvidenceForm({
               {described.counter}
             </p>
             {textMissing && (
-              <p data-testid="evidence-text-missing" className="text-xs text-amber-200">
+              <p
+                id={textMissingId}
+                data-testid="evidence-text-missing"
+                className="text-xs text-amber-200"
+              >
                 Para entregar o link, conte também o que você fez.
               </p>
             )}

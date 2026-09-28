@@ -267,6 +267,68 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
   })
 })
 
+describe('EvaluationPanel -- fix-1 da revisao', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('falha refresh com onReload: oferece o botao de recarga, que chama onReload', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+    })
+    const onReload = vi.fn()
+    render(
+      <EvaluationPanel
+        mission={comEvidencia}
+        onReload={onReload}
+        reloadLabel="Atualizar o quadro"
+      />,
+    )
+
+    fireEvent.click(botaoPedir())
+
+    const atualizar = await screen.findByRole('button', { name: 'Atualizar o quadro' })
+    expect(
+      screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(atualizar)
+    expect(onReload).toHaveBeenCalledTimes(1)
+  })
+
+  it('o botao de recarga nao aparece fora da falha refresh', () => {
+    routeFetch({})
+
+    render(<EvaluationPanel mission={comEvidencia} onReload={() => undefined} />)
+
+    expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).not.toBeInTheDocument()
+  })
+
+  it('resposta fresca atende com reward null (idempotente): diz que o bonus ja foi creditado', async () => {
+    routeFetch({ [KEY]: () => Response.json({ evaluation: avaliacao(), reward: null }) })
+    render(<EvaluationPanel mission={comEvidencia} />)
+
+    fireEvent.click(botaoPedir())
+
+    expect(await screen.findByTestId('evaluation-bonus-credited')).toHaveTextContent(
+      'Bônus de XP creditado ao seu saldo.',
+    )
+    expect(screen.queryByTestId('reward')).not.toBeInTheDocument()
+  })
+
+  it('o botao de pedir mantem o nome exato e ganha a missao como descricao', () => {
+    routeFetch({})
+
+    render(
+      <>
+        <h3 id="titulo-7">Resolver a lista 3</h3>
+        <EvaluationPanel mission={comEvidencia} describedBy="titulo-7" />
+      </>,
+    )
+
+    expect(botaoPedir()).toHaveAccessibleDescription('Resolver a lista 3')
+  })
+})
+
 describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', () => {
   afterEach(() => {
     vi.unstubAllGlobals()

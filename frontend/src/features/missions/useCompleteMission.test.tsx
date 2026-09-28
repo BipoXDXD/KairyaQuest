@@ -530,6 +530,29 @@ describe('useCompleteMission', () => {
       expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
     })
 
+    it.each(['transicao_ilegal', 'missao_nao_encontrada', 'operacao_reutilizada'])(
+      'numa falha sem retry (%s) a chave sai, mas o rascunho FICA (E17)',
+      async (code) => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn().mockResolvedValue(Response.json({ detail: 'x', code }, { status: 409 })),
+        )
+        const { result } = renderCompletion()
+        result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+        const primeira = result.current.registry.operationIdFor(7)
+
+        act(() => {
+          result.current.complete({ text: 'Feito', link: '' })
+        })
+
+        await waitFor(() => {
+          expect(result.current.state.status).toBe('failed')
+        })
+        expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+        expect(result.current.registry.operationIdFor(7)).not.toBe(primeira)
+      },
+    )
+
     it('no sucesso o registro esquece a chave e o rascunho', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(concluidaResposta)))
       const { result } = renderCompletion()

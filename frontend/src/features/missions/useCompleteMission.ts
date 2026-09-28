@@ -101,7 +101,9 @@ export function useCompleteMission(
         ...(described === undefined ? {} : { evidence: described.body }),
       })
         .then((completion) => {
+          // So o sucesso apaga o rascunho: a entrega foi feita.
           registry.release(missionId)
+          registry.discardDraft(missionId)
           const { reward, ...mission } = completion
           setState({ status: 'completed', mission, reward })
           // A conclusao ja esta gravada no servidor e no estado: um callback do

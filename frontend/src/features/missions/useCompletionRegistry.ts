@@ -29,10 +29,16 @@ export interface CompletionRegistry {
   /** Guarda o rascunho da evidencia da missao. */
   saveDraft: (missionId: number, draft: EvidenceDraft) => void
   /**
-   * Tira a chave E o rascunho da missao do registro: o proximo pedido gera
-   * outra chave, e o formulario recomeca vazio.
+   * Tira SO a chave da missao do registro: o proximo pedido gera outra. O
+   * rascunho fica -- uma falha sem retry tambem libera a chave, e o rascunho
+   * nunca se perde numa falha (E17, README §7).
    */
   release: (missionId: number) => void
+  /**
+   * Apaga o rascunho da missao: o formulario recomeca vazio. So o sucesso da
+   * conclusao chama isto.
+   */
+  discardDraft: (missionId: number) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
   /** Um POST de conclusao terminou, com qualquer resultado. */
@@ -91,6 +97,8 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       },
       release: (missionId) => {
         operationIds.current.delete(missionId)
+      },
+      discardDraft: (missionId) => {
         drafts.current.delete(missionId)
       },
       started: () => {
