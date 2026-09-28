@@ -84,9 +84,9 @@ def _abrir(
         session,
         ESTUDANTE,
         mission_id,
-        agora=agora,
+        clock=lambda: agora,
         modelo=modelo,
-        orfa_antes_de=orfa_antes_de,
+        limite_do_orfao=agora - orfa_antes_de,
     )
 
 
@@ -175,7 +175,10 @@ def test_a_falhou_e_repetida_com_attempt_mais_um(session: Session) -> None:
     missao = _com_evidencia(session)
     primeira = _tentativa(_abrir(session, missao.id))
     assert registrar_falha(
-        session, primeira, falha=FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL, agora=AGORA
+        session,
+        primeira,
+        falha=FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
+        clock=lambda: AGORA,
     )
     segunda = _tentativa(_abrir(session, missao.id, agora=DEPOIS))
     assert segunda.attempt == 2
@@ -196,7 +199,7 @@ def test_a_concluida_e_devolvida_sem_mudar_nada(session: Session) -> None:
         tentativa,
         veredito=Veredito.PARCIAL,
         feedback="Falta o fim.",
-        agora=AGORA,
+        clock=lambda: AGORA,
     )
     devolvida = _abrir(session, missao.id, agora=DEPOIS, modelo="outro-modelo")
     assert devolvida is _avaliacao(session, missao.id)
@@ -268,10 +271,11 @@ def test_registrar_resultado_conclui_a_tentativa_corrente(session: Session) -> N
         tentativa,
         veredito=Veredito.ATENDE,
         feedback="Muito bom.",
-        agora=DEPOIS,
+        clock=lambda: DEPOIS,
     )
     assert gravada is not None
-    gravada_missao, avaliacao = gravada
+    gravada_missao, avaliacao = gravada.missao, gravada.avaliacao
+    assert gravada.agora == DEPOIS
     assert gravada_missao is missao
     assert avaliacao is _avaliacao(session, missao.id)
     assert (avaliacao.state, avaliacao.verdict, avaliacao.feedback) == (
@@ -294,7 +298,11 @@ def test_registrar_resultado_da_superada_nao_grava(session: Session) -> None:
     missao, primeira = _superada(session)
     assert (
         registrar_resultado(
-            session, primeira, veredito=Veredito.ATENDE, feedback="x", agora=DEPOIS
+            session,
+            primeira,
+            veredito=Veredito.ATENDE,
+            feedback="x",
+            clock=lambda: DEPOIS,
         )
         is None
     )
@@ -310,7 +318,7 @@ def test_registrar_falha_da_corrente_grava_falhou(session: Session) -> None:
     missao = _com_evidencia(session)
     tentativa = _tentativa(_abrir(session, missao.id))
     assert registrar_falha(
-        session, tentativa, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, agora=DEPOIS
+        session, tentativa, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, clock=lambda: DEPOIS
     )
     avaliacao = _avaliacao(session, missao.id)
     assert (avaliacao.state, avaliacao.error_code, avaliacao.finished_at) == (
@@ -323,7 +331,10 @@ def test_registrar_falha_da_corrente_grava_falhou(session: Session) -> None:
 def test_registrar_falha_da_superada_nao_grava(session: Session) -> None:
     missao, primeira = _superada(session)
     assert not registrar_falha(
-        session, primeira, falha=FalhaDaAvaliacao.AVALIACAO_INVALIDA, agora=DEPOIS
+        session,
+        primeira,
+        falha=FalhaDaAvaliacao.AVALIACAO_INVALIDA,
+        clock=lambda: DEPOIS,
     )
     avaliacao = _avaliacao(session, missao.id)
     assert (avaliacao.state, avaliacao.attempt, avaliacao.error_code) == (
@@ -339,11 +350,15 @@ def test_a_mesma_tentativa_ja_encerrada_nao_grava_de_novo(session: Session) -> N
     missao = _com_evidencia(session)
     tentativa = _tentativa(_abrir(session, missao.id))
     assert registrar_falha(
-        session, tentativa, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, agora=AGORA
+        session, tentativa, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, clock=lambda: AGORA
     )
     assert (
         registrar_resultado(
-            session, tentativa, veredito=Veredito.ATENDE, feedback="x", agora=DEPOIS
+            session,
+            tentativa,
+            veredito=Veredito.ATENDE,
+            feedback="x",
+            clock=lambda: DEPOIS,
         )
         is None
     )
@@ -352,10 +367,10 @@ def test_a_mesma_tentativa_ja_encerrada_nao_grava_de_novo(session: Session) -> N
     outra = _com_evidencia(session)
     corrente = _tentativa(_abrir(session, outra.id))
     registrar_resultado(
-        session, corrente, veredito=Veredito.ATENDE, feedback="Ok.", agora=AGORA
+        session, corrente, veredito=Veredito.ATENDE, feedback="Ok.", clock=lambda: AGORA
     )
     assert not registrar_falha(
-        session, corrente, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, agora=DEPOIS
+        session, corrente, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, clock=lambda: DEPOIS
     )
     assert _avaliacao(session, outra.id).state is EstadoDaAvaliacao.CONCLUIDA
 
@@ -367,9 +382,16 @@ def test_registrar_sobre_missao_apagada_e_nao_encontrada(session: Session) -> No
     session.flush()
     with pytest.raises(MissaoNaoEncontradaError):
         registrar_falha(
-            session, tentativa, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, agora=DEPOIS
+            session,
+            tentativa,
+            falha=FalhaDaAvaliacao.TEMPO_ESGOTADO,
+            clock=lambda: DEPOIS,
         )
     with pytest.raises(MissaoNaoEncontradaError):
         registrar_resultado(
-            session, tentativa, veredito=Veredito.ATENDE, feedback="x", agora=DEPOIS
+            session,
+            tentativa,
+            veredito=Veredito.ATENDE,
+            feedback="x",
+            clock=lambda: DEPOIS,
         )

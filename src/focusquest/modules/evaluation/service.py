@@ -10,13 +10,18 @@ esse tempo todo (E9). A primeira grava `avaliando` e commita; a segunda grava
 o resultado -- ou a falha -- e commita ANTES de a rota responder (E13).
 """
 
+import logging
 from dataclasses import dataclass
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.clock import Clock
-from focusquest.core.errors import AvaliacaoEmAndamentoError, AvaliacaoFalhouError
+from focusquest.core.errors import (
+    AvaliacaoEmAndamentoError,
+    MissaoNaoEncontradaError,
+)
+from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
 from focusquest.modules.evaluation.rubric import (
     FERRAMENTA_DA_AVALIACAO,
     montar_turno_da_avaliacao,
@@ -39,6 +44,8 @@ from focusquest.modules.tutoring.provider import (
     TempoEsgotadoError,
 )
 from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO, Tutoria
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,15 +74,14 @@ def avaliar_missao(
     O veredito so vale se o esquema o aceitar (`EvaluationOutput`): e so ele,
     e nunca o texto da evidencia, que decide o bonus.
     """
-    agora = clock()
     with fabrica() as session:
         aberta = abrir_tentativa(
             session,
             user_id,
             mission_id,
-            agora=agora,
+            clock=clock,
             modelo=tutoria.modelo,
-            orfa_antes_de=agora - tutoria.limite - FOLGA_DO_ORFAO,
+            limite_do_orfao=tutoria.limite + FOLGA_DO_ORFAO,
         )
         session.commit()
     if isinstance(aberta, MissionEvaluation):
@@ -83,15 +89,23 @@ def avaliar_missao(
 
     falha: FalhaDaAvaliacao | None = None
     saida: EvaluationOutput | None = None
+    inesperada: Exception | None = None
+    turno = montar_turno_da_avaliacao(aberta)
     inicio = clock()
     try:
-        entrada = tutoria.provedor.avaliar(
-            montar_turno_da_avaliacao(aberta), FERRAMENTA_DA_AVALIACAO
-        )
+        entrada = tutoria.provedor.avaliar(turno, FERRAMENTA_DA_AVALIACAO)
     except TempoEsgotadoError:
         falha = FalhaDaAvaliacao.TEMPO_ESGOTADO
     except ProvedorIndisponivelError:
         falha = FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
+    except Exception as erro:
+        # Qualquer outra excecao do provedor (um defeito do SDK, um erro de
+        # decodificacao) tambem e falha do outro lado: gravada, para a
+        # tentativa nao ficar `avaliando` ate o corte do orfao com todo pedido
+        # recebendo 409. O rastro vai para o log, e a causa fica no erro.
+        _log.exception("excecao inesperada do provedor na avaliacao")
+        falha = FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
+        inesperada = erro
     else:
         # O limite TOTAL (M5): o timeout do SDK e por leitura, e uma resposta
         # que pinga devagar passaria por ele. Nem uma saida valida conta
@@ -106,11 +120,10 @@ def avaliar_missao(
             except ValidationError:
                 falha = FalhaDaAvaliacao.AVALIACAO_INVALIDA
 
-    fim = clock()
     with fabrica() as session:
         if saida is None:
             assert falha is not None
-            gravou = registrar_falha(session, aberta, falha=falha, agora=fim)
+            gravou = registrar_falha(session, aberta, falha=falha, clock=clock)
             # Commit ANTES do raise: quem recebe o erro ja encontra a falha
             # gravada (E13).
             session.commit()
@@ -118,15 +131,18 @@ def avaliar_missao(
                 raise AvaliacaoEmAndamentoError(
                     f"missao {mission_id}: tentativa superada"
                 )
-            raise AvaliacaoFalhouError(falha)
+            raise AvaliacaoFalhouError(falha) from inesperada
         gravada = registrar_resultado(
-            session, aberta, veredito=saida.verdict, feedback=saida.feedback, agora=fim
+            session,
+            aberta,
+            veredito=saida.verdict,
+            feedback=saida.feedback,
+            clock=clock,
         )
         if gravada is None:
             session.rollback()
             raise AvaliacaoEmAndamentoError(f"missao {mission_id}: tentativa superada")
-        missao, _ = gravada
-        registrar_bonus(session, missao, saida.verdict, fim)
+        registrar_bonus(session, gravada.missao, saida.verdict, gravada.agora)
         session.commit()
     return _reconstruir(fabrica, mission_id)
 
@@ -138,7 +154,10 @@ def _reconstruir(
     pedido e para o repetido, que por isso devolvem o mesmo corpo (D10)."""
     with fabrica() as session:
         missao = session.get(Mission, mission_id)
-        assert missao is not None and missao.evaluation is not None
+        # A missao (e a avaliacao, pelo CASCADE) apagada depois da transacao
+        # 2: o mesmo 404 de sempre, e nao um 500.
+        if missao is None or missao.evaluation is None:
+            raise MissaoNaoEncontradaError(f"missao {mission_id} nao existe")
         return ResultadoDaAvaliacao(
             missao.evaluation, recompensa_do_bonus(session, missao)
         )

@@ -1,7 +1,5 @@
 """Erros de dominio comuns, traduzidos para HTTP pelos handlers."""
 
-from focusquest.modules.missions.domain import FalhaDaAvaliacao
-
 
 class DomainError(Exception):
     """Base de todo erro previsto pelo dominio.
@@ -115,16 +113,3 @@ class AvaliacaoEmAndamentoError(DomainError):
     tentativa que outro pedido ja retomou nao grava nada, e quem pediu fica
     sabendo que a avaliacao segue em outro pedido.
     """
-
-
-class AvaliacaoFalhouError(DomainError):
-    """A tentativa de avaliacao falhou, e a falha JA esta gravada (E13).
-
-    `falha` e o `error_code` gravado na linha; o handler o traduz em status e
-    `code`. Um tipo so para as tres falhas: o que muda entre elas e o valor, e
-    o valor ja e um enum.
-    """
-
-    def __init__(self, falha: FalhaDaAvaliacao) -> None:
-        super().__init__(f"a avaliacao falhou: {falha.value}")
-        self.falha = falha

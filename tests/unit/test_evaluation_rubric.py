@@ -95,3 +95,27 @@ def test_o_comentario_e_aparado_antes_de_valer() -> None:
         {"verdict": "atende", "feedback": "  " + "x" * 1500 + "  "}
     )
     assert saida.feedback == "x" * 1500
+
+
+def _objetos(no: object) -> list[dict[str, object]]:
+    """Todo objeto JSON do esquema, em qualquer profundidade."""
+    if isinstance(no, dict):
+        proprios = [no] if no.get("type") == "object" else []
+        return proprios + [o for v in no.values() for o in _objetos(v)]
+    if isinstance(no, list):
+        return [o for v in no for o in _objetos(v)]
+    return []
+
+
+def test_o_esquema_serve_a_ferramenta_estrita() -> None:
+    """EM3: com `strict: true`, a API nao suporta `minLength`/`maxLength` e
+    exige `additionalProperties: false` em todo objeto (referencia da API,
+    "JSON Schema Limitations"). Os limites continuam valendo, no
+    `EvaluationOutput`, antes de qualquer escrita. `enum` e `$ref` sao
+    suportados."""
+    esquema = FERRAMENTA_DA_AVALIACAO.esquema
+    texto = json.dumps(esquema)
+    assert "minLength" not in texto and "maxLength" not in texto
+    assert esquema["additionalProperties"] is False
+    assert all(o.get("additionalProperties") is False for o in _objetos(esquema))
+    assert esquema["required"] == ["verdict", "feedback"]

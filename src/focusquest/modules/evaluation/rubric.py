@@ -40,18 +40,41 @@ DESCRICAO_DA_FERRAMENTA = (
 )
 
 
+# O que a ferramenta estrita (`strict: true`, EM3) nao suporta num esquema:
+# os limites de tamanho de string (referencia da API, "JSON Schema
+# Limitations"). Saem do esquema publicado e continuam valendo no
+# `EvaluationOutput`, que valida a saida antes de qualquer escrita.
+_FORA_DO_ESTRITO = ("minLength", "maxLength")
+
+
+def _sem_limites_de_string(no: Any) -> None:
+    """Tira `_FORA_DO_ESTRITO` de todo no do esquema, em qualquer profundidade."""
+    if isinstance(no, dict):
+        for chave in _FORA_DO_ESTRITO:
+            no.pop(chave, None)
+        for valor in no.values():
+            _sem_limites_de_string(valor)
+    elif isinstance(no, list):
+        for valor in no:
+            _sem_limites_de_string(valor)
+
+
 def _esquema_da_saida() -> dict[str, Any]:
-    """O `input_schema` gerado do `EvaluationOutput`, sem as docstrings.
+    """O `input_schema` gerado do `EvaluationOutput`, pronto para a
+    ferramenta estrita.
 
     A tecnica de `esquema_da_proposta` (M8): a docstring do schema, e aqui
     tambem a do enum `Veredito` (que entra em `$defs`), e de manutencao e nao
     serve ao modelo. A descricao para o modelo e `DESCRICAO_DA_FERRAMENTA`.
+    O `additionalProperties: false` que o modo estrito exige vem do
+    `extra="forbid"` do schema; `enum` e `$ref` sao suportados.
     """
     esquema = EvaluationOutput.model_json_schema()
     esquema.pop("description", None)
     esquema.pop("title", None)
     for definicao in esquema["$defs"].values():
         definicao.pop("description", None)
+    _sem_limites_de_string(esquema)
     return esquema
 
 

@@ -24,10 +24,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import (
     AvaliacaoEmAndamentoError,
-    AvaliacaoFalhouError,
+    MissaoNaoEncontradaError,
     SemEvidenciaError,
 )
-from focusquest.modules.evaluation.service import ResultadoDaAvaliacao, avaliar_missao
+from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
+from focusquest.modules.evaluation.service import (
+    ResultadoDaAvaliacao,
+    _reconstruir,
+    avaliar_missao,
+)
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
     FalhaDaAvaliacao,
@@ -55,7 +60,7 @@ from focusquest.modules.tutoring.provider import (
     Provedor,
     Turno,
 )
-from focusquest.modules.tutoring.service import Tutoria
+from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO, Tutoria
 from integration.conftest import TIMEOUT_DE_TESTE
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -311,6 +316,7 @@ def test_sem_evidencia_nao_chama_o_modelo(
 @pytest.mark.parametrize(
     "roteiro",
     [
+        _roteiro({}),
         _roteiro({"verdict": "otimo", "feedback": "ok"}),
         _roteiro({"verdict": "atende"}),
         _roteiro({"verdict": "atende", "feedback": "x" * 1501}),
@@ -321,6 +327,7 @@ def test_sem_evidencia_nao_chama_o_modelo(
         Roteiro(blocos=(Texto(("Nao vou chamar a ferramenta.",)),)),
     ],
     ids=[
+        "ferramenta-sem-argumentos",
         "veredito-fora-da-rubrica",
         "sem-feedback",
         "feedback-longo",
@@ -483,9 +490,11 @@ class _ProvedorRetomado:
                 sessao,
                 ESTUDANTE,
                 self.mission_id,
-                agora=AGORA,
+                clock=lambda: AGORA,
                 modelo="quem-retomou",
-                orfa_antes_de=AGORA + timedelta(days=1),
+                # Um limite negativo poe o corte no futuro: toda `avaliando`
+                # e orfa, e a tentativa em curso e retomada.
+                limite_do_orfao=-timedelta(days=1),
             )
             sessao.commit()
         return self.real.avaliar(turno, ferramenta)
@@ -561,3 +570,100 @@ def test_o_bonus_trava_o_usuario(
                 registrar_bonus(sessao, missao, Veredito.ATENDE, AGORA)
             sessao.rollback()
     assert isinstance(excecao.value.orig, psycopg.errors.LockNotAvailable)
+
+
+@pytest.mark.parametrize(
+    ("desvio", "retomada"),
+    [
+        (-timedelta(microseconds=1), False),
+        (timedelta(0), False),
+        (timedelta(microseconds=1), True),
+    ],
+    ids=["1us-antes-do-corte", "no-corte", "1us-depois-do-corte"],
+)
+def test_o_corte_do_orfao_e_o_limite_mais_a_folga(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+    desvio: timedelta,
+    retomada: bool,
+) -> None:
+    """E9: uma `avaliando` pedida em AGORA so e orfa para um pedido feito
+    DEPOIS de `AGORA + limite + FOLGA_DO_ORFAO`. Antes disso, ou no instante
+    exato, o pedido recebe `avaliacao_em_andamento` e nao chama o modelo."""
+    mission_id = missoes.concluida()
+    with fabrica() as sessao:
+        abrir_tentativa(
+            sessao,
+            ESTUDANTE,
+            mission_id,
+            clock=lambda: AGORA,
+            modelo="claude-opus-5",
+            limite_do_orfao=timedelta(0),
+        )
+        sessao.commit()
+    falso.roteiro = _veredito("atende")
+    pedido = [AGORA + tutoria.limite + FOLGA_DO_ORFAO + desvio]
+    if retomada:
+        resultado = _avaliar(fabrica, tutoria, mission_id, pedido)
+        assert (resultado.avaliacao.state, resultado.avaliacao.attempt) == (
+            EstadoDaAvaliacao.CONCLUIDA,
+            2,
+        )
+        assert len(falso.recebidas) == 1
+    else:
+        with pytest.raises(AvaliacaoEmAndamentoError):
+            _avaliar(fabrica, tutoria, mission_id, pedido)
+        assert falso.recebidas == []
+        gravada = _lida(fabrica, mission_id)
+        assert (gravada.state, gravada.attempt, gravada.requested_at) == (
+            EstadoDaAvaliacao.AVALIANDO,
+            1,
+            AGORA,
+        )
+
+
+@dataclass(frozen=True)
+class _ProvedorQueQuebra:
+    """Uma excecao que nao e nenhuma das duas do `Protocol` (um defeito do
+    SDK, um erro de decodificacao): a tentativa nao pode ficar `avaliando`."""
+
+    real: Provedor
+
+    def responder(self, turno: Turno) -> Generator[EventoDoProvedor]:
+        return self.real.responder(turno)
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        raise RuntimeError("falha inesperada do provedor")
+
+
+def test_excecao_inesperada_do_provedor_e_gravada(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    missoes: Missoes,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mission_id = missoes.concluida()
+    quebrado = dataclasses.replace(
+        tutoria, provedor=_ProvedorQueQuebra(tutoria.provedor)
+    )
+    with pytest.raises(AvaliacaoFalhouError) as erro:
+        _avaliar(fabrica, quebrado, mission_id)
+    assert erro.value.falha is FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
+    assert isinstance(erro.value.__cause__, RuntimeError)
+    gravada = _lida(fabrica, mission_id)
+    assert (gravada.state, gravada.error_code) == (
+        EstadoDaAvaliacao.FALHOU,
+        FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
+    )
+    assert "falha inesperada do provedor" in caplog.text
+
+
+def test_reconstruir_sem_a_missao_e_nao_encontrada(
+    fabrica: sessionmaker[Session],
+) -> None:
+    """A missao apagada entre a transacao 2 e a leitura final: o 404 de
+    sempre, e nao um `AssertionError` que viraria 500."""
+    with pytest.raises(MissaoNaoEncontradaError):
+        _reconstruir(fabrica, 2**31 - 1)

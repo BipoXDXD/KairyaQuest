@@ -19,7 +19,6 @@ from focusquest.core.database import get_engine
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
-    AvaliacaoFalhouError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -32,6 +31,7 @@ from focusquest.core.errors import (
     SemanaEncerradaError,
     SemEvidenciaError,
 )
+from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
 from focusquest.modules.evaluation.router import router as evaluation_router
 from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError

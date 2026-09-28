@@ -11,10 +11,11 @@ um de cada vez, e o segundo le o que o primeiro commitou.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from focusquest.core.clock import Clock
 from focusquest.core.errors import (
     AvaliacaoEmAndamentoError,
     MissaoNaoEncontradaError,
@@ -52,9 +53,9 @@ def abrir_tentativa(
     user_id: int,
     mission_id: int,
     *,
-    agora: datetime,
+    clock: Clock,
     modelo: str,
-    orfa_antes_de: datetime,
+    limite_do_orfao: timedelta,
 ) -> Tentativa | MissionEvaluation:
     """Grava `avaliando` numa tentativa nova, ou devolve a avaliacao concluida.
 
@@ -62,12 +63,18 @@ def abrir_tentativa(
     futura sem evidencia responde 404, e nao `sem_evidencia`, que diria que
     ela existe); a `concluida` ANTES da em andamento, porque e terminal (E8).
 
-    Uma `avaliando` pedida em `orfa_antes_de` ou depois esta em andamento; so
-    a ANTERIOR ao corte e orfa (E9), e passa por `falhou` (`tempo_esgotado`)
-    antes da tentativa nova -- o mesmo caminho de uma falha de verdade, pela
-    tabela de transicoes.
+    A hora e lida DEPOIS da trava (spec, Servicos, passo 1; a C13 da
+    conclusao): lida antes, um pedido que esperasse a trava de uma conclusao
+    da mesma missao gravaria um `requested_at` anterior a ela, e aplicaria a
+    ocultacao num instante velho.
+
+    O corte do orfao e `agora - limite_do_orfao`. Uma `avaliando` pedida no
+    corte ou depois esta em andamento; so a ANTERIOR a ele e orfa (E9), e
+    passa por `falhou` (`tempo_esgotado`) antes da tentativa nova -- o mesmo
+    caminho de uma falha de verdade, pela tabela de transicoes.
     """
     missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
+    agora = clock()
     ler_missao(session, missao, agora)
     if missao.evidence is None:
         raise SemEvidenciaError(f"missao {mission_id} nao tem evidencia para avaliar")
@@ -75,7 +82,7 @@ def abrir_tentativa(
     if avaliacao is not None and avaliacao.state is EstadoDaAvaliacao.CONCLUIDA:
         return avaliacao
     if avaliacao is not None and avaliacao.state is EstadoDaAvaliacao.AVALIANDO:
-        if avaliacao.requested_at >= orfa_antes_de:
+        if avaliacao.requested_at >= agora - limite_do_orfao:
             raise AvaliacaoEmAndamentoError(
                 f"missao {mission_id} ja esta sendo avaliada"
             )
@@ -107,30 +114,40 @@ def abrir_tentativa(
     )
 
 
+@dataclass(frozen=True)
+class ResultadoGravado:
+    """A missao JA TRAVADA, a avaliacao concluida e o instante lido depois da
+    trava: o chamador credita o bonus na mesma transacao, com a mesma hora."""
+
+    missao: Mission
+    avaliacao: MissionEvaluation
+    agora: datetime
+
+
 def registrar_resultado(
     session: Session,
     tentativa: Tentativa,
     *,
     veredito: Veredito,
     feedback: str,
-    agora: datetime,
-) -> tuple[Mission, MissionEvaluation] | None:
+    clock: Clock,
+) -> ResultadoGravado | None:
     """Grava `concluida` se `tentativa` ainda for a corrente; `None` se nao.
 
-    Devolve a missao JA TRAVADA para o chamador creditar o bonus na mesma
-    transacao, depois dela (D12). `None` e a tentativa superada (E10): nada
-    muda na linha.
+    `None` e a tentativa superada (E10): nada muda na linha. A hora e lida
+    depois da trava, como em `abrir_tentativa`.
     """
     missao, avaliacao = _corrente(session, tentativa)
     if avaliacao is None:
         return None
+    agora = clock()
     validar_transicao_da_avaliacao(avaliacao.state, EstadoDaAvaliacao.CONCLUIDA)
     avaliacao.state = EstadoDaAvaliacao.CONCLUIDA
     avaliacao.verdict = veredito
     avaliacao.feedback = feedback
     avaliacao.finished_at = agora
     session.flush()
-    return missao, avaliacao
+    return ResultadoGravado(missao, avaliacao, agora)
 
 
 def registrar_falha(
@@ -138,13 +155,13 @@ def registrar_falha(
     tentativa: Tentativa,
     *,
     falha: FalhaDaAvaliacao,
-    agora: datetime,
+    clock: Clock,
 ) -> bool:
     """Grava `falhou` se `tentativa` ainda for a corrente. `False` se superada."""
     _, avaliacao = _corrente(session, tentativa)
     if avaliacao is None:
         return False
-    _encerrar_com_falha(avaliacao, falha, agora)
+    _encerrar_com_falha(avaliacao, falha, clock())
     session.flush()
     return True
 

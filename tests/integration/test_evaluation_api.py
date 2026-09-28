@@ -222,9 +222,9 @@ def test_em_andamento_e_409(
             sessao,
             ESTUDANTE,
             mission_id,
-            agora=AGORA,
+            clock=lambda: AGORA,
             modelo="claude-opus-5",
-            orfa_antes_de=AGORA - timedelta(minutes=1),
+            limite_do_orfao=timedelta(minutes=1),
         )
         sessao.commit()
     assert _erro(_avaliar(cliente, mission_id)) == (409, "avaliacao_em_andamento")
