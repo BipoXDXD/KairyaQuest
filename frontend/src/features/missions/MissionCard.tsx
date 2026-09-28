@@ -4,6 +4,7 @@ import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
+import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
@@ -22,9 +23,6 @@ const RELOAD_BUTTON_CLASS =
   'rounded border border-slate-400/60 px-3 py-1 text-sm font-medium text-slate-100 ' +
   'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none ' +
   'disabled:cursor-not-allowed disabled:opacity-60'
-
-/** O texto do "Atualizar o quadro" enquanto espera uma conclusao em voo. */
-const RELOAD_WAITING_LABEL = 'Aguardando a conclusão em andamento…'
 
 /**
  * O texto do botao de concluir em cada estado em que ele aparece.
@@ -358,6 +356,7 @@ export function MissionCard({
           onRewarded={onRewarded}
           onReload={onReload}
           reloadLabel={reloadLabel}
+          reloadWaiting={reloadWaiting}
           describedBy={titleId}
         />
       )}

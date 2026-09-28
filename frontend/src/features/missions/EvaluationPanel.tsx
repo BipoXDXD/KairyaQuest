@@ -8,6 +8,7 @@ import type {
 } from '../../shared/types/mission'
 import type { Reward } from '../../shared/types/reward'
 import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluationFailure'
+import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
 
@@ -222,6 +223,7 @@ function EvidenceAndEvaluation({
   onRewarded,
   onReload,
   reloadLabel,
+  reloadWaiting,
   describedBy,
 }: {
   mission: Mission
@@ -229,6 +231,7 @@ function EvidenceAndEvaluation({
   onRewarded?: () => void
   onReload?: () => void
   reloadLabel: string
+  reloadWaiting: boolean
   describedBy?: string
 }) {
   const { state: request, request: requestEvaluation } = useRequestEvaluation(
@@ -273,10 +276,11 @@ function EvidenceAndEvaluation({
           <button
             type="button"
             data-testid="evaluation-reload"
+            disabled={reloadWaiting}
             onClick={onReload}
             className={REQUEST_BUTTON_CLASS}
           >
-            {reloadLabel}
+            {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
           </button>
         )}
         <div role="status" data-testid="evaluation-status" className="text-sm text-sky-200">
@@ -315,6 +319,9 @@ function EvidenceAndEvaluation({
  *
  * `onReload` e o mesmo recarregamento que a falha de conclusao usa: a falha
  * `refresh` da avaliacao manda atualizar, e o painel oferece o botao.
+ * `reloadWaiting` e o mesmo estado do botao da conclusao: com uma conclusao em
+ * voo, recarregar agora a atropelaria, entao o botao fica desabilitado e diz a
+ * mesma espera (MF2).
  * `describedBy` e o id do titulo da missao, que descreve o "Pedir avaliação
  * da Tifa" sem mudar o nome exato dele.
  */
@@ -323,12 +330,14 @@ export function EvaluationPanel({
   onRewarded,
   onReload,
   reloadLabel = 'Atualizar o quadro',
+  reloadWaiting = false,
   describedBy,
 }: {
   mission: Mission
   onRewarded?: () => void
   onReload?: () => void
   reloadLabel?: string
+  reloadWaiting?: boolean
   describedBy?: string
 }) {
   // `== null` de proposito: uma API anterior ao E nem manda as chaves.
@@ -352,6 +361,7 @@ export function EvaluationPanel({
           onRewarded={onRewarded}
           onReload={onReload}
           reloadLabel={reloadLabel}
+          reloadWaiting={reloadWaiting}
           describedBy={describedBy}
         />
       )}

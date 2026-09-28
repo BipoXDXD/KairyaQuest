@@ -1381,6 +1381,41 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(campoDepois).toHaveValue('Texto do oito')
   })
 
+  it('MF2: o botao de recarga da avaliacao espera a conclusao em voo, como o da conclusao', async () => {
+    let terminar: (resposta: Response) => void = () => undefined
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([{ ...pendenteComEvidencia }, B]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+      'POST /api/missions/8/complete': () =>
+        new Promise<Response>((resolve) => {
+          terminar = resolve
+        }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    // A conclusao de 8 fica em voo; a avaliacao de 7 falha pedindo atualizar.
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    fireEvent.click(within(card(7)).getByTestId('evaluation-request'))
+
+    // O quadro so "espera" depois do pedido de recarga com algo em voo.
+    fireEvent.click(await within(card(7)).findByTestId('evaluation-reload'))
+    const recarga = within(card(7)).getByTestId('evaluation-reload')
+    expect(recarga).toBeDisabled()
+    expect(recarga).toHaveTextContent('Aguardando a conclusão em andamento…')
+
+    await act(async () => {
+      terminar(Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }))
+      await Promise.resolve()
+    })
+    // A conclusao terminou: a recarga esperada acontece e remonta os cartoes.
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    expect(within(card(7)).queryByTestId('evaluation-reload')).not.toBeInTheDocument()
+  })
+
   it('depois de concluir, o foco nao se perde para o body: vai para o titulo do cartao', async () => {
     routeFetch({
       'GET /api/missions': () => Response.json([pendente]),

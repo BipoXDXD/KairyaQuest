@@ -350,6 +350,30 @@ describe('EvaluationPanel -- fix-1 da revisao', () => {
     expect(onReload).toHaveBeenCalledTimes(1)
   })
 
+  it('MF2: com uma conclusao em voo (reloadWaiting), o botao de recarga fica desabilitado e diz a espera', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+    })
+    const onReload = vi.fn()
+    render(
+      <EvaluationPanel
+        mission={comEvidencia}
+        onReload={onReload}
+        reloadLabel="Atualizar o quadro"
+        reloadWaiting
+      />,
+    )
+
+    fireEvent.click(botaoPedir())
+
+    const espera = await screen.findByTestId('evaluation-reload')
+    expect(espera).toBeDisabled()
+    expect(espera).toHaveTextContent('Aguardando a conclusão em andamento…')
+    expect(espera).not.toHaveTextContent('Atualizar o quadro')
+    fireEvent.click(espera)
+    expect(onReload).not.toHaveBeenCalled()
+  })
+
   it('o botao de recarga nao aparece fora da falha refresh', () => {
     routeFetch({})
 
