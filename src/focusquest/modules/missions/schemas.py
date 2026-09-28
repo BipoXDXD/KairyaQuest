@@ -149,11 +149,21 @@ TAMANHO_MAXIMO_DA_EVIDENCIA = 4000
 TAMANHO_MAXIMO_DO_LINK = 2000
 TAMANHO_MAXIMO_DO_FEEDBACK = 1500
 
+
+def _sem_nul(valor: str) -> str:
+    """Recusa o byte NUL: o PostgreSQL nao o guarda em `text`, e sem esta guarda
+    a entrega viraria um 500 em vez de um 422 que aponta o campo."""
+    if "\x00" in valor:
+        raise ValueError("o texto nao pode conter o caractere NUL")
+    return valor
+
+
 TextoDaEvidencia = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True, min_length=1, max_length=TAMANHO_MAXIMO_DA_EVIDENCIA
     ),
+    AfterValidator(_sem_nul),
 ]
 # `(?i)`: HTTPS:// colado de um celular e o mesmo endereco (EM2). `\S+`: um
 # espaco no meio nao e endereco nenhum. O backend NUNCA abre o link (E3).
@@ -164,6 +174,7 @@ LinkDaEvidencia = Annotated[
         max_length=TAMANHO_MAXIMO_DO_LINK,
         pattern=r"(?i)^https?://\S+$",
     ),
+    AfterValidator(_sem_nul),
 ]
 
 
