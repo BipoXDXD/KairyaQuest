@@ -2,6 +2,7 @@
 
 import pytest
 
+from focusquest.modules.tutoring.anthropic_provider import MAX_TOKENS_DA_AVALIACAO
 from focusquest.modules.tutoring.provider import (
     Ferramenta,
     MensagemDoTurno,
@@ -43,20 +44,19 @@ def test_avaliar_devolve_a_entrada_da_ferramenta(
     assert tutoria.provedor.avaliar(TURNO, FERRAMENTA) == {"verdict": "atende"}
 
 
-def test_avaliar_forca_a_ferramenta_na_requisicao(
+def test_avaliar_pede_a_ferramenta_com_tool_choice_auto_e_strict(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
+    """EM3: `tool_choice` NAO e forcado (daria 400 em alguns modelos); a
+    ferramenta e `strict` e uma chamada so por resposta."""
     falso.roteiro = Roteiro(
         blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),)
     )
     tutoria.provedor.avaliar(TURNO, FERRAMENTA)
     corpo = falso.recebidas[-1].corpo
-    assert corpo["tool_choice"] == {
-        "type": "tool",
-        "name": "record_evaluation",
-        "disable_parallel_tool_use": True,
-    }
+    assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
     assert [t["name"] for t in corpo["tools"]] == ["record_evaluation"]
+    assert corpo["tools"][0]["strict"] is True
     assert "thinking" not in corpo
     # O que o chamador manda e o que chega ao modelo: a rubrica so chega por aqui.
     assert corpo["tools"][0]["name"] == FERRAMENTA.nome
@@ -65,9 +65,22 @@ def test_avaliar_forca_a_ferramenta_na_requisicao(
     assert corpo["messages"] == [{"role": "user", "content": '{"evidence": "x"}'}]
 
 
+def test_avaliar_manda_o_max_tokens_proprio_da_avaliacao(
+    falso: ServidorAnthropicFalso, tutoria: Tutoria
+) -> None:
+    """M5: nao e o `max_tokens` do chat (256 nesta fixture, 1024 em producao)."""
+    falso.roteiro = Roteiro(
+        blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),)
+    )
+    tutoria.provedor.avaliar(TURNO, FERRAMENTA)
+    assert falso.recebidas[-1].corpo["max_tokens"] == MAX_TOKENS_DA_AVALIACAO == 2048
+
+
 def test_avaliar_sem_chamar_a_ferramenta_e_none(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
+    """Com `tool_choice` auto o modelo PODE so conversar: resposta so de texto
+    (`end_turn`, sem `tool_use`) e `None`, nao erro."""
     falso.roteiro = Roteiro(blocos=(Texto(("Nao vou avaliar.",)),))
     assert tutoria.provedor.avaliar(TURNO, FERRAMENTA) is None
 
