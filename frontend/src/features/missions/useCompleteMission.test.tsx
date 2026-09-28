@@ -377,6 +377,30 @@ describe('useCompleteMission', () => {
     expect(onCompleted).not.toHaveBeenCalled()
   })
 
+  it('um onCompleted que lanca nao vira falha: a conclusao ja aconteceu no servidor', async () => {
+    const erro = new Error('secao quebrou')
+    const onCompleted = vi.fn(() => {
+      throw erro
+    })
+    const registrar = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluidaResposta)))
+    const { result } = renderCompletion(onCompleted)
+
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
+    })
+    expect(onCompleted).toHaveBeenCalledTimes(1)
+    expect(registrar).toHaveBeenCalledWith(expect.any(String), erro)
+  })
+
   it('avisa o fim do voo tambem quando o POST falha', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     const { result, reload } = renderCompletion()

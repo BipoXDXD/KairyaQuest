@@ -88,6 +88,27 @@ describe('useRequestEvaluation', () => {
     expect(onRewarded).toHaveBeenCalledTimes(1)
   })
 
+  it('um onRewarded que lanca nao vira falha: o bonus ja foi concedido no servidor', async () => {
+    routeFetch({ [KEY]: () => Response.json(comBonus) })
+    const erro = new Error('quadro quebrou')
+    const onRewarded = vi.fn(() => {
+      throw erro
+    })
+    const registrar = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { result } = renderHook(() => useRequestEvaluation(7, onRewarded))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'done', result: comBonus })
+    })
+    expect(onRewarded).toHaveBeenCalledTimes(1)
+    // A excecao nao some: fica registrada, sem mexer no estado.
+    expect(registrar).toHaveBeenCalledWith(expect.any(String), erro)
+  })
+
   it('NAO chama onRewarded quando reward e null', async () => {
     routeFetch({ [KEY]: () => Response.json(semBonus) })
     const onRewarded = vi.fn()

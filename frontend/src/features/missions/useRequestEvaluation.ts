@@ -45,7 +45,14 @@ export function useRequestEvaluation(
       .then((result) => {
         setState({ status: 'done', result })
         if (result.reward !== null) {
-          onRewarded?.()
+          // O estado de sucesso ja esta gravado, e o bonus ja foi concedido no
+          // servidor: um callback do chamador que lance nao pode cair no
+          // `.catch` abaixo e virar "falhou". Fica registrado, sem mexer no estado.
+          try {
+            onRewarded?.()
+          } catch (error) {
+            console.error('onRewarded lancou depois do bonus concedido:', error)
+          }
         }
       })
       .catch((error: unknown) => {

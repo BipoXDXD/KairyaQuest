@@ -104,7 +104,14 @@ export function useCompleteMission(
           registry.release(missionId)
           const { reward, ...mission } = completion
           setState({ status: 'completed', mission, reward })
-          onCompleted?.()
+          // A conclusao ja esta gravada no servidor e no estado: um callback do
+          // chamador que lance nao pode cair no `.catch` abaixo e virar
+          // "falhou". Fica registrado, sem mexer no estado.
+          try {
+            onCompleted?.()
+          } catch (error) {
+            console.error('onCompleted lancou depois da conclusao:', error)
+          }
         })
         .catch((error: unknown) => {
           const failure = describeCompletionFailure(error)
