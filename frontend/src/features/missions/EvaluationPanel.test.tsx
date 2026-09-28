@@ -272,16 +272,21 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(onRewarded).not.toHaveBeenCalled()
   })
 
-  it('falha 422: a tela diz que a evidencia nao foi aceita, sem "tente de novo"', async () => {
+  it('falha 422: o id fora da faixa e missao inexistente, entao manda atualizar, sem "tente de novo"', async () => {
     routeFetch({ [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }) })
     render(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
     const alerta = await screen.findByRole('alert')
-    expect(alerta).toHaveTextContent('A evidência não foi aceita. Revise o texto e o link.')
+    expect(alerta).toHaveTextContent(
+      'Esta missão não está mais disponível. Atualize para ver o estado atual.',
+    )
     expect(alerta).not.toHaveTextContent(/tente de novo|tentar de novo/i)
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).not.toBeInTheDocument()
   })
 
   it('falha 502: a mensagem e "Tentar de novo", que pede de novo', async () => {

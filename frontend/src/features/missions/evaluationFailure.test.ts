@@ -74,16 +74,17 @@ describe('describeEvaluationFailure', () => {
     expect(describeEvaluationFailure(new ApiError('x', 404, 'codigo_futuro'))).toEqual(GENERIC)
   })
 
-  it('um 422 nao e "tente de novo": a evidencia foi recusada, e repetir nao adianta', () => {
+  it('um 422 e o id do caminho fora da faixa: missao que nao existe, entao manda atualizar', () => {
+    // `POST /evaluation` nao tem corpo: o unico 422 possivel e o do id.
     expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual({
-      message: 'A evidência não foi aceita. Revise o texto e o link.',
-      recovery: 'unavailable',
+      message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
+      recovery: 'refresh',
     })
   })
 
-  it('um 422 com code DESCONHECIDO tambem e evidencia recusada (nao "tente de novo")', () => {
+  it('um 422 com code DESCONHECIDO tambem manda atualizar (nao "tente de novo")', () => {
     expect(describeEvaluationFailure(new ApiError('x', 422, 'codigo_futuro')).recovery).toBe(
-      'unavailable',
+      'refresh',
     )
   })
 
