@@ -55,31 +55,38 @@ def test_evidencia_em_missao_nao_concluida_e_defeito_e_nao_vira_verificacao() ->
         verificacao_da_missao(MissionState.PENDENTE, True)
 
 
-@pytest.mark.parametrize(
-    ("atual", "destino"),
-    [
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.CONCLUIDA),
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.FALHOU),
-        (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.AVALIANDO),
-    ],
-)
+_LEGAIS = [
+    (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.CONCLUIDA),
+    (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.FALHOU),
+    (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.AVALIANDO),
+]
+
+# O complemento das legais entre TODOS os pares (9 - 3 = 6), gerado e nao
+# escrito a mao: uma transicao nova no enum entra aqui como ilegal ate alguem
+# decidir o contrario.
+_ILEGAIS = [
+    (atual, destino)
+    for atual in EstadoDaAvaliacao
+    for destino in EstadoDaAvaliacao
+    if (atual, destino) not in _LEGAIS
+]
+
+
+@pytest.mark.parametrize(("atual", "destino"), _LEGAIS)
 def test_transicoes_legais_da_avaliacao(
     atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
 ) -> None:
+    # Sem assercao explicita de proposito: a transicao legal passa por nao levantar.
     validar_transicao_da_avaliacao(atual, destino)
 
 
-@pytest.mark.parametrize(
-    ("atual", "destino"),
-    [
-        (EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.AVALIANDO),
-        (EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.FALHOU),
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.AVALIANDO),
-        (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.CONCLUIDA),
-    ],
-)
+@pytest.mark.parametrize(("atual", "destino"), _ILEGAIS)
 def test_transicoes_ilegais_da_avaliacao(
     atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
 ) -> None:
-    with pytest.raises(TransicaoIlegalError, match=f"'{atual.value}'"):
+    # A mensagem traz os dois estados: "ir de 'atual' para 'destino'".
+    with pytest.raises(
+        TransicaoIlegalError,
+        match=f"ir de '{atual.value}' para '{destino.value}'",
+    ):
         validar_transicao_da_avaliacao(atual, destino)
