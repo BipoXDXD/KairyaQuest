@@ -277,8 +277,8 @@ FocusQuest/
 │   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
 │   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
-│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, cada restrição dizendo não com o nome, o downgrade que falha alto com bônus gravado (E, Task 2)
-│   │   ├── test_evaluation_models.py  # os CHECKs das duas tabelas por INSERT cru, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
+│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2)
+│   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
 │   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice forçado, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
 │   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2); o bloco com tool_name e o padrão create_mission (E, Task 4)
@@ -307,8 +307,8 @@ FocusQuest/
 │       ├── test_clock.py
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
-│       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
+│       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
@@ -903,7 +903,7 @@ opcional `evidence`:
   '^https?://\S+$'`, `ck_mission_evidence_link`).
 - **`evidence` não aceita campo a mais** (`extra="forbid"`): um campo
   desconhecido é 422, e não ignorado em silêncio.
-- **Sem `evidence`, nada muda** em relação ao D: a missão é concluída como
+- **Sem `evidence`, a conclusão não muda** em relação ao D (a resposta só ganha os três campos derivados): a missão é concluída como
   `autodeclarada`.
 
 **Os erros que a evidência acrescenta:**

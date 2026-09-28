@@ -12,7 +12,7 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 **Incremento E — entrega com evidência e avaliação.** Branch
 `feat/incremento-e`, aberta a partir de `fe37820` (a branch
-`docs/retomada-pos-d`, ainda local: o remoto não existe, pendência 89). Spec em
+`docs/retomada-pos-d`, ainda local na época: o remoto não existia, pendência 89, resolvida depois). Spec em
 `docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`
 (decisões E1–E18, emendas EM1–EM2), aprovada pelo dono em 2026-09-28; plano em
 `docs/superpowers/plans/2026-09-28-incremento-e.md`. **Estado de publicação:
@@ -794,7 +794,7 @@ frontend/package-lock.json uv.lock` vazio (medido nesta sessão).
 
 ### Incremento E — decisões E1–E18 (da spec) e EM1–EM2 (emendas)
 
-Transcritas da spec
+Resumidas da spec (a spec é a fonte; o texto integral dos motivos está nela)
 (`docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`),
 desenhada pelo agente com **delegação expressa do dono** ("pode tomar as
 decisões por mim, escolha sempre as que mais fazem sentido", 2026-09-28) e
@@ -852,7 +852,7 @@ fora do controle de versão), com o motivo e o custo.
 
 | # | Decisão | Motivo e custo |
 |---|---|---|
-| RE1 | **Paralelismo por worktree**, a pedido do dono ("use mais agentes"), no lugar da execução sequencial no checkout principal que o preflight tinha decidido: `FocusQuest-e-dados` (Tasks 2 → 3 → 5), `FocusQuest-e-provedor` (Task 4 e o lote 5a) e `FocusQuest-e-front` (Tasks 6 → 7, o lote 6m e a Task 8); o checkout principal fica para revisão e integração por merge. Depois, `FocusQuest-e-docs` (esta documentação). O pedido subiu de três para cinco agentes simultâneos | Um implementador por worktree, sem disputar o mesmo gate, banco e portas (`scripts/novo-worktree.sh`). Custo: merges de integração, cada um rodando o gate completo (`pre-merge-commit`), e o risco de conflito de import em `missions/router.py` entre o 5a e a Task 3, resolvido no merge |
+| RE1 | **Paralelismo por worktree**, a pedido do dono ("use mais agentes"), no lugar da execução sequencial no checkout principal que o preflight tinha decidido: `FocusQuest-e-dados` (Tasks 2 → 3 → 5), `FocusQuest-e-provedor` (Task 4 e o lote 5a) e `FocusQuest-e-front` (Tasks 6 → 7, o lote 6m e a Task 8); o checkout principal fica para revisão e integração por merge. Depois, `FocusQuest-e-docs` (esta documentação). O pedido subiu de três para cinco agentes simultâneos | Um implementador por worktree, sem disputar o mesmo gate, banco e portas (`scripts/novo-worktree.sh`). Custo: merges de integração, cada um rodando o gate completo (`pre-merge-commit`), e o risco de conflito de import em `missions/router.py` entre o 5a e a Task 3 (não medido se ocorreu) |
 | RE2 | **Pipeline: uma tarefa começa enquanto a revisão da anterior corre.** A Task 3 foi despachada em `e-dados` durante a revisão da Task 2; o lote 6m (os *minors* da Task 6), em `e-front`, durante a revisão da Task 7. As correções que a revisão pedisse entrariam **depois**, no mesmo worktree, em commit próprio (foi o que aconteceu: `451f21e` depois da Task 3, `78c1fd5` depois do 6m) | O revisor é sonnet e lê um pacote de diff (`review-<base>..<topo>.diff`), então não bloqueia o implementador seguinte. Custo: o revisor final precisa reconstruir a ordem dos commits, e os diffs de correção e da tarefa seguinte se sobrepõem em parte |
 | RE3 | **Modelos por papel.** Implementadores **sonnet** nas tarefas com código completo no plano (Tasks 0/1, 2, 3, 4, 6 e 9); **opus** (o agente `complexo`) nas de julgamento (Tasks 5, 7 e 8); revisores sonnet; revisão final opus; nenhum Haiku (a R3 do D, depois do incidente da Task 0) | Código já escrito no plano não pede o modelo mais caro; decisão de projeto (a orquestração da avaliação, a acessibilidade da tela, o E2E) pede. Custo: retrabalho se uma tarefa sonnet travar (a regra é escalar para opus) |
 | RE4 | **E17 prevalece sobre o código.** A revisão da Task 7 reprovou só a conformidade com a spec: a falha `refresh` na conclusão apagava o rascunho. Decidiu-se corrigir o **código** (o rascunho só sai no sucesso), não emendar a spec | A spec é a autoridade e a regra "nunca se perde numa falha" (§7) é do produto. `CompletionRegistry.release(id)` passou a apagar **só a chave**; o novo `discardDraft(id)` apaga só o rascunho e só é chamado no sucesso. Custo: o registro separa duas operações que eram uma, e o rascunho de uma missão que falhou com `refresh` fica no registro até um sucesso que talvez nunca venha (a missão já está concluída ou sumiu; o registro vive enquanto a página vive) |
@@ -873,7 +873,7 @@ o topo da branch de integração, é da parte 2.
 - **O `POST /api/missions/{mission_id}/complete` estendido** (decisão E1).
   Sem rota nova: o corpo ganhou o campo opcional `evidence` (`text`, `link?`),
   e o `MissionRead` ganhou `verification`, `evidence` e `evaluation` (sem
-  `bonus_xp`, EM1), derivados na leitura. Sem `evidence`, nada muda. O motivo
+  `bonus_xp`, EM1), derivados na leitura. Sem `evidence`, a conclusão não muda (a resposta só ganha os três campos derivados). O motivo
   de não haver rota de entrega é o da E1: uma ordem de conclusão, uma
   idempotência, um crédito. Contrato completo em `docs/ARCHITECTURE.md` §3.
 - **O `POST /api/missions/{mission_id}/evaluation` e o módulo `evaluation`**
@@ -2444,7 +2444,7 @@ vista **reprovando** e desfeita por `cp`, segundo os relatórios das tarefas.
   navegador: é da Task 8. Evidência do relatório da tarefa (antes do commit do
   fix): frontend com 100% nos quatro eixos.
 - **Integração até aqui.** Merges de integração, cada um pelo
-  `pre-merge-commit` (gate completo, segundo o ledger): `6a8b4d2` (Task 4 na branch de
+  `pre-merge-commit` (gate completo; o ledger registra o gate verde para `f761bbe`, `b04726c`, `631a68e`, `8321a55` e `22c6a7e`, e nada para `6a8b4d2`): `6a8b4d2` (Task 4 na branch de
   integração), `f761bbe` (Tasks 6 e 7), `b04726c` (integração em `e-dados`,
   antes da Task 5), `631a68e` e `8321a55` (5a em `e-dados`, RE5) e `22c6a7e`
   (backend das Tasks 2, 3 e 5a em `e-front`, antes da Task 8). `wt/e-docs` parte de
@@ -3617,14 +3617,15 @@ C".
     (`grep -rn "missions.router import" src` acha só `main.py`, que importa o
     `router`). **Continua aberto:** os dois pares de pacotes com arestas nos
     dois sentidos (`missions` ↔ `progression`, `progression` ↔ `tutoring`).
-    O E **não** acrescentou um terceiro par — foi para isso que E11 pôs as
-    tabelas da entrega em `missions` e o processo de avaliar num módulo à
-    parte —, mas também não desfez os dois que já existiam. A segunda fonte de
-    XP (o bônus) chegou sem ser motivo para inverter `missions → progression`:
-    o bônus é escrito por `evaluation`, não pela conclusão. Revisitar o par
+    A decisão E11 põe as tabelas da entrega em `missions` e o processo de
+    avaliar num módulo à parte justamente para **não** criar um terceiro par
+    nos dois sentidos; **até `22c6a7e` o grafo de imports não ganhou par novo**
+    (o módulo `evaluation` ainda não existe nesta árvore), e a conferência
+    com o módulo integrado é da fase 2. Os dois pares que já existiam
+    continuam. Revisitar o par
     quando uma segunda operação precisar creditar XP na **mesma** transação
     da conclusão.
-89. **O repositório remoto não existe mais.** Medido em 2026-09-28: `git
+~~89. **O repositório remoto não existe mais.** Medido em 2026-09-28: `git
     fetch` responde `ERROR: Repository not found.`, `gh repo view
     BipoXDXD/FocusQuest` responde `Could not resolve to a Repository`, e a
     listagem da conta (`gh repo list BipoXDXD`, 17 repositórios; nenhuma
@@ -3638,7 +3639,17 @@ C".
     reaplicar a proteção da `main`, exigindo `quality-gate` depois de o
     primeiro push mostrar o nome real do check, README §12) ou apontar o
     `origin` para onde ele estiver agora. Enquanto isso, o trabalho segue em
-    branches locais, cada commit pelo hook.
+    branches locais, cada commit pelo hook.~~
+    **Resolvida em 2026-09-28.** O dono autorizou recriar: o repositório
+    `BipoXDXD/FocusQuest` (privado) foi recriado com `gh repo create` e a
+    proteção da `main` reaplicada por `gh api PUT .../branches/main/protection`
+    — `quality-gate` obrigatório com base atualizada (`strict`),
+    `enforce_admins` ativo, sem force-push, sem deleção —, **conferida pela
+    resposta da API**, não por uma tentativa de push. O CI da `main` rodou
+    verde (4 jobs + `quality-gate`). O primeiro `git push origin main` **não**
+    passou pelo gate do pre-push (a ref remota velha fez o `pre-commit`
+    pular — limitação do `docs/QUALITY.md` §6); o conteúdo (`49faaf0`) tinha
+    passado `make check` local antes. Ver a nota 98 sobre a numeração dos PRs.
 
 **Incremento E — entrega e avaliação (2026-09-28)**
 
@@ -3668,14 +3679,15 @@ ledger; nenhum é bug esquecido.
     chama a Anthropic.** `docs/QUALITY.md` §9 diz o que as camadas 1 e 2
     provam e o que esta não prova.
 92. **Evidência sem upload** (decisão E3). Só texto (1 a 4000 pontos de código)
-    e um link `http(s)` de até 2000; o backend **nunca abre o link** e a Tifa é
-    avisada disso, então só conta o que o texto diz. Arquivo, captura de tela e
+    e um link `http(s)` de até 2000; o backend **nunca abre o link** (pela decisão E3, a Tifa será avisada
+    disso, então só contará o que o texto diz; o prompt da avaliação é da fase 2). Arquivo, captura de tela e
     repositório enviado pedem armazenamento, limite de tipo e varredura; abrir
     o link pede defesa contra SSRF e trata conteúdo não confiável dentro do
     prompt. Fazer quando houver necessidade medida (README §3).
 93. **Uma avaliação por missão, sem contestar** (decisão E8). Concluída, a
-    avaliação vale para sempre: pedir de novo devolve a mesma (200, mesmo
-    corpo); só uma tentativa que **falhou** se repete. Não há reavaliar nem
+    avaliação vale para sempre: pela decisão E8, pedir de novo devolve a mesma
+    (200, mesmo corpo) e só uma tentativa que **falhou** se repete — o
+    serviço que faz isso é da Task 5, ainda não descrito aqui. Não há reavaliar nem
     contestar o veredito, e a pessoa que discorda de um `nao_atende` não tem
     caminho. É de propósito (anti-roleta: sem o limite, pedir até sair
     `atende`); um dia pode virar "contestar com evidência nova", com custo e
@@ -3707,29 +3719,34 @@ ledger; nenhum é bug esquecido.
     `tool_use` da mesma ferramenta: o último vence, improvável com
     `disable_parallel_tool_use`, e o tipo `Bloco` do `falso.ts` tem dois
     membros de `tool_input` (Task 4); (d) tirar `httpx2.TransportError` do ramo
-    de indisponibilidade de `_traduzir_erros` não reprova teste nenhum, e tirar
-    só `httpx2.TimeoutException` reprova o chat mas não a avaliação — o lote 5b
-    tem o teste parametrizado (Task 5a); (e) o `trim()` do JavaScript remove
+    de indisponibilidade de `_traduzir_erros` não reprovava teste nenhum, e
+    tirar só `httpx2.TimeoutException` reprovava o chat mas não a avaliação
+    (Task 5a) — **o lote 5b existe** (commit `52b5a59`, em outro worktree,
+    `tests/unit/test_traducao_de_erros.py`, 7 casos, 4 mutações de
+    meia-cláusula, cada uma reprovando o seu caso, segundo o relatório dele)
+    e **ainda não está neste worktree**: riscar (d) quando entrar; (e) o `trim()` do JavaScript remove
     U+FEFF e o `strip` do Python não: os dois lados divergem sobre o que é
     "espaço nas pontas" (Task 6; não medido o efeito de ponta a ponta); (f) o teste do
     congelamento do vazio faz um *cast* `as {text; link}` sem comentário (Task
     6m); (g) o rascunho de uma missão que falhou com `refresh` fica no
     registro até um sucesso que talvez nunca venha (RE4).
-98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi recriado
-    (`BipoXDXD/FocusQuest`; o `origin` responde de novo), então os "PR #4",
-    "PR #10", "PR #17" e "PR #18" citados neste documento são do repositório
-    **antigo** e não existem no novo; os hashes de commit citados continuam
-    valendo no histórico local. Isto trata do remoto da pendência 89. **Não
-    verificado nesta tarefa:** se a proteção da `main` (o `quality-gate`
-    obrigatório, `enforce_admins`) foi reaplicada no repositório novo.
-99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19**, segundo o
-    aviso do GitHub Actions relatado durante a execução do incremento.
-    Os jobs de `.github/workflows/quality.yml` usam `runs-on: ubuntu-latest`,
-    então passam a rodar na imagem nova sem mudança no arquivo. Nada foi
-    medido sobre a imagem nova; se algum passo do gate depender da versão do
-    sistema (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da
-    data. Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as
-    atualizações da imagem.
+98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
+    recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
+    `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1
+    ("docs: retomada no clone movido e correções pós-incremento D"). Os PRs
+    #1 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
+    repositório **anterior**, apagado; no recriado eles não existem, e o #1
+    de hoje **não** é o de mesmo número de antes. Os hashes de commit citados
+    continuam valendo no histórico local.
+99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.** O aviso
+    foi **observado** pelo controlador nas anotações do CI da `main` do
+    repositório recriado (2026-09-28). Os jobs de
+    `.github/workflows/quality.yml` usam `runs-on: ubuntu-latest`, então
+    passam a rodar na imagem nova sem mudança no arquivo. Nada foi medido
+    sobre a imagem nova; se algum passo do gate depender da versão do sistema
+    (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da data.
+    Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as atualizações
+    da imagem.
 
 ## Próximo incremento
 

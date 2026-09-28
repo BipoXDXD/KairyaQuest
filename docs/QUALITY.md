@@ -1018,10 +1018,14 @@ True}`), sem pedir thinking, consumindo o stream inteiro por dentro. **Nenhum
 servidor falso novo:** o `ServidorAnthropicFalso` das camadas 1 e 2 serve a
 avaliação como serve a conversa.
 
-- **O falso roteirizado com `tool_name`.** O bloco de chamada de ferramenta do
-  roteiro (`ChamadaDeFerramenta`) ganhou o nome. Até o E o falso só emitia
-  `create_mission`; agora o roteiro escolhe o nome da ferramenta, e o padrão
-  continua `create_mission`, então nada do que existia muda. No JSON do
+- **O falso roteirizado com `tool_name`.** O `ChamadaDeFerramenta` do roteiro
+  em Python (`provedor_falso.py`) **já** tinha o campo `nome`, com padrão
+  `create_mission`, antes do E; o E **não** o alterou. O que o E acrescentou
+  (Task 4) foi o `tool_name` no **JSON do controle do falso do E2E**
+  (`falso_do_e2e._bloco`) e no tipo `Bloco` de `frontend/tests/e2e/falso.ts`:
+  até então um cenário de E2E só conseguia roteirizar `create_mission`, e agora
+  escolhe a ferramenta. O padrão continua `create_mission`, então nada do que
+  existia muda. No JSON do
   roteiro (`roteiro_do_json`, chave `blocks`) o bloco é `{"tool_input": {...}}`
   (padrão) ou `{"tool_input": {...}, "tool_name": "record_evaluation"}`;
   `tool_name` precisa ser um texto **não vazio**, senão `roteiro_do_json`
