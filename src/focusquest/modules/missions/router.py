@@ -26,6 +26,7 @@ from focusquest.modules.missions.schemas import (
     MissionRead,
 )
 from focusquest.modules.missions.service import (
+    NovaEvidencia,
     concluir_missao,
     criar_missao,
     listar_missoes,
@@ -115,7 +116,16 @@ def concluir(
     commit, so para montar a resposta -- ver o comentario abaixo.
     """
     missao = concluir_missao(
-        session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock
+        session,
+        USUARIO_UNICO,
+        mission_id,
+        dados.operation_id,
+        clock=clock,
+        evidencia=(
+            None
+            if dados.evidence is None
+            else NovaEvidencia(dados.evidence.text, dados.evidence.link)
+        ),
     )
     session.commit()
     # Relida depois do commit, com o relogio lido de novo: a disponibilidade de
