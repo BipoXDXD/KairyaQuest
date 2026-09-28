@@ -215,7 +215,7 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
  * O botao some so quando repetir nao tem sentido: avaliacao concluida (E8) ou
  * falha que pede atualizar. Na falha `unavailable` (503) ele fica HABILITADO
  * (E18: "fica sempre habilitado"; o 503 vira mensagem): desabilitar o mataria
- * ate remontar o cartao, mesmo com a chave configurada depois (M3 da revisao).
+ * ate remontar o cartao, mesmo com a chave configurada depois.
  */
 function EvidenceAndEvaluation({
   mission,
@@ -292,7 +292,7 @@ function EvidenceAndEvaluation({
         {failure !== null && (
           // `alert` so na falha FRESCA (o pedido que a pessoa acabou de fazer).
           // A gravada, lida com a pagina, e texto comum: com varias missoes
-          // falhadas, cada cartao anunciaria um evento que nao e novo (M2).
+          // falhadas, cada cartao anunciaria um evento que nao e novo.
           <p
             role={view.kind === 'failed' && view.fresh ? 'alert' : undefined}
             data-testid="evaluation-error"
@@ -321,9 +321,9 @@ function EvidenceAndEvaluation({
  * `refresh` da avaliacao manda atualizar, e o painel oferece o botao.
  * `reloadWaiting` e o mesmo estado do botao da conclusao: com uma conclusao em
  * voo, recarregar agora a atropelaria, entao o botao fica desabilitado e diz a
- * mesma espera (MF2).
- * `describedBy` e o id do titulo da missao, que descreve o "Pedir avaliação
- * da Tifa" sem mudar o nome exato dele.
+ * mesma espera.
+ * `describedBy` e o id do titulo da missao, que descreve o botao de pedir a
+ * avaliacao da Tifa sem mudar o nome exato dele.
  */
 export function EvaluationPanel({
   mission,

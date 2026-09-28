@@ -789,7 +789,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     // Nada em voo: o reload e imediato.
     expect(listGets(fetchMock)).toBe(2)
     // O cartao de A REMONTOU: o aviso da falha sumiu, mas a chave continua
-    // retida no registro, entao o botao segue dizendo "Tentar de novo" (MF1) --
+    // retida no registro, entao o botao segue dizendo "Tentar de novo" --
     // "Concluir" sugeriria um envio novo, e ele reenvia a MESMA chave.
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -1314,7 +1314,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
         expect(within(card(7)).getByLabelText('O que você fez')).not.toBe(campoAntes)
       })
       // O cartao remontou (idle, sem a mensagem de falha), e a chave retida
-      // continua valendo: editar de novo perderia a entrega (S-I1).
+      // continua valendo: editar de novo perderia a entrega.
       expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
       expect(within(card(7)).getByLabelText('O que você fez')).toHaveAttribute('readonly')
       expect(within(card(7)).getByLabelText('Link (opcional)')).toHaveAttribute('readonly')
@@ -1381,7 +1381,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(campoDepois).toHaveValue('Texto do oito')
   })
 
-  it('MF2: o botao de recarga da avaliacao espera a conclusao em voo, como o da conclusao', async () => {
+  it('o botao de recarga da avaliacao espera a conclusao em voo, como o da conclusao', async () => {
     let terminar: (resposta: Response) => void = () => undefined
     const fetchMock = routeFetch({
       'GET /api/missions': () => Response.json([{ ...pendenteComEvidencia }, B]),

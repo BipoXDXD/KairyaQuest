@@ -233,7 +233,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
   it('falha 503: a mensagem "fora do ar", e o botao continua HABILITADO (E18)', async () => {
     // E18: o botao fica sempre habilitado; o 503 vira mensagem. Desabilitar
     // mataria o botao ate remontar o cartao, mesmo com a chave configurada
-    // depois (achado M3 da revisao Opus).
+    // depois.
     const fetchMock = routeFetch({
       [KEY]: (_init, call) =>
         call === 1
@@ -355,7 +355,7 @@ describe('EvaluationPanel -- fix-1 da revisao', () => {
     expect(onReload).toHaveBeenCalledTimes(1)
   })
 
-  it('MF2: com uma conclusao em voo (reloadWaiting), o botao de recarga fica desabilitado e diz a espera', async () => {
+  it('com uma conclusao em voo (reloadWaiting), o botao de recarga fica desabilitado e diz a espera', async () => {
     routeFetch({
       [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
     })

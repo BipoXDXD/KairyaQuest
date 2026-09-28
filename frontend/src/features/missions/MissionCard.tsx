@@ -29,7 +29,7 @@ const RELOAD_BUTTON_CLASS =
  *
  * `retryPending` vem do REGISTRO, nao do estado do cartao: o reload remonta o
  * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
- * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete (MF1).
+ * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete.
  */
 function completeLabel(completion: CompletionState, retryPending: boolean): string {
   if (completion.status === 'submitting') {
@@ -50,7 +50,7 @@ function statusText(completion: CompletionState): string {
  * Por que o rascunho em uso nao pode sair, ou `null` se pode (ou nao ha
  * rascunho). O texto mora JUNTO do Concluir, fora do disclosure: com o
  * formulario recolhido, o botao desabilitado continua com o motivo a vista e
- * ligado por `aria-describedby` (fix-1 da Task 7).
+ * ligado por `aria-describedby`.
  */
 function blockedReason(draft: EvidenceDraft): string | null {
   const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
@@ -237,7 +237,7 @@ export function MissionCard({
     registry.saveDraft(listed.id, next)
   }
   // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
-  // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
+  // concluir sem ele trocaria a entrega que a pessoa quis dar. Sem
   // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
   const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const titleId = useId()

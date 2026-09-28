@@ -200,7 +200,7 @@ describe('EvidenceForm', () => {
 
     const aviso = screen.getByTestId('evidence-text-missing')
     expect(aviso).toHaveTextContent('Para entregar o link, conte também o que você fez.')
-    // Ligado ao campo que falta preencher (fix-1, item 5).
+    // Ligado ao campo que falta preencher.
     expect(screen.getByLabelText('O que você fez').getAttribute('aria-describedby')).toContain(
       aviso.id,
     )

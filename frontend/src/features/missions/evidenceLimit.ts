@@ -28,8 +28,8 @@ export const COUNTER_VISIBLE_FROM = (MAX_EVIDENCE_LENGTH * 9) / 10
  * NAO e o `trim()` do JS nem o `str.strip()` do Python. Diferencas medidas:
  * U+0085 (NEL) o servidor remove e o JS nao; U+FEFF o JS remove e o servidor
  * nao; U+001C..U+001F o Python remove, mas nem o servidor nem o JS. Um texto
- * so de NEL passava na tela e era recusado la (422); a tela tem de concordar
- * com o servidor, e o servidor e a verdade.
+ * so de NEL e vazio para o servidor (422); a tela tem de concordar com ele, e
+ * o servidor e a verdade.
  */
 const SERVER_SPACE =
   '\\t-\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'

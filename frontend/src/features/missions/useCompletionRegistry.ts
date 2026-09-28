@@ -9,11 +9,13 @@ import type { EvidenceDraft } from './types'
 const EMPTY_DRAFT: Readonly<EvidenceDraft> = Object.freeze({ text: '', link: '' })
 
 /**
- * O que cada conclusao de missao usa do quadro: a chave e o aviso de voo.
+ * O que cada conclusao de missao usa do quadro: a chave, o rascunho da
+ * evidencia, a marca de retry pendente e o aviso de voo.
  *
  * E uma interface, e nao o `Map` cru, de proposito: quem conclui so pede a
- * chave, a devolve ou avisa que um pedido saiu e terminou. A regra de quando
- * a chave nasce fica num lugar so.
+ * chave, a devolve, guarda ou apaga o rascunho, marca o retry pendente ou avisa
+ * que um pedido saiu e terminou. A regra de quando a chave nasce fica num
+ * lugar so.
  */
 export interface CompletionRegistry {
   /**
@@ -63,8 +65,9 @@ export interface UseCompletionRegistryResult {
 }
 
 /**
- * O registro das conclusoes do quadro: as chaves por missao e a recarga que
- * espera a conclusao em andamento.
+ * O registro das conclusoes do quadro: as chaves e os rascunhos da evidencia
+ * por missao, o retry pendente (a chave retida, que trava a edicao da
+ * evidencia) e a recarga que espera a conclusao em andamento.
  *
  * Mora no `MissionList`, ACIMA dos cartoes, porque o `reload` do `useMissions`
  * desmonta todos os cartoes -- a lista passa por `loading` -- e monta cartoes
@@ -78,7 +81,7 @@ export interface UseCompletionRegistryResult {
  * dele no meio do pedido. Pedida com conclusao em voo, ela fica pendente e e
  * executada UMA vez, por quem terminar por ultimo.
  *
- * Contador e chaves ficam em `useRef`: sao lidos e escritos so dentro de
+ * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e escritos so dentro de
  * callbacks, e mudar um deles nao deve renderizar nada. O que a tela mostra --
  * se ha espera -- e estado. O pedido pendente tem as duas formas porque
  * `settled` precisa le-lo na hora, sem esperar o proximo render.

@@ -192,9 +192,8 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
     expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
   })
 
-  // Fix-1 da Task 7 (E17/§7): a chave e o rascunho saem por caminhos
-  // DIFERENTES. A falha sem retry libera a chave, mas o rascunho so sai no
-  // sucesso -- este teste substitui o "release apaga a chave E o rascunho".
+  // E17/§7: a chave e o rascunho saem por caminhos DIFERENTES. A falha sem
+  // retry libera a chave, mas o rascunho so sai no sucesso.
   it('release apaga SO a chave da missao; o rascunho fica', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
     const { result } = renderRegistry()

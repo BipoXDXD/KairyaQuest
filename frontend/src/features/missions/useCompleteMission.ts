@@ -64,8 +64,13 @@ export interface UseCompleteMissionResult {
  * - **`operacao_reutilizada`**: a chave sai, e o proximo envio gera outra. Com
  *   ela, toda tentativa seria recusada, e trocar e seguro porque a missao nao
  *   foi concluida por ela;
- * - **sucesso, `transicao_ilegal`, `missao_nao_encontrada`**: a chave sai,
- *   porque nao tem mais uso. Mante-la so faria o registro crescer.
+ * - **sucesso, `transicao_ilegal`, `missao_nao_encontrada`,
+ *   `missao_expirada`**: a chave sai, porque nao tem mais uso. Mante-la so
+ *   faria o registro crescer.
+ *
+ * A chave e o rascunho saem por caminhos diferentes: so o SUCESSO apaga o
+ * rascunho da evidencia (a entrega foi feita). Qualquer falha o deixa, para a
+ * pessoa nao perder o que escreveu (E17).
  *
  * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que
  * faz o "Atualizar o quadro" esperar a conclusao em andamento.
@@ -90,9 +95,8 @@ export function useCompleteMission(
       // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
       // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
       // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
-      // que nunca vai settle. Antes desta ordem, uma excecao aqui deixava o
-      // contador do registro preso em 1 para sempre (regressao medida na
-      // revisao da Task 6).
+      // que nunca vai settle. Com a ordem inversa, uma excecao aqui deixaria o
+      // contador do registro preso em 1 para sempre.
       const operationId = registry.operationIdFor(missionId)
       setState({ status: 'submitting' })
       // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
