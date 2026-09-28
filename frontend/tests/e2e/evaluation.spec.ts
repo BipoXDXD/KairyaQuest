@@ -101,14 +101,17 @@ test('conclui com evidencia, pede a avaliacao e ve o bonus e o painel', async ({
   await expect(cartao.getByTestId('evaluation-panel').getByTestId('reward-xp')).toHaveText(
     `+${String(bonus)} XP de bônus`,
   )
-  await expect(page.getByTestId('progress-total')).toHaveText(
-    `${(antes.xp_total + missao.xp + bonus).toLocaleString('pt-BR')} XP no total`,
-  )
+  const totalEsperado = `${(antes.xp_total + missao.xp + bonus).toLocaleString('pt-BR')} XP no total`
+  await expect(page.getByTestId('progress-total')).toHaveText(totalEsperado)
 
   // A requisicao que a API mandou ao falso oferece a ferramenta da rubrica, com
   // `strict`, e `tool_choice` automatico sem chamadas paralelas (EM3: o forcado
   // da 400 em alguns modelos; quem manda chamar a ferramenta e o sistema).
-  const pedidos = (await requisicoes()).map((r) => r.body as PedidoAoFalso)
+  const recebidas = await requisicoes()
+  // O fluxo inteiro faz UMA chamada ao modelo (a da avaliacao). O filtro por
+  // `tools` abaixo nao veria uma chamada extra sem a ferramenta; este total ve.
+  expect(recebidas).toHaveLength(1)
+  const pedidos = recebidas.map((r) => r.body as PedidoAoFalso)
   const daAvaliacao = pedidos.filter((b) =>
     (b.tools ?? []).some((f) => f.name === 'record_evaluation'),
   )
@@ -135,4 +138,6 @@ test('conclui com evidencia, pede a avaliacao e ve o bonus e o painel', async ({
   await page.reload()
   await expect(cartao.getByText('Critério atendido', { exact: true })).toBeVisible()
   await expect(cartao.getByText('Bônus de XP creditado ao seu saldo.')).toBeVisible()
+  // O saldo com o bonus tambem volta da API, nao so o texto do painel.
+  await expect(page.getByTestId('progress-total')).toHaveText(totalEsperado)
 })
