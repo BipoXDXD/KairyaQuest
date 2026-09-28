@@ -4,6 +4,7 @@ import pytest
 
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
     MissionState,
     MissionType,
     TransicaoIlegalError,
@@ -14,6 +15,7 @@ from focusquest.modules.missions.domain import (
     xp_da_missao,
 )
 from focusquest.modules.progression.domain import bonus_da_avaliacao
+from focusquest.modules.tutoring.domain import CodigoDoStream
 
 
 @pytest.mark.parametrize(
@@ -90,3 +92,16 @@ def test_transicoes_ilegais_da_avaliacao(
         match=f"ir de '{atual.value}' para '{destino.value}'",
     ):
         validar_transicao_da_avaliacao(atual, destino)
+
+
+def test_falhas_da_avaliacao_e_codigos_do_stream_tem_o_mesmo_texto() -> None:
+    """As falhas que existem dos dois lados tem o mesmo valor em texto: a
+    tela le `error_code` da avaliacao e do chat pelo mesmo vocabulario. So
+    `avaliacao_invalida` e da avaliacao e nao existe no stream. (Importar
+    `tutoring.domain` aqui e aceitavel: e teste; os modulos de producao nao
+    se importam.)"""
+    do_stream = {c.value for c in CodigoDoStream}
+    compartilhadas = {f.value for f in FalhaDaAvaliacao} - {"avaliacao_invalida"}
+    assert compartilhadas == {"provedor_indisponivel", "tempo_esgotado"}
+    assert compartilhadas <= do_stream
+    assert FalhaDaAvaliacao.AVALIACAO_INVALIDA.value not in do_stream
