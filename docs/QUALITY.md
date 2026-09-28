@@ -748,6 +748,20 @@ Sem eufemismo:
   na branch por fast-forward ou rebase, o topo da ref é validado em
   worktree isolado antes de o conteúdo sair da máquina. O que escapa
   continua sendo o commit intermediário (primeira limitação desta lista).
+- **Mover o diretório do clone quebra o `.venv` e os hooks.** Os dois
+  guardam o caminho **absoluto** de onde foram criados: cada script de
+  `.venv/bin/` começa com um shebang para `<caminho antigo>/.venv/bin/python`,
+  e cada hook de `.git/hooks/` fixa `INSTALL_PYTHON` no mesmo caminho. Medido
+  na retomada de 2026-09-28, com o clone movido de pasta: `make check`
+  aprovou o `check-web` e reprovou no `check-api` com
+  `error: Failed to spawn: mypy` / `No such file or directory` (o arquivo
+  existe; o interpretador do shebang, não). Os hooks falham **fechado**: sem o
+  Python do `INSTALL_PYTHON` e sem `pre-commit` no `PATH`, o hook imprime
+  `` `pre-commit` not found `` e sai com 1, bloqueando o commit — não o deixa
+  passar sem gate. Conserto, da raiz nova: `rm -rf .venv`,
+  `uv sync --locked` e `uv run pre-commit install --install-hooks` (o mesmo
+  passo de "Primeiro uso após clonar"). O `frontend/node_modules/` não sofre
+  disso: os links de `.bin/` são relativos.
 - **O gate roda inteiro a cada commit, e fica mais lento conforme o
   projeto cresce.** Medido nesta máquina, com o PostgreSQL já de pé e os
   caches quentes: `make check` completo em cerca de 12 segundos de relógio

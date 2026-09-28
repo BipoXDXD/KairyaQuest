@@ -10,6 +10,15 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Retomada num clone movido de pasta (2026-09-28).** Branch
+`docs/retomada-pos-d`, aberta a partir de `49faaf0` (a `main`: o merge do PR
+#18). Só documentação: o estado de publicação do D, uma afirmação falsa do
+`docs/ARCHITECTURE.md` §3 sobre a direção das dependências, a limitação de
+mover o clone (`docs/QUALITY.md` §6) e as pendências 88 e 89. Antes de
+qualquer mudança, o `.venv` e os hooks foram refeitos (apontavam para a pasta
+antiga) e o `make check` da base aprovou (ver "Resultados"). **Estado de
+publicação: não publicado — o remoto não existe mais (pendência 89).**
+
 **Incremento D — a progressão.** Branch `feat/incremento-d`, aberta a partir
 de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C), + a spec (1551ea8)
 + o merge da Frente 0 (d2125d5, `feat/gate-paralelo`) + o merge de
@@ -20,8 +29,12 @@ retroativamente para as missões já concluídas. Recorte: saldo, nível,
 conquistas; entrega e avaliação ficam para o E. Spec em
 `docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`; plano em
 `docs/superpowers/plans/2026-09-25-incremento-d.md`. **Estado de publicação:
-não publicado.** Este worktree tem banco de teste (`focusquest_d_test`) e portas
-do E2E próprias, pelo desenho da Frente 0.
+publicado pelo PR #17, mesclado por merge commit em `af6f50d` em 2026-09-25;
+o `CONTINUACAO.md` (roteiro para retomar num clone novo) veio logo depois pelo
+PR #18, em `49faaf0`.** (Registro anterior, corrigido na retomada de
+2026-09-28: este parágrafo dizia "não publicado".) O worktree do D tinha banco
+de teste (`focusquest_d_test`) e portas do E2E próprias, pelo desenho da
+Frente 0.
 
 **Onda de correções da revisão do repositório.** Branch
 `fix/revisao-repositorio`, aberta a partir de `5b463b5` (a ponta de
@@ -2214,6 +2227,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check-e2e`, **segunda execução**, rodada em seguida, sem `check-api` no meio | Aprovado, EXIT 0, 20,7 s de relógio. **17 passed** (16,4 s de Playwright) — mesma contagem da primeira. |
 | `make check`, rodado por mim direto, sobre a árvore da onda final de correções do D (HEAD `9b7b4ac`, antes deste commit de documentação) | Aprovado, EXIT 0. Frontend: **36 arquivos, 444 testes**, cobertura de 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas) — inalterado, a onda não toca `frontend/src/`. `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 96 arquivos já formatados. mypy sem problemas em 92 arquivos. Backend: **598 passed** (os 589 da Task 10 mais 9 novos: 2 casos do M1 e 7 do M2; I2 e M4 estenderam testes que já existiam), 1 aviso, cobertura total de 100% (1254 instruções, 188 ramificações). E2E: **17 cenários** aprovados em Chromium (16,3 s de Playwright). Gitleaks sem achados. |
 | `make check-e2e`, duas vezes seguidas, sobre a mesma árvore (I1) | Aprovado, EXIT 0 nas duas. **17 passed** nas duas (16,4 s e 16,2 s de Playwright). |
+| `make check` sobre `49faaf0` (a `main` depois do PR #18), no clone movido de pasta, **antes** de refazer o `.venv` (retomada de 2026-09-28) | **Reprovou**, EXIT 2, em 11,9 s: `check-web` aprovado (444 testes, 100% nos quatro eixos); no `check-api`, `uv lock --check`, Ruff e `format --check` aprovados e o mypy não subiu — `error: Failed to spawn: mypy` / `No such file or directory` (shebang do `.venv` apontando para a pasta antiga; `docs/QUALITY.md` §6). |
+| `make check` sobre a mesma árvore, depois de `rm -rf .venv`, `uv sync --locked` e `uv run pre-commit install --install-hooks` | Aprovado, EXIT 0, 1m45,6s de relógio. Frontend: **36 arquivos, 444 testes**, 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas). `uv lock --check` (59 pacotes), Ruff sem achados, 97 arquivos já formatados, mypy sem problemas em 92 arquivos. Backend: **598 passed**, 1 aviso, 100% (1254 instruções, 188 ramificações). E2E: **17 passed**. Gitleaks: `no leaks found`. Os mesmos números da última linha do D. |
 
 ## Ambiente verificado
 
@@ -3227,6 +3242,43 @@ C".
     da missão com saldo anterior não nulo, e a mutação reprova ali ("+120
     XP" no lugar de "+40 XP").
 
+**Retomada (2026-09-28)**
+
+88. **`missions` e `progression`, e `progression` e `tutoring`, dependem um
+    do outro no nível do pacote.** Medido com um grafo de imports de
+    `src/focusquest` (37 módulos, via `ast`): **nenhum ciclo entre
+    arquivos**, e exatamente esses dois pares de pacotes com arestas nos dois
+    sentidos (detalhe em `docs/ARCHITECTURE.md` §3). A convenção 2 do §5
+    ("nada de dependência circular") mira justamente essa forma. **Não foi
+    desfeito agora, de propósito:** o sentido `missions → progression` é a
+    decisão D3 (o crédito na mesma transação da conclusão) e a D10 (a
+    recompensa reconstruída na rota); invertê-lo pediria um gancho de
+    conclusão registrado por `main.py`, indireção sem ganho de comportamento
+    enquanto a única fonte de XP for a conclusão. **Nota sobre a
+    pendência 8:** tirar `User` de `missions/models.py` **não** desfaz este
+    par — `progression` continua lendo `Mission`, o histórico e o XP da
+    missão. **O pedaço barato, a fazer no próximo incremento que tocar as
+    rotas:** `progression/router.py` importa `USUARIO_UNICO` de
+    `missions/router.py` (uma rota dependendo da camada de transporte de outro
+    módulo); a constante do recorte A2 pertence a um lugar comum. Revisitar o
+    par inteiro quando o Incremento E trouxer a segunda fonte de XP
+    (pendência 78).
+89. **O repositório remoto não existe mais.** Medido em 2026-09-28: `git
+    fetch` responde `ERROR: Repository not found.`, `gh repo view
+    BipoXDXD/FocusQuest` responde `Could not resolve to a Repository`, e a
+    listagem da conta (`gh repo list BipoXDXD`, 17 repositórios; nenhuma
+    organização) não o traz — o `gh` está autenticado na mesma conta. O clone
+    local tem o histórico inteiro até `49faaf0` (a última `origin/main`
+    vista). **Consequências:** sem push, sem PR, sem CI; e a proteção da
+    `main` (o `quality-gate` obrigatório, `enforce_admins`, sem force-push)
+    morava no remoto, então hoje o único gate é o dos hooks locais
+    (`docs/QUALITY.md` §6: contornáveis por quem controla o git). **Decisão
+    do dono**, que só ele pode tomar: recriar o repositório privado (e
+    reaplicar a proteção da `main`, exigindo `quality-gate` depois de o
+    primeiro push mostrar o nome real do check, README §12) ou apontar o
+    `origin` para onde ele estiver agora. Enquanto isso, o trabalho segue em
+    branches locais, cada commit pelo hook.
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
@@ -3256,11 +3308,7 @@ B → C**. O desenho de A, B e C está em
   `docs/superpowers/plans/2026-09-25-incremento-b.md`; decisões P1–P10 em
   "Decisões tomadas", acima.
 - **C — a campanha** (trilha em Campanhas, navegação lateral, axe na
-  trilha), o próximo depois do B. **B começa por design próprio**
-  (pendência 26: teto de negócio para `estimated_minutes`, janela de negócio
-  para `deadline`, missões diárias reveladas semanalmente e a missão especial
-  com bônus de XP — parte implementada pelo B, avulsa continua aberta).
-  **Entregue e comitado por inteiro** em `feat/incremento-c`
+  trilha), o próximo depois do B. **Entregue e comitado por inteiro** em `feat/incremento-c`
   (`9c2bd1e`..`e195128`, Tasks 0–6 mais o fix round 1 da Task 5, e este
   commit de documentação por cima — ver "Alterações do Incremento C").
   Plano em `docs/superpowers/plans/2026-09-25-incremento-c.md`; decisões
@@ -3277,7 +3325,8 @@ B → C**. O desenho de A, B e C está em
   Spec em `docs/superpowers/specs/2026-09-25-incremento-d-progressao-design.md`
   (decisões D1–D16); plano em `docs/superpowers/plans/2026-09-25-incremento-d.md`
   (decisões P1–P7 e as Rulings R1–R13) em "Decisões tomadas", acima. **Estado
-  de publicação: não publicado** (ver "Revisão-base"). **Recorte do D:**
+  de publicação: publicado pelo PR #17**, mesclado em `af6f50d` em 2026-09-25
+  (ver "Revisão-base"). **Recorte do D:**
   saldo, nível e conquistas; entrega com evidência e avaliação
   (`submit_activity`, `request_reward_evaluation`) ficam para o **E**, o
   próximo incremento. A pendência 3 (iniciar missão, `started_at` sem rota)

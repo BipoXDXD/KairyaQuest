@@ -26,10 +26,11 @@ e acrescida dos três arquivos que a Frente 0 (gate paralelo) criou
 Incremento D (a progressão de RPG), acrescentados ou modificados entre
 `a53733f` e `HEAD` — o módulo `progression` no backend e no frontend, a
 migração `0004`, `shared/types/reward.ts` e os testes correspondentes; ver
-"Alterações do Incremento D" em `docs/HANDOFF.md`. Os Incrementos B, C e D já
-estão na branch de integração: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR
-#14 (C) em `8ab91ce`, os dois em 2026-09-25, e o D (`feat/incremento-d`)
-segue **não publicado** (ver "Revisão-base" em `docs/HANDOFF.md`).
+"Alterações do Incremento D" em `docs/HANDOFF.md`. Os Incrementos B, C e D
+estão na `main`: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR #14 (C) em
+`8ab91ce` e o PR #17 (D) em `af6f50d`, os três em 2026-09-25; o PR #18
+acrescentou o `CONTINUACAO.md` na raiz (ver "Revisão-base" em
+`docs/HANDOFF.md`).
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -299,6 +300,7 @@ FocusQuest/
 ├── .python-version
 ├── AGENTS.md                      # regras comuns a todos os agentes
 ├── CLAUDE.md                      # importa AGENTS.md e acrescenta o específico do Claude Code
+├── CONTINUACAO.md                 # roteiro curto para retomar num clone novo; aponta para AGENTS.md e docs/HANDOFF.md
 ├── Makefile                       # a entrada única do gate e do ambiente local
 ├── README.md                      # a especificação do produto; autoridade final
 ├── alembic.ini
@@ -470,11 +472,27 @@ soltos — a spec previa "só o modelo"; a implementação real também usa os
 dois enums, registrado como pendência 82 em `docs/HANDOFF.md`).
 `progression.service` **não** importa `missions.service` nem nada de
 `tutoring` além do que está listado — não há caminho do chat até o saldo
-(D15, README §6: "pedir pontos no chat não altera saldo"). Não há ciclo de
-import entre os três módulos: `missions` não importa nada de `progression`
-nem de `tutoring` de volta.
-`tutoring.context` também consome `progression.ler_progresso` (só leitura,
-direto, sem HTTP) para montar a linha de progresso do turno da Tifa (D15).
+(D15, README §6: "pedir pontos no chat não altera saldo").
+`tutoring.service` também chama `progression.ler_progresso` (só leitura,
+direto, sem HTTP), e `tutoring.context` recebe o `Progresso` para montar a
+linha de progresso do turno da Tifa (D15).
+
+**Não há ciclo entre arquivos, mas há dependência nos dois sentidos entre
+pacotes.** Nenhum arquivo importa, direta ou indiretamente, um arquivo que o
+importa de volta — por isso a carga dos módulos funciona. No nível do
+**pacote**, porém, `missions` e `progression` dependem um do outro:
+`missions/service.py` chama `registrar_conclusao` (o crédito na mesma
+transação, D3), `missions/router.py` chama `recompensa_da_missao` (D10) e
+`missions/schemas.py` usa `RewardRead`; no outro sentido,
+`progression/service.py` lê os fatos de `missions` (acima), `progression/domain.py`
+usa `cycle_domain.sequencia_ate` e `progression/router.py` importa
+`USUARIO_UNICO` de `missions/router.py`. O mesmo vale para `tutoring` e
+`progression` (`tutoring.service` lê o progresso; `progression.service` lê
+`TutorAction`). **Registro anterior, corrigido na retomada de 2026-09-28:**
+este parágrafo afirmava que `missions` não importava nada de `progression`,
+o que era falso desde a Task 3 do D. É uma tensão real com a convenção 2 do
+§5, registrada como pendência 88 em `docs/HANDOFF.md`, com o motivo de não
+ser desfeita agora.
 
 Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
 `commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
@@ -495,7 +513,7 @@ concluir missão ou confirmar recompensa por conta própria.
 | Método e caminho | Sucesso | O que faz |
 |---|---|---|
 | `POST /api/missions` | `201` com a missão criada | Cria uma missão `pendente` para o usuário único. |
-| `GET /api/missions` | `200` com a lista | Lista as missões do usuário único, em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
+| `GET /api/missions` | `200` com a lista | Lista as missões **avulsas** do usuário único (desde o Incremento B; ver "O contrato HTTP do ciclo diário", abaixo), em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
 | `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |

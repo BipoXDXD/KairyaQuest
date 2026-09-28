@@ -41,6 +41,8 @@ Não vêm no clone, de propósito:
     livro-razão, nível 100·n, 7 conquistas, painel no Quartel-General);
   - a "Frente 0" (gate paralelo por worktree) e uma onda de correções da revisão do repositório;
   - 17 PRs até o Incremento D (o do D é o #17); este arquivo entrou num PR seguinte. CI da `main` verde.
+- **Em 2026-09-28 o repositório remoto não existia mais** (`git fetch`: "Repository not found"). Sem push, PR nem CI
+  até o dono decidir onde ele mora — `docs/HANDOFF.md`, pendência 89.
 - **Próximo: Incremento E**, entrega com evidência e avaliação (ferramentas `submit_activity` e
   `request_reward_evaluation`, README §5 e §6). Começar pelo desenho com o dono (perguntas uma por vez, depois a
   spec, depois o plano), sem código antes da aprovação.
@@ -74,3 +76,5 @@ Não vêm no clone, de propósito:
   todo documento aprovado que for comitado.
 - Para desfazer uma mutação, use backup + diff, nunca `git checkout -- arquivo`.
 - Ao despachar um agente, diga o caminho absoluto do worktree dele, porque ele herda o diretório de quem o chamou.
+- Se o clone mudou de pasta, refaça `.venv` e hooks antes de tudo (`rm -rf .venv`, `uv sync --locked`,
+  `uv run pre-commit install --install-hooks`): os dois guardam o caminho antigo (`docs/QUALITY.md` §6).
