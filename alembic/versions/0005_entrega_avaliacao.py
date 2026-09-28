@@ -41,7 +41,7 @@ def upgrade() -> None:
             "char_length(text) BETWEEN 1 AND 4000", name="ck_mission_evidence_text"
         ),
         sa.CheckConstraint(
-            "link IS NULL OR (link ~* '^https?://' AND char_length(link) <= 2000)",
+            "link IS NULL OR (link ~* '^https?://\\S+$' AND char_length(link) <= 2000)",
             name="ck_mission_evidence_link",
         ),
     )

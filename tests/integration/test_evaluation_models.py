@@ -56,10 +56,23 @@ _EVIDENCIA = (
 @pytest.mark.parametrize(
     ("texto", "link", "nome"),
     [
-        ("", None, "ck_mission_evidence_text"),
-        ("x" * 4001, None, "ck_mission_evidence_text"),
-        ("ok", "ftp://exemplo.com", "ck_mission_evidence_link"),
-        ("ok", "https://" + "a" * 1993, "ck_mission_evidence_link"),
+        pytest.param("", None, "ck_mission_evidence_text", id="texto-vazio"),
+        pytest.param(
+            "x" * 4001, None, "ck_mission_evidence_text", id="texto-4001-caracteres"
+        ),
+        pytest.param(
+            "ok", "ftp://exemplo.com", "ck_mission_evidence_link", id="link-ftp"
+        ),
+        pytest.param(
+            "ok",
+            "https://" + "a" * 1993,
+            "ck_mission_evidence_link",
+            id="link-2001-caracteres",
+        ),
+        pytest.param("ok", "https://", "ck_mission_evidence_link", id="link-sem-host"),
+        pytest.param(
+            "ok", "https://a b", "ck_mission_evidence_link", id="link-com-espaco"
+        ),
     ],
 )
 def test_evidencia_recusada(
@@ -154,7 +167,9 @@ def _checks(session: Session, tabela: str) -> dict[str, str]:
     return {nome: definicao for nome, definicao in linhas}
 
 
-@pytest.mark.parametrize("tabela", ["mission_evidence", "mission_evaluations"])
+@pytest.mark.parametrize(
+    "tabela", ["mission_evidence", "mission_evaluations", "xp_entries"]
+)
 def test_o_modelo_descreve_os_mesmos_checks_que_a_migracao(
     session: Session, tabela: str
 ) -> None:
