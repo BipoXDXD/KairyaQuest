@@ -104,5 +104,11 @@ export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (known !== null) {
     return known
   }
+  // Um 404 SEM `code` nao e o da missao (esse traz `missao_nao_encontrada`):
+  // e rota ausente ou deploy desencontrado. Repetir nao adianta; recarregar
+  // mostra a verdade, pela mesma via da missao que sumiu.
+  if (error.status === 404 && error.code === null) {
+    return FAILURE_BY_CODE.missao_nao_encontrada
+  }
   return error.status === 422 ? EVIDENCE_REJECTED : GENERIC
 }

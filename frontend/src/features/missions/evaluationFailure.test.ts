@@ -63,6 +63,17 @@ describe('describeEvaluationFailure', () => {
     expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual(GENERIC)
   })
 
+  it('um 404 SEM code (rota ausente, deploy desencontrado) manda atualizar, nao "tente de novo"', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 404, null))).toEqual({
+      message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
+      recovery: 'refresh',
+    })
+  })
+
+  it('um 404 com code DESCONHECIDO nao e tratado como 404 sem code', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 404, 'codigo_futuro'))).toEqual(GENERIC)
+  })
+
   it('um 422 nao e "tente de novo": a evidencia foi recusada, e repetir nao adianta', () => {
     expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual({
       message: 'A evidência não foi aceita. Revise o texto e o link.',

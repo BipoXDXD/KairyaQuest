@@ -101,6 +101,12 @@ export function describeCompletionFailure(error: unknown): CompletionFailure {
   if (error instanceof ApiError && error.code !== null && isMissionErrorCode(error.code)) {
     return FAILURE_BY_CODE[error.code]
   }
+  // Um 404 SEM `code` nao e o da missao (esse traz `missao_nao_encontrada`):
+  // e rota ausente ou deploy desencontrado. Repetir nao adianta e a mensagem de
+  // "tentar de novo e seguro" seria promessa vazia; recarregar mostra a verdade.
+  if (error instanceof ApiError && error.status === 404 && error.code === null) {
+    return FAILURE_BY_CODE.missao_nao_encontrada
+  }
   if (error instanceof ApiError && error.status === 422) {
     return EVIDENCE_REJECTED
   }
