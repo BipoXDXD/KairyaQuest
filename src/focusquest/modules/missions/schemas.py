@@ -14,7 +14,7 @@ da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
 from datetime import UTC, date, datetime
-from typing import Annotated, Any
+from typing import Annotated, TypedDict
 
 from pydantic import (
     AfterValidator,
@@ -217,9 +217,17 @@ class EvaluationSummaryRead(BaseModel):
         )
 
 
+class _CamposDaEntrega(TypedDict):
+    """Os tres campos com o tipo real, para o mypy checar o `**` de quem os usa."""
+
+    verification: Verificacao | None
+    evidence: EvidenceRead | None
+    evaluation: EvaluationSummaryRead | None
+
+
 def _campos_da_entrega(
     missao: Mission,
-) -> dict[str, Any]:
+) -> _CamposDaEntrega:
     """Os tres campos novos de `MissionRead`, escritos uma vez so."""
     return {
         "verification": verificacao_da_missao(
