@@ -18,10 +18,16 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from focusquest.core.base import Base
-from focusquest.modules.missions.domain import MissionState, MissionType
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    MissionState,
+    MissionType,
+    Veredito,
+)
 
 # Ao contrario da migracao -- que congelou a lista de estados de proposito,
 # porque migracao e historico --, o modelo DESCREVE a tabela de hoje, e por
@@ -35,6 +41,12 @@ _ESTADOS_SQL = ", ".join(f"'{estado.value}'" for estado in MissionState)
 # Mesmo motivo de _ESTADOS_SQL: o modelo DESCREVE a tabela de hoje, e por isso
 # deriva do enum -- o CHECK que vive no banco so muda por migracao a mao.
 _TIPOS_SQL = ", ".join(f"'{tipo.value}'" for tipo in MissionType)
+
+# Mesmo motivo de _ESTADOS_SQL para os tres enums da avaliacao: o modelo
+# deriva do enum, e o CHECK do banco so muda por migracao escrita a mao.
+_ESTADOS_DA_AVALIACAO_SQL = ", ".join(f"'{e.value}'" for e in EstadoDaAvaliacao)
+_VEREDITOS_SQL = ", ".join(f"'{v.value}'" for v in Veredito)
+_FALHAS_SQL = ", ".join(f"'{f.value}'" for f in FalhaDaAvaliacao)
 
 
 class MissionStateText(TypeDecorator[MissionState]):
@@ -74,6 +86,38 @@ class MissionTypeText(TypeDecorator[MissionType]):
 
     def process_result_value(self, value: Any, dialect: Dialect) -> MissionType:
         return MissionType(value)
+
+
+class EstadoDaAvaliacaoText(TypeDecorator[EstadoDaAvaliacao]):
+    """TEXT no banco, EstadoDaAvaliacao no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> EstadoDaAvaliacao:
+        return EstadoDaAvaliacao(value)
+
+
+class VereditoText(TypeDecorator[Veredito]):
+    """TEXT no banco, Veredito no Python. A coluna e nulavel: None volta None."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> Veredito | None:
+        return None if value is None else Veredito(value)
+
+
+class FalhaDaAvaliacaoText(TypeDecorator[FalhaDaAvaliacao]):
+    """TEXT no banco, FalhaDaAvaliacao no Python. Nulavel, como VereditoText."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> FalhaDaAvaliacao | None:
+        return None if value is None else FalhaDaAvaliacao(value)
 
 
 class WeeklyPlan(Base):
@@ -162,6 +206,15 @@ class Mission(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"`: a listagem tem
+    # poucas missoes, e cada leitura faz no maximo duas consultas pequenas.
+    evidence: Mapped[MissionEvidence | None] = relationship(
+        cascade="all, delete-orphan", lazy="select"
+    )
+    evaluation: Mapped[MissionEvaluation | None] = relationship(
+        cascade="all, delete-orphan", lazy="select"
+    )
+
     # As restricoes sao repetidas aqui porque o modelo precisa DESCREVER a
     # tabela que a migracao criou, com os mesmos nomes. Nao e o modelo que
     # cria o esquema -- as migracoes criam --, mas um modelo que omite as
@@ -229,4 +282,81 @@ class MissionOperation(Base):
     # por ele que um `DROP CONSTRAINT` futuro vai chamar a restricao.
     __table_args__ = (
         UniqueConstraint("operation_id", name="uq_mission_operations_operation_id"),
+    )
+
+
+class MissionEvidence(Base):
+    """A evidencia entregue ao concluir a missao (uma por missao)."""
+
+    __tablename__ = "mission_evidence"
+
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), primary_key=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(Text, default=None)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(text) BETWEEN 1 AND 4000", name="ck_mission_evidence_text"
+        ),
+        CheckConstraint(
+            "link IS NULL OR (link ~* '^https?://\\S+$' AND char_length(link) <= 2000)",
+            name="ck_mission_evidence_link",
+        ),
+    )
+
+
+class MissionEvaluation(Base):
+    """A avaliacao da Tifa sobre a evidencia (uma por missao, E9)."""
+
+    __tablename__ = "mission_evaluations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE")
+    )
+    state: Mapped[EstadoDaAvaliacao] = mapped_column(EstadoDaAvaliacaoText)
+    attempt: Mapped[int] = mapped_column(Integer)
+    verdict: Mapped[Veredito | None] = mapped_column(VereditoText, default=None)
+    feedback: Mapped[str | None] = mapped_column(Text, default=None)
+    error_code: Mapped[FalhaDaAvaliacao | None] = mapped_column(
+        FalhaDaAvaliacaoText, default=None
+    )
+    model: Mapped[str] = mapped_column(Text)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    __table_args__ = (
+        UniqueConstraint("mission_id", name="uq_mission_evaluations_mission_id"),
+        CheckConstraint(
+            f"state IN ({_ESTADOS_DA_AVALIACAO_SQL})",
+            name="ck_mission_evaluations_state",
+        ),
+        CheckConstraint("attempt >= 1", name="ck_mission_evaluations_attempt"),
+        CheckConstraint(
+            f"verdict IN ({_VEREDITOS_SQL})", name="ck_mission_evaluations_verdict"
+        ),
+        CheckConstraint(
+            f"error_code IN ({_FALHAS_SQL})", name="ck_mission_evaluations_error_code"
+        ),
+        CheckConstraint(
+            "char_length(feedback) BETWEEN 1 AND 1500",
+            name="ck_mission_evaluations_feedback",
+        ),
+        CheckConstraint(
+            "(state = 'concluida') = (verdict IS NOT NULL AND feedback IS NOT NULL)",
+            name="ck_mission_evaluations_concluida_com_veredito",
+        ),
+        CheckConstraint(
+            "(state = 'falhou') = (error_code IS NOT NULL)",
+            name="ck_mission_evaluations_falha_com_codigo",
+        ),
+        CheckConstraint(
+            "(state = 'avaliando') = (finished_at IS NULL)",
+            name="ck_mission_evaluations_avaliando_sem_fim",
+        ),
     )

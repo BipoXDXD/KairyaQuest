@@ -20,6 +20,9 @@ const concluida: Mission = {
   completed_at: '2026-09-18T15:00:00Z',
   xp: 100,
   actual_duration_minutes: null,
+  verification: 'autodeclarada',
+  evidence: null,
+  evaluation: null,
 }
 
 /** A recompensa desta conclusao, como a API a devolve junto da missao. */
@@ -53,7 +56,7 @@ function renderCompletion(onCompleted?: () => void) {
   const reload = vi.fn()
   const rendered = renderHook(() => {
     const { registry, reload: requestReload } = useCompletionRegistry(reload)
-    return { ...useCompleteMission(7, registry, onCompleted), requestReload }
+    return { ...useCompleteMission(7, registry, onCompleted), requestReload, registry }
   })
   return { ...rendered, reload }
 }
@@ -374,6 +377,30 @@ describe('useCompleteMission', () => {
     expect(onCompleted).not.toHaveBeenCalled()
   })
 
+  it('um onCompleted que lanca nao vira falha: a conclusao ja aconteceu no servidor', async () => {
+    const erro = new Error('secao quebrou')
+    const onCompleted = vi.fn(() => {
+      throw erro
+    })
+    const registrar = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluidaResposta)))
+    const { result } = renderCompletion(onCompleted)
+
+    act(() => {
+      result.current.complete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
+    })
+    expect(onCompleted).toHaveBeenCalledTimes(1)
+    expect(registrar).toHaveBeenCalledWith(expect.any(String), erro)
+  })
+
   it('avisa o fim do voo tambem quando o POST falha', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     const { result, reload } = renderCompletion()
@@ -414,5 +441,131 @@ describe('useCompleteMission', () => {
     })
 
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  describe('com evidencia', () => {
+    it('complete com evidencia manda o operation_id e a evidencia sem link vazio', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json(concluidaResposta))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(JSON.parse(init.body as string)).toEqual({
+        operation_id: PRIMEIRA_CHAVE,
+        evidence: { text: 'Feito' },
+      })
+    })
+
+    it('leva o link quando ele existe', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json(concluidaResposta))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: ' https://x.com/a ' })
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(JSON.parse(init.body as string)).toEqual({
+        operation_id: PRIMEIRA_CHAVE,
+        evidence: { text: 'Feito', link: 'https://x.com/a' },
+      })
+    })
+
+    it('complete() sem argumento manda so o operation_id, byte a byte como antes', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json(concluidaResposta))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete()
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(init.body).toBe(JSON.stringify({ operation_id: PRIMEIRA_CHAVE }))
+    })
+
+    it('um rascunho que nao pode ser enviado nao faz POST nem gasta chave', () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: '   ', link: '' })
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result.current.state).toEqual({ status: 'idle' })
+      expect(crypto.randomUUID).not.toHaveBeenCalled()
+    })
+
+    it('numa falha retry o rascunho continua no registro', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: 'x' }, { status: 500 })),
+      )
+      const { result } = renderCompletion()
+      result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+      expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+    })
+
+    it.each(['transicao_ilegal', 'missao_nao_encontrada', 'operacao_reutilizada'])(
+      'numa falha sem retry (%s) a chave sai, mas o rascunho FICA (E17)',
+      async (code) => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn().mockResolvedValue(Response.json({ detail: 'x', code }, { status: 409 })),
+        )
+        const { result } = renderCompletion()
+        result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+        const primeira = result.current.registry.operationIdFor(7)
+
+        act(() => {
+          result.current.complete({ text: 'Feito', link: '' })
+        })
+
+        await waitFor(() => {
+          expect(result.current.state.status).toBe('failed')
+        })
+        expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+        expect(result.current.registry.operationIdFor(7)).not.toBe(primeira)
+      },
+    )
+
+    it('no sucesso o registro esquece a chave e o rascunho', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(concluidaResposta)))
+      const { result } = renderCompletion()
+      result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
+    })
   })
 })

@@ -1,4 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import type { EvidenceDraft } from './types'
+
+/**
+ * O rascunho vazio, um objeto so para todas as missoes: por isso congelado,
+ * no tipo (`Readonly`) e em tempo de execucao (`Object.freeze`). Quem o
+ * mutasse contaminaria o rascunho "vazio" de todas as outras.
+ */
+const EMPTY_DRAFT: Readonly<EvidenceDraft> = Object.freeze({ text: '', link: '' })
 
 /**
  * O que cada conclusao de missao usa do quadro: a chave e o aviso de voo.
@@ -13,8 +21,24 @@ export interface CompletionRegistry {
    * houver, uma nova, que passa a ser dela ate `release`.
    */
   operationIdFor: (missionId: number) => string
-  /** Tira a chave da missao do registro: o proximo pedido gera outra. */
+  /**
+   * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
+   * formulario, pelo mesmo motivo da chave: o reload remonta os cartoes.
+   */
+  draftFor: (missionId: number) => Readonly<EvidenceDraft>
+  /** Guarda o rascunho da evidencia da missao. */
+  saveDraft: (missionId: number, draft: EvidenceDraft) => void
+  /**
+   * Tira SO a chave da missao do registro: o proximo pedido gera outra. O
+   * rascunho fica -- uma falha sem retry tambem libera a chave, e o rascunho
+   * nunca se perde numa falha (E17, README §7).
+   */
   release: (missionId: number) => void
+  /**
+   * Apaga o rascunho da missao: o formulario recomeca vazio. So o sucesso da
+   * conclusao chama isto.
+   */
+  discardDraft: (missionId: number) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
   /** Um POST de conclusao terminou, com qualquer resultado. */
@@ -52,6 +76,7 @@ export interface UseCompletionRegistryResult {
  */
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {
   const operationIds = useRef(new Map<number, string>())
+  const drafts = useRef(new Map<number, EvidenceDraft>())
   const inFlight = useRef(0)
   const reloadPending = useRef(false)
   const [waitingForCompletion, setWaitingForCompletion] = useState(false)
@@ -66,8 +91,15 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
         }
         return operationId
       },
+      draftFor: (missionId) => drafts.current.get(missionId) ?? EMPTY_DRAFT,
+      saveDraft: (missionId, draft) => {
+        drafts.current.set(missionId, draft)
+      },
       release: (missionId) => {
         operationIds.current.delete(missionId)
+      },
+      discardDraft: (missionId) => {
+        drafts.current.delete(missionId)
       },
       started: () => {
         inFlight.current += 1

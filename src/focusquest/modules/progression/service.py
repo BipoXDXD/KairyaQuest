@@ -145,7 +145,9 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
     atual.
     """
     entrada = session.scalars(
-        select(XpEntry).where(XpEntry.mission_id == missao.id)
+        select(XpEntry).where(
+            XpEntry.mission_id == missao.id, XpEntry.source == FONTE_CONCLUSAO
+        )
     ).one()
     antes = session.scalar(
         select(func.coalesce(func.sum(XpEntry.amount), 0)).where(

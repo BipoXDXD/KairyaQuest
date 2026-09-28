@@ -22,6 +22,8 @@ interface CardProps {
   onReload: () => void
   reloadWaiting: boolean
   onCompleted: () => void
+  /** O bonus da avaliacao: so avisa a pagina (a sequencia nao muda com ele). */
+  onRewarded?: () => void
   /** m5: aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
   reloadLabel: string
 }
@@ -163,6 +165,7 @@ export function CycleSection({ onMissionCompleted }: { onMissionCompleted?: () =
       refresh()
       onMissionCompleted?.()
     },
+    onRewarded: onMissionCompleted,
     reloadLabel: 'Atualizar a missão de hoje',
   }
   return (
