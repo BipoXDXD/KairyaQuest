@@ -109,3 +109,73 @@ def xp_da_missao(tipo: MissionType, dificuldade: int) -> int:
     if tipo is MissionType.ESPECIAL:
         return xp * MULTIPLICADOR_DA_ESPECIAL
     return xp
+
+
+class Veredito(StrEnum):
+    """O nivel da rubrica fixa da avaliacao (E6). Dado, nao texto de tela."""
+
+    ATENDE = "atende"
+    PARCIAL = "parcial"
+    NAO_ATENDE = "nao_atende"
+
+
+class EstadoDaAvaliacao(StrEnum):
+    """O ciclo de vida de uma avaliacao (E9): gravada `avaliando` antes de
+    chamar o modelo, e so anunciada depois de `concluida` ou `falhou`."""
+
+    AVALIANDO = "avaliando"
+    CONCLUIDA = "concluida"
+    FALHOU = "falhou"
+
+
+class FalhaDaAvaliacao(StrEnum):
+    """O `error_code` de uma tentativa que falhou (E13). Os dois primeiros tem
+    o mesmo valor dos codigos do stream da conversa (`CodigoDoStream`)."""
+
+    PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
+    TEMPO_ESGOTADO = "tempo_esgotado"
+    AVALIACAO_INVALIDA = "avaliacao_invalida"
+
+
+class Verificacao(StrEnum):
+    """Como a conclusao foi verificada (E4). DERIVADA, nunca gravada. A
+    avaliacao da Tifa nao e um terceiro valor aqui: ela e mostrada a parte,
+    como interpretacao do modelo, sobre uma conclusao `com_evidencia`."""
+
+    AUTODECLARADA = "autodeclarada"
+    COM_EVIDENCIA = "com_evidencia"
+
+
+def verificacao_da_missao(
+    estado: MissionState, tem_evidencia: bool
+) -> Verificacao | None:
+    """`None` enquanto a missao nao foi concluida: nao ha o que verificar."""
+    if estado is not MissionState.CONCLUIDA:
+        if tem_evidencia:
+            raise ValueError("evidencia gravada numa missao nao concluida")
+        return None
+    return Verificacao.COM_EVIDENCIA if tem_evidencia else Verificacao.AUTODECLARADA
+
+
+# CONCLUIDA e terminal (E8): uma avaliacao concluida por missao, para sempre.
+# FALHOU volta a AVALIANDO numa tentativa nova; a orfa passa por FALHOU antes.
+_TRANSICOES_DA_AVALIACAO: dict[EstadoDaAvaliacao, frozenset[EstadoDaAvaliacao]] = {
+    EstadoDaAvaliacao.AVALIANDO: frozenset(
+        {EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.FALHOU}
+    ),
+    EstadoDaAvaliacao.FALHOU: frozenset({EstadoDaAvaliacao.AVALIANDO}),
+    EstadoDaAvaliacao.CONCLUIDA: frozenset(),
+}
+
+
+def validar_transicao_da_avaliacao(
+    atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
+) -> None:
+    """Mesmo erro e mesma forma de mensagem da missao (`transicao_ilegal`)."""
+    if destino not in _TRANSICOES_DA_AVALIACAO[atual]:
+        permitidos = sorted(e.value for e in _TRANSICOES_DA_AVALIACAO[atual])
+        alvo = ", ".join(permitidos) if permitidos else "nenhum estado"
+        raise TransicaoIlegalError(
+            f"nao e possivel ir de '{atual.value}' para '{destino.value}'; "
+            f"a partir de '{atual.value}' so se pode ir para: {alvo}"
+        )

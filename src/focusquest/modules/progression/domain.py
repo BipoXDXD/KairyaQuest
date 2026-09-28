@@ -12,6 +12,7 @@ from enum import StrEnum
 from math import isqrt
 
 from focusquest.modules.missions.cycle_domain import Historico, sequencia_ate
+from focusquest.modules.missions.domain import Veredito
 
 # D4: subir do nivel n para o n+1 custa 100*n XP. O XP acumulado para estar
 # no nivel L e a soma 100*(1 + 2 + ... + (L-1)) = 50*L*(L-1).
@@ -145,3 +146,10 @@ def maior_sequencia(historico: Historico) -> int:
     o mesmo custo declarado da C2, desprezivel com usuario unico.
     """
     return max((sequencia_ate(historico, dia) for dia in historico), default=0)
+
+
+def bonus_da_avaliacao(veredito: Veredito, xp_da_missao: int) -> int:
+    """O bonus da avaliacao (E7): metade do XP da missao, para baixo, so no
+    `atende`. E a regra UNICA -- o servico chama esta funcao e nao repete a
+    conta. O modelo decide o veredito; quanto vale e decisao daqui."""
+    return xp_da_missao // 2 if veredito is Veredito.ATENDE else 0
