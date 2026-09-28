@@ -1289,6 +1289,116 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     })
   })
 
+  it('os rascunhos de dois cartoes sao independentes: digitar, concluir e falhar em um nao mexe no outro', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 1
+            ? [pendente, B]
+            : [{ ...pendente, state: 'concluida', verification: 'autodeclarada' }, B],
+        ),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Texto do sete', link: 'https://x.dev/sete' })
+    preencher(8, { text: 'Texto do oito' })
+
+    expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue('Texto do sete')
+    expect(within(card(8)).getByLabelText('O que você fez')).toHaveValue('Texto do oito')
+    expect(within(card(8)).getByLabelText('Link (opcional)')).toHaveValue('')
+
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    await within(card(7)).findByText('Missão concluída.')
+
+    // Concluir o 7 nao limpou nem alterou o rascunho do 8 (na tela, e no
+    // registro: o remonte do cartao 8 abaixo le dele).
+    expect(within(card(8)).getByLabelText('O que você fez')).toHaveValue('Texto do oito')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(corpo).toMatchObject({ evidence: { text: 'Texto do sete' } })
+    expect(corpos(fetchMock, 8)).toHaveLength(0)
+  })
+
+  it('o rascunho do 8 vem do registro quando o quadro recarrega depois de o 7 concluir', async () => {
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 1
+            ? [pendente, B]
+            : [{ ...pendente, state: 'concluida', verification: 'autodeclarada' }, B],
+        ),
+      'POST /api/missions/7/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Texto do sete' })
+    preencher(8, { text: 'Texto do oito' })
+    const campoAntes = within(card(8)).getByLabelText('O que você fez')
+
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    fireEvent.click(await within(card(7)).findByTestId('mission-reload'))
+
+    await waitFor(() => {
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    const campoDepois = within(card(8)).getByLabelText('O que você fez')
+    expect(campoDepois).not.toBe(campoAntes)
+    expect(campoDepois).toHaveValue('Texto do oito')
+  })
+
+  it('depois de concluir, o foco nao se perde para o body: vai para o titulo do cartao', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    concluir.focus()
+    expect(document.activeElement).toBe(concluir)
+
+    fireEvent.click(concluir)
+
+    await within(card(7)).findByTestId('evaluation-panel')
+    expect(concluir).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+  })
+
+  it('se o foco ja esta em outro lugar quando a conclusao chega, ele nao e roubado', async () => {
+    let resolver: (r: Response) => void = () => {}
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente, B]),
+      'POST /api/missions/7/complete': () =>
+        new Promise<Response>((resolve) => {
+          resolver = resolve
+        }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    const outroBotao = within(card(8)).getByTestId('mission-complete')
+    outroBotao.focus()
+
+    await act(async () => {
+      resolver(Response.json(comRecompensa(pendenteComEvidencia)))
+      await Promise.resolve()
+    })
+    await within(card(7)).findByTestId('evaluation-panel')
+
+    expect(document.activeElement).toBe(outroBotao)
+  })
+
+  it('o cartao que ja vem concluido do quadro nao rouba o foco', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([concluida]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
   it('o rascunho sobrevive a "Atualizar o quadro": o cartao remonta e o texto continua', async () => {
     const fetchMock = routeFetch({
       'GET /api/missions': (_init, call) =>

@@ -127,6 +127,23 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['data: com HTML', 'data:text/html,<script>alert(1)</script>'],
+    ['DATA: em maiusculas', 'DATA:text/html;base64,PHNjcmlwdD4='],
+    ['esquema-relativo //evil.com', '//evil.com/x'],
+    ['JAVASCRIPT: em maiusculas', 'JAVASCRIPT:alert(1)'],
+    ['https sem barras', 'https:evil.com'],
+    ['http com espaco na frente', ' http://x.dev'],
+  ])('link %s (API defasada) aparece como texto, SEM ancora', (_nome, link) => {
+    routeFetch({})
+
+    render(<EvaluationPanel mission={{ ...comEvidencia, evidence: { text: 'Fiz', link } }} />)
+
+    expect(screen.getByTestId('evaluation-evidence-link')).toHaveTextContent(link.trim())
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(document.querySelector('a[href]')).toBeNull()
+  })
+
   it('evidencia sem link nao mostra linha de link', () => {
     routeFetch({})
 
