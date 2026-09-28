@@ -154,6 +154,20 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
     expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
   })
 
+  it('o rascunho vazio e imutavel: mutar o de uma missao nao contamina o das outras', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    const vazio = registry.draftFor(7) as { text: string; link: string }
+
+    // Modulo ESM roda em strict mode: escrever num objeto congelado lanca.
+    expect(() => {
+      vazio.text = 'contaminado'
+    }).toThrow(TypeError)
+
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+    expect(Object.isFrozen(registry.draftFor(9))).toBe(true)
+  })
+
   it('saveDraft guarda por missao e draftFor devolve o que foi guardado', () => {
     const { result } = renderRegistry()
     const { registry } = result.current

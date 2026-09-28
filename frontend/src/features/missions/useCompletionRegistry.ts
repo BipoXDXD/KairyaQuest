@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { EvidenceDraft } from './types'
 
-const EMPTY_DRAFT: EvidenceDraft = { text: '', link: '' }
+/**
+ * O rascunho vazio, um objeto so para todas as missoes: por isso congelado,
+ * no tipo (`Readonly`) e em tempo de execucao (`Object.freeze`). Quem o
+ * mutasse contaminaria o rascunho "vazio" de todas as outras.
+ */
+const EMPTY_DRAFT: Readonly<EvidenceDraft> = Object.freeze({ text: '', link: '' })
 
 /**
  * O que cada conclusao de missao usa do quadro: a chave e o aviso de voo.
@@ -20,7 +25,7 @@ export interface CompletionRegistry {
    * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
    * formulario, pelo mesmo motivo da chave: o reload remonta os cartoes.
    */
-  draftFor: (missionId: number) => EvidenceDraft
+  draftFor: (missionId: number) => Readonly<EvidenceDraft>
   /** Guarda o rascunho da evidencia da missao. */
   saveDraft: (missionId: number, draft: EvidenceDraft) => void
   /**
