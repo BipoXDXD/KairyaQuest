@@ -20,10 +20,45 @@ export const MAX_LINK_LENGTH = 2000
 export const COUNTER_VISIBLE_FROM = (MAX_EVIDENCE_LENGTH * 9) / 10
 
 /**
- * O formato aceito do link: `(?i)^https?://\S+$` no backend. A flag `i` faz
- * `HTTPS://x.com` valer, como la.
+ * O que o SERVIDOR chama de espaco (medido com pydantic 2, no schema de
+ * `TextoDaEvidencia`): o `White_Space` do Unicode, que e o `trim()` e o `\s`
+ * do Rust. Sao 25 pontos de codigo: U+0009..U+000D, U+0020, U+0085, U+00A0,
+ * U+1680, U+2000..U+200A, U+2028, U+2029, U+202F, U+205F e U+3000.
+ *
+ * NAO e o `trim()` do JS nem o `str.strip()` do Python. Diferencas medidas:
+ * U+0085 (NEL) o servidor remove e o JS nao; U+FEFF o JS remove e o servidor
+ * nao; U+001C..U+001F o Python remove, mas nem o servidor nem o JS. Um texto
+ * so de NEL passava na tela e era recusado la (422); a tela tem de concordar
+ * com o servidor, e o servidor e a verdade.
  */
-const LINK_PATTERN = /^https?:\/\/\S+$/i
+const SERVER_SPACE =
+  '\\t-\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'
+const SERVER_SPACE_CHAR = new RegExp(`[${SERVER_SPACE}]`)
+
+/**
+ * O formato aceito do link: `(?i)^https?://\S+$` no backend, e la o `\S` e o
+ * complemento do conjunto acima. A flag `i` faz `HTTPS://x.com` valer, como la.
+ * Por isso o `\S` do JS (que trata U+FEFF como espaco e U+0085 como nao) nao
+ * serve.
+ */
+const LINK_PATTERN = new RegExp(`^https?://[^${SERVER_SPACE}]+$`, 'i')
+
+/**
+ * O texto sem os espacos das pontas, pelo conjunto do servidor. Percorre por
+ * indice, e nao por regex `[..]+$`: esta seria quadratica num texto com uma
+ * corrida enorme de espacos no meio.
+ */
+export function stripEnds(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && SERVER_SPACE_CHAR.test(value.charAt(start))) {
+    start += 1
+  }
+  while (end > start && SERVER_SPACE_CHAR.test(value.charAt(end - 1))) {
+    end -= 1
+  }
+  return value.slice(start, end)
+}
 
 const LINK_FORMAT_ERROR = 'O link precisa começar com http:// ou https:// e não ter espaços.'
 const LINK_LENGTH_ERROR = `O link passa de ${String(MAX_LINK_LENGTH)} caracteres.`
@@ -43,12 +78,12 @@ export interface EvidenceDescription {
  * O que o SERVIDOR vai medir e aceitar.
  *
  * `Array.from(...).length` conta pontos de codigo; o `.length` de uma string
- * conta unidades UTF-16, e um emoji valeria 2 aqui e 1 la. O `trim()`
- * reproduz o `strip_whitespace` do schema.
+ * conta unidades UTF-16, e um emoji valeria 2 aqui e 1 la. O `stripEnds`
+ * reproduz o `strip_whitespace` do schema, e o teto e medido DEPOIS dele.
  */
 export function describeEvidence(draft: Readonly<EvidenceDraft>): EvidenceDescription {
-  const text = draft.text.trim()
-  const link = draft.link.trim()
+  const text = stripEnds(draft.text)
+  const link = stripEnds(draft.link)
   const length = Array.from(text).length
   const remaining = MAX_EVIDENCE_LENGTH - length
   const linkError = describeLinkError(link)

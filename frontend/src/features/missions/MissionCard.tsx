@@ -3,7 +3,7 @@ import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
-import { describeEvidence, MAX_EVIDENCE_LENGTH } from './evidenceLimit'
+import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
@@ -49,7 +49,7 @@ function statusText(completion: CompletionState): string {
  * ligado por `aria-describedby` (fix-1 da Task 7).
  */
 function blockedReason(draft: EvidenceDraft): string | null {
-  const inUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const described = describeEvidence(draft)
   if (!inUse || described.sendable) {
     return null
@@ -57,7 +57,7 @@ function blockedReason(draft: EvidenceDraft): string | null {
   if (described.linkError !== null) {
     return `Corrija o link da evidência para concluir. ${described.linkError}`
   }
-  if (draft.text.trim() === '') {
+  if (stripEnds(draft.text) === '') {
     return 'Conte o que você fez para concluir com o link.'
   }
   return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
@@ -232,7 +232,7 @@ export function MissionCard({
   // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
   // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
   // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
-  const draftInUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const titleId = useId()
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --

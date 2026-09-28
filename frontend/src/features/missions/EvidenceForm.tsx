@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { describeEvidence } from './evidenceLimit'
+import { describeEvidence, stripEnds } from './evidenceLimit'
 import type { EvidenceDraft } from './types'
 
 const TOGGLE_CLASS =
@@ -56,7 +56,7 @@ export function EvidenceForm({
   const linkErrorId = `${id}-link-error`
   const textMissingId = `${id}-text-missing`
   const described = describeEvidence(draft)
-  const textMissing = draft.text.trim() === '' && draft.link.trim() !== ''
+  const textMissing = stripEnds(draft.text) === '' && stripEnds(draft.link) !== ''
 
   return (
     <div className="mt-3">
