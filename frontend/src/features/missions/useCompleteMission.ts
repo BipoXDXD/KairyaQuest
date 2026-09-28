@@ -56,8 +56,11 @@ export interface UseCompleteMissionResult {
  * Quando a chave sai do registro, este hook decide pelo resultado:
  *
  * - **falha que se repete com a mesma chave** (`recovery: 'retry'` -- rede,
- *   5xx, 422, `code` desconhecido): a chave FICA. Nao se sabe se o servidor
+ *   5xx, `code` desconhecido): a chave FICA, e o registro marca o retry
+ *   pendente (a tela trava a edicao da evidencia). Nao se sabe se o servidor
  *   concluiu, e so a mesma chave torna o reenvio seguro;
+ * - **422** (evidencia recusada): a chave SAI. O servidor leu o pedido e
+ *   recusou, nada foi gravado, e repetir daria o mesmo 422;
  * - **`operacao_reutilizada`**: a chave sai, e o proximo envio gera outra. Com
  *   ela, toda tentativa seria recusada, e trocar e seguro porque a missao nao
  *   foi concluida por ela;
@@ -117,7 +120,9 @@ export function useCompleteMission(
         })
         .catch((error: unknown) => {
           const failure = describeCompletionFailure(error)
-          if (failure.recovery !== 'retry') {
+          if (failure.recovery === 'retry') {
+            registry.markRetryPending(missionId)
+          } else {
             registry.release(missionId)
           }
           setState({ status: 'failed', failure })

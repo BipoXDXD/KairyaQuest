@@ -180,9 +180,9 @@ def concluir_missao(
     engano do cliente daria 200 em sequencia e 500 em paralelo, conforme o
     escalonador.
     """
-    missao = _buscar(session, user_id, mission_id, travar=True)
+    missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
 
-    # A hora e lida AQUI, com a linha ja travada, e nao antes do `_buscar`
+    # A hora e lida AQUI, com a linha ja travada, e nao antes da busca
     # (decisao C13 da spec do ciclo diario). Lida antes, uma conclusao que
     # esperasse a trava de outra carregaria um instante anterior a espera. A
     # hora decide a ocultacao, a regra do dia e o `completed_at`.
@@ -286,7 +286,7 @@ def _exigir_mesma_operacao(
         raise OperacaoReutilizadaError(_reuso(operation_id))
 
 
-def _buscar(
+def buscar_para_escrever(
     session: Session, user_id: int, mission_id: int, *, travar: bool = False
 ) -> Mission:
     """A missao do usuario, ou o erro que explica o bloqueio (README s8).

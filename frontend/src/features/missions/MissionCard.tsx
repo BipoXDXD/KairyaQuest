@@ -1,9 +1,9 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
-import { describeEvidence, MAX_EVIDENCE_LENGTH } from './evidenceLimit'
+import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
@@ -49,7 +49,7 @@ function statusText(completion: CompletionState): string {
  * ligado por `aria-describedby` (fix-1 da Task 7).
  */
 function blockedReason(draft: EvidenceDraft): string | null {
-  const inUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const described = describeEvidence(draft)
   if (!inUse || described.sendable) {
     return null
@@ -57,7 +57,7 @@ function blockedReason(draft: EvidenceDraft): string | null {
   if (described.linkError !== null) {
     return `Corrija o link da evidência para concluir. ${described.linkError}`
   }
-  if (draft.text.trim() === '') {
+  if (stripEnds(draft.text) === '') {
     return 'Conte o que você fez para concluir com o link.'
   }
   return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
@@ -232,13 +232,25 @@ export function MissionCard({
   // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
   // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
   // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
-  const draftInUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const titleId = useId()
+  const titleRef = useRef<HTMLHeadingElement>(null)
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
   const mission = completion.status === 'completed' ? completion.mission : listed
   const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
+  // Ao concluir, o Concluir (e o formulario) saem do documento, e o foco que
+  // estava neles cairia no `body`: quem navega pelo teclado ou por leitor de
+  // tela recomecaria a pagina do topo. Vai para o titulo do cartao -- o painel
+  // que aparece esta logo abaixo dele. So se o foco REALMENTE se perdeu: se a
+  // pessoa ja foi para outro lugar enquanto o pedido voava, nao se rouba.
+  const completed = completion.status === 'completed'
+  useEffect(() => {
+    if (completed && document.activeElement === document.body) {
+      titleRef.current?.focus()
+    }
+  }, [completed])
   // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
   // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
   const offersEvidence =
@@ -250,8 +262,10 @@ export function MissionCard({
       <div className="flex items-start justify-between gap-4">
         <HeadingTag
           id={titleId}
+          ref={titleRef}
+          tabIndex={-1}
           data-testid="mission-instructions"
-          className="text-base font-semibold text-slate-100"
+          className="text-base font-semibold text-slate-100 focus:outline-none"
         >
           {mission.instructions}
         </HeadingTag>
@@ -310,6 +324,7 @@ export function MissionCard({
           draft={draft}
           onChange={changeDraft}
           disabled={completion.status === 'submitting'}
+          retryPending={registry.isRetryPending(listed.id)}
           describedBy={titleId}
         />
       )}

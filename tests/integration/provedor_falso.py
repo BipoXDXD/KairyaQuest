@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import TracebackType
-from typing import Any
+from typing import Any, Literal
 
 from anthropic.types import (
     InputJSONDelta,
@@ -118,6 +118,9 @@ class Roteiro:
       manda (`EVENTOS_DO_PENSAMENTO` eventos, que entram nas contagens
       acima). Ligado por padrao, para o falso se parecer com a API real
       (decisao do dono no ponto de parada 3 do 1b-2).
+    - `stop_reason`: o motivo de parada do `message_delta`. `None` (padrao)
+      deriva do roteiro: `tool_use` com ferramenta, `end_turn` sem ela. Um
+      valor explicito (ex.: `max_tokens`) deixa o teste roteirizar a parada.
     """
 
     blocos: tuple[Texto | ChamadaDeFerramenta, ...] = ()
@@ -127,6 +130,7 @@ class Roteiro:
     atrasar_cabecalhos: float = 0.0
     segurar_apos_eventos: int | None = None
     pensar: bool = True
+    stop_reason: Literal["end_turn", "tool_use", "max_tokens"] | None = None
 
 
 @dataclass(frozen=True)
@@ -199,7 +203,8 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[RawMessageStreamEvent]:
         RawMessageDeltaEvent(
             type="message_delta",
             delta=DeltaDaMensagem(
-                stop_reason="tool_use" if tem_ferramenta else "end_turn",
+                stop_reason=roteiro.stop_reason
+                or ("tool_use" if tem_ferramenta else "end_turn"),
                 stop_sequence=None,
             ),
             usage=MessageDeltaUsage(output_tokens=1),

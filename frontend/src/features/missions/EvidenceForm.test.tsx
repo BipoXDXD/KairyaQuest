@@ -11,10 +11,12 @@ const VAZIO: EvidenceDraft = { text: '', link: '' }
 function Controlado({
   inicial = VAZIO,
   disabled = false,
+  retryPending = false,
   onChange,
 }: {
   inicial?: EvidenceDraft
   disabled?: boolean
+  retryPending?: boolean
   onChange?: (draft: EvidenceDraft) => void
 }) {
   const [draft, setDraft] = useState(inicial)
@@ -22,6 +24,7 @@ function Controlado({
     <EvidenceForm
       draft={draft}
       disabled={disabled}
+      retryPending={retryPending}
       onChange={(d) => {
         setDraft(d)
         onChange?.(d)
@@ -121,13 +124,62 @@ describe('EvidenceForm', () => {
     expect(texto.getAttribute('aria-describedby')).toContain(contador.id)
   })
 
-  it('link invalido mostra o erro com role="alert", ligado ao campo', () => {
+  it('digitando um link invalido, o erro NAO aparece nem e anunciado (M4)', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+
+    fireEvent.change(link, { target: { value: 'h' } })
+    fireEvent.change(link, { target: { value: 'javascript:alert(1)' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('evidence-link-error')).not.toBeInTheDocument()
+    expect(link).not.toHaveAttribute('aria-invalid')
+    expect(link).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('depois do primeiro blur, editar para valido apaga o erro e a proxima digitacao invalida nao o anuncia de novo', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+    fireEvent.change(link, { target: { value: 'x' } })
+    fireEvent.blur(link)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.change(link, { target: { value: 'https://x.dev' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // Apagar um caractere quebra o link: sem novo blur, nada e anunciado.
+    fireEvent.change(link, { target: { value: 'https:/' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.blur(link)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    // Link vazio tambem e valido: reseta.
+    fireEvent.change(link, { target: { value: '' } })
+    fireEvent.change(link, { target: { value: 'h' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('sair do campo (blur) com link valido nao mostra erro', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+
+    fireEvent.change(link, { target: { value: 'https://x.dev' } })
+    fireEvent.blur(link)
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('link invalido mostra o erro com role="alert" ao SAIR do campo, ligado a ele', () => {
     render(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     fireEvent.change(link, { target: { value: 'javascript:alert(1)' } })
+    fireEvent.blur(link)
 
     const erro = screen.getByRole('alert')
     expect(erro).toHaveTextContent('O link precisa começar com http:// ou https://')
@@ -191,5 +243,35 @@ describe('EvidenceForm', () => {
 
     expect(screen.getByLabelText('O que você fez')).toBeDisabled()
     expect(screen.getByLabelText('Link (opcional)')).toBeDisabled()
+  })
+
+  it('com retry pendente, os campos ficam SOMENTE LEITURA (focaveis) e o aviso os descreve', () => {
+    render(<Controlado inicial={{ text: 'Feito', link: '' }} retryPending />)
+
+    const aviso = screen.getByTestId('evidence-retry-notice')
+    expect(aviso).toHaveTextContent(
+      'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.',
+    )
+    const texto = screen.getByLabelText('O que você fez')
+    const link = screen.getByLabelText('Link (opcional)')
+    for (const campo of [texto, link]) {
+      expect(campo).toBeEnabled()
+      expect(campo).toHaveAttribute('readonly')
+      expect(campo).toHaveAttribute('aria-readonly', 'true')
+      campo.focus()
+      expect(document.activeElement).toBe(campo)
+    }
+    expect(texto.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+    expect(link.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+  })
+
+  it('sem retry pendente, nao ha aviso e os campos editam', () => {
+    render(<Controlado inicial={{ text: 'Feito', link: '' }} />)
+
+    expect(screen.queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('O que você fez')).toBeEnabled()
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-readonly')
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-describedby')
   })
 })

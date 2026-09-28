@@ -12,8 +12,12 @@ from sqlalchemy.orm import Session
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_session
 from focusquest.main import app
-from focusquest.modules.missions.domain import MissionType
-from focusquest.modules.missions.models import Mission
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    MissionType,
+)
+from focusquest.modules.missions.models import Mission, MissionEvaluation
 
 SEGUNDA = date(2026, 9, 21)
 QUARTA = SEGUNDA + timedelta(days=2)
@@ -474,3 +478,83 @@ def test_a_listagem_tem_so_avulsas_com_os_campos_novos(
         None,
         "disponivel",
     )
+
+
+def test_o_ciclo_e_a_trilha_publicam_verificacao_evidencia_e_avaliacao(
+    client: TestClient, relogio: list[datetime], session: Session
+) -> None:
+    """A diaria concluida com evidencia sai com os tres campos novos pelos
+    DOIS caminhos que montam `MissionRead` para o ciclo: `GET /api/cycle` e a
+    trilha `GET /api/plans/current`."""
+    client.post("/api/plans", json=_corpo())
+    missao = client.get("/api/cycle").json()["mission"]
+    assert (missao["verification"], missao["evidence"], missao["evaluation"]) == (
+        None,
+        None,
+        None,
+    )
+    resposta = client.post(
+        f"/api/missions/{missao['id']}/complete",
+        json={
+            "operation_id": "op-ciclo-evidencia",
+            "evidence": {"text": "Fiz tudo", "link": "https://exemplo.com/x"},
+        },
+    )
+    assert resposta.status_code == 200, resposta.text
+    session.add(
+        MissionEvaluation(
+            mission_id=missao["id"],
+            state=EstadoDaAvaliacao.FALHOU,
+            attempt=1,
+            error_code=FalhaDaAvaliacao.TEMPO_ESGOTADO,
+            model="modelo-x",
+            requested_at=relogio[0],
+            finished_at=relogio[0],
+        )
+    )
+    session.flush()
+    session.expire_all()
+
+    esperado_evidencia = {"text": "Fiz tudo", "link": "https://exemplo.com/x"}
+    esperado_avaliacao = {
+        "state": "falhou",
+        "verdict": None,
+        "feedback": None,
+        "error_code": "tempo_esgotado",
+        "model": "modelo-x",
+        "finished_at": "2026-09-23T15:00:00Z",
+    }
+    no_ciclo = client.get("/api/cycle").json()["mission"]
+    na_trilha = next(
+        d["mission"]
+        for d in client.get("/api/plans/current").json()["plan"]["days"]
+        if d["mission"] is not None and d["mission"]["id"] == missao["id"]
+    )
+    for lida in (no_ciclo, na_trilha):
+        assert lida["verification"] == "com_evidencia"
+        assert lida["evidence"] == esperado_evidencia
+        assert lida["evaluation"] == esperado_avaliacao
+
+
+def test_a_especial_concluida_com_evidencia_sai_com_os_campos_novos(
+    client: TestClient, relogio: list[datetime]
+) -> None:
+    relogio[0] = ao_meio_dia(SEGUNDA)
+    client.post("/api/plans", json=_corpo())
+    for i in range(7):
+        relogio[0] = ao_meio_dia(SEGUNDA + timedelta(days=i))
+        missao = client.get("/api/cycle").json()["mission"]
+        assert _concluir(client, missao["id"], f"op-{i}").status_code == 200
+    especial = client.get("/api/cycle").json()["special"]
+    assert (especial["verification"], especial["evidence"]) == (None, None)
+    resposta = client.post(
+        f"/api/missions/{especial['id']}/complete",
+        json={"operation_id": "op-esp-ev", "evidence": {"text": "Prova feita"}},
+    )
+    assert resposta.status_code == 200, resposta.text
+    no_ciclo = client.get("/api/cycle").json()["special"]
+    na_trilha = client.get("/api/plans/current").json()["plan"]["special"]["mission"]
+    for lida in (no_ciclo, na_trilha):
+        assert lida["verification"] == "com_evidencia"
+        assert lida["evidence"] == {"text": "Prova feita", "link": None}
+        assert lida["evaluation"] is None

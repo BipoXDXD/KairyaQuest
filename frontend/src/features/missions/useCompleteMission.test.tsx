@@ -203,16 +203,6 @@ describe('useCompleteMission', () => {
   it.each<[string, () => Response]>([
     ['500 sem code', () => Response.json({ detail: 'Erro interno.' }, { status: 500 })],
     [
-      '422 com detail em lista, no formato do FastAPI',
-      () =>
-        Response.json(
-          {
-            detail: [{ loc: ['body', 'operation_id'], msg: 'campo obrigatório', type: 'missing' }],
-          },
-          { status: 422 },
-        ),
-    ],
-    [
       "409 com code: 'codigo_futuro' (desconhecido deste frontend)",
       () => Response.json({ detail: 'x', code: 'codigo_futuro' }, { status: 409 }),
     ],
@@ -222,6 +212,8 @@ describe('useCompleteMission', () => {
       // README §7: nenhuma dessas respostas diz se o servidor concluiu. So a
       // falha de rede reenviava a mesma chave antes desta rodada -- aqui a
       // mesma garantia vale para qualquer resposta HTTP sem `code` conhecido.
+      // O 422 saiu desta lista (S-I2): ele prova que nada foi gravado, e tem
+      // teste proprio -- a chave sai e o rascunho fica.
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(respostaDeFalha())
@@ -552,6 +544,82 @@ describe('useCompleteMission', () => {
         expect(result.current.registry.operationIdFor(7)).not.toBe(primeira)
       },
     )
+
+    it('num 422 o rascunho FICA (E17), a chave sai e a proxima tentativa usa chave nova', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }))
+        .mockResolvedValueOnce(Response.json(concluidaResposta))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderCompletion()
+      result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'failed',
+          failure: {
+            message: 'A evidência não foi aceita. Revise o texto e o link.',
+            recovery: 'retry-with-new-operation',
+          },
+        })
+      })
+      expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+
+      act(() => {
+        result.current.complete({ text: 'Feito corrigido', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
+    })
+
+    it('falha retry marca o retry pendente no registro; um novo sucesso o limpa', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+          .mockResolvedValueOnce(Response.json(concluidaResposta)),
+      )
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+      expect(result.current.registry.isRetryPending(7)).toBe(true)
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      expect(result.current.registry.isRetryPending(7)).toBe(false)
+    })
+
+    it('falha sem retry (422) NAO deixa retry pendente', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: [] }, { status: 422 })),
+      )
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+
+      expect(result.current.registry.isRetryPending(7)).toBe(false)
+    })
 
     it('no sucesso o registro esquece a chave e o rascunho', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(concluidaResposta)))

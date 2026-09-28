@@ -88,6 +88,21 @@ describe('useRequestEvaluation', () => {
     expect(onRewarded).toHaveBeenCalledTimes(1)
   })
 
+  it('uma resposta SEM a chave reward (contrato violado) nao chama onRewarded', async () => {
+    routeFetch({ [KEY]: () => Response.json({ evaluation: avaliacao }) })
+    const onRewarded = vi.fn()
+    const { result } = renderHook(() => useRequestEvaluation(7, onRewarded))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('done')
+    })
+    expect(onRewarded).not.toHaveBeenCalled()
+  })
+
   it('um onRewarded que lanca nao vira falha: o bonus ja foi concedido no servidor', async () => {
     routeFetch({ [KEY]: () => Response.json(comBonus) })
     const erro = new Error('quadro quebrou')
@@ -153,6 +168,27 @@ describe('useRequestEvaluation', () => {
         failure: {
           message: 'A Tifa não conseguiu avaliar agora. Tente de novo.',
           recovery: 'retry',
+        },
+      })
+    })
+  })
+
+  it('falha 422: a evidencia foi recusada, e nao "tente de novo"', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }),
+    })
+    const { result } = renderHook(() => useRequestEvaluation(7))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'failed',
+        failure: {
+          message: 'A evidência não foi aceita. Revise o texto e o link.',
+          recovery: 'unavailable',
         },
       })
     })

@@ -103,3 +103,100 @@ def test_o_downgrade_falha_alto_com_bonus_gravado(
             command.downgrade(cfg, "0004")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_o_downgrade_devolve_as_restricoes_do_livro_razao_da_0004(
+    banco_migrado: Engine,
+) -> None:
+    """Depois do downgrade: unicidade SO por missao e CHECK so com
+    `mission_completed`, como antes da 0005."""
+    cfg = alembic_config()
+    try:
+        command.downgrade(cfg, "0004")
+        with banco_migrado.connect() as conexao:
+            unicas = {
+                u["name"]: tuple(u["column_names"])
+                for u in inspect(conexao).get_unique_constraints("xp_entries")
+            }
+            fonte = conexao.execute(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE "
+                    "conname = 'ck_xp_entries_source' "
+                    "AND conrelid = 'xp_entries'::regclass"
+                )
+            ).scalar_one()
+        assert unicas == {"uq_xp_entries_mission_id": ("mission_id",)}
+        assert "mission_completed" in fonte
+        assert "evaluation_bonus" not in fonte
+    finally:
+        command.upgrade(cfg, "head")
+
+
+@pytest.fixture
+def missao_com_evidencia_e_avaliacao_commitadas(
+    banco_migrado: Engine,
+) -> Iterator[int]:
+    """Missao concluida com evidencia e uma avaliacao (sem bonus), COMMITADAS."""
+    with Session(bind=banco_migrado) as sessao:
+        mission_id = _nova_missao(sessao)
+        sessao.execute(
+            text(
+                "INSERT INTO mission_evidence (mission_id, text, submitted_at) "
+                "VALUES (:m, 'Fiz tudo', now())"
+            ),
+            {"m": mission_id},
+        )
+        sessao.execute(
+            text(
+                "INSERT INTO mission_evaluations (mission_id, state, attempt, "
+                "verdict, feedback, model, requested_at, finished_at) VALUES "
+                "(:m, 'concluida', 1, 'parcial', 'Falta um criterio.', 'modelo-x', "
+                "now(), now())"
+            ),
+            {"m": mission_id},
+        )
+        sessao.commit()
+    try:
+        yield mission_id
+    finally:
+        with Session(bind=banco_migrado) as sessao:
+            sessao.execute(delete(Mission).where(Mission.id == mission_id))
+            sessao.commit()
+
+
+@pytest.mark.parametrize("tabela", ["mission_evidence", "mission_evaluations"])
+def test_o_downgrade_falha_alto_com_evidencia_ou_avaliacao_gravada(
+    banco_migrado: Engine, missao_com_evidencia_e_avaliacao_commitadas: int, tabela: str
+) -> None:
+    """Sem bonus, o `drop_table` levaria em silencio os textos e os vereditos:
+    o downgrade recusa, e o banco fica como estava (versao 0005 e linhas)."""
+    cfg = alembic_config()
+    mission_id = missao_com_evidencia_e_avaliacao_commitadas
+    outra = (
+        "mission_evaluations" if tabela == "mission_evidence" else "mission_evidence"
+    )
+    try:
+        with banco_migrado.begin() as conexao:
+            # Deixa so UMA das duas tabelas com linha, para cada caso provar a
+            # sua propria guarda.
+            conexao.execute(
+                text(f"DELETE FROM {outra} WHERE mission_id = :m"), {"m": mission_id}
+            )
+        with pytest.raises(RuntimeError, match=tabela):
+            command.downgrade(cfg, "0004")
+        with banco_migrado.connect() as conexao:
+            versao = conexao.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            restam = conexao.execute(
+                text(f"SELECT count(*) FROM {tabela} WHERE mission_id = :m"),
+                {"m": mission_id},
+            ).scalar_one()
+            unicas = {
+                u["name"] for u in inspect(conexao).get_unique_constraints("xp_entries")
+            }
+        assert versao == "0005"
+        assert restam == 1
+        assert unicas == {"uq_xp_entries_mission_id_source"}
+    finally:
+        command.upgrade(cfg, "head")

@@ -43,6 +43,52 @@ describe('describeEvidence -- o texto', () => {
     expect(result.sendable).toBe(true)
   })
 
+  it.each([
+    ['NEL (U+0085)', '\u0085'],
+    ['NEL e espaco', ' \u0085\n'],
+    ['espaco de largura ideografica (U+3000)', '\u3000'],
+    ['NBSP (U+00A0)', '\u00a0'],
+    ['separador de linha (U+2028)', '\u2028'],
+  ])('texto so de %s e vazio, como no servidor', (_nome, text) => {
+    const result = describeEvidence({ text, link: '' })
+
+    expect(result.sendable).toBe(false)
+    expect(result.body).toBeNull()
+  })
+
+  it.each([
+    ['U+FEFF', '\ufeff'],
+    ['U+001C', '\u001c'],
+    ['U+001F', '\u001f'],
+  ])('%s NAO e espaco: o servidor nao o remove, e a tela tambem nao', (_nome, ch) => {
+    const result = describeEvidence({ text: `${ch}feito${ch}`, link: '' })
+
+    expect(result.sendable).toBe(true)
+    expect(result.body).toEqual({ text: `${ch}feito${ch}` })
+    expect(describeEvidence({ text: ch, link: '' }).sendable).toBe(true)
+  })
+
+  it('o teto de 4000 e contado DEPOIS do recorte (com NEL e U+3000 nas pontas)', () => {
+    const corpo = 'a'.repeat(MAX_EVIDENCE_LENGTH)
+
+    const noLimite = describeEvidence({ text: `\u0085\u3000${corpo}\u3000\u0085`, link: '' })
+    expect(noLimite.sendable).toBe(true)
+    expect(noLimite.body).toEqual({ text: corpo })
+
+    const acima = describeEvidence({ text: `\u0085${corpo}a\u0085`, link: '' })
+    expect(acima.sendable).toBe(false)
+    expect(acima.counter).toBe('Passou 1 caractere do limite de 4000.')
+  })
+
+  it('conta pontos de codigo, e nao grafemas: marca combinante e ZWJ', () => {
+    expect(describeEvidence({ text: 'e\u0301'.repeat(2000), link: '' }).sendable).toBe(true)
+    expect(describeEvidence({ text: 'e\u0301'.repeat(2001), link: '' }).sendable).toBe(false)
+    // familia: 5 pontos de codigo (3 pessoas e 2 ZWJ), 1 grafema.
+    const familia = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'
+    expect(describeEvidence({ text: familia.repeat(800), link: '' }).sendable).toBe(true)
+    expect(describeEvidence({ text: familia.repeat(801), link: '' }).sendable).toBe(false)
+  })
+
   it('nao mostra contador abaixo de 90% do limite, e mostra a partir dele', () => {
     expect(describeEvidence({ text: 'a'.repeat(3599), link: '' }).counter).toBeNull()
     expect(describeEvidence({ text: 'a'.repeat(3600), link: '' }).counter).toBe(
@@ -100,6 +146,31 @@ describe('describeEvidence -- o link', () => {
     const acima = describeEvidence({ text: 'Feito', link: `${noLimite}a` })
     expect(acima.sendable).toBe(false)
     expect(acima.linkError).toBe('O link passa de 2000 caracteres.')
+  })
+
+  it.each([
+    ['NEL (U+0085)', 'https://a\u0085b'],
+    ['NBSP', 'https://a\u00a0b'],
+    ['U+3000', 'https://a\u3000b'],
+    ['U+2028', 'https://a\u2028b'],
+  ])('recusa espaco de Unicode no meio do link: %s', (_nome, link) => {
+    expect(describeEvidence({ text: 'Feito', link }).linkError).toBe(LINK_ERROR)
+  })
+
+  it.each([
+    ['U+FEFF', 'https://a\ufeffb'],
+    ['U+001C', 'https://a\u001cb'],
+  ])('aceita %s no meio do link: para o servidor nao e espaco', (_nome, link) => {
+    const result = describeEvidence({ text: 'Feito', link })
+
+    expect(result.linkError).toBeNull()
+    expect(result.body).toEqual({ text: 'Feito', link })
+  })
+
+  it('o NEL nas pontas do link e recortado, como no servidor', () => {
+    const result = describeEvidence({ text: 'Feito', link: '\u0085https://x.com\u0085' })
+
+    expect(result.body).toEqual({ text: 'Feito', link: 'https://x.com' })
   })
 
   it('link ruim barra o envio mesmo com texto bom', () => {

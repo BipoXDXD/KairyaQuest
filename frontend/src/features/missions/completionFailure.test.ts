@@ -76,10 +76,31 @@ describe('describeCompletionFailure', () => {
     },
   )
 
-  it('cai na mensagem generica quando nao ha code (rede, 5xx, 422)', () => {
-    const erro = new ApiError('Não foi possível falar com o servidor.', null, null)
+  it('cai na mensagem generica quando nao ha code (rede, 5xx)', () => {
+    expect(
+      describeCompletionFailure(new ApiError('Não foi possível falar com o servidor.', null, null)),
+    ).toEqual(UNCONFIRMED)
+    expect(describeCompletionFailure(new ApiError('O servidor respondeu 500.', 500, null))).toEqual(
+      UNCONFIRMED,
+    )
+  })
 
-    expect(describeCompletionFailure(erro)).toEqual(UNCONFIRMED)
+  it('um 422 nao e "tente de novo": a evidencia foi recusada, e a chave sai', () => {
+    // O 422 prova que nada foi gravado, e repetir o mesmo pedido daria o mesmo
+    // 422 para sempre. A recuperacao `retry-with-new-operation` libera a chave
+    // (o hook so a retem em `retry`).
+    const erro = new ApiError('O servidor respondeu 422.', 422, null)
+
+    expect(describeCompletionFailure(erro)).toEqual({
+      message: 'A evidência não foi aceita. Revise o texto e o link.',
+      recovery: 'retry-with-new-operation',
+    })
+  })
+
+  it('um code conhecido vence o status 422', () => {
+    const erro = new ApiError('x', 422, 'missao_expirada')
+
+    expect(describeCompletionFailure(erro).recovery).toBe('refresh')
   })
 
   it('cai na mensagem generica quando a falha nao e um ApiError', () => {

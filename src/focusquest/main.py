@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from focusquest.core.database import get_engine
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
+    AvaliacaoEmAndamentoError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -28,9 +29,12 @@ from focusquest.core.errors import (
     ProvedorNaoConfiguradoError,
     SemanaDistanteError,
     SemanaEncerradaError,
+    SemEvidenciaError,
 )
+from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
+from focusquest.modules.evaluation.router import router as evaluation_router
 from focusquest.modules.missions.cycle_router import router as cycle_router
-from focusquest.modules.missions.domain import TransicaoIlegalError
+from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
 from focusquest.modules.tutoring.router import router as tutoring_router
@@ -42,6 +46,7 @@ app.include_router(missions_router)
 app.include_router(cycle_router)
 app.include_router(progression_router)
 app.include_router(tutoring_router)
+app.include_router(evaluation_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
 # proposito: ver `_nao_pertence`.
@@ -82,6 +87,14 @@ class CodigoDeErro(StrEnum):
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
     SEMANA_DISTANTE = "semana_distante"
+    SEM_EVIDENCIA = "sem_evidencia"
+    AVALIACAO_EM_ANDAMENTO = "avaliacao_em_andamento"
+    # Os dois seguintes tem o MESMO valor do `CodigoDoStream` da conversa
+    # (spec, "Erros"); `test_os_codigos_http_da_avaliacao_tem_o_valor_do_stream`
+    # confere que nao divergem.
+    PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
+    TEMPO_ESGOTADO = "tempo_esgotado"
+    AVALIACAO_INVALIDA = "avaliacao_invalida"
 
 
 def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:
@@ -238,6 +251,40 @@ def _semana_encerrada(request: Request, exc: SemanaEncerradaError) -> JSONRespon
 def _semana_distante(request: Request, exc: SemanaDistanteError) -> JSONResponse:
     """409 pelo mesmo motivo de `_semana_encerrada`."""
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEMANA_DISTANTE)
+
+
+@app.exception_handler(SemEvidenciaError)
+def _sem_evidencia(request: Request, exc: SemEvidenciaError) -> JSONResponse:
+    """409: a missao existe e e visivel; o estado dela (sem evidencia, ou nao
+    concluida) e que recusa a avaliacao."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEM_EVIDENCIA)
+
+
+@app.exception_handler(AvaliacaoEmAndamentoError)
+def _avaliacao_em_andamento(
+    request: Request, exc: AvaliacaoEmAndamentoError
+) -> JSONResponse:
+    """409: outra tentativa esta avaliando esta missao. O cliente espera."""
+    return _erro(
+        status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.AVALIACAO_EM_ANDAMENTO
+    )
+
+
+# O status de cada falha da avaliacao (E13). 502 quando o problema esta do
+# outro lado (o provedor falhou, ou respondeu fora do esquema), 504 quando foi
+# o tempo. Os tres dizem ao cliente "nenhum bonus aconteceu" sem ler o corpo.
+_STATUS_DA_FALHA: dict[FalhaDaAvaliacao, int] = {
+    FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL: status.HTTP_502_BAD_GATEWAY,
+    FalhaDaAvaliacao.TEMPO_ESGOTADO: status.HTTP_504_GATEWAY_TIMEOUT,
+    FalhaDaAvaliacao.AVALIACAO_INVALIDA: status.HTTP_502_BAD_GATEWAY,
+}
+
+
+@app.exception_handler(AvaliacaoFalhouError)
+def _avaliacao_falhou(request: Request, exc: AvaliacaoFalhouError) -> JSONResponse:
+    """A falha ja gravada na avaliacao, com o `code` igual ao `error_code` da
+    linha: a tela traduz os dois pelo mesmo mapa."""
+    return _erro(_STATUS_DA_FALHA[exc.falha], str(exc), CodigoDeErro(exc.falha.value))
 
 
 @app.get("/health")
