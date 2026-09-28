@@ -287,6 +287,7 @@ def test_o_pedido_repetido_nao_chama_o_modelo(
     chamadas = len(falso.recebidas)
     segundo = _avaliar(fabrica, tutoria, mission_id, [AGORA + timedelta(days=1)])
     assert len(falso.recebidas) == chamadas
+    assert segundo.recompensa is not None
     assert segundo.recompensa == primeiro.recompensa
     assert (segundo.avaliacao.id, segundo.avaliacao.finished_at) == (
         primeiro.avaliacao.id,
@@ -314,6 +315,8 @@ def test_sem_evidencia_nao_chama_o_modelo(
         _roteiro({"verdict": "atende"}),
         _roteiro({"verdict": "atende", "feedback": "x" * 1501}),
         _roteiro({"verdict": "atende", "feedback": ""}),
+        _roteiro({"verdict": "atende", "feedback": "   "}),
+        _roteiro({"verdict": "atende", "feedback": "ok\x00fim"}),
         _roteiro({"verdict": "atende", "feedback": "ok", "xp": 9999}),
         Roteiro(blocos=(Texto(("Nao vou chamar a ferramenta.",)),)),
     ],
@@ -322,6 +325,8 @@ def test_sem_evidencia_nao_chama_o_modelo(
         "sem-feedback",
         "feedback-longo",
         "feedback-vazio",
+        "feedback-so-espacos",
+        "feedback-com-nul",
         "campo-a-mais",
         "sem-chamar-a-ferramenta",
     ],

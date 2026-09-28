@@ -194,6 +194,7 @@ def test_o_pedido_repetido_devolve_o_mesmo_corpo(
     segunda = _avaliar(cliente, mission_id)
     assert segunda.status_code == 200
     assert segunda.content == primeira.content
+    assert segunda.json()["reward"]["xp_awarded"] == BONUS
     assert len(falso.recebidas) == 1
 
 
@@ -234,6 +235,25 @@ def test_sem_chave_e_503_antes_de_tocar_no_banco(cliente: TestClient) -> None:
     """Um id que nao existe responderia 404 se a rota fosse ao banco."""
     app.dependency_overrides[get_tutoria] = lambda: None
     assert _erro(_avaliar(cliente, 2**31 - 1)) == (503, "provedor_nao_configurado")
+
+
+def test_sem_chave_nao_grava_avaliando(
+    cliente: TestClient,
+    registro: Registro,
+    fabrica_de_teste: sessionmaker[Session],
+) -> None:
+    mission_id = _com_evidencia(cliente, registro)
+    app.dependency_overrides[get_tutoria] = lambda: None
+    assert _erro(_avaliar(cliente, mission_id)) == (503, "provedor_nao_configurado")
+    with fabrica_de_teste() as sessao:
+        assert (
+            sessao.scalars(
+                select(MissionEvaluation).where(
+                    MissionEvaluation.mission_id == mission_id
+                )
+            ).all()
+            == []
+        )
 
 
 def _corpo_do_404_da_conclusao(cliente: TestClient, mission_id: int) -> Any:
