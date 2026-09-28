@@ -158,6 +158,27 @@ describe('useRequestEvaluation', () => {
     })
   })
 
+  it('falha 422: a evidencia foi recusada, e nao "tente de novo"', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }),
+    })
+    const { result } = renderHook(() => useRequestEvaluation(7))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'failed',
+        failure: {
+          message: 'A evidência não foi aceita. Revise o texto e o link.',
+          recovery: 'unavailable',
+        },
+      })
+    })
+  })
+
   it('um segundo request com um pedido em voo NAO faz outro POST', async () => {
     let release: (r: Response) => void = () => undefined
     const fetchMock = routeFetch({

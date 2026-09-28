@@ -54,11 +54,21 @@ const FAILURE_BY_CODE: Record<EvaluationErrorCode, EvaluationFailure> = {
   },
 }
 
-/** Rede fora, 5xx, 422, `code` de um backend mais novo: repetir e seguro. */
+/** Rede fora, 5xx, `code` de um backend mais novo: repetir e seguro. */
 const GENERIC: EvaluationFailure = {
   message:
     'Não foi possível pedir a avaliação. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
   recovery: 'retry',
+}
+
+/**
+ * O 422: o servidor recusou a evidencia gravada. Repetir o pedido nao a muda e
+ * daria o mesmo 422, entao nao ha "tentar de novo" (`unavailable`: a tela so
+ * informa), ao contrario da mensagem generica (achado S-I2).
+ */
+const EVIDENCE_REJECTED: EvaluationFailure = {
+  message: 'A evidência não foi aceita. Revise o texto e o link.',
+  recovery: 'unavailable',
 }
 
 /**
@@ -81,5 +91,9 @@ export function describeEvaluationErrorCode(code: string | null): EvaluationFail
 
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
-  return error instanceof ApiError ? describeEvaluationErrorCode(error.code) : GENERIC
+  if (!(error instanceof ApiError)) {
+    return GENERIC
+  }
+  const described = describeEvaluationErrorCode(error.code)
+  return error.status === 422 && described === GENERIC ? EVIDENCE_REJECTED : described
 }

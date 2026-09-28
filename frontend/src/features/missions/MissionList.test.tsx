@@ -1188,6 +1188,36 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(segundo).toEqual(primeiro)
   })
 
+  it('num 422 a tela diz que a evidencia nao foi aceita, mantem o rascunho editavel e usa chave nova', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': (_init, call) =>
+        call === 1
+          ? Response.json({ detail: [{ msg: 'x' }] }, { status: 422 })
+          : Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    expect(await within(card(7)).findByTestId('mission-completion-error')).toHaveTextContent(
+      'A evidência não foi aceita. Revise o texto e o link.',
+    )
+    const campo = within(card(7)).getByLabelText('O que você fez')
+    expect(campo).toHaveValue('Resumo entregue no caderno.')
+    expect(campo).toBeEnabled()
+
+    fireEvent.change(campo, { target: { value: 'Resumo revisado.' } })
+    fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [primeiro, segundo] = corpos(fetchMock, 7) as { operation_id: string }[]
+    expect(segundo?.operation_id).not.toBe(primeiro?.operation_id)
+    expect(segundo).toMatchObject({ evidence: { text: 'Resumo revisado.' } })
+  })
+
   it('o rascunho sobrevive a "Atualizar o quadro": o cartao remonta e o texto continua', async () => {
     const fetchMock = routeFetch({
       'GET /api/missions': (_init, call) =>

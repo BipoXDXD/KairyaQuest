@@ -229,6 +229,18 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(screen.getByTestId('evaluation-status-text')).toBeEmptyDOMElement()
   })
 
+  it('falha 422: a tela diz que a evidencia nao foi aceita, sem "tente de novo"', async () => {
+    routeFetch({ [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }) })
+    render(<EvaluationPanel mission={comEvidencia} />)
+
+    fireEvent.click(botaoPedir())
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('A evidência não foi aceita. Revise o texto e o link.')
+    expect(alerta).not.toHaveTextContent(/tente de novo|tentar de novo/i)
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+  })
+
   it('falha 502: a mensagem e "Tentar de novo", que pede de novo', async () => {
     const fetchMock = routeFetch({
       [KEY]: (_init, call) =>
