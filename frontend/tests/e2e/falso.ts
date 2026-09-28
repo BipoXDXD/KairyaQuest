@@ -7,7 +7,10 @@ import { FALSO_URL } from './servers'
  * por `tests/integration/test_falso_do_e2e.py`). `fetch` do Node, e nao o
  * `request` do Playwright: o controle nao passa pelo navegador nem pelo proxy.
  */
-export type Bloco = { text: string[] } | { tool_input: Record<string, unknown> }
+export type Bloco =
+  | { text: string[] }
+  | { tool_input: Record<string, unknown> }
+  | { tool_input: Record<string, unknown>; tool_name: string }
 
 export interface RoteiroDoFalso {
   blocks: Bloco[]
