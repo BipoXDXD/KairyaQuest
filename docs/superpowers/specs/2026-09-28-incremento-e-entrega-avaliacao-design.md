@@ -357,12 +357,17 @@ por mutação depois; toda guarda nova tem um teste que a faz dizer não.
 - O texto exato das mensagens de falha da avaliação e do contador da
   evidência.
 
-## Emendas (2026-09-28, antes do plano)
+## Emendas (2026-09-28)
 
-Feitas ao escrever o plano, com o código aberto, antes de qualquer
-implementação; o texto acima já as incorpora.
+EM1 e EM2 foram feitas ao escrever o plano, com o código aberto, antes de
+qualquer implementação; o texto acima já as incorpora. **EM3 e EM4 foram feitas
+durante a execução (2026-09-28) e o texto acima NÃO as incorpora**: onde ele
+diz `tool_choice` **forçado** (E12, "Riscos", "O pedido ao modelo") e "devolve o
+estado atual sem gravar" (E10, "Serviços"), vale a emenda.
 
 | # | O que a spec dizia | O que vale | Motivo |
 |---|---|---|---|
 | EM1 | `MissionRead.evaluation` trazia `bonus_xp`, lido do livro-razão | O resumo da avaliação no `MissionRead` **não** tem o valor do bônus. O número sai só no `reward` da resposta de `POST /evaluation`, reconstruído do livro-razão; depois de recarregar, o cartão diz "Bônus de XP creditado ao seu saldo" para o veredito `atende`, e o painel de progresso mostra o saldo. | Ler `xp_entries` para montar o `MissionRead` faria `missions` depender dos modelos de `progression` também na leitura — mais uma aresta do par da pendência 88. Recalcular pela regra seria a segunda fonte da verdade que a própria spec recusou. |
 | EM2 | O link valia com `^https?://` (sensível a maiúsculas) | Sem diferenciar maiúsculas: `~*` no `CHECK`, `(?i)` no schema, e a tela só vira âncora o que casa com `/^https?:\/\//i`. | Quem cola `HTTPS://…` de um celular receberia 422 por um detalhe que não muda o endereço. |
+| EM3 | E12 e "Riscos": `avaliar` usa `tool_choice` **forçado** em `record_evaluation`, com plano B (`auto`) só se a chamada real (pendência 91) recusasse | `avaliar` usa **`tool_choice: {"type": "auto", "disable_parallel_tool_use": true}`**, a ferramenta com **`strict: true`**, e o sistema da avaliação **manda** chamar `record_evaluation` exatamente uma vez, sem texto livre. Sem chamada de `record_evaluation` (ou parada por outro motivo que não `tool_use`, como `max_tokens`), `avaliar` devolve `None`, e o serviço grava `avaliacao_invalida`. O esquema publicado ao modelo perde `minLength`/`maxLength` (a ferramenta estrita não os suporta) e ganha `additionalProperties: false`; os limites continuam no `EvaluationOutput`, validado antes de qualquer escrita. A avaliação tem `max_tokens` próprio (2048) | Decisão do controlador, com o plano B adotado de saída. Fonte: a referência oficial da API (a skill `claude-api`, em cache, 2026-09-25): o `tool_choice` forçado dá 400 no Fable 5.1 e no Mythos 5.1 e exige thinking desligado no Bedrock; o `claude-opus-5` configurado o aceitaria, mas trocar o modelo quebraria toda avaliação sem que nenhum teste reprovasse. **Não medido por chamada real.** Custo: o modelo pode deixar de chamar a ferramenta às vezes, o que vira `avaliacao_invalida` (`502`, repetível) |
+| EM4 | E10 e "Serviços", passo 3: a tentativa superada "devolve o estado atual sem gravar" | A tentativa superada **não grava** e responde **`409 avaliacao_em_andamento`**; o `retry` do cliente lê o estado real na chamada seguinte | O plano e o brief já mandavam assim, e o código o faz (`AvaliacaoEmAndamentoError` na segunda transação). O 409 às vezes descreve o estado de forma imprecisa (ele pode já ser `concluida`), e a chamada seguinte resolve. Achado m2 da revisão da Task 5; registrado como emenda em vez de mudar o código |
