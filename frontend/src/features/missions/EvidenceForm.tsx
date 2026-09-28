@@ -58,6 +58,7 @@ export function EvidenceForm({
   retryPending?: boolean
   describedBy?: string
 }) {
+  const [linkTouched, setLinkTouched] = useState(false)
   const [expanded, setExpanded] = useState(() => draft.text !== '' || draft.link !== '')
   const id = useId()
   const regionId = `${id}-region`
@@ -69,6 +70,11 @@ export function EvidenceForm({
   const retryNoticeId = `${id}-retry-notice`
   const locked = disabled || retryPending
   const described = describeEvidence(draft)
+  // O erro do link so aparece (e so e anunciado) depois que a pessoa SAI do
+  // campo: `role="alert"` no primeiro caractere ("h") interromperia o leitor de
+  // tela no meio da digitacao (M4). E o mais simples que serve -- sem timer, e
+  // o motivo do Concluir bloqueado ja esta a vista fora do disclosure.
+  const linkError = linkTouched ? described.linkError : null
   const textMissing = stripEnds(draft.text) === '' && stripEnds(draft.link) !== ''
 
   return (
@@ -139,24 +145,27 @@ export function EvidenceForm({
               inputMode="url"
               value={draft.link}
               disabled={locked}
-              aria-invalid={described.linkError === null ? undefined : true}
+              aria-invalid={linkError === null ? undefined : true}
               aria-describedby={joinIds(
                 retryPending ? retryNoticeId : null,
-                described.linkError === null ? null : linkErrorId,
+                linkError === null ? null : linkErrorId,
               )}
+              onBlur={() => {
+                setLinkTouched(true)
+              }}
               onChange={(event) => {
                 onChange({ ...draft, link: event.target.value })
               }}
               className={FIELD_CLASS}
             />
-            {described.linkError !== null && (
+            {linkError !== null && (
               <p
                 id={linkErrorId}
                 role="alert"
                 data-testid="evidence-link-error"
                 className="text-xs text-red-300"
               >
-                {described.linkError}
+                {linkError}
               </p>
             )}
           </>

@@ -93,7 +93,7 @@ type EvaluationView =
   | { kind: 'none' }
   | { kind: 'requesting' }
   | { kind: 'in_progress' }
-  | { kind: 'failed'; failure: EvaluationFailure }
+  | { kind: 'failed'; failure: EvaluationFailure; fresh: boolean }
   | ConcludedView
 
 interface ConcludedView {
@@ -123,7 +123,7 @@ function viewOfSummary(
     case 'avaliando':
       return { kind: 'in_progress' }
     case 'falhou':
-      return { kind: 'failed', failure: describeEvaluationErrorCode(summary.error_code) }
+      return { kind: 'failed', failure: describeEvaluationErrorCode(summary.error_code), fresh }
   }
 }
 
@@ -138,9 +138,9 @@ function currentView(
     case 'requesting':
       return { kind: 'requesting' }
     case 'done':
-      return viewOfSummary(request.result.evaluation, true, request.result.reward)
+      return viewOfSummary(request.result.evaluation, true, request.result.reward ?? null)
     case 'failed':
-      return { kind: 'failed', failure: request.failure }
+      return { kind: 'failed', failure: request.failure, fresh: true }
   }
 }
 
@@ -212,8 +212,9 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
  * o `RewardAnnouncement` do bonus mora DENTRO dela, como o da conclusao.
  *
  * O botao some so quando repetir nao tem sentido: avaliacao concluida (E8) ou
- * falha que pede atualizar. Na falha `unavailable` (503) ele fica, desabilitado:
- * a mensagem diz por que, e o lugar do botao nao pula.
+ * falha que pede atualizar. Na falha `unavailable` (503) ele fica HABILITADO
+ * (E18: "fica sempre habilitado"; o 503 vira mensagem): desabilitar o mataria
+ * ate remontar o cartao, mesmo com a chave configurada depois (M3 da revisao).
  */
 function EvidenceAndEvaluation({
   mission,
@@ -260,7 +261,7 @@ function EvidenceAndEvaluation({
           <button
             type="button"
             data-testid="evaluation-request"
-            disabled={view.kind === 'requesting' || failure?.recovery === 'unavailable'}
+            disabled={view.kind === 'requesting'}
             onClick={requestEvaluation}
             aria-describedby={describedBy}
             className={REQUEST_BUTTON_CLASS}
@@ -285,7 +286,14 @@ function EvidenceAndEvaluation({
           )}
         </div>
         {failure !== null && (
-          <p role="alert" data-testid="evaluation-error" className="w-full text-sm text-red-300">
+          // `alert` so na falha FRESCA (o pedido que a pessoa acabou de fazer).
+          // A gravada, lida com a pagina, e texto comum: com varias missoes
+          // falhadas, cada cartao anunciaria um evento que nao e novo (M2).
+          <p
+            role={view.kind === 'failed' && view.fresh ? 'alert' : undefined}
+            data-testid="evaluation-error"
+            className="w-full text-sm text-red-300"
+          >
             {failure.message}
           </p>
         )}

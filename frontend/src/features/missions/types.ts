@@ -57,7 +57,11 @@ export type EvaluationErrorCode =
 /** A resposta do pedido de avaliacao: o resumo e o bonus, se concedido agora. */
 export interface EvaluationResult {
   evaluation: EvaluationSummary
-  reward: Reward | null
+  /**
+   * `reward` pode faltar (deploy defasado ou contrato violado) ou vir `null`
+   * (sem bonus): quem le usa `!= null`, como o `useCompleteMission` faz.
+   */
+  reward?: Reward | null
 }
 
 /** O rascunho da evidencia, guardado por missao no registro de conclusoes. */

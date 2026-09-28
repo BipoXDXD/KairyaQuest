@@ -230,10 +230,15 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(onRewarded).not.toHaveBeenCalled()
   })
 
-  it('falha 503: "fora do ar" e o botao DESABILITADO (repetir nao adianta)', async () => {
-    routeFetch({
-      [KEY]: () =>
-        Response.json({ detail: 'x', code: 'provedor_nao_configurado' }, { status: 503 }),
+  it('falha 503: a mensagem "fora do ar", e o botao continua HABILITADO (E18)', async () => {
+    // E18: o botao fica sempre habilitado; o 503 vira mensagem. Desabilitar
+    // mataria o botao ate remontar o cartao, mesmo com a chave configurada
+    // depois (achado M3 da revisao Opus).
+    const fetchMock = routeFetch({
+      [KEY]: (_init, call) =>
+        call === 1
+          ? Response.json({ detail: 'x', code: 'provedor_nao_configurado' }, { status: 503 })
+          : Response.json({ evaluation: avaliacao(), reward: null }),
     })
     render(<EvaluationPanel mission={comEvidencia} />)
 
@@ -242,8 +247,29 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'A Tifa está fora do ar: falta configurar o provedor.',
     )
-    expect(botaoPedir()).toBeDisabled()
+    expect(botaoPedir()).toBeEnabled()
     expect(screen.getByTestId('evaluation-status-text')).toBeEmptyDOMElement()
+
+    // O dono configurou a chave: o mesmo botao pede de novo e funciona.
+    fireEvent.click(botaoPedir())
+
+    expect(await screen.findByTestId('evaluation-verdict')).toHaveTextContent('Critério atendido')
+    expect(requestsTo(fetchMock, KEY)).toHaveLength(2)
+  })
+
+  it.each([
+    ['sem a chave reward', { evaluation: avaliacao() }],
+    ['com reward null', { evaluation: avaliacao(), reward: null }],
+  ])('resposta %s mostra o veredito e nao derruba o cartao', async (_nome, corpo) => {
+    const onRewarded = vi.fn()
+    routeFetch({ [KEY]: () => Response.json(corpo) })
+    render(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
+
+    fireEvent.click(botaoPedir())
+
+    expect(await screen.findByTestId('evaluation-verdict')).toHaveTextContent('Critério atendido')
+    expect(screen.queryByTestId('reward')).not.toBeInTheDocument()
+    expect(onRewarded).not.toHaveBeenCalled()
   })
 
   it('falha 422: a tela diz que a evidencia nao foi aceita, sem "tente de novo"', async () => {
@@ -445,6 +471,49 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
     )
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeEnabled()
     expect(screen.queryByTestId('evaluation-verdict')).not.toBeInTheDocument()
+  })
+
+  it('falhou LIDA da API nao e um alert: cada cartao gritaria ao carregar a pagina (M2)', () => {
+    routeFetch({})
+
+    render(
+      <EvaluationPanel
+        mission={{
+          ...comEvidencia,
+          evaluation: avaliacao({
+            state: 'falhou',
+            verdict: null,
+            feedback: null,
+            error_code: 'tempo_esgotado',
+          }),
+        }}
+      />,
+    )
+
+    expect(screen.getByTestId('evaluation-error')).toHaveTextContent(
+      'A avaliação demorou demais. Tente de novo.',
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a falha FRESCA do pedido continua sendo um alert', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: 'x', code: 'tempo_esgotado' }, { status: 504 }),
+    })
+    render(
+      <EvaluationPanel
+        mission={{
+          ...comEvidencia,
+          evaluation: avaliacao({ state: 'falhou', verdict: null, error_code: 'tempo_esgotado' }),
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A avaliação demorou demais. Tente de novo.',
+    )
   })
 
   it('a resposta do pedido substitui a avaliacao falhada que veio da API', async () => {

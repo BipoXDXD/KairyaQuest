@@ -8,8 +8,9 @@ import type { EvaluationErrorCode } from './types'
  *   duas vezes.
  * - `refresh`: nao ha o que repetir; a missao mudou ou sumiu, e a acao util e
  *   recarregar para ver o estado de verdade.
- * - `unavailable`: repetir nao adianta agora (o provedor nao esta
- *   configurado); a tela so informa.
+ * - `unavailable`: repetir provavelmente nao adianta agora (provedor sem
+ *   configuracao, evidencia recusada); a tela so informa, e o botao continua
+ *   habilitado (E18): quem corrigiu a causa nao precisa recarregar.
  */
 export type EvaluationRecovery = 'retry' | 'refresh' | 'unavailable'
 

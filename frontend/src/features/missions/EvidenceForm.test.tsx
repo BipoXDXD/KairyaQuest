@@ -124,13 +124,39 @@ describe('EvidenceForm', () => {
     expect(texto.getAttribute('aria-describedby')).toContain(contador.id)
   })
 
-  it('link invalido mostra o erro com role="alert", ligado ao campo', () => {
+  it('digitando um link invalido, o erro NAO aparece nem e anunciado (M4)', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+
+    fireEvent.change(link, { target: { value: 'h' } })
+    fireEvent.change(link, { target: { value: 'javascript:alert(1)' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('evidence-link-error')).not.toBeInTheDocument()
+    expect(link).not.toHaveAttribute('aria-invalid')
+    expect(link).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('sair do campo (blur) com link valido nao mostra erro', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+
+    fireEvent.change(link, { target: { value: 'https://x.dev' } })
+    fireEvent.blur(link)
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('link invalido mostra o erro com role="alert" ao SAIR do campo, ligado a ele', () => {
     render(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     fireEvent.change(link, { target: { value: 'javascript:alert(1)' } })
+    fireEvent.blur(link)
 
     const erro = screen.getByRole('alert')
     expect(erro).toHaveTextContent('O link precisa começar com http:// ou https://')

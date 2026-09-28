@@ -88,6 +88,21 @@ describe('useRequestEvaluation', () => {
     expect(onRewarded).toHaveBeenCalledTimes(1)
   })
 
+  it('uma resposta SEM a chave reward (contrato violado) nao chama onRewarded', async () => {
+    routeFetch({ [KEY]: () => Response.json({ evaluation: avaliacao }) })
+    const onRewarded = vi.fn()
+    const { result } = renderHook(() => useRequestEvaluation(7, onRewarded))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('done')
+    })
+    expect(onRewarded).not.toHaveBeenCalled()
+  })
+
   it('um onRewarded que lanca nao vira falha: o bonus ja foi concedido no servidor', async () => {
     routeFetch({ [KEY]: () => Response.json(comBonus) })
     const erro = new Error('quadro quebrou')
