@@ -1,3 +1,5 @@
+import type { EvidenceDraft } from './types'
+
 /**
  * O tamanho maximo do texto da evidencia, em pontos de codigo.
  *
@@ -26,12 +28,6 @@ const LINK_PATTERN = /^https?:\/\/\S+$/i
 const LINK_FORMAT_ERROR = 'O link precisa começar com http:// ou https:// e não ter espaços.'
 const LINK_LENGTH_ERROR = `O link passa de ${String(MAX_LINK_LENGTH)} caracteres.`
 
-/** O rascunho como o formulario o guarda: texto e link crus, sem validar. */
-export interface EvidenceDraftInput {
-  text: string
-  link: string
-}
-
 export interface EvidenceDescription {
   /** Texto nao vazio e dentro do limite, e link (se houver) valido. */
   sendable: boolean
@@ -50,7 +46,7 @@ export interface EvidenceDescription {
  * conta unidades UTF-16, e um emoji valeria 2 aqui e 1 la. O `trim()`
  * reproduz o `strip_whitespace` do schema.
  */
-export function describeEvidence(draft: EvidenceDraftInput): EvidenceDescription {
+export function describeEvidence(draft: Readonly<EvidenceDraft>): EvidenceDescription {
   const text = draft.text.trim()
   const link = draft.link.trim()
   const length = Array.from(text).length
