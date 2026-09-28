@@ -146,3 +146,79 @@ describe('useCompletionRegistry -- a recarga', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('useCompletionRegistry -- o rascunho da evidencia', () => {
+  it('draftFor devolve o rascunho vazio para missao sem rascunho', () => {
+    const { result } = renderRegistry()
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
+  })
+
+  it('o rascunho vazio e imutavel: mutar o de uma missao nao contamina o das outras', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    const vazio = registry.draftFor(7) as { text: string; link: string }
+
+    // Modulo ESM roda em strict mode: escrever num objeto congelado lanca.
+    expect(() => {
+      vazio.text = 'contaminado'
+    }).toThrow(TypeError)
+
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+    expect(Object.isFrozen(registry.draftFor(9))).toBe(true)
+  })
+
+  it('saveDraft guarda por missao e draftFor devolve o que foi guardado', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    registry.saveDraft(7, { text: 'Feito', link: 'https://x.com' })
+
+    expect(registry.draftFor(7)).toEqual({ text: 'Feito', link: 'https://x.com' })
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+  })
+
+  it('o rascunho sobrevive ao reload do quadro', () => {
+    const { result } = renderRegistry()
+    result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+    act(() => {
+      result.current.reload()
+    })
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+  })
+
+  // Fix-1 da Task 7 (E17/§7): a chave e o rascunho saem por caminhos
+  // DIFERENTES. A falha sem retry libera a chave, mas o rascunho so sai no
+  // sucesso -- este teste substitui o "release apaga a chave E o rascunho".
+  it('release apaga SO a chave da missao; o rascunho fica', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.saveDraft(7, { text: 'Feito', link: '' })
+
+    registry.release(7)
+
+    expect(registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+    expect(registry.operationIdFor(7)).toBe(K2)
+    vi.restoreAllMocks()
+  })
+
+  it('discardDraft apaga SO o rascunho da missao, e so dela; a chave fica', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.saveDraft(7, { text: 'Feito', link: '' })
+    registry.saveDraft(8, { text: 'Outra', link: '' })
+
+    registry.discardDraft(7)
+
+    expect(registry.draftFor(7)).toEqual({ text: '', link: '' })
+    expect(registry.draftFor(8)).toEqual({ text: 'Outra', link: '' })
+    expect(registry.operationIdFor(7)).toBe(K1)
+    vi.restoreAllMocks()
+  })
+})

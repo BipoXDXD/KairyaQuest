@@ -49,6 +49,31 @@ export const DAYS_PER_MILESTONE = 7
  */
 export const MAX_DIFFICULTY = 5
 
+/** Como a conclusao foi verificada: so declarada, ou entregue com evidencia. */
+export type Verification = 'autodeclarada' | 'com_evidencia'
+
+/** O veredito da Tifa sobre a evidencia (interpretacao do modelo, nao prova). */
+export type Verdict = 'atende' | 'parcial' | 'nao_atende'
+
+/** O estado do pedido de avaliacao: em curso, terminado ou falhado. */
+export type EvaluationState = 'avaliando' | 'concluida' | 'falhou'
+
+/** A evidencia entregue com a conclusao; `link` e opcional. */
+export interface Evidence {
+  text: string
+  link: string | null
+}
+
+/** O resumo da avaliacao (`EvaluationSummary` da API). Sem `bonus_xp` (EM1). */
+export interface EvaluationSummary {
+  state: EvaluationState
+  verdict: Verdict | null
+  feedback: string | null
+  error_code: string | null
+  model: string
+  finished_at: string | null
+}
+
 export interface Mission {
   id: number
   instructions: string
@@ -75,6 +100,10 @@ export interface Mission {
   xp: number
   /** Computado pela API; `null` enquanto faltar o inicio ou a conclusao. */
   actual_duration_minutes: number | null
+  /** `null` enquanto a missao nao esta concluida. */
+  verification: Verification | null
+  evidence: Evidence | null
+  evaluation: EvaluationSummary | null
 }
 
 /**
