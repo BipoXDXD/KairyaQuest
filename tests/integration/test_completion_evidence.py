@@ -261,6 +261,34 @@ def test_link_opcional_e_sem_espacos_nas_pontas(
     assert resposta.json()["evidence"]["link"] == link
 
 
+def test_concluir_de_novo_com_outra_chave_e_evidencia_nao_muda_a_gravada(
+    client: TestClient, session: Session, relogio_fixo: datetime
+) -> None:
+    """Missao ja concluida + operacao NOVA com outra evidencia: e a transicao
+    ilegal de sempre (409), e a evidencia da primeira conclusao fica intacta."""
+    missao = _criar(client)
+    _concluir(
+        client,
+        missao["id"],
+        {"operation_id": "op-a", "evidence": {"text": "Primeira", "link": None}},
+    )
+    resposta = _concluir(
+        client,
+        missao["id"],
+        {"operation_id": "op-b", "evidence": {"text": "Segunda"}},
+    )
+    assert resposta.status_code == 409
+    assert resposta.json()["code"] == "transicao_ilegal"
+    session.expire_all()
+    gravada = session.get(MissionEvidence, missao["id"])
+    assert gravada is not None
+    assert (gravada.text, gravada.link) == ("Primeira", None)
+    lista = client.get("/api/missions").json()
+    assert [m["evidence"] for m in lista if m["id"] == missao["id"]] == [
+        {"text": "Primeira", "link": None}
+    ]
+
+
 def test_a_recompensa_da_conclusao_nao_muda_com_um_bonus_gravado(
     client: TestClient, session: Session, relogio_fixo: datetime
 ) -> None:
