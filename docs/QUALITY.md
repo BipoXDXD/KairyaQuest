@@ -1064,7 +1064,10 @@ das camadas 1 e 2 serve a avaliação como serve a conversa.
 - **`avaliar_missao` testado contra o mesmo falso**
   (`tests/integration/test_evaluation_service.py`, `test_evaluation_records.py`,
   `test_evaluation_api.py` e `test_evaluation_concorrencia.py`, com o servidor
-  falso e o relógio injetável, **sem `sleep`**): os três vereditos com e sem
+  falso e o relógio injetável, **sem `sleep` para simular o tempo**: o relógio é
+  injetado; a concorrência usa uma espera ativa curta, um `time.sleep(0.01)` num
+  laço que espera a trava aparecer em `pg_stat_activity`, e um encontro com teto
+  de 1,0 s): os três vereditos com e sem
   bônus; o pedido repetido **sem chamar o falso** (contador zero); `sem_evidencia`
   sem chamar o falso; provedor fora, tempo esgotado e saída inválida, cada um
   gravado como `falhou` **antes** do erro, e a nova tentativa funcionando

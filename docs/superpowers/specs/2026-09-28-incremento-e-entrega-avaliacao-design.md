@@ -357,7 +357,7 @@ por mutação depois; toda guarda nova tem um teste que a faz dizer não.
 - O texto exato das mensagens de falha da avaliação e do contador da
   evidência.
 
-## Emendas (2026-09-28, antes do plano)
+## Emendas (2026-09-28)
 
 EM1 e EM2 foram feitas ao escrever o plano, com o código aberto, antes de
 qualquer implementação; o texto acima já as incorpora. **EM3 e EM4 foram feitas

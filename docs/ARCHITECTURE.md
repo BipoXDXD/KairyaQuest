@@ -257,7 +257,7 @@ FocusQuest/
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
 │       │       ├── models.py      # TutorMessage, TutorAction
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12)
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice forçado, e _traduzir_erros compartilhado com responder (E)
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
@@ -292,7 +292,7 @@ FocusQuest/
 │   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
 │   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
 │   │   ├── test_evaluation_service.py  # avaliar_missao contra o falso: os três vereditos com e sem bônus, o repetido sem chamar o falso, falhas gravadas antes do erro, o limite total, a injeção (E, Task 5)
-│   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice forçado, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
+│   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice auto e strict (EM3), max_tokens próprio, stop_reason, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
 │   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2); o bloco com tool_name e o padrão create_mission (E, Task 4)
 │   │   ├── test_health.py
@@ -319,9 +319,9 @@ FocusQuest/
 │       ├── __init__.py
 │       ├── test_clock.py
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
+│       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
-│       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
 │       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
 │       ├── test_missions_domain.py
@@ -480,9 +480,9 @@ real, e em qual módulo.
 
 | Camada | Responsabilidade | O que **não** faz | Estado |
 |---|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`) |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`) |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`) |
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
@@ -1031,7 +1031,10 @@ O caminho, em três passos (`evaluation/service.py`, E9):
    `falhou` ou órfã → grava `avaliando` com a tentativa nova (`attempt + 1`,
    e a órfã passa por `falhou`/`tempo_esgotado` antes). Commit. Órfã é a
    `avaliando` pedida **antes** de `agora − (tutor_timeout_seconds +
-   FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento.
+   FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento. **O corte não é uma
+   fronteira segura:** com o SDK repetindo a chamada (`TENTATIVAS = 2`), uma
+   tentativa viva pode passar dos 90 s do padrão, e um novo pedido a retoma como
+   órfã, com uma segunda chamada paga e sem corromper nada (pendência 106).
 3. **Fora de transação**, `tutoria.provedor.avaliar(turno, ferramenta)`; o
    turno é uma mensagem única, sem histórico da conversa. Depois, **transação 2**
    (`registrar_resultado`/`registrar_falha`): trava a missão de novo e confere

@@ -14,7 +14,7 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 `feat/incremento-e`, aberta a partir de `fe37820` (a branch
 `docs/retomada-pos-d`, ainda local na época: o remoto não existia, pendência 89, resolvida depois). Spec em
 `docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`
-(decisões E1–E18, emendas EM1–EM2), aprovada pelo dono em 2026-09-28; plano em
+(decisões E1–E18, emendas EM1–EM4; as duas últimas vieram da execução), aprovada pelo dono em 2026-09-28; plano em
 `docs/superpowers/plans/2026-09-28-incremento-e.md`. **Estado de publicação:
 não publicado.**
 
@@ -25,7 +25,7 @@ não publicado.**
 mover o clone (`docs/QUALITY.md` §6) e as pendências 88 e 89. Antes de
 qualquer mudança, o `.venv` e os hooks foram refeitos (apontavam para a pasta
 antiga) e o `make check` da base aprovou (ver "Resultados"). **Estado de
-publicação: não publicado — o remoto não existe mais (pendência 89).**
+publicação: na época, não publicado — o remoto não existia (pendência 89, hoje resolvida: o repositório `BipoXDXD/FocusQuest` foi recriado e a proteção da `main` reaplicada; ver a 89).**
 
 **Incremento D — a progressão.** Branch `feat/incremento-d`, aberta a partir
 de `8ab91ce` (a `main`: o merge do PR #14, o Incremento C), + a spec (1551ea8)
@@ -2342,14 +2342,16 @@ e as duas ondas pré-finais; **a Task 8 (o E2E) não está aqui**, e os
   dataclass `Ferramenta(nome, descricao, esquema)` e `Provedor.avaliar(turno,
   ferramenta)`. `anthropic_provider.py`: `_mensagens_da_api(turno)` extraída e
   usada por `responder` e `avaliar`; `avaliar` com `tool_choice` **forçado**
-  (`{"type": "tool", "name": ..., "disable_parallel_tool_use": True}`), sem
+  (`{"type": "tool", "name": ..., "disable_parallel_tool_use": True}`; **substituído
+  pela EM3**, que o trocou por `auto` com `strict`), sem
   pedir thinking, conferindo o nome do bloco e exigindo `message_stop` (M3).
   `tests/integration/falso_do_e2e.py`: `_bloco` aceita `tool_name` (texto não
   vazio, senão `ValueError`; o padrão continua `create_mission`) e
   `frontend/tests/e2e/falso.ts` alargou o tipo `Bloco`. Testes:
   `test_evaluation_provider.py` (7) e 3 casos em `test_falso_do_e2e.py`. RED:
   `ImportError` de `Ferramenta`; 3 falhas de `bloco desconhecido`. Mutações:
-  `tool_choice` `auto` (reprova `test_avaliar_forca_a_ferramenta_na_requisicao`);
+  `tool_choice` `auto` (reprova `test_avaliar_forca_a_ferramenta_na_requisicao`, teste que a EM3
+  reescreveu depois, como `test_avaliar_pede_a_ferramenta_com_tool_choice_auto_e_strict`);
   sem conferir `name` (reprova `..._ignora_chamada_de_outra_ferramenta`); sem
   `if not terminou` (reprova `..._stream_cortado_e_provedor_indisponivel`);
   `_bloco` ignorando `tool_name` (reprova
@@ -2516,8 +2518,10 @@ e as duas ondas pré-finais; **a Task 8 (o E2E) não está aqui**, e os
   500). Custo: o teste verde leva cerca de 1,7 s. **Revisão (opus):** *Needs
   fixes*, 0 Critical, 3 Important, 7 Minor, com duas guardas que sobreviviam à
   mutação **na medição do revisor** (o corte do órfão no serviço e a retrava da
-  transação 2) e o relógio lido antes da trava. **Correção 1 (`c2bfaa2`),**
-  todas com mutação: (I1) `test_o_corte_do_orfao_e_o_limite_mais_a_folga`
+  transação 2) e o relógio lido antes da trava. **Correção 1 (`c2bfaa2`).** Tiveram
+  mutação os itens I1, I2, I3, 4, 5 e m3 a m5; **não** tiveram m2 (só a proposta
+  de emenda), m6 (o caso `{}` entrou sem mutação própria) e m7 (refatoração sem
+  teste novo): (I1) `test_o_corte_do_orfao_e_o_limite_mais_a_folga`
   (1 µs antes do corte e no corte: 409 sem chamar o falso; 1 µs depois:
   retomada, `attempt == 2`); mutações `limite_do_orfao = 0` e `FOLGA_DO_ORFAO = 0`
   reprovam 2 casos cada. (I2)
@@ -2542,8 +2546,8 @@ e as duas ondas pré-finais; **a Task 8 (o E2E) não está aqui**, e os
   emenda **EM4** (tentativa superada: 409, não grava). **Re-revisão:** todos
   atendidos ou adiados de propósito, sem quebra bloqueante; sobram os furos do
   teste AST de `core/` (pendência 103) e um comentário desatualizado em
-  `test_evaluation_service.py`. Relatório da tarefa: 741 passed (commit 1) e
-  751 passed (correção), 100% de cobertura nas duas.
+  `test_evaluation_service.py`. Relatório da tarefa: 735 passed (`25b3090`), 741
+  passed (`2d84116`) e 751 passed (`c2bfaa2`), 100% de cobertura.
 - **Task 5b** (`52b5a59`) — `tests/unit/test_traducao_de_erros.py`, só teste, sem
   banco: 6 casos parametrizados de `_traduzir_erros` (`type(saida) is` a
   exceção traduzida e `__cause__ is` a original: timeout do SDK, `ReadTimeout`
@@ -2629,9 +2633,13 @@ e as duas ondas pré-finais; **a Task 8 (o E2E) não está aqui**, e os
   Relatório: 601 testes na onda e 608 depois da rodada 1, 100% nos quatro
   eixos, sem limiar mexido. **Re-revisão:** 7 de 7 atendidos; sobra um *minor*
   (pendência 105).
-- **Integração desta rodada,** cada merge com o gate completo verde (segundo o
-  ledger): `c9eee20` (5b), `b7d22b7` (PF-back), `e88e3ea` (PF-front), `bf694af`
-  (a correção da Task 5) e `0a09100` (tudo isso em `wt/e-docs`). A Task 5 também
+- **Integração desta rodada:** `c9eee20` (5b), `b7d22b7` (PF-back), `e88e3ea`
+  (PF-front), `bf694af` (a correção da Task 5) e `0a09100` (tudo isso em
+  `wt/e-docs`). Todo merge commit só existe se o hook `pre-merge-commit`
+  (que roda o `make check`) passou, então o commit existir é a prova do gate;
+  o ledger registra "gate verde" explicitamente só para `c9eee20`, `bf694af` e
+  `0a09100`. Os *fast-forwards* não rodam esse hook: os commits deles passaram
+  pelo hook `pre-commit` no worktree de origem (`e-front`). A Task 5 também
   foi levada ao `e-front` para a fase 2 da Task 8 **enquanto** a re-revisão
   corria (RE18).
 
@@ -3875,10 +3883,15 @@ ledger; nenhum é bug esquecido.
     modelo responder em texto, sai `502 avaliacao_invalida`, repetível.
     **Roteiro, igual ao da pendência 42:** o **dono**, com a chave do Keychain
     só para o processo da API e o `anthropic_base_url` **sem** override, pede
-    uma avaliação real de uma missão concluída com evidência (o script de
-    `tests/integration/camada3.py`, ou pela tela), confere que o veredito volta
-    e grava, sem o conteúdo do texto, a sequência de tipos de evento, para a
-    camada 3 da avaliação. **O CI nunca chama a Anthropic.** O
+    uma avaliação real de uma missão concluída com evidência, **pela tela**, ou
+    com um **script novo** que chame `avaliar`, e confere que o veredito volta.
+    O `tests/integration/camada3.py` de hoje **não serve como está**: ele
+    captura só a proposta de missão da **conversa** (a ferramenta
+    `create_mission`, um prompt fixo, sem missão nem evidência, chamando
+    `messages.create` direto, sem passar por `avaliar`). Faltaria um script
+    que monte uma `Tentativa`, chame `avaliar` com a `FERRAMENTA_DA_AVALIACAO`
+    e grave, sem o conteúdo do texto, a sequência de tipos de evento para a
+    referência da camada 3 da avaliação. **O CI nunca chama a Anthropic.** O
     `docs/QUALITY.md` §9 diz o que as camadas 1 e 2 provam e o que esta não
     prova.
 92. **Evidência sem upload** (decisão E3). Só texto (1 a 4000 pontos de código)
@@ -3946,9 +3959,8 @@ ledger; nenhum é bug esquecido.
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1
     ("docs: retomada no clone movido e correções pós-incremento D"). Os PRs
-    #1 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
-    repositório **anterior**, apagado; no recriado eles não existem, e o #1
-    de hoje **não** é o de mesmo número de antes. Os hashes de commit citados
+    #4 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
+    repositório **anterior**, apagado; no recriado eles não existem. Os hashes de commit citados
     continuam valendo no histórico local.
 99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.** O aviso
     foi **observado** pelo controlador nas anotações do CI da `main` do
@@ -4006,6 +4018,18 @@ ledger; nenhum é bug esquecido.
     (o estado mora no registro), mas o botão diz "Concluir" e a mensagem de
     falha some, embora a ação reenvie o mesmo rascunho com a mesma chave.
     Poderia ler `isRetryPending` para dizer "Tentar de novo".
+106. **O corte do órfão (90 s) é menor que a duração possível de uma tentativa
+    viva** (m1 da revisão final opus). O corte é `tutor_timeout_seconds +
+    FOLGA_DO_ORFAO`, 90 s com o padrão de 60 s. O adaptador cria o cliente com
+    `max_retries=TENTATIVAS` (`TENTATIVAS = 2`): o SDK repete a chamada até duas
+    vezes antes do primeiro evento, cada uma com o timeout inteiro, então uma
+    tentativa **viva** pode durar até cerca de 3 × 60 s. Recarregar a página e
+    pedir de novo depois de 90 s, com a primeira ainda em voo, retoma a
+    `avaliando` como órfã e faz uma **segunda chamada paga** ao modelo. **Nada se
+    corrompe:** a tentativa superada não grava (EM4) e o bônus tem um lançamento
+    no máximo. Custo, portanto, só de dinheiro e de um `409` na primeira. A
+    conversa tem o mesmo problema. Uma correção subiria o corte para além do
+    pior caso (ou contaria o tempo pela soma das tentativas do SDK).
 
 ## Próximo incremento
 
