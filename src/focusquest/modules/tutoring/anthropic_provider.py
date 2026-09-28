@@ -139,6 +139,7 @@ class ProvedorAnthropic:
         }
         entrada: dict[str, Any] | None = None
         terminou = False
+        motivo_da_parada: str | None = None
         with (
             _traduzir_erros(),
             self._cliente.messages.stream(
@@ -161,8 +162,14 @@ class ProvedorAnthropic:
                     and evento.content_block.name == ferramenta.nome
                 ):
                     entrada = dict(evento.content_block.input)
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
                     terminou = True
         if not terminou:
             raise ProvedorIndisponivelError("o stream terminou sem message_stop")
+        if motivo_da_parada != "tool_use":
+            # `max_tokens` (ou outra parada) deixa um `input` possivelmente
+            # parcial: nao o entrega como se fosse uma avaliacao valida.
+            return None
         return entrada

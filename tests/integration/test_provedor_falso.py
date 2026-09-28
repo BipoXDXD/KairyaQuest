@@ -65,6 +65,20 @@ def test_sem_ferramenta_a_resposta_termina_em_end_turn(
     assert [bloco.type for bloco in final.content] == ["thinking", "text"]
 
 
+def test_o_roteiro_escolhe_o_motivo_de_parada(falso: ServidorAnthropicFalso) -> None:
+    """`stop_reason` explicito vence o derivado (com ferramenta seria `tool_use`)."""
+    falso.roteiro = Roteiro(
+        blocos=(ChamadaDeFerramenta(ENTRADA),), stop_reason="max_tokens"
+    )
+    with _cliente(falso).messages.stream(
+        model="claude-opus-5",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "oi"}],
+    ) as stream:
+        final = stream.get_final_message()
+    assert final.stop_reason == "max_tokens"
+
+
 def test_o_falso_registra_corpo_e_cabecalhos(falso: ServidorAnthropicFalso) -> None:
     """E o contador que prova, em outros testes, que um reenvio nao chamou o
     modelo -- e o registro que prova QUAL chave foi usada."""
