@@ -26,12 +26,18 @@ const RELOAD_BUTTON_CLASS =
 /** O texto do "Atualizar o quadro" enquanto espera uma conclusao em voo. */
 const RELOAD_WAITING_LABEL = 'Aguardando a conclusão em andamento…'
 
-/** O texto do botao de concluir em cada estado em que ele aparece. */
-function completeLabel(completion: CompletionState): string {
+/**
+ * O texto do botao de concluir em cada estado em que ele aparece.
+ *
+ * `retryPending` vem do REGISTRO, nao do estado do cartao: o reload remonta o
+ * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
+ * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete (MF1).
+ */
+function completeLabel(completion: CompletionState, retryPending: boolean): string {
   if (completion.status === 'submitting') {
     return 'Concluindo…'
   }
-  return completion.status === 'failed' ? 'Tentar de novo' : 'Concluir'
+  return completion.status === 'failed' || retryPending ? 'Tentar de novo' : 'Concluir'
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo. */
@@ -105,6 +111,7 @@ function CompletionControls({
   completion,
   onComplete,
   blocked,
+  retryPending,
   onReload,
   reloadWaiting,
   reloadLabel,
@@ -114,6 +121,8 @@ function CompletionControls({
   onComplete: () => void
   /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
   blocked: string | null
+  /** A chave desta missao esta retida no registro (falha que se repete). */
+  retryPending: boolean
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
@@ -139,7 +148,7 @@ function CompletionControls({
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
-          {completeLabel(completion)}{' '}
+          {completeLabel(completion, retryPending)}{' '}
           <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
       )}
@@ -253,6 +262,7 @@ export function MissionCard({
   }, [completed])
   // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
   // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
+  const retryPending = registry.isRetryPending(listed.id)
   const offersEvidence =
     mission.state !== 'concluida' &&
     !(completion.status === 'failed' && completion.failure.recovery === 'refresh')
@@ -324,7 +334,7 @@ export function MissionCard({
           draft={draft}
           onChange={changeDraft}
           disabled={completion.status === 'submitting'}
-          retryPending={registry.isRetryPending(listed.id)}
+          retryPending={retryPending}
           describedBy={titleId}
         />
       )}
@@ -336,6 +346,7 @@ export function MissionCard({
           complete(draftInUse ? draft : undefined)
         }}
         blocked={blockedReason(draft)}
+        retryPending={retryPending}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}

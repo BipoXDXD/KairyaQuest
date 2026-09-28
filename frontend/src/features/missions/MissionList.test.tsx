@@ -770,7 +770,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(listGets(fetchMock)).toBe(2)
   })
 
-  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o novo Concluir manda a MESMA chave', async () => {
+  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o Tentar de novo manda a MESMA chave', async () => {
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
       posts: {
@@ -788,12 +788,14 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
 
     // Nada em voo: o reload e imediato.
     expect(listGets(fetchMock)).toBe(2)
-    // O cartao de A REMONTOU: voltou a "Concluir", e nao ao "Tentar de novo".
+    // O cartao de A REMONTOU: o aviso da falha sumiu, mas a chave continua
+    // retida no registro, entao o botao segue dizendo "Tentar de novo" (MF1) --
+    // "Concluir" sugeriria um envio novo, e ele reenvia a MESMA chave.
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
     })
     const concluirA = within(card(7)).getByTestId('mission-complete')
-    expect(concluirA).toHaveTextContent('Concluir')
+    expect(concluirA).toHaveTextContent('Tentar de novo')
     expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
 
     fireEvent.click(concluirA)
