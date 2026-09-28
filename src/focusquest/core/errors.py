@@ -1,5 +1,7 @@
 """Erros de dominio comuns, traduzidos para HTTP pelos handlers."""
 
+from focusquest.modules.missions.domain import FalhaDaAvaliacao
+
 
 class DomainError(Exception):
     """Base de todo erro previsto pelo dominio.
@@ -96,3 +98,33 @@ class SemanaDistanteError(DomainError):
     Alem de reduzir o que da para esconder, e o que impede o 500 de uma semana
     no ano 9999, em que o fim do domingo estouraria o `datetime`.
     """
+
+
+class SemEvidenciaError(DomainError):
+    """A missao nao tem evidencia para a Tifa avaliar (inclui a nao concluida).
+
+    O pedido esta certo; o estado da missao e que recusa -- 409, como a
+    transicao ilegal. Autodeclarar nao da direito a avaliacao (E4).
+    """
+
+
+class AvaliacaoEmAndamentoError(DomainError):
+    """Ja ha uma tentativa de avaliacao `avaliando`, e ela nao e orfa (E9).
+
+    Tambem e o erro da tentativa SUPERADA (E10): a resposta atrasada de uma
+    tentativa que outro pedido ja retomou nao grava nada, e quem pediu fica
+    sabendo que a avaliacao segue em outro pedido.
+    """
+
+
+class AvaliacaoFalhouError(DomainError):
+    """A tentativa de avaliacao falhou, e a falha JA esta gravada (E13).
+
+    `falha` e o `error_code` gravado na linha; o handler o traduz em status e
+    `code`. Um tipo so para as tres falhas: o que muda entre elas e o valor, e
+    o valor ja e um enum.
+    """
+
+    def __init__(self, falha: FalhaDaAvaliacao) -> None:
+        super().__init__(f"a avaliacao falhou: {falha.value}")
+        self.falha = falha
