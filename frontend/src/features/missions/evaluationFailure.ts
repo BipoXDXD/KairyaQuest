@@ -8,8 +8,9 @@ import type { EvaluationErrorCode } from './types'
  *   duas vezes.
  * - `refresh`: nao ha o que repetir; a missao mudou ou sumiu, e a acao util e
  *   recarregar para ver o estado de verdade.
- * - `unavailable`: repetir nao adianta agora (o provedor nao esta
- *   configurado); a tela so informa.
+ * - `unavailable`: repetir provavelmente nao adianta agora (provedor sem
+ *   configuracao, evidencia recusada); a tela so informa, e o botao continua
+ *   habilitado (E18): quem corrigiu a causa nao precisa recarregar.
  */
 export type EvaluationRecovery = 'retry' | 'refresh' | 'unavailable'
 
@@ -54,11 +55,21 @@ const FAILURE_BY_CODE: Record<EvaluationErrorCode, EvaluationFailure> = {
   },
 }
 
-/** Rede fora, 5xx, 422, `code` de um backend mais novo: repetir e seguro. */
+/** Rede fora, 5xx, `code` de um backend mais novo: repetir e seguro. */
 const GENERIC: EvaluationFailure = {
   message:
     'Não foi possível pedir a avaliação. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
   recovery: 'retry',
+}
+
+/**
+ * O 422: o servidor recusou a evidencia gravada. Repetir o pedido nao a muda e
+ * daria o mesmo 422, entao nao ha "tentar de novo" (`unavailable`: a tela so
+ * informa), ao contrario da mensagem generica (achado S-I2).
+ */
+const EVIDENCE_REJECTED: EvaluationFailure = {
+  message: 'A evidência não foi aceita. Revise o texto e o link.',
+  recovery: 'unavailable',
 }
 
 /**
@@ -76,10 +87,22 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  * pessoa ter visto a falha ao vivo ou depois.
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
-  return code !== null && isEvaluationErrorCode(code) ? FAILURE_BY_CODE[code] : GENERIC
+  return knownFailure(code) ?? GENERIC
+}
+
+/** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
+function knownFailure(code: string | null): EvaluationFailure | null {
+  return code !== null && isEvaluationErrorCode(code) ? FAILURE_BY_CODE[code] : null
 }
 
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
-  return error instanceof ApiError ? describeEvaluationErrorCode(error.code) : GENERIC
+  if (!(error instanceof ApiError)) {
+    return GENERIC
+  }
+  const known = knownFailure(error.code)
+  if (known !== null) {
+    return known
+  }
+  return error.status === 422 ? EVIDENCE_REJECTED : GENERIC
 }

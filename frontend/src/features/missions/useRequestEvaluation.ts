@@ -24,7 +24,8 @@ export interface UseRequestEvaluationResult {
  * ambos `idle`. Um POST duplicado gastaria uma chamada do modelo a toa (o
  * bonus, esse, nunca e concedido duas vezes: o backend e idempotente).
  *
- * `onRewarded` so e chamado quando a resposta traz `reward` -- o quadro
+ * `onRewarded` so e chamado quando a resposta traz `reward` (nem ausente, nem
+ * `null`) -- o quadro
  * recarrega o XP; sem bonus, nada mudou de tela.
  */
 export function useRequestEvaluation(
@@ -44,7 +45,7 @@ export function useRequestEvaluation(
     postJson<EvaluationResult>(`/missions/${String(missionId)}/evaluation`, {})
       .then((result) => {
         setState({ status: 'done', result })
-        if (result.reward !== null) {
+        if (result.reward != null) {
           // O estado de sucesso ja esta gravado, e o bonus ja foi concedido no
           // servidor: um callback do chamador que lance nao pode cair no
           // `.catch` abaixo e virar "falhou". Fica registrado, sem mexer no estado.

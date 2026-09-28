@@ -258,6 +258,41 @@ describe('CycleSection', () => {
     expect(screen.queryByTestId('cycle-progress')).toBeNull()
   })
 
+  it('a diaria e a especial tem rascunhos independentes, e concluir a diaria nao mexe no da especial', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
+    })
+    render(<CycleSection />)
+    const secaoEspecial = await screen.findByTestId('cycle-special')
+    const cartaoDiaria = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === '31') as HTMLElement
+    const preencher = (cartao: HTMLElement, texto: string) => {
+      fireEvent.click(within(cartao).getByRole('button', { name: /Entregar com evidência/ }))
+      fireEvent.change(within(cartao).getByLabelText('O que você fez'), {
+        target: { value: texto },
+      })
+    }
+
+    preencher(cartaoDiaria, 'Feito da diaria')
+    preencher(secaoEspecial, 'Feito da especial')
+
+    expect(within(cartaoDiaria).getByLabelText('O que você fez')).toHaveValue('Feito da diaria')
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+
+    fireEvent.click(within(cartaoDiaria).getByTestId('mission-complete'))
+    await within(cartaoDiaria).findByText('Missão concluída.')
+
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+    const [corpo] = requestsTo(fetchMock, 'POST /api/missions/31/complete').map(
+      (init) => JSON.parse(String(init.body)) as unknown,
+    )
+    expect(corpo).toMatchObject({ evidence: { text: 'Feito da diaria' } })
+    expect(requestsTo(fetchMock, 'POST /api/missions/38/complete')).toHaveLength(0)
+  })
+
   it('o erro de carregamento oferece Tentar novamente', async () => {
     routeFetch({
       'GET /api/cycle': (_init, call) =>

@@ -58,8 +58,28 @@ describe('describeEvaluationFailure', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, 'novo_code'))).toEqual(GENERIC)
   })
 
-  it('erro sem code (422, corpo que nao e JSON) cai no generico', () => {
-    expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual(GENERIC)
+  it('erro sem code (5xx, corpo que nao e JSON) cai no generico', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 500, null))).toEqual(GENERIC)
+    expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual(GENERIC)
+  })
+
+  it('um 422 nao e "tente de novo": a evidencia foi recusada, e repetir nao adianta', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual({
+      message: 'A evidência não foi aceita. Revise o texto e o link.',
+      recovery: 'unavailable',
+    })
+  })
+
+  it('um 422 com code DESCONHECIDO tambem e evidencia recusada (nao "tente de novo")', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 422, 'codigo_futuro')).recovery).toBe(
+      'unavailable',
+    )
+  })
+
+  it('um code conhecido vence o status 422', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 422, 'sem_evidencia')).recovery).toBe(
+      'refresh',
+    )
   })
 
   it('erro de rede que nao e ApiError cai no generico', () => {

@@ -222,3 +222,28 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
     vi.restoreAllMocks()
   })
 })
+
+describe('useCompletionRegistry -- retry pendente', () => {
+  it('comeca sem retry pendente, e marca e desmarca por missao', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.isRetryPending(7)).toBe(false)
+    registry.markRetryPending(7)
+
+    expect(registry.isRetryPending(7)).toBe(true)
+    expect(registry.isRetryPending(8)).toBe(false)
+  })
+
+  it('release limpa o retry pendente da missao (a chave saiu), e so dela', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.markRetryPending(7)
+    registry.markRetryPending(8)
+
+    registry.release(7)
+
+    expect(registry.isRetryPending(7)).toBe(false)
+    expect(registry.isRetryPending(8)).toBe(true)
+  })
+})
