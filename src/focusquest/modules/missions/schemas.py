@@ -243,11 +243,14 @@ def _campos_da_entrega(
 
 
 class MissionComplete(BaseModel):
-    """O identificador de operacao que torna a conclusao idempotente.
+    """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
+
+    O identificador torna a conclusao idempotente.
 
     Quem o gera e o cliente, e e por isso que ele entra no corpo: o servidor
     nao tem como saber, sozinho, se a segunda requisicao e um reenvio da
-    primeira ou uma tentativa nova.
+    primeira ou uma tentativa nova. A `evidence`, quando vem, faz parte da
+    operacao: o mesmo identificador com outra evidencia e chave gasta.
     """
 
     operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)

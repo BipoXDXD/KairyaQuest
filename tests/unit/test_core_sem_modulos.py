@@ -68,8 +68,8 @@ def test_import_relativo_num_subpacote_sobe_do_pacote_do_arquivo() -> None:
 
 def test_nenhum_arquivo_de_core_importa_um_modulo() -> None:
     """A direcao e `modules -> core`, nunca o contrario (ARCHITECTURE,
-    `core/`). Um erro de um modulo so mora no modulo, como
-    `AvaliacaoFalhouError` em `evaluation/`."""
+    `core/`). Um erro que depende de tipo de um modulo mora nesse modulo, como
+    `AvaliacaoFalhouError` (usa `FalhaDaAvaliacao`) em `evaluation/`."""
     arquivos = sorted(NUCLEO.rglob("*.py"))
     assert arquivos
     for arquivo in arquivos:

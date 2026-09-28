@@ -437,7 +437,7 @@ def test_o_limite_total_vale_mesmo_com_a_resposta_valida(
     falso: ServidorAnthropicFalso,
     missoes: Missoes,
 ) -> None:
-    """M5: o timeout do SDK e por leitura; o limite da tutoria e do total.
+    """O timeout do SDK e por leitura; o limite da tutoria e do total.
     Uma resposta `atende` que chega depois dele e `tempo_esgotado`."""
     mission_id = missoes.concluida()
     falso.roteiro = _veredito("atende")
@@ -664,6 +664,6 @@ def test_reconstruir_sem_a_missao_e_nao_encontrada(
     fabrica: sessionmaker[Session],
 ) -> None:
     """A missao apagada entre a transacao 2 e a leitura final: o 404 de
-    sempre, e nao um `AssertionError` que viraria 500."""
+    sempre, e nao um 500."""
     with pytest.raises(MissaoNaoEncontradaError):
         _reconstruir(fabrica, 2**31 - 1)

@@ -64,7 +64,7 @@ def test_a_ferramenta_publica_o_esquema_de_saida_sem_a_docstring() -> None:
 
 def test_nenhuma_docstring_de_manutencao_vai_ao_modelo() -> None:
     """O `Veredito` entra no esquema como `$defs`, com a docstring do enum:
-    ela e de manutencao (M8), como a do schema, e sai tambem."""
+    ela e de manutencao, como a do schema, e sai tambem."""
     definicoes = FERRAMENTA_DA_AVALIACAO.esquema["$defs"]
     assert definicoes["Veredito"]["enum"] == ["atende", "parcial", "nao_atende"]
     assert all("description" not in d for d in definicoes.values())

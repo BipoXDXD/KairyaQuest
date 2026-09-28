@@ -26,9 +26,10 @@ from focusquest.modules.tutoring.provider import (
 # (medido: 3 chamadas com demora nos cabecalhos ou 500; 1 com o corte no meio).
 TENTATIVAS = 2
 
-# Teto de saida da AVALIACAO, proprio e maior que o do chat (1024): o
-# thinking consome o mesmo `max_tokens`, e um `feedback` de ate 1500
-# caracteres mais o JSON da ferramenta precisam caber com folga. Truncado, o
+# Teto de saida da AVALIACAO, proprio e maior que o do chat (1024): um
+# `feedback` de ate 1500 caracteres mais o JSON da ferramenta precisam caber
+# com folga (e, nos modelos que pensam por padrao, o thinking gasta do mesmo
+# `max_tokens`). Truncado, o
 # `input` sairia parcial (ver o `stop_reason` em `avaliar`).
 MAX_TOKENS_DA_AVALIACAO = 2048
 
@@ -135,12 +136,13 @@ class ProvedorAnthropic:
                     yield Fim()
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
-        """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou.
+        """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou
+        ou se a resposta parou por `stop_reason` diferente de `tool_use`.
 
-        `tool_choice` e `auto` (EM3), e nao FORCADO na ferramenta: a referencia
-        da API diz que o forcado da 400 em alguns modelos (Fable 5.1, Mythos
-        5.1) e exige thinking desligado no Bedrock, o que prenderia a avaliacao
-        ao modelo configurado. Quem manda o modelo chamar `record_evaluation`
+        `tool_choice` e `auto` (EM3), e nao FORCADO na ferramenta: em alguns
+        modelos o forcado da 400 ou exige thinking desligado (ver a referencia
+        da API, `tool_choice`), o que prenderia a avaliacao ao modelo
+        configurado. Quem manda o modelo chamar `record_evaluation`
         e o sistema da avaliacao; se ele nao chamar, o resultado e `None`, que
         o servico grava como `avaliacao_invalida`. `strict` faz a entrada
         obedecer ao esquema. O stream e consumido inteiro por dentro; so

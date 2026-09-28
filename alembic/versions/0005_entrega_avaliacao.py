@@ -111,8 +111,8 @@ def downgrade() -> None:
             f"{bonus} lancamento(s) evaluation_bonus gravado(s): a unicidade so por "
             "missao os recusaria; apague-os de proposito antes de voltar para 0004"
         )
-    # As duas tabelas caem no fim, e com elas todo texto que a pessoa escreveu e
-    # todo veredito: nao se apaga isso em silencio.
+    # Antes de derrubar as tabelas: se houver linha, o downgrade recusa. Apagar
+    # textos da pessoa e vereditos nao e algo para fazer em silencio.
     for tabela in ("mission_evidence", "mission_evaluations"):
         linhas = conexao.execute(sa.text(f"SELECT count(*) FROM {tabela}")).scalar_one()
         if linhas:

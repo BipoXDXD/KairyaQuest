@@ -56,7 +56,10 @@ class Turno:
 
 @dataclass(frozen=True)
 class Ferramenta:
-    """Uma ferramenta que o chamador define e o provedor FORCA o modelo a usar.
+    """Uma ferramenta que o chamador define e o provedor oferece ao modelo.
+
+    O provedor a oferece em modo estrito (`strict`): a entrada da chamada
+    obedece ao esquema. Chamar ou nao e decisao do modelo (`tool_choice` auto).
 
     E parametro, e nao constante do adaptador, para `tutoring` nao importar
     `evaluation`: quem conhece a rubrica e `evaluation`.
@@ -87,7 +90,8 @@ class Provedor(Protocol):
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
         """A entrada da chamada de `ferramenta`, ou `None` se o modelo terminou
-        sem chama-la. A entrada ainda NAO foi validada.
+        sem chama-la ou se a resposta parou por outro motivo que `tool_use`
+        (por exemplo, `max_tokens`). A entrada ainda NAO foi validada.
 
         Levanta `ProvedorIndisponivelError` (inclusive no stream cortado, sem
         `message_stop`) e `TempoEsgotadoError`.

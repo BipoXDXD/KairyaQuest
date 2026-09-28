@@ -207,7 +207,8 @@ class Mission(Base):
     )
 
     # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"`: a listagem tem
-    # poucas missoes, e cada leitura faz no maximo duas consultas pequenas.
+    # poucas missoes, e cada missao lida dispara ate duas consultas pequenas
+    # (evidencia e avaliacao).
     evidence: Mapped[MissionEvidence | None] = relationship(
         cascade="all, delete-orphan", lazy="select"
     )

@@ -107,7 +107,7 @@ def avaliar_missao(
         falha = FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
         inesperada = erro
     else:
-        # O limite TOTAL (M5): o timeout do SDK e por leitura, e uma resposta
+        # O limite TOTAL: o timeout do SDK e por leitura, e uma resposta
         # que pinga devagar passaria por ele. Nem uma saida valida conta
         # depois do limite.
         if clock() - inicio > tutoria.limite:

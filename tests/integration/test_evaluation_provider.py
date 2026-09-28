@@ -69,7 +69,7 @@ def test_avaliar_pede_a_ferramenta_com_tool_choice_auto_e_strict(
 def test_avaliar_manda_o_max_tokens_proprio_da_avaliacao(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
-    """M5: nao e o `max_tokens` do chat (256 nesta fixture, 1024 em producao)."""
+    """Nao e o `max_tokens` do chat (256 nesta fixture, 1024 em producao)."""
     falso.roteiro = Roteiro(
         blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),)
     )
@@ -111,7 +111,7 @@ def test_avaliar_com_a_ferramenta_completa_mas_sem_message_stop_e_indisponivel(
 ) -> None:
     """O corte DEPOIS do bloco da ferramenta completo e do `message_delta`, e
     antes do `message_stop`: a entrada esta inteira, mas a API nao terminou a
-    resposta, e so `message_stop` prova isso (M3)."""
+    resposta, e so `message_stop` prova isso."""
     falso.roteiro = Roteiro(
         blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),),
         cortar_apos_eventos=EVENTOS_DO_PENSAMENTO + 5,
@@ -123,7 +123,7 @@ def test_avaliar_com_a_ferramenta_completa_mas_sem_message_stop_e_indisponivel(
 def test_avaliar_com_resposta_truncada_por_max_tokens_e_none(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
-    """S-M7: `max_tokens` estourado deixa um `input` parcial; devolve-lo como
+    """`max_tokens` estourado deixa um `input` parcial; devolve-lo como
     dict valido esconderia o truncamento. `None` e o resultado invalido."""
     falso.roteiro = Roteiro(
         blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),),

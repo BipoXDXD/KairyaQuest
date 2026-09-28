@@ -95,7 +95,8 @@ def concluir(
     200 e nao 201: nao nasce recurso novo, muda o estado de um que ja existia.
     E o reenvio do MESMO identificador devolve 200 de novo, com o mesmo corpo
     -- o servico e quem sustenta essa promessa; a rota so nao a estraga
-    devolvendo um status diferente na segunda vez.
+    devolvendo um status diferente na segunda vez. A mesma chave com OUTRA
+    evidencia (ou em outra missao) nao e reenvio: e `OperacaoReutilizadaError`.
 
     O relogio vem da dependencia e segue INTEIRO para o servico, que o le
     depois de travar a linha. A rota nao le a hora ANTES do servico: ler aqui
