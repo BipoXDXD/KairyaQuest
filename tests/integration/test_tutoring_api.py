@@ -422,6 +422,7 @@ def test_a_chave_nao_aparece_na_resposta_nem_no_log(
             ),
             historico=20,
             limite=timedelta(seconds=60),
+            modelo="claude-opus-5",
         ),
     )
     resposta = _enviar(cliente, conversa.id("segredo"))
@@ -464,3 +465,21 @@ def test_get_tutoria_com_chave_monta_e_reaproveita(
     assert isinstance(primeira.provedor, ProvedorAnthropic)
     assert (primeira.historico, primeira.limite) == (7, timedelta(seconds=12))
     assert dependencias.get_tutoria() is primeira
+
+
+def test_get_tutoria_leva_o_modelo_configurado(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """O modelo que interpreta vai gravado em cada avaliacao (spec, `model`):
+    a tutoria o carrega do `Settings`, o mesmo que o adaptador usa."""
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_MODEL", "modelo-de-teste")
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    assert tutoria.modelo == "modelo-de-teste"
