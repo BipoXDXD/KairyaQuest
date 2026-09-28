@@ -10,6 +10,14 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento E — entrega com evidência e avaliação.** Branch
+`feat/incremento-e`, aberta a partir de `fe37820` (a branch
+`docs/retomada-pos-d`, ainda local: o remoto não existe, pendência 89). Spec em
+`docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`
+(decisões E1–E18, emendas EM1–EM2), aprovada pelo dono em 2026-09-28; plano em
+`docs/superpowers/plans/2026-09-28-incremento-e.md`. **Estado de publicação:
+não publicado.**
+
 **Retomada num clone movido de pasta (2026-09-28).** Branch
 `docs/retomada-pos-d`, aberta a partir de `49faaf0` (a `main`: o merge do PR
 #18). Só documentação: o estado de publicação do D, uma afirmação falsa do
