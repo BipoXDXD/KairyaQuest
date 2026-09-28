@@ -792,7 +792,7 @@ frontend/package-lock.json uv.lock` vazio (medido nesta sessão).
   diferentes para reproduzir); registrado como procedimento a seguir, não
   como bug a corrigir agora.
 
-### Incremento E — decisões E1–E18 (da spec) e EM1–EM2 (emendas)
+### Incremento E — decisões E1–E18 (da spec) e EM1–EM4 (emendas)
 
 Resumidas da spec (a spec é a fonte; o texto integral dos motivos está nela)
 (`docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`),
@@ -815,9 +815,9 @@ escolhas do agente, com o motivo; o dono pode revogar qualquer uma.
 | E7 | **O bônus é determinístico**: veredito `atende` credita `xp_da_missao(tipo, dificuldade) // 2` (divisão inteira), num lançamento novo do livro-razão com `source = 'evaluation_bonus'`. `parcial` e `nao_atende` não creditam nada | "XP segue critérios determinísticos" (§6): o modelo decide o veredito; **quanto** vale e **quando** vale é regra do backend. Metade do XP incentiva entregar bem sem que a avaliação valha mais que a missão. Binário porque "parcial" com XP parcial convidaria a negociar o nível no texto da evidência |
 | E8 | **Uma avaliação concluída por missão, para sempre.** Pedir de novo devolve a mesma avaliação (200, mesmo corpo). Só uma tentativa que **falhou** pode ser repetida (pendência 93) | Idempotência (§8) e anti-roleta: sem o limite, dava para pedir avaliações até sair `atende`. A chave natural é a missão; por isso o pedido **não** leva `operation_id` |
 | E9 | **A avaliação é gravada antes de chamar o modelo** (`avaliando`, num commit próprio) e só anunciada depois de gravada como `concluida` ou `falhou` — o desenho da resposta `gerando` do 1b-1. Uma `avaliando` mais velha que `tutor_timeout_seconds + FOLGA_DO_ORFAO` é órfã e pode ser retomada | Não segurar transação aberta durante a chamada ao modelo; não deixar uma avaliação presa para sempre se o processo morrer. Reaproveita a regra e a constante que já existem |
-| E10 | Cada tentativa tem um número (`attempt`); a gravação do resultado só acontece se a tentativa ainda for a corrente | Uma tentativa órfã retomada por outro pedido não pode ser sobrescrita pela resposta atrasada da primeira. Mesmo papel do contador de geração do histórico da conversa (1b-2) |
+| E10 | Cada tentativa tem um número (`attempt`); a gravação do resultado só acontece se a tentativa ainda for a corrente | Uma tentativa órfã retomada por outro pedido não pode ser sobrescrita pela resposta atrasada da primeira. Mesmo papel do contador de geração do histórico da conversa (1b-2). **Emenda EM4:** a tentativa superada não grava e responde `409 avaliacao_em_andamento` (a spec dizia "devolve o estado atual") |
 | E11 | **Onde mora cada coisa:** a evidência e a avaliação são **dados da missão** e as tabelas ficam em `missions` (`models.py`); o **processo** de avaliar (montar o pedido, chamar o provedor, aplicar a rubrica e o bônus) é um módulo novo, `modules/evaluation/`, que escreve por funções de serviço de `missions` e de `progression` | `MissionRead` precisa mostrar a evidência e a avaliação; com as tabelas num módulo que importa `missions`, `missions` teria de importá-lo de volta — um terceiro par nos dois sentidos (pendência 88). Assim a direção é única: `evaluation → missions`, `evaluation → progression`, `evaluation → tutoring`, e ninguém importa `evaluation` além de `main.py` |
-| E12 | O provedor ganha um segundo método, `avaliar(turno) -> dict`, no mesmo adaptador, com `messages.stream` e `tool_choice` **forçado** em `record_evaluation`. O endpoint devolve JSON comum, não SSE | A tela precisa do veredito, não do texto nascendo. Usar o stream por dentro reaproveita o adaptador, o tratamento de tempo (M4, M5) e o servidor falso inteiro (camadas 1 e 2) |
+| E12 | O provedor ganha um segundo método, `avaliar(turno) -> dict`, no mesmo adaptador, com `messages.stream`. O endpoint devolve JSON comum, não SSE. **O `tool_choice` forçado da spec saiu na emenda EM3**: vale `auto`, com `strict` e a instrução no sistema | A tela precisa do veredito, não do texto nascendo. Usar o stream por dentro reaproveita o adaptador, o tratamento de tempo (M4, M5) e o servidor falso inteiro (camadas 1 e 2) |
 | E13 | A falha do provedor na avaliação é gravada (`falhou` com `error_code`) e **depois** vira erro HTTP: `502 provedor_indisponivel`, `504 tempo_esgotado`, `502 avaliacao_invalida` | O mesmo desenho do `prazo_expirado` do 1b-1 (gravar, commitar, levantar). Um status de erro diz ao cliente "nada de bônus aconteceu" sem ele ler o corpo |
 | E14 | `xp_entries` passa a ser único por (`mission_id`, `source`), e o `CHECK` de `source` aceita `'evaluation_bonus'`. `recompensa_da_missao` filtra `source = 'mission_completed'` | É a mudança que o D registrou para o E (pendência 78, riscada). Sem o filtro, o `.one()` da recompensa quebraria em toda missão com bônus |
 | E15 | O bônus **não** avalia conquistas: nenhum fato do catálogo muda com ele | As conquistas continuam dependendo só de conclusões (D5); o bônus mexe no saldo e, portanto, pode subir o nível — e o anúncio mostra |
@@ -830,12 +830,14 @@ a avaliação vale para os três tipos de missão (avulsa, diária e especial),
 porque as três têm critério de conclusão; o comentário da Tifa é texto de
 interface gerado pelo modelo e é mostrado como tal.
 
-**EM1–EM2 (emendas, feitas ao escrever o plano, antes de qualquer código):**
+**EM1–EM4 (emendas).** EM1 e EM2 foram feitas ao escrever o plano, antes de qualquer código; EM3 e EM4 vieram da execução e estão também na tabela de emendas da spec:
 
 | # | O que a spec dizia | O que vale | Motivo |
 |---|---|---|---|
 | EM1 | `MissionRead.evaluation` trazia `bonus_xp`, lido do livro-razão | O resumo da avaliação no `MissionRead` **não** tem o valor do bônus. O número sai só no `reward` da resposta de `POST /evaluation`; depois de recarregar, o cartão diz "Bônus de XP creditado ao seu saldo" para o veredito `atende`, e o painel de progresso mostra o saldo | Ler `xp_entries` para montar o `MissionRead` faria `missions` depender dos modelos de `progression` também na leitura — mais uma aresta do par da pendência 88. Recalcular pela regra seria a segunda fonte da verdade que a própria spec recusou |
 | EM2 | O link valia com `^https?://` (sensível a maiúsculas) | Sem diferenciar maiúsculas: `~*` no `CHECK`, `(?i)` no schema, e a tela só vira âncora o que casa com `/^https?:\/\//i` | Quem cola `HTTPS://…` de um celular receberia 422 por um detalhe que não muda o endereço |
+| EM3 | E12 e "Riscos": `tool_choice` **forçado** em `record_evaluation`, com plano B só se a chamada real recusasse | `avaliar` usa `tool_choice: {"type": "auto", "disable_parallel_tool_use": true}`, a ferramenta com `strict: true` e o sistema mandando chamar `record_evaluation` exatamente uma vez; sem chamada (ou parada que não seja `tool_use`) → `None` → `avaliacao_invalida`. O esquema publicado perde `minLength`/`maxLength` e ganha `additionalProperties: false`; a avaliação tem `max_tokens` próprio (2048) | Decisão do controlador, com a fonte da referência oficial da API (skill `claude-api` em cache, 2026-09-25): o forçado dá 400 no Fable 5.1 e no Mythos 5.1 e exige thinking desligado no Bedrock; o `claude-opus-5` configurado o aceitaria, mas trocar de modelo quebraria toda avaliação sem teste reprovar. **Não medido por chamada real** (pendência 91). Custo: o modelo pode deixar de chamar a ferramenta às vezes (vira `avaliacao_invalida`, `502`, repetível). Escrita na tabela de emendas da spec |
+| EM4 | E10 e "Serviços": a tentativa superada "devolve o estado atual sem gravar" | A tentativa superada **não grava** e responde `409 avaliacao_em_andamento`; o `retry` do cliente lê o estado real na chamada seguinte | O plano e o código já faziam assim; o 409 às vezes descreve o estado de forma imprecisa (pode já ser `concluida`). Achado m2 da revisão da Task 5; escrita na spec |
 
 **Endurecimento do link durante a execução (fix round da Task 2):** a spec e o
 `CHECK` original aceitavam `https://` sem endereço e `https://a b` com
@@ -845,9 +847,9 @@ passou a `link ~* '^https?://\S+$'`, com os dois casos em
 `0005` antiga — só bancos de teste, recriados pela suíte —, então nenhum
 precisa de `downgrade`/`upgrade`.
 
-### Incremento E — decisões tomadas durante a execução (Rulings RE1–RE7)
+### Incremento E — decisões tomadas durante a execução (Rulings RE1–RE18)
 
-Cada uma vem do ledger da execução (`.superpowers/sdd/2026-09-28-incremento-e/progress.md`,
+Cada uma vem do ledger da execução (RE13, de um *minor* de revisão) (`.superpowers/sdd/2026-09-28-incremento-e/progress.md`,
 fora do controle de versão), com o motivo e o custo.
 
 | # | Decisão | Motivo e custo |
@@ -859,6 +861,17 @@ fora do controle de versão), com o motivo e o custo.
 | RE5 | **O lote 5a foi mesclado em `e-dados` antes da revisão** (`631a68e`, `8321a55`, gate verde), para destravar a Task 5, que precisava de `USUARIO_UNICO` e `SessaoDaRequisicao` já em `core/`. A revisão saiu depois: **Approved**, sem pedir mudança | Sem o merge, a Task 5 esperaria a revisão à toa. Custo (não ocorrido): um merge de correção a mais se a revisão tivesse pedido mudança |
 | RE6 | A **Task 0** (só o parágrafo de revisão-base no `HANDOFF.md`) foi no mesmo despacho da Task 1, em commit próprio (`0778e0d`) | É uma linha de documentação sem teste; um despacho só para ela custaria mais que o risco. Custo: nenhum |
 | RE7 | **Editar o rascunho entre duas tentativas com a mesma chave de operação** não ganhou tratamento no frontend: o backend já cobre (a Task 3 devolve `409 operacao_reutilizada` para o mesmo `operation_id` com evidência diferente; o `recovery` `retry-with-new-operation` gera a chave nova) | Um caminho só, no servidor, em vez de duas regras. Custo: um ida-e-volta a mais na tela nesse caso raro |
+| RE8 | **Reforços: quatro revisores só-leitura e duas ondas de correção**, a pedido do dono ("mande reforços"), enquanto só a Task 5 rodava: pré-revisão final (opus), caça a falhas silenciosas, análise de testes e veracidade da documentação da fase 1 (sonnet), sobre `49faaf0..387e413`. As ondas PF-back (em `e-provedor`) e PF-front (em `e-fixfront`, worktree novo, deslocamento 5) abriram **antes** de a revisão opus terminar | Os achados das lentes eram independentes dela. O front foi para um worktree próprio porque o `e-front` guardava o spec E2E da Task 8 sem commit e em RED, e qualquer commit ali rodaria o hook sobre ele. Custo: sobreposição parcial com as revisões por tarefa, e uma segunda onda possível (o que a opus trouxe entrou na onda da revisão final) |
+| RE9 | **O que é "espaço" na evidência: o servidor é a verdade, e a verdade foi medida.** A regra preliminar dizia que o `str.strip()` do Python mandava e o cliente replicaria (U+FEFF ficaria, NUL viraria 422). **Medido, a premissa estava errada:** o `strip_whitespace` do pydantic é o `trim()` do **Rust** do `pydantic-core`. Removidos, 25 pontos de código (U+0009–000D, 0020, 0085, 00A0, 1680, 2000–200A, 2028, 2029, 202F, 205F, 3000); **ficam** U+001C–001F e U+FEFF. O cliente passou a usar esse conjunto (`stripEnds`), e o NUL é 422 nos dois textos | Uma regra só, e a do servidor, que é o que grava; um cliente com outro conjunto aceitaria o que o servidor recusa (U+0085) ou recusaria o que ele aceita (U+FEFF). Custo: nenhum; o erro do brief foi pego por medição antes de comitar, nos dois lados, e a alegação do revisor sobre U+001C–001F, que era falsa, ficou registrada |
+| RE10 | **Não editar a evidência durante um retry pendente (S-I1):** congelar os campos, em vez de gerar chave nova. O estado "chave retida" mora no **registro** (`isRetryPending`), por isso sobrevive à recarga do quadro; os campos ficam `readOnly` (focáveis) com um aviso ligado por `aria-describedby` | Uma chave nova perderia a proteção de idempotência (a entrega anterior pode ter chegado, e o servidor a reconheceria pela chave); editar com a mesma chave dá `409 operacao_reutilizada`. Custo: a pessoa não edita o rascunho antes de tentar de novo, e **depois de remontar** o botão diz "Concluir" (não "Tentar de novo") e a mensagem de falha some, mas a ação reenvia o mesmo rascunho com a mesma chave (pendência 105) |
+| RE11 | **O 422 tem mensagem própria** ("A evidência não foi aceita. Revise o texto e o link."), a chave é liberada e o rascunho fica; na avaliação o `recovery` é `unavailable`, sem "tentar de novo" | Antes o 422 caía na mensagem genérica "tentar de novo é seguro", um laço: a mesma evidência recusada, repetida, recusada de novo. Custo: um teste existente mudou (a linha "422 com `detail` em lista" do `it.each` "mantém a MESMA chave" afirmava o comportamento corrigido), com justificativa, não como ajuste de passagem |
+| RE12 | **`avaliar` devolve `None` quando o `stop_reason` não é `tool_use`** (S-M7), e o falso roteiriza o `stop_reason` | Uma parada por `max_tokens` deixa um `input` possivelmente parcial, que não pode passar por avaliação válida; `None` já vira `avaliacao_invalida`. Custo: um campo a mais no `Roteiro` do falso |
+| RE13 | (Minor da revisão da PF-back, sem ruling do ledger.) **`strict` não valida no falso**: o esquema da rubrica segue as regras do modo estrito só por leitura da referência (`additionalProperties: false`; sem `minLength`/`maxLength`) | O falso não simula a validação da API; só a chamada real a exercita (pendência 91). Custo: nenhum teste reprova se a referência estiver desatualizada |
+| RE14 | **O esquema publicado de `record_evaluation` perde `minLength`/`maxLength` e ganha `additionalProperties: false`** (`_sem_limites_de_string`); os limites ficam no `EvaluationOutput`, validado antes de qualquer escrita | Confirmado na referência ("JSON Schema Limitations": não suportados os limites de string em ferramenta estrita); manter os limites arriscava um 400 em toda avaliação, que sairia como `provedor_indisponivel`. Custo: o modelo passa a ver menos do contrato; a garantia continua no servidor |
+| RE15 | **Relógio depois da trava, contra o brief do plano (I3 da revisão da Task 5); e `AvaliacaoFalhouError` sai de `core/`.** A spec prevalece (C13): `abrir_tentativa`, `registrar_resultado` e `registrar_falha` recebem o `clock` e leem a hora depois da trava. O erro foi para `modules/evaluation/errors.py`, e um teste com `ast` impede `core/` de importar módulo | O brief errou ao fixar `agora` como parâmetro: lido antes, um pedido que esperasse a trava de uma conclusão gravaria `requested_at` anterior a ela e aplicaria a ocultação num instante velho. E `core → modules` invertia a camada por um erro que só `evaluation` levanta. Custo: a assinatura das três funções mudou depois de o brief tê-la fixado |
+| RE16 | **Descartar o rascunho num retry persistente NÃO entra** (E17): se o retry falha sempre, o rascunho fica | A E17 manda que o rascunho nunca se perca numa falha, e vale mais que sair do laço. Custo: pendência 102 |
+| RE17 | Os itens da revisão opus: M1–M4 → PF-front (grupo E); M5 (`max_tokens` próprio) e M7 (o `downgrade` da `0005` recusa se houver evidência ou avaliação) → PF-back (grupo E); M9 e a pendência 91 → esta documentação; M10 → pendência 101 | Cada achado no lado do código que o produz, e a documentação com a documentação. Custo: nenhum |
+| RE18 | **Pipeline da Task 5:** a correção `c2bfaa2` foi mesclada na branch de integração e levada ao `e-front` (fase 2 da Task 8) **enquanto** a re-revisão corria | Destravar o E2E sem esperar; custo (não ocorrido) de um merge de correção se a re-revisão pedisse mudança, e ela não pediu bloqueante |
 
 ### Dependências e infraestrutura que entraram no E
 
@@ -866,9 +879,10 @@ O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
 serviço. **Nenhuma dependência nova**: conferido,
 `git diff fe37820 -- pyproject.toml uv.lock frontend/package.json
 frontend/package-lock.json` vazio (0 linhas, medido nesta sessão, em
-`wt/e-docs`, `HEAD` `22c6a7e`). A regra global do plano ("nenhuma
-dependência nova") vale até o fim do incremento; a conferência final, sobre
-o topo da branch de integração, é da parte 2.
+`wt/e-docs`, primeiro sobre `22c6a7e` e de novo sobre a integração
+completa das Tasks 5, 5b e das ondas pré-finais, `0a09100`; a saída foi
+vazia nas duas vezes). Se a Task 8 ou a integração final mexerem em
+dependência, esta conferência se repete sobre o topo definitivo.
 
 - **O `POST /api/missions/{mission_id}/complete` estendido** (decisão E1).
   Sem rota nova: o corpo ganhou o campo opcional `evidence` (`text`, `link?`),
@@ -877,8 +891,17 @@ o topo da branch de integração, é da parte 2.
   de não haver rota de entrega é o da E1: uma ordem de conclusão, uma
   idempotência, um crédito. Contrato completo em `docs/ARCHITECTURE.md` §3.
 - **O `POST /api/missions/{mission_id}/evaluation` e o módulo `evaluation`**
-  (decisões E5 e E11) **entram na parte 2 desta documentação**, depois do merge
-  da Task 5; não estão descritos aqui.
+  (decisões E5 e E11). Endpoint novo: a pessoa pede a avaliação da Tifa depois
+  de concluir com evidência. Foi um pedido **separado** da conclusão porque
+  concluir nunca espera o modelo (com o provedor fora do ar, ou sem chave, a
+  entrega vale do mesmo jeito) e o modelo só é chamado quando a pessoa quer
+  (custo, README §6). O módulo `modules/evaluation/` existe porque o
+  **processo** de avaliar (montar o pedido, chamar o provedor, aplicar a
+  rubrica e o bônus) não pertence a `missions` nem a `tutoring`; ele consome o
+  `Protocol` do provedor e escreve por funções de serviço, com a direção única
+  `evaluation → missions/progression/tutoring` (E11, `docs/ARCHITECTURE.md` §3).
+  Nenhuma dependência de biblioteca: reaproveita o SDK `anthropic` já
+  encapsulado no adaptador.
 - **Nenhum serviço de infraestrutura novo.** Tudo roda no mesmo processo
   FastAPI, sobre o mesmo PostgreSQL, com uma migração a mais
   (`0005_entrega_avaliacao.py`): as tabelas `mission_evidence` e
@@ -894,8 +917,10 @@ o topo da branch de integração, é da parte 2.
   gravado, seu `.one()` falharia com mais de um lançamento por missão. E o
   `downgrade` da `0005` **falha alto** de propósito se existir lançamento
   `evaluation_bonus` (voltar à unicidade só por missão o recusaria de todo
-  jeito), então uma volta atrás depois do primeiro bônus exige decisão humana
-  sobre os lançamentos. Não medido nesta sessão (não há dois processos com
+  jeito) **ou** qualquer linha em `mission_evidence` ou `mission_evaluations`
+  (as duas tabelas caem no fim, e com elas todo texto que a pessoa escreveu e
+  todo veredito; guarda da onda pré-final, com teste), então uma volta atrás
+  depois da primeira evidência exige decisão humana sobre os dados. Não medido nesta sessão (não há dois processos com
   versões diferentes para reproduzir); registrado como procedimento a seguir,
   não como bug a corrigir agora.
 - **Sem infraestrutura de arquivo.** Upload, abrir o link e executar código do
@@ -2233,14 +2258,13 @@ E este commit de documentação:
 
 ## Alterações do Incremento E
 
-**Parte 1 (esta): tudo o que não depende da Task 5.** Plano em
-`docs/superpowers/plans/2026-09-28-incremento-e.md`; spec em
+Plano em `docs/superpowers/plans/2026-09-28-incremento-e.md`; spec em
 `docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`.
 Base `fe37820`. Cada commit de tarefa passou pelo hook (`make check`
-completo). As Tasks 5 (o módulo `evaluation`, `POST /evaluation`, os registros
-da avaliação, o serviço do bônus e os *handlers* de erro), 5b e 8 (o E2E) e a
-integração final **não** estão aqui: entram na parte 2. Cada mutação abaixo foi
-vista **reprovando** e desfeita por `cp`, segundo os relatórios das tarefas.
+completo). Cada mutação abaixo foi vista **reprovando** e desfeita por `cp`,
+segundo os relatórios das tarefas. Esta seção cobre as Tasks 0 a 7 e 5a, 5b, 6m
+e as duas ondas pré-finais; **a Task 8 (o E2E) não está aqui**, e os
+"Resultados" finais só serão registrados depois da Task 8.
 
 - **Task 0** (`0778e0d`) — o parágrafo de revisão-base do E, neste arquivo (ver
   RE6), no mesmo commit que traz o plano e a spec.
@@ -2449,6 +2473,167 @@ vista **reprovando** e desfeita por `cp`, segundo os relatórios das tarefas.
   antes da Task 5), `631a68e` e `8321a55` (5a em `e-dados`, RE5) e `22c6a7e`
   (backend das Tasks 2, 3 e 5a em `e-front`, antes da Task 8). `wt/e-docs` parte de
   `22c6a7e`.
+- **Task 5** (`25b3090`, `2d84116`, e a correção `c2bfaa2`) — a avaliação
+  (`request_reward_evaluation`, E5). **Novos:** o módulo `modules/evaluation/`
+  (`rubric.py`, `schemas.py`, `service.py`, `router.py`, e `errors.py` depois da
+  correção) e `missions/evaluation_records.py` (`Tentativa`, `abrir_tentativa`,
+  `registrar_resultado`, `registrar_falha`, `_corrente`; todas travam a missão
+  primeiro). **Alterados:** `core/errors.py` (`SemEvidenciaError`,
+  `AvaliacaoEmAndamentoError`); `missions/service.py` (`_buscar` virou
+  `buscar_para_escrever`); `progression/service.py` (`registrar_bonus`,
+  `recompensa_do_bonus` e `_saldo_antes`, que `recompensa_da_missao` também usa);
+  `main.py` (cinco membros novos em `CodigoDeErro`, os handlers e o mapa de
+  status); `Tutoria.modelo`, preenchido em `get_tutoria`, na fixture `tutoria` e
+  num teste. Contrato completo em `docs/ARCHITECTURE.md` §3. **Divergências do
+  brief, deliberadas:** o `$defs` do esquema sai sem docstring (técnica M8),
+  com teste; `_corrente` levanta `MissaoNaoEncontradaError` se a missão sumiu
+  entre as duas transações; o comentário do modelo é aparado e sem NUL
+  (`AfterValidator`), porque o NUL dava `psycopg.DataError` no `UPDATE`
+  **depois** da chamada ao modelo — exatamente o defeito "presa em `avaliando`",
+  visto no RED; o prompt manda chamar a ferramenta uma vez, sem texto livre
+  (EM3). **RED** visto em cada passo (`ModuleNotFoundError`, `ImportError`,
+  `AttributeError: 'Tutoria' object has no attribute 'modelo'`,
+  `NotImplementedError` num serviço em *stub*, `5 failed, 44 passed` na revisão
+  do comentário). **Mutações** (script próprio, restauração por `cp` e conferência
+  por `cmp`; 17 de 18 reprovam): sem o corte do órfão (4 falhas) e `>=` → `>`
+  (1); sem a conferência de `attempt` (4) e de estado (1); `commit` da falha
+  depois do `raise` (13); sem o limite total (1) e `>` → `>=` (1); sem a
+  ocultação (2); sem o `if valor == 0: return` do bônus (6); bônus sem
+  `_travar_usuario` (1); sem `extra="forbid"` (1); docstring do enum de volta ao
+  esquema (1); `tempo_esgotado` → 502 (1); sem o 503 antes do banco (1); sem
+  `strip_whitespace` (2); `_sem_nul` aceitando NUL (1); prompt sem "exatamente
+  uma vez" (1). **A mutação M3 sobrevive, e é registrada como equivalente nos
+  testes:** mover `registrar_bonus` para antes de `registrar_resultado` só
+  inverte a ordem das travas (usuário antes de missão), um risco de espera
+  circular que nenhum teste exercita (pendência 104). **Concorrência:** o teste
+  do brief (uma barreira só, na largada) detectava **0 de 5** com a trava da
+  transação 1 removida — a transação dura milissegundos, e quem larga antes
+  commita antes de o outro ler qualquer coisa. A versão final tem um segundo
+  ponto de encontro (`_encontro_na_leitura`, um listener `after_cursor_execute`
+  que segura cada thread depois da primeira leitura de `mission_evaluations`):
+  **5 de 5**, e a falha lida é `['IntegrityError', 'avaliou'] == ['avaliou',
+  'em_andamento']` (a `UNIQUE` impede o bônus duplo, mas o segundo pedido viraria
+  500). Custo: o teste verde leva cerca de 1,7 s. **Revisão (opus):** *Needs
+  fixes*, 0 Critical, 3 Important, 7 Minor, com duas guardas que sobreviviam à
+  mutação **na medição do revisor** (o corte do órfão no serviço e a retrava da
+  transação 2) e o relógio lido antes da trava. **Correção 1 (`c2bfaa2`),**
+  todas com mutação: (I1) `test_o_corte_do_orfao_e_o_limite_mais_a_folga`
+  (1 µs antes do corte e no corte: 409 sem chamar o falso; 1 µs depois:
+  retomada, `attempt == 2`); mutações `limite_do_orfao = 0` e `FOLGA_DO_ORFAO = 0`
+  reprovam 2 casos cada. (I2)
+  `test_a_resposta_atrasada_e_a_retomada_disputam_a_segunda_transacao`, em
+  conexões reais; `_corrente` sem `with_for_update` reprova **5 de 5**, com B
+  retomando a tentativa 2 com a de A em voo. (I3) o relógio passou a ser lido
+  **depois** da trava (RE15); RED real
+  (`datetime(…15:00) == datetime(…15:02)`) e mutação de ler antes reprova. (Item
+  4/m1) `AvaliacaoFalhouError` saiu de `core/` (RE15), com
+  `tests/unit/test_core_sem_modulos.py`; RED
+  `errors.py importa {'focusquest.modules.missions.domain'}`. (Item 5, EM3) o
+  esquema publicado perde `minLength`/`maxLength` e mantém
+  `additionalProperties: false` (RE14); mutação reprova. Minors: m3 (o encontro
+  passa a contar as threads e afirmar `== 2`; um listener que deixasse de casar
+  o SQL antes deixava o teste verde sem disputa); m4 (`_reconstruir` levanta
+  `MissaoNaoEncontradaError` em vez de `assert`); m5 (uma exceção inesperada do
+  provedor é gravada como `provedor_indisponivel`, com `_log.exception` e a
+  causa em `__cause__`; `montar_turno_da_avaliacao` saiu do `try`); m6 parcial
+  (entrou o caso `{}`; a entrada truncada por `max_tokens` **não**, porque o falso
+  só emite a entrada inteira num `input_json_delta` — o `max_tokens` ficou com a
+  PF-back); m7 (`get_tutoria` lê `settings.tutor_model` uma vez). m2 virou a
+  emenda **EM4** (tentativa superada: 409, não grava). **Re-revisão:** todos
+  atendidos ou adiados de propósito, sem quebra bloqueante; sobram os furos do
+  teste AST de `core/` (pendência 103) e um comentário desatualizado em
+  `test_evaluation_service.py`. Relatório da tarefa: 741 passed (commit 1) e
+  751 passed (correção), 100% de cobertura nas duas.
+- **Task 5b** (`52b5a59`) — `tests/unit/test_traducao_de_erros.py`, só teste, sem
+  banco: 6 casos parametrizados de `_traduzir_erros` (`type(saida) is` a
+  exceção traduzida e `__cause__ is` a original: timeout do SDK, `ReadTimeout`
+  cru do `httpx2`, `APIConnectionError`, `InternalServerError`, `APIError`
+  genérico, `ConnectError` cru) mais um teste de que um `ValueError` atravessa
+  sem `__cause__`. Fecha a lacuna da Task 5a. **Mutações de meia-cláusula**,
+  cada uma reprovando o seu caso: sem `anthropic.APITimeoutError`, sem
+  `httpx2.TimeoutException`, sem `anthropic.APIError` (3 casos) e sem
+  `httpx2.TransportError`. Relatório: 7 passed; suíte com 636 passed e 100% na
+  época. Revisão limpa.
+- **Onda pré-final, backend — PF-back** (`e34d0cd`, `ed2a66e`, `ff77b11`,
+  `1ffdcb5`, `c9f886d`, `d784ebd`; revisão *Approved*, 0 Critical, 0 Important,
+  4 Minor). Nasceu das revisões pré-finais (RE8). (A) NUL na evidência e o que
+  é espaço: `_sem_nul` em `TextoDaEvidencia` e `LinkDaEvidencia` (NUL vira 422
+  apontando o campo, antes 500 do PostgreSQL); testes fixam o conjunto de
+  espaços **medido** (RE9): U+0085 sai, U+001C e U+FEFF ficam, o teto vale depois
+  do recorte, 4001 emoji e 4001 `e` (combinante) recusados. A **premissa do
+  brief estava errada** (o `str.strip` do Python) e foi corrigida por medição
+  antes de comitar; o caso "só U+001C é texto válido" entrou em `c9f886d`.
+  Mutações: sem o validador de NUL (reprova texto e link), `strip_whitespace=False`
+  no texto e no link, tetos 3999 e 4001, e um `strip()` do Python depois do
+  recorte (reprova `fs-fica` e `so-fs-fica`). (B) Os `CHECK`s da `0005` nas duas
+  direções (`avaliando`/`falhou` com veredito, `concluida`/`avaliando` com
+  `error_code`, sem `finished_at`, feedback de 1501, link de 2000 aceito) e o
+  `downgrade` que devolve a `uq_xp_entries_mission_id` e o `CHECK` de fonte só
+  com `mission_completed`; mutações aplicadas **nos dois lados** (modelo e
+  migração), para não cair só no espelho: bicondicional → implicação nos três
+  `CHECK`s, `BETWEEN 1 AND 1499`, link `< 2000`, `downgrade` sem recriar a
+  unicidade. (C) O falso ganhou `Roteiro.stop_reason` (`end_turn`/`tool_use`/
+  `max_tokens`, padrão derivado), e `avaliar` guarda o `stop_reason` do
+  `message_delta` e devolve `None` se não for `tool_use` (RE12); RED do
+  `max_tokens` (devolvia o dict parcial); testes do corpo da requisição e do
+  corte depois do bloco completo, sem `message_stop`. (D) Conclusão repetida com
+  outra chave e outra evidência sobre missão já concluída → `409
+  transicao_ilegal`, evidência gravada intacta; o ciclo, a trilha e a especial
+  publicam `verification`/`evidence`/`evaluation`; mutações: gravar a evidência
+  antes de `validar_transicao` e `da_leitura` sem `_campos_da_entrega`. (E) EM3:
+  `tool_choice` `auto` com `disable_parallel_tool_use` e `"strict": true` na
+  ferramenta (RED: `tool` ≠ `auto`); `MAX_TOKENS_DA_AVALIACAO = 2048`, próprio
+  (RED: 256 ≠ 2048); o `downgrade` da `0005` **recusa** se houver linha em
+  `mission_evidence` ou `mission_evaluations` (`RuntimeError` com a contagem), e
+  o teste confere que a versão do Alembic continua em `0005` e a linha e a
+  unicidade nova ficam intactas; mutações: sem `strict`, sem
+  `disable_parallel_tool_use`, `max_tokens=self._max_tokens`, guarda só numa das
+  duas tabelas. Relatório: 697, 710, 713 e 720 passed nos commits A, B, C e E
+  (D e a correção de A passaram pelo `make check` do hook, sem número isolado).
+  **Não feitos** (fora do brief): T-M5 (`GeneratorExit` em `_traduzir_erros`),
+  S-I3 (pendência 100), S-M6, o "upgrade preserva `xp_entries`" e a segunda metade
+  do T-M1 (pendência 97).
+- **Onda pré-final, frontend — PF-front** (`0bd1178`, `2182556`, `a19855a`,
+  `8fa8884`, `775c855`, e a rodada 1, `bf68914`; num worktree próprio, porque o
+  `e-front` guardava o spec E2E da Task 8, sem commit e em RED). (A) A tela
+  recorta os **mesmos** espaços que o servidor (`stripEnds`, laço por índice e
+  não regex `+$`, para não ser quadrático): o conjunto de 25 pontos de código
+  **medido** no servidor (RE9), no lugar do `trim()` do JavaScript (que removia
+  U+FEFF e não removia U+0085); o teto vale depois do recorte; o `\S` do link é o
+  complemento do mesmo conjunto. RED `7 failed | 28 passed`; mutações:
+  `slice` → `trim()` (5 falhas), `\S` no link (5), teto sobre o texto cru (8).
+  (B) 422 com mensagem própria (RE11): "A evidência não foi aceita. Revise o texto e
+  o link.", `retry-with-new-operation` na conclusão (a chave sai, o rascunho
+  fica) e `unavailable` na avaliação; **um teste mudou por justificativa**: a
+  linha "422 com detail em lista" do `it.each` "mantém a MESMA chave" afirmava
+  exatamente o comportamento que se corrigia, e foi removida, com o teste novo
+  cobrindo o 422. Os testes de hook e de tela do 422 **da avaliação** foram
+  escritos depois do código, e a prova é por mutação. (C) Campos travados
+  durante o retry pendente (RE10), com aviso ligado por `aria-describedby`; RED
+  de 3 falhas. (D) Isolamento entre cartões, âncora do link (`data:`, `DATA:`,
+  `//evil.com/x`, `JAVASCRIPT:`, `https:evil.com` e um espaço na frente viram
+  texto, sem `<a href>`) e **foco**: medido que se perdia (depois de concluir, o
+  `activeElement` era o `body`); o `MissionCard` passou a focar o título do
+  cartão (`tabIndex={-1}`) num `useEffect`, só se o foco estava no `body`. (E)
+  `reward` ausente tratado (`reward?: Reward | null`, `!= null`); `role="alert"`
+  só na falha do pedido, não na gravada lida da API; o botão de pedir avaliação
+  não é mais desabilitado no 503 (E18); o erro do link só depois do `blur`.
+  **Rodada 1** (a revisão achou 1 Important e 6 Minor): backups de `sed -i -E`
+  do macOS tinham sido comitados (`git rm`); o "retry pendente" passou a morar no
+  **registro** (`isRetryPending`/`markRetryPending`), e por isso sobrevive à
+  recarga do quadro; `readOnly` + `aria-readonly` no lugar de `disabled`
+  (focáveis); `linkTouched` volta a `false` quando o link fica válido ou vazio;
+  o `evaluationFailure.ts` decide por `knownFailure` e não por identidade; dois
+  comentários. Mutações: `release` sem limpar o retry (3), sem `markRetryPending`
+  (4), sem `readOnly` (4), sem `aria-readonly` (2), exigir `code === null` (1).
+  Relatório: 601 testes na onda e 608 depois da rodada 1, 100% nos quatro
+  eixos, sem limiar mexido. **Re-revisão:** 7 de 7 atendidos; sobra um *minor*
+  (pendência 105).
+- **Integração desta rodada,** cada merge com o gate completo verde (segundo o
+  ledger): `c9eee20` (5b), `b7d22b7` (PF-back), `e88e3ea` (PF-front), `bf694af`
+  (a correção da Task 5) e `0a09100` (tudo isso em `wt/e-docs`). A Task 5 também
+  foi levada ao `e-front` para a fase 2 da Task 8 **enquanto** a re-revisão
+  corria (RE18).
 
 ## Comandos
 
@@ -3619,12 +3804,18 @@ C".
     dois sentidos (`missions` ↔ `progression`, `progression` ↔ `tutoring`).
     A decisão E11 põe as tabelas da entrega em `missions` e o processo de
     avaliar num módulo à parte justamente para **não** criar um terceiro par
-    nos dois sentidos; **até `22c6a7e` o grafo de imports não ganhou par novo**
-    (o módulo `evaluation` ainda não existe nesta árvore), e a conferência
-    com o módulo integrado é da fase 2. Os dois pares que já existiam
-    continuam. Revisitar o par
-    quando uma segunda operação precisar creditar XP na **mesma** transação
-    da conclusão.
+    nos dois sentidos. **Conferido na integração `0a09100`, com o módulo
+    `evaluation` já presente:** `grep -rn "modules.evaluation" src` fora do
+    próprio módulo acha só `main.py` (as linhas 34 e 35), e nenhum arquivo de
+    `missions/` importa `evaluation`; a direção é `evaluation → missions`,
+    `evaluation → progression` e `evaluation → tutoring`. O E **não**
+    acrescentou par novo ao grafo; os dois que já existiam continuam
+    (`progression/domain.py` importa `Veredito` de `missions.domain`, mais uma
+    aresta do sentido `progression → missions`, que já existia). Um grafo de
+    imports completo (como o de 37 módulos da retomada) **não** foi refeito
+    nesta integração: a conclusão vale para a aresta `evaluation`, medida por
+    `grep`. Revisitar o par quando uma segunda operação precisar creditar XP na
+    **mesma** transação da conclusão.
 ~~89. **O repositório remoto não existe mais.** Medido em 2026-09-28: `git
     fetch` responde `ERROR: Repository not found.`, `gh repo view
     BipoXDXD/FocusQuest` responde `Could not resolve to a Repository`, e a
@@ -3663,35 +3854,48 @@ ledger; nenhum é bug esquecido.
     porque nenhuma missão tem hoje um critério assim; inventar um seria fingir
     verificação. Precisa de missões com critério executável, e a execução de
     código do estudante exige isolamento (README §6 proíbe na API).
-91. **A camada 3 da avaliação não foi gravada.** A referência da camada 3
-    (`tests/integration/referencia_da_api_real.json`) cobre **texto e
-    proposta** da conversa; a avaliação usa `tool_choice` **forçado** em
-    `record_evaluation`, com `claude-opus-5`, que manda um bloco de thinking
-    sem que a requisição o peça (1b-2). **Não medido:** se a API aceita
-    `tool_choice` forçado nesse modelo. O risco está na spec ("Riscos"): a
-    falha sai como `502 provedor_indisponivel` **gravada**, nunca como bônus.
+91. **A camada 3 da avaliação não foi gravada, e a chamada real da avaliação
+    nunca aconteceu.** A referência da camada 3
+    (`tests/integration/referencia_da_api_real.json`) cobre **uma** resposta
+    real de **texto e proposta** da conversa. A avaliação **não** força a
+    ferramenta (emenda **EM3**): usa `tool_choice: {"type": "auto",
+    "disable_parallel_tool_use": true}`, a ferramenta `record_evaluation` com
+    `strict: true` e um sistema que manda chamá-la exatamente uma vez; sem
+    chamada (ou parada que não seja `tool_use`), o resultado é
+    `avaliacao_invalida`. A EM3 vem da referência oficial da API (a skill
+    `claude-api` em cache, 2026-09-25), **não de uma chamada real**: o forçado
+    dá 400 no Fable 5.1 e no Mythos 5.1 e exige thinking desligado no Bedrock;
+    o `claude-opus-5` configurado o aceitaria. **Não medido, portanto:** (a) que
+    o modelo **chama** a ferramenta com `auto` e a instrução, em vez de
+    responder em texto; (b) que a API aceita o esquema `strict` da rubrica
+    (`additionalProperties: false`, sem `minLength`/`maxLength`; o falso **não**
+    valida o `strict`); (c) o comportamento com o bloco de thinking que o
+    `claude-opus-5` manda sem que a requisição o peça (1b-2). Se a API recusar
+    o esquema, sai `502 provedor_indisponivel` **gravado**, nunca bônus; se o
+    modelo responder em texto, sai `502 avaliacao_invalida`, repetível.
     **Roteiro, igual ao da pendência 42:** o **dono**, com a chave do Keychain
     só para o processo da API e o `anthropic_base_url` **sem** override, pede
-    uma avaliação real de uma missão concluída com evidência e grava, sem o
-    conteúdo do texto, a sequência de tipos de evento; se a API recusar o
-    `tool_choice` forçado, troca-se para `tool_choice: auto`, com
-    `avaliacao_invalida` quando o modelo não chamar a ferramenta. **O CI nunca
-    chama a Anthropic.** `docs/QUALITY.md` §9 diz o que as camadas 1 e 2
-    provam e o que esta não prova.
+    uma avaliação real de uma missão concluída com evidência (o script de
+    `tests/integration/camada3.py`, ou pela tela), confere que o veredito volta
+    e grava, sem o conteúdo do texto, a sequência de tipos de evento, para a
+    camada 3 da avaliação. **O CI nunca chama a Anthropic.** O
+    `docs/QUALITY.md` §9 diz o que as camadas 1 e 2 provam e o que esta não
+    prova.
 92. **Evidência sem upload** (decisão E3). Só texto (1 a 4000 pontos de código)
-    e um link `http(s)` de até 2000; o backend **nunca abre o link** (pela decisão E3, a Tifa será avisada
-    disso, então só contará o que o texto diz; o prompt da avaliação é da fase 2). Arquivo, captura de tela e
-    repositório enviado pedem armazenamento, limite de tipo e varredura; abrir
-    o link pede defesa contra SSRF e trata conteúdo não confiável dentro do
-    prompt. Fazer quando houver necessidade medida (README §3).
+    e um link `http(s)` de até 2000; o backend **nunca abre o link**, e o
+    sistema da avaliação diz à Tifa que o link não foi aberto (e o JSON do
+    pedido leva `link_opened: false`), então só conta o que o texto diz.
+    Arquivo, captura de tela e repositório enviado pedem armazenamento, limite
+    de tipo e varredura; abrir o link pede defesa contra SSRF e trata conteúdo
+    não confiável dentro do prompt. Fazer quando houver necessidade medida
+    (README §3).
 93. **Uma avaliação por missão, sem contestar** (decisão E8). Concluída, a
-    avaliação vale para sempre: pela decisão E8, pedir de novo devolve a mesma
-    (200, mesmo corpo) e só uma tentativa que **falhou** se repete — o
-    serviço que faz isso é da Task 5, ainda não descrito aqui. Não há reavaliar nem
-    contestar o veredito, e a pessoa que discorda de um `nao_atende` não tem
-    caminho. É de propósito (anti-roleta: sem o limite, pedir até sair
-    `atende`); um dia pode virar "contestar com evidência nova", com custo e
-    limite próprios.
+    avaliação vale para sempre: pedir de novo devolve a mesma (200, mesmo
+    corpo, `reward` reconstruído do banco), sem chamar o modelo (testado), e só
+    uma tentativa que **falhou** se repete. Não há reavaliar nem contestar o
+    veredito, e a pessoa que discorda de um `nao_atende` não tem caminho. É de
+    propósito (anti-roleta: sem o limite, pedir até sair `atende`); um dia
+    pode virar "contestar com evidência nova", com custo e limite próprios.
 94. **O `console.error` dos dois hooks é o único log de produção do
     frontend** (Task 6m). `useRequestEvaluation` e `useCompleteMission`
     registram nele a exceção de um callback do chamador que lança
@@ -3710,26 +3914,34 @@ ledger; nenhum é bug esquecido.
     relacionamentos, carregados com `lazy="select"`: cada missão listada custa
     até duas consultas a mais. Aceito enquanto o usuário tem poucas missões
     (A2); com muitas, trocar por `selectinload` na listagem.
-97. **Minors das revisões adiados** (ledger), nenhum com efeito no produto:
-    (a) os três `TypeDecorator` de `missions/models.py` são quase iguais, e o
-    `cascade` de `Mission.evidence`/`Mission.evaluation` não usa
-    `passive_deletes=True` (Task 2); (b) `_campos_da_entrega` devolve
-    `dict[str, Any]` e perde a checagem de tipo do mypy nesses três campos —
-    marcado para a onda final, **conferir se foi feito** (Task 3); (c) dois
-    `tool_use` da mesma ferramenta: o último vence, improvável com
-    `disable_parallel_tool_use`, e o tipo `Bloco` do `falso.ts` tem dois
-    membros de `tool_input` (Task 4); (d) tirar `httpx2.TransportError` do ramo
-    de indisponibilidade de `_traduzir_erros` não reprovava teste nenhum, e
-    tirar só `httpx2.TimeoutException` reprovava o chat mas não a avaliação
-    (Task 5a) — **o lote 5b existe** (commit `52b5a59`, em outro worktree,
-    `tests/unit/test_traducao_de_erros.py`, 7 casos, 4 mutações de
-    meia-cláusula, cada uma reprovando o seu caso, segundo o relatório dele)
-    e **ainda não está neste worktree**: riscar (d) quando entrar; (e) o `trim()` do JavaScript remove
-    U+FEFF e o `strip` do Python não: os dois lados divergem sobre o que é
-    "espaço nas pontas" (Task 6; não medido o efeito de ponta a ponta); (f) o teste do
-    congelamento do vazio faz um *cast* `as {text; link}` sem comentário (Task
-    6m); (g) o rascunho de uma missão que falhou com `refresh` fica no
-    registro até um sucesso que talvez nunca venha (RE4).
+97. **Minors das revisões adiados** (ledger e revisões), nenhum com efeito no
+    produto: (a) os três `TypeDecorator` de `missions/models.py` são quase
+    iguais, e o `cascade` de `Mission.evidence`/`Mission.evaluation` não usa
+    `passive_deletes=True` (Task 2); (b) `_campos_da_entrega` **continua**
+    devolvendo `dict[str, Any]` (conferido em `missions/schemas.py`) e perde a
+    checagem de tipo do mypy nesses três campos; a onda final planejada ainda
+    não o trocou por um `TypedDict` (Task 3); (c) dois `tool_use` da mesma
+    ferramenta: o último vence, improvável com `disable_parallel_tool_use`, e o
+    tipo `Bloco` do `falso.ts` tem dois membros de `tool_input` (Task 4); (d)
+    ~~tirar `httpx2.TransportError` do ramo de indisponibilidade de
+    `_traduzir_erros` não reprovava teste nenhum, e tirar só
+    `httpx2.TimeoutException` reprovava o chat mas não a avaliação~~
+    **resolvida pela Task 5b** (`52b5a59`, `test_traducao_de_erros.py`, 7
+    casos, 4 mutações de meia-cláusula, cada uma reprovando o seu caso); (e)
+    ~~o `trim()` do JavaScript remove U+FEFF e o `strip` do Python não~~
+    **resolvida pela onda pré-final** (RE9): o servidor usa o `trim()` do Rust
+    do `pydantic-core`, medido, e a tela replica esse conjunto (`stripEnds`); (f)
+    o teste do congelamento do vazio faz um *cast* `as {text; link}` sem
+    comentário (Task 6m); (g) o rascunho de uma missão que falhou com `refresh`
+    fica no registro até um sucesso que talvez nunca venha (RE4); (h) um
+    comentário desatualizado em `test_evaluation_service.py` (m6 da Task 5) e a
+    docstring do módulo `test_evaluation_provider.py`, que ainda diz "com a
+    ferramenta forçada" depois da EM3; (i) o teste do `downgrade` da `0005` assume
+    `0005` como topo e `0004` como alvo, e precisa de ajuste quando chegar uma
+    `0006` (PF-back); (j) não feitos, fora do brief das ondas: T-M5
+    (`GeneratorExit` atravessando `_traduzir_erros`), S-M6, "o upgrade preserva
+    os `xp_entries` existentes" (T-M4) e a segunda metade do T-M1 (falha de
+    conclusão com evidência não deixa linha em `mission_evidence`).
 98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1
@@ -3747,6 +3959,53 @@ ledger; nenhum é bug esquecido.
     (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da data.
     Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as atualizações
     da imagem.
+100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
+    log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
+    funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
+    401, 403, 404, 400 e 429 (chave inválida ou revogada, modelo inexistente,
+    corpo recusado, limite de taxa), e a mensagem leva só o **nome** da
+    exceção. **É comportamento anterior ao E, do chat, estendido à avaliação**
+    (ruling do ledger: pendência nova, não correção agora; o custo é um diagnóstico pior de chave inválida até lá). Consequência: uma chave
+    inválida aparece na tela como "A Tifa está fora do ar" e no servidor como
+    `502 provedor_indisponivel`, sem rastro do status real; quem diagnostica
+    precisa reproduzir a chamada. Uma correção registraria o status e o tipo
+    da causa no log (nunca o corpo nem a chave) e talvez distinguisse os 4xx
+    de configuração dos de rede.
+101. **O rascunho guardado pode ficar inacessível para a pessoa** (M10 da
+    pré-revisão opus). Numa falha `refresh` da conclusão (`transicao_ilegal`, por
+    exemplo quando a primeira tentativa foi gravada, a pessoa editou o texto e a
+    chave nova bateu numa missão já concluída), o formulário some. Depois da
+    recarga, o cartão está concluído com a evidência **antiga** (ou sem
+    nenhuma), e o texto novo continua no registro sem caminho para ser visto ou
+    copiado. A RE4 já registra o custo de o rascunho ficar na memória; a perda
+    **visível** é outra coisa, de grau baixo com usuário único. Correção
+    possível: na falha `refresh` com rascunho não vazio, mostrar a evidência
+    digitada só para leitura ("Seu texto não foi entregue:").
+102. **Descartar o rascunho num retry persistente não entra** (RE16). Se o
+    "Tentar de novo" falha sempre, o rascunho e a chave retida ficam, e a
+    tela não oferece "descartar e recomeçar". A E17 manda que o rascunho nunca se
+    perca numa falha; a saída do laço hoje é recarregar a página, que perde o
+    rascunho junto. Um botão explícito de descarte, com confirmação, resolveria.
+103. **O teste AST de `core/` tem três furos** (re-revisão da Task 5).
+    `tests/unit/test_core_sem_modulos.py` só olha `ast.ImportFrom` com
+    `module` que comece por `focusquest.modules` e lê `core/*.py`. Não pega:
+    (a) `from focusquest import modules`; (b) o import relativo
+    (`from ..modules import ...`); (c) um arquivo em subpasta de `core/` (o
+    `glob("*.py")` não é recursivo). Nada disso existe hoje; o teste é uma
+    barreira, não uma prova.
+104. **A ordem das travas na transação 2 da avaliação não é provada por
+    teste** (mutação M3 da Task 5, equivalente nos testes). Mover
+    `registrar_bonus` para antes de `registrar_resultado` só inverte a ordem
+    missão → usuário, um risco de espera circular com outra conclusão
+    simultânea que nenhum teste exercita. O código está na ordem certa
+    (missão → avaliação → usuário) e o documento a declara; um teste teria de
+    montar duas transações em conflito cruzado.
+105. **Depois de remontar o cartão com a chave retida, o botão diz "Concluir"**
+    (re-revisão da PF-front). Com um retry pendente, o quadro recarregado
+    remonta o cartão em `idle`; os campos seguem `readOnly` e o aviso continua
+    (o estado mora no registro), mas o botão diz "Concluir" e a mensagem de
+    falha some, embora a ação reenvie o mesmo rascunho com a mesma chave.
+    Poderia ler `isRetryPending` para dizer "Tentar de novo".
 
 ## Próximo incremento
 

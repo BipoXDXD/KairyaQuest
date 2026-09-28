@@ -31,13 +31,14 @@ estão na `main`: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR #14 (C) em
 `8ab91ce` e o PR #17 (D) em `af6f50d`, os três em 2026-09-25; o PR #18
 acrescentou o `CONTINUACAO.md` na raiz (ver "Revisão-base" em
 `docs/HANDOFF.md`).
-Ao fim, o que o **Incremento E** (entrega com evidência e avaliação) já
-criou nesta branch, entre `fe37820` e `22c6a7e`: a migração `0005`, o
-`core/usuario_unico.py`, os modelos e os schemas da entrega, o método
-`avaliar` do provedor e a tela da evidência e da avaliação, com os testes
+Ao fim, o que o **Incremento E** (entrega com evidência e avaliação) criou
+entre `fe37820` e a integração das Tasks 5 e 5b e das duas ondas
+pré-finais (`0a09100`): a migração `0005`, o `core/usuario_unico.py`, os
+modelos e os schemas da entrega, o módulo `evaluation` e os registros da
+avaliação em `missions/evaluation_records.py`, o método `avaliar` do
+provedor e a tela da evidência e da avaliação, com os testes
 correspondentes (ver "Alterações do Incremento E" em `docs/HANDOFF.md`). O
-módulo `evaluation` (Task 5) **ainda não está na árvore**: entra na parte 2
-desta documentação.
+E2E da avaliação (Task 8) não entra nesta árvore.
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -92,23 +93,23 @@ FocusQuest/
 │   │   │   │   ├── EvaluationPanel.test.tsx
 │   │   │   │   ├── EvaluationPanel.tsx    # o selo de verificação, a evidência, o botão "Pedir avaliação da Tifa" e os estados da avaliação (avaliando, concluída, falhou, fora do ar); o veredito em texto e ícone e o rótulo fixo de interpretação do modelo; sem `section` rotulada (landmark-unique) (E, Task 7)
 │   │   │   │   ├── EvidenceForm.test.tsx
-│   │   │   │   ├── EvidenceForm.tsx       # o disclosure "Entregar com evidência (opcional)": texto e link controlados, contador, erro do link; recolhido, os campos ficam fora do DOM (E, Task 7, decisão E17)
-│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4); guarda o rascunho da evidência no registro, liga o EvidenceForm e o EvaluationPanel e explica por que o Concluir está bloqueado, por aria-describedby (E, Task 7)
+│   │   │   │   ├── EvidenceForm.tsx       # o disclosure "Entregar com evidência (opcional)": texto e link controlados, contador, erro do link; recolhido, os campos ficam fora do DOM (E, Task 7, decisão E17); durante um retry pendente os campos ficam readOnly, com aviso ligado por aria-describedby (E, onda pré-final)
+│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4); guarda o rascunho da evidência no registro, liga o EvidenceForm e o EvaluationPanel e explica por que o Concluir está bloqueado, por aria-describedby (E, Task 7); leva o foco ao título do cartão depois de concluir, se ele estava no body (E, onda pré-final)
 │   │   │   │   ├── MissionList.test.tsx
 │   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle; onMissionCompleted repassado a cada MissionCard (D, Task 8)
 │   │   │   │   ├── evaluationFailure.test.ts
 │   │   │   │   ├── evaluationFailure.ts # mapa exaustivo code → mensagem e recovery (retry, refresh, unavailable) da avaliação; describeEvaluationErrorCode também para o error_code de uma avaliação `falhou` vinda da API (E, Tasks 6 e 7)
 │   │   │   │   ├── evidenceLimit.test.ts
-│   │   │   │   ├── evidenceLimit.ts     # describeEvidence: tetos de 4000 e 2000 em pontos de código, o formato do link, o contador a partir de 3600 (E, Task 6)
+│   │   │   │   ├── evidenceLimit.ts     # describeEvidence: tetos de 4000 e 2000 em pontos de código, o formato do link, o contador a partir de 3600 (E, Task 6); stripEnds recorta o mesmo conjunto de espaços que o servidor, medido (25 pontos de código), e o teto vale depois do recorte (E, onda pré-final)
 │   │   │   │   ├── completionFailure.test.ts
-│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B)
+│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B); 422 sem code conhecido tem mensagem própria, libera a chave e mantém o rascunho (E, onda pré-final)
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
 │   │   │   │   ├── types.ts             # (E, Task 6: EvaluationErrorCode, EvaluationResult e EvidenceDraft) Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
 │   │   │   │   ├── useCompleteMission.test.tsx
 │   │   │   │   ├── useCompleteMission.ts # (E: complete(evidence?), com rascunho inválido sem POST; o rascunho só sai no sucesso, decisões E17/RE4) conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
-│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera; o rascunho da evidência por missão (draftFor/saveDraft/discardDraft), com release só da chave (E, Task 6 e fix round da Task 7)
+│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera; o rascunho da evidência por missão (draftFor/saveDraft/discardDraft), com release só da chave (E, Task 6 e fix round da Task 7); isRetryPending/markRetryPending guardam a chave retida, que sobrevive à remontagem do cartão (E, onda pré-final)
 │   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
 │   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, P9); atualiza sozinho na volta à aba (C, Task 5); só a resposta do pedido mais recente decide (C, fix round 1, commit e195128)
 │   │   │   │   ├── useMissions.test.tsx
@@ -221,16 +222,24 @@ FocusQuest/
 │       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
 │       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
 │       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
-│       │   ├── errors.py          # erros de domínio comuns
+│       │   ├── errors.py          # erros de domínio comuns a mais de um módulo; SemEvidenciaError e AvaliacaoEmAndamentoError (E). Sem import de modules/: o teste tests/unit/test_core_sem_modulos.py o exige
 │       │   └── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
 │       ├── modules/
 │       │   ├── __init__.py
+│       │   ├── evaluation/        # o processo de avaliar uma entrega (E); ver §3, "O módulo evaluation e a direção única das dependências"
+│       │   │   ├── __init__.py
+│       │   │   ├── errors.py      # AvaliacaoFalhouError(falha): a falha JÁ gravada, que main.py traduz em 502/504; mora aqui e não em core/, porque só evaluation a levanta
+│       │   │   ├── router.py      # POST /api/missions/{id}/evaluation; sem sessão da requisição (abre as próprias transações, E9); 503 antes de tocar no banco
+│       │   │   ├── rubric.py      # o prompt de sistema da avaliação (versionado, README §5), FERRAMENTA_DA_AVALIACAO (esquema estrito, EM3) e montar_turno_da_avaliacao (a evidência como JSON, dado e não instrução)
+│       │   │   ├── schemas.py     # EvaluationOutput (a saída do modelo, validada antes de qualquer escrita) e EvaluationResultRead
+│       │   │   └── service.py     # avaliar_missao: duas transações e a chamada ao modelo entre elas; o limite total; a falha gravada antes de virar erro
 │       │   ├── missions/
 │       │   │   ├── __init__.py
 │       │   │   ├── cycle_domain.py  # regras puras do ciclo: dia, semana, disponibilidade, sequencia, marco, janela (B)
 │       │   │   ├── cycle_router.py  # POST /api/plans, GET /api/plans/current, GET /api/cycle (B)
 │       │   │   ├── cycle_schemas.py # contratos do plano semanal e do ciclo (B)
 │       │   │   ├── cycle_service.py # criar plano, ler plano/ciclo/missao, historico, ocultacao (B)
+│       │   │   ├── evaluation_records.py  # as funções de escrita da avaliação, que evaluation chama (E11): abrir_tentativa, registrar_resultado, registrar_falha; travam a missão primeiro; o relógio é lido depois da trava
 │       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B); Veredito, EstadoDaAvaliacao, FalhaDaAvaliacao, Verificacao, verificacao_da_missao e a tabela de transições da avaliação (E) — sem FastAPI nem SQLAlchemy
 │       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B); MissionEvidence e MissionEvaluation, com os relacionamentos Mission.evidence/evaluation (E, decisão E11: os dados da entrega moram aqui)
 │       │   │   ├── router.py      # as três rotas de /api/missions; concluir devolve MissionCompletionRead, com reward reconstruído do banco depois do commit (D, decisão D10) e passa evidencia= ao serviço (E); USUARIO_UNICO e SessaoDaRequisicao vêm de core/
@@ -242,7 +251,7 @@ FocusQuest/
 │       │   │   ├── models.py      # XpEntry (o livro-razão, D2) e UserAchievement (D5), com os nomes de restrição do plano; FONTE_BONUS e a unicidade por (mission_id, source) (E, decisão E14)
 │       │   │   ├── router.py      # GET /api/progress, sem commit (é leitura); USUARIO_UNICO de core/ (E)
 │       │   │   ├── schemas.py     # AchievementRead, ProgressRead, UnlockedAchievementRead, RewardRead
-│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10; filtra source = mission_completed, E14), ler_progresso; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
+│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10; filtra source = mission_completed, E14), ler_progresso; registrar_bonus e recompensa_do_bonus, o bônus da avaliação (E7, E15), e _saldo_antes; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
 │       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
 │       │       ├── __init__.py
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
@@ -252,9 +261,9 @@ FocusQuest/
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
-│       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar
+│       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar; a Tutoria ganhou o campo `modelo` (E)
 │       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
-│       │       ├── dependencies.py  # get_tutoria() -> Tutoria | None ("sem chave" é None, não exceção)
+│       │       ├── dependencies.py  # get_tutoria() -> Tutoria | None ("sem chave" é None, não exceção); leva settings.tutor_model à Tutoria e ao adaptador (E)
 │       │       └── router.py      # as cinco rotas de /api/tutoring
 │       ├── __init__.py
 │       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready, a tutoria e a progressão (include_router de progression.router, D)
@@ -277,8 +286,12 @@ FocusQuest/
 │   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
 │   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
+│   │   ├── test_evaluation_api.py  # o contrato de POST /evaluation: o corpo da spec, reward nulo, o repetido, cada erro com status e code, as falhas do modelo já gravadas (E, Task 5)
+│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5)
 │   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2)
 │   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
+│   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
+│   │   ├── test_evaluation_service.py  # avaliar_missao contra o falso: os três vereditos com e sem bônus, o repetido sem chamar o falso, falhas gravadas antes do erro, o limite total, a injeção (E, Task 5)
 │   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice forçado, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
 │   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2); o bloco com tool_name e o padrão create_mission (E, Task 4)
@@ -308,10 +321,13 @@ FocusQuest/
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
+│       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
 │       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
+│       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
+│       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
 │       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
 │       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
@@ -457,7 +473,7 @@ consumido por `missions`).
 
 ## 3. Responsabilidades por camada
 
-### Backend — `missions`, `tutoring` e `progression` existem; o resto é contrato
+### Backend — `missions`, `tutoring`, `progression` e `evaluation` existem; o resto é contrato
 
 Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
 real, e em qual módulo.
@@ -500,6 +516,48 @@ dois enums, registrado como pendência 82 em `docs/HANDOFF.md`).
 `tutoring.service` também chama `progression.ler_progresso` (só leitura,
 direto, sem HTTP), e `tutoring.context` recebe o `Progresso` para montar a
 linha de progresso do turno da Tifa (D15).
+
+**O módulo `evaluation` (Incremento E) e a direção única das dependências
+(E11).** As tabelas da entrega (`mission_evidence`, `mission_evaluations`) são
+**dados da missão** e moram em `missions/models.py`; o **processo** de avaliar
+mora em `modules/evaluation/` e **escreve por funções de serviço dos outros
+módulos**, nunca pelos modelos deles diretamente. As arestas, conferidas nos
+`import` do código (`grep` sobre `src/`):
+
+- `evaluation → missions`: `missions.evaluation_records` (`abrir_tentativa`,
+  `registrar_resultado`, `registrar_falha`, as funções de escrita da avaliação,
+  que **moram em `missions`** para que quem escreve nas tabelas dela seja o
+  módulo dono delas), `missions.domain` (`Veredito`, `FalhaDaAvaliacao`),
+  `missions.models` (`Mission`, `MissionEvaluation`) e `missions.schemas`
+  (`EvaluationSummaryRead`, o teto do feedback);
+- `evaluation → progression`: `progression.service` (`registrar_bonus`,
+  `recompensa_do_bonus`) e `progression.schemas` (`RewardRead`);
+- `evaluation → tutoring`: `tutoring.provider` (o `Protocol`, `Ferramenta`,
+  `Turno` e os erros do provedor), `tutoring.service` (`Tutoria`,
+  `FOLGA_DO_ORFAO`) e `tutoring.dependencies` (`get_tutoria`);
+- **ninguém importa `evaluation` além de `main.py`**, que registra o router e
+  o handler de `AvaliacaoFalhouError`. Conferido: `grep -rn
+  "modules.evaluation" src` fora do próprio módulo acha só `main.py:34` e
+  `main.py:35`, e **nenhum arquivo de `missions/` importa `evaluation`**.
+
+Foi para isso que as tabelas ficaram em `missions`: com elas num módulo que
+importa `missions`, o `MissionRead` (que mostra a evidência e a avaliação na
+listagem, no ciclo e na trilha) teria de importar esse módulo de volta, e
+seria um terceiro par nos dois sentidos (pendência 88). Até esta integração
+o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
+
+**`evaluation/errors.py`, e por que `core/` não tem módulos.**
+`AvaliacaoFalhouError(falha)` é o erro da falha **já gravada** (E13). Nasceu em
+`core/errors.py`, mas a assinatura dele usa `FalhaDaAvaliacao`, de
+`missions/domain.py`: mantê-lo ali inverteria a direção (`core → modules`), e
+só `evaluation` o levanta. Na revisão da Task 5 ele foi para
+`modules/evaluation/errors.py` — como `TransicaoIlegalError` mora em
+`missions/domain.py`. `SemEvidenciaError` e `AvaliacaoEmAndamentoError` ficaram
+em `core/errors.py`, porque `missions` e `evaluation` os levantam. A regra é
+verificada por `tests/unit/test_core_sem_modulos.py`, que lê com `ast` cada
+`*.py` de `core/` e exige que nenhum importe `focusquest.modules`. **O teste
+tem furos conhecidos** (pendência 103): não pega `from focusquest import
+modules`, nem import relativo, nem subpasta de `core/`.
 
 **Não há ciclo entre arquivos, mas há dependência nos dois sentidos entre
 pacotes.** Nenhum arquivo importa, direta ou indiretamente, um arquivo que o
@@ -873,10 +931,9 @@ tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
 > `src/focusquest/modules/missions/service.py` (`concluir_missao`) e
 > `src/focusquest/modules/missions/domain.py` (`verificacao_da_missao`).
 
-Só o que já existe nesta branch: **o `POST /api/missions/{id}/complete`
-estendido** e os campos novos do `MissionRead`. O `POST
-/api/missions/{id}/evaluation` e o módulo `evaluation` entram na parte 2
-desta documentação, depois do merge da Task 5.
+Esta seção descreve **o `POST /api/missions/{id}/complete` estendido**, os
+campos novos do `MissionRead` e, ao fim, o **`POST
+/api/missions/{id}/evaluation`**.
 
 Não há rota nova de entrega (decisão E1): entregar e concluir são o mesmo
 ato, com uma ordem de conclusão, uma idempotência (`operation_id`) e um
@@ -895,7 +952,15 @@ opcional `evidence`:
 - **`evidence.text`**: obrigatório dentro de `evidence`, **sem espaço nas
   pontas** (o schema apara antes de validar) e de **1 a 4000 pontos de
   código** (`TAMANHO_MAXIMO_DA_EVIDENCIA`). Um texto só de espaços é vazio
-  depois de aparado, e vira 422.
+  depois de aparado, e vira 422. **O que é "espaço" foi medido:** o
+  `strip_whitespace` do pydantic é o `trim()` do Rust do `pydantic-core`
+  (Unicode `White_Space`), **não** o `str.strip()` do Python. Removidos: U+0009
+  a U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000 a U+200A, U+2028, U+2029,
+  U+202F, U+205F e U+3000 (25 pontos de código); **não** removidos: U+001C a
+  U+001F e U+FEFF. O teto de 4000 vale **depois** do recorte. O frontend
+  replica esse conjunto (`stripEnds`, `features/missions/evidenceLimit.ts`).
+- **NUL (`\x00`) no texto ou no link é 422** apontando o campo (`_sem_nul`):
+  o PostgreSQL não grava NUL em `TEXT`, e sem a guarda a conclusão saía 500.
 - **`evidence.link`**: opcional (`null` ou ausente), aparado, de até **2000
   caracteres** (`TAMANHO_MAXIMO_DO_LINK`), casando `(?i)^https?://\S+$`: só
   `http`/`https` (sem diferenciar maiúsculas, decisão EM2) e sem espaço. **O
@@ -910,7 +975,7 @@ opcional `evidence`:
 
 | Situação | Status | `code` | Observação |
 |---|---|---|---|
-| `evidence` inválida: texto vazio ou longo, link sem `http(s)`, longo ou com espaço, campo a mais | `422` | — | Formato nativo do FastAPI; o `loc` termina em `text`, `link` ou `extra` (com `body` e `evidence` antes) |
+| `evidence` inválida: texto vazio, só de espaços, com NUL ou longo, link sem `http(s)`, longo, com espaço ou com NUL, campo a mais | `422` | — | Formato nativo do FastAPI; o `loc` termina em `text`, `link` ou `extra` (com `body` e `evidence` antes) |
 | **Mesmo `operation_id` com outra evidência**: texto ou link diferentes, evidência onde antes não havia, ou sem evidência onde havia | `409` | `operacao_reutilizada` | "Mesmo id, outro conteúdo" — o desenho do `client_message_id` do 1b-1. Conferido **depois** da checagem de que a operação é da mesma missão. O cliente gera um `operation_id` novo e repete |
 | Reenvio com a **mesma** evidência | `200` | — | O mesmo corpo do primeiro envio, `reward` incluído, como no D |
 
@@ -948,6 +1013,92 @@ tira reprova com `MultipleResultsFound`.
 e a avaliação são **dados da missão** — as tabelas ficam em
 `modules/missions/models.py`, e o `MissionRead` as lê dali, sem importar
 nenhum módulo novo.
+
+**`POST /api/missions/{mission_id}/evaluation`** (o pedido da avaliação da
+Tifa, decisão E5; `request_reward_evaluation` do README §6). Sem corpo (um `{}`
+é aceito e ignorado). Só a pessoa o chama, pela tela, depois da conclusão com
+evidência; o modelo nunca. Sem `operation_id`: a chave natural é a missão (E8).
+`mission_id` é inteiro de `1` a `2**31 - 1`, como nas outras rotas de missão.
+
+O caminho, em três passos (`evaluation/service.py`, E9):
+
+1. **Sem chave, `503` antes de tocar no banco.** A avaliação já concluída
+   continua visível pelo `MissionRead`.
+2. **Transação 1** (`missions/evaluation_records.abrir_tentativa`): trava a
+   missão (`FOR UPDATE`); lê o relógio **depois** da trava; aplica a ocultação
+   (o mesmo 404 de sempre); sem evidência recusa; avaliação `concluida` →
+   devolve ela, **sem chamar o modelo**; `avaliando` **não órfã** → recusa; nenhuma,
+   `falhou` ou órfã → grava `avaliando` com a tentativa nova (`attempt + 1`,
+   e a órfã passa por `falhou`/`tempo_esgotado` antes). Commit. Órfã é a
+   `avaliando` pedida **antes** de `agora − (tutor_timeout_seconds +
+   FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento.
+3. **Fora de transação**, `tutoria.provedor.avaliar(turno, ferramenta)`; o
+   turno é uma mensagem única, sem histórico da conversa. Depois, **transação 2**
+   (`registrar_resultado`/`registrar_falha`): trava a missão de novo e confere
+   que a tentativa ainda é a corrente (E10). Válida → `concluida` e o bônus na
+   **mesma** transação; qualquer falha → `falhou` com o `error_code`. **Commit
+   antes de a rota responder**, e só então o erro sobe (E13).
+
+**A saída do modelo só vale se o `EvaluationOutput` a aceitar** (validado antes
+de qualquer escrita): `verdict` ∈ `atende`/`parcial`/`nao_atende`, `feedback`
+aparado, de 1 a 1500 caracteres e sem NUL, e nenhum campo a mais
+(`extra="forbid"`). Saída fora disso, ou nenhuma chamada de
+`record_evaluation`, é `avaliacao_invalida`. Um `verdict` `atende` credita o
+bônus `xp_da_missao // 2` (E7, `progression.registrar_bonus`), uma vez;
+`parcial` e `nao_atende` não creditam nada.
+
+**Resposta `200`** (`EvaluationResultRead`):
+
+```json
+{
+  "evaluation": {
+    "state": "concluida", "verdict": "atende", "feedback": "…",
+    "error_code": null, "model": "claude-opus-5", "finished_at": "2026-09-28T20:14:03Z"
+  },
+  "reward": {
+    "xp_awarded": 110, "xp_total": 1450, "level_before": 5, "level_after": 5,
+    "achievements_unlocked": []
+  }
+}
+```
+
+`reward` está **sempre** no corpo, e é `null` quando o veredito não credita
+bônus. O bônus **não** avalia conquistas (E15): `achievements_unlocked` sai
+vazio, e o nível pode subir. O pedido repetido sobre uma avaliação `concluida`
+devolve o **mesmo** corpo, `reward` incluído, reconstruído do banco por um
+caminho só (`_reconstruir`, o desenho da D10). O `model` é o modelo que
+interpretou (transparência do README §5).
+
+**Os erros** (`main.py`; `CodigoDeErro` ganhou `sem_evidencia`,
+`avaliacao_em_andamento`, `provedor_indisponivel`, `tempo_esgotado` e
+`avaliacao_invalida`):
+
+| Situação | Status | `code` | O que aconteceu antes |
+|---|---|---|---|
+| Missão inexistente, alheia ou oculta (diária futura) | `404` | `missao_nao_encontrada` | Nada gravado; o **mesmo** corpo do 404 da conclusão |
+| Missão sem evidência (inclui a não concluída) | `409` | `sem_evidencia` | Nada gravado |
+| Avaliação em andamento, não órfã; ou tentativa **superada** (EM4) | `409` | `avaliacao_em_andamento` | Nada gravado por este pedido |
+| Sem chave da Anthropic | `503` | `provedor_nao_configurado` | Nada gravado, o banco nem é tocado |
+| O provedor falhou (erro HTTP, stream cortado sem `message_stop`, exceção inesperada) | `502` | `provedor_indisponivel` | `falhou` gravada |
+| Passou do tempo (o do SDK, ou o limite total da avaliação) | `504` | `tempo_esgotado` | `falhou` gravada |
+| O modelo não chamou `record_evaluation` (ou parou por outro motivo que não `tool_use`, como `max_tokens`) ou mandou saída fora do esquema | `502` | `avaliacao_invalida` | `falhou` gravada |
+| `mission_id` fora de `1..2**31 - 1` | `422` | — | Lista de erros do FastAPI |
+
+Os dois códigos que já existiam só no stream da conversa
+(`provedor_indisponivel`, `tempo_esgotado`) têm o **mesmo valor** no HTTP; um
+teste confere que não divergem, e outro que toda `FalhaDaAvaliacao` tem um
+`CodigoDeErro` de mesmo valor. Nas três falhas gravadas, a linha `falhou` só
+sai do estado por um novo pedido (`falhou → avaliando`, `attempt + 1`): é o
+"Tentar de novo" da tela. **`tool_choice` da avaliação é `auto`, com a
+ferramenta `strict` e o sistema mandando chamá-la** (emenda EM3 da spec, não
+medida por chamada real: pendência 91).
+
+**Concorrência e ordem de travas.** Missão → avaliação → usuário, sempre: a
+avaliação só é escrita com a missão travada, e o usuário só é travado pelo
+`registrar_bonus`, por último. Dois pedidos simultâneos: um avalia, o outro
+recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
+`evaluation_bonus` por missão (`uq_xp_entries_mission_id_source`).
+
 
 ### Frontend — parte descrição, parte contrato
 
@@ -1222,7 +1373,9 @@ legitimamente pertence a ele — nunca antes.
 | Configuração, conexão, infraestrutura comum | `src/focusquest/core/` | existe |
 | Teste unitário (sem banco) / de integração (PostgreSQL real) | `tests/unit/` / `tests/integration/` | existe |
 | Adaptador de um provedor externo (ex.: o SDK `anthropic`) | `src/focusquest/modules/<módulo>/<provedor>_provider.py`, atrás de um `Protocol` que o serviço consome | existe (`tutoring/anthropic_provider.py`) |
-| Módulo do README §8 ainda não iniciado (entrega e avaliação, o Incremento E) | `src/focusquest/modules/<módulo>/` | contrato |
+| Módulo do README §8 ainda não iniciado | `src/focusquest/modules/<módulo>/` | contrato |
+| Processo que chama o provedor **fora da conversa** (avaliar uma entrega, e o que vier parecido) | um módulo **próprio** (`modules/evaluation/`), que consome o `Protocol` de `tutoring/provider.py` — nunca um método a mais no `tutoring/service.py`, nem uma chamada ao SDK. As tabelas ficam com o módulo dono dos dados (`missions`), e o módulo novo escreve por funções de serviço, para a direção ficar única (E11) | existe (`evaluation`) |
+| Erro de domínio de **um** módulo só | `src/focusquest/modules/<módulo>/errors.py` (ou o `domain.py` do módulo) — **não** `core/errors.py`, que não pode importar módulo (`tests/unit/test_core_sem_modulos.py`) | existe (`evaluation/errors.py`) |
 
 ### Fora da aplicação
 
