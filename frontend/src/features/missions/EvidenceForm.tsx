@@ -17,6 +17,9 @@ function joinIds(...ids: (string | null)[]): string | undefined {
   return present.length === 0 ? undefined : present.join(' ')
 }
 
+const RETRY_NOTICE =
+  'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.'
+
 /**
  * A entrega com evidencia, recolhida por padrao (E17): Concluir continua a um
  * clique, e quem quer mostrar o que fez abre o disclosure.
@@ -33,6 +36,12 @@ function joinIds(...ids: (string | null)[]): string | undefined {
  * Os campos ficam FORA do documento quando recolhido (e nao so escondidos):
  * nada invisivel entra na ordem de tabulacao.
  *
+ * `retryPending`: a ultima conclusao falhou de um jeito que segura a chave (a
+ * entrega anterior pode ter chegado ao servidor). Com a MESMA chave, uma
+ * evidencia editada seria recusada (409) e a edicao, perdida em silencio
+ * (achado S-I1): os campos ficam desabilitados, com o aviso ligado a eles, e o
+ * "Tentar de novo" reenvia o mesmo rascunho.
+ *
  * `describedBy` e o id do titulo da missao: o nome do toggle e o mesmo em
  * todos os cartoes (o E2E depende dele), e a descricao diz DE QUAL missao.
  */
@@ -40,11 +49,13 @@ export function EvidenceForm({
   draft,
   onChange,
   disabled,
+  retryPending = false,
   describedBy,
 }: {
   draft: EvidenceDraft
   onChange: (draft: EvidenceDraft) => void
   disabled: boolean
+  retryPending?: boolean
   describedBy?: string
 }) {
   const [expanded, setExpanded] = useState(() => draft.text !== '' || draft.link !== '')
@@ -55,6 +66,8 @@ export function EvidenceForm({
   const counterId = `${id}-counter`
   const linkErrorId = `${id}-link-error`
   const textMissingId = `${id}-text-missing`
+  const retryNoticeId = `${id}-retry-notice`
+  const locked = disabled || retryPending
   const described = describeEvidence(draft)
   const textMissing = stripEnds(draft.text) === '' && stripEnds(draft.link) !== ''
 
@@ -76,6 +89,15 @@ export function EvidenceForm({
       <div id={regionId} className="mt-2 flex flex-col gap-2">
         {expanded && (
           <>
+            {retryPending && (
+              <p
+                id={retryNoticeId}
+                data-testid="evidence-retry-notice"
+                className="text-xs text-amber-200"
+              >
+                {RETRY_NOTICE}
+              </p>
+            )}
             <label htmlFor={textId} className="text-sm font-medium text-slate-200">
               O que você fez
             </label>
@@ -84,8 +106,9 @@ export function EvidenceForm({
               data-testid="evidence-text"
               rows={3}
               value={draft.text}
-              disabled={disabled}
+              disabled={locked}
               aria-describedby={joinIds(
+                retryPending ? retryNoticeId : null,
                 described.counter === null ? null : counterId,
                 textMissing ? textMissingId : null,
               )}
@@ -115,9 +138,12 @@ export function EvidenceForm({
               type="url"
               inputMode="url"
               value={draft.link}
-              disabled={disabled}
+              disabled={locked}
               aria-invalid={described.linkError === null ? undefined : true}
-              aria-describedby={described.linkError === null ? undefined : linkErrorId}
+              aria-describedby={joinIds(
+                retryPending ? retryNoticeId : null,
+                described.linkError === null ? null : linkErrorId,
+              )}
               onChange={(event) => {
                 onChange({ ...draft, link: event.target.value })
               }}

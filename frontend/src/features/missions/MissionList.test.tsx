@@ -1218,6 +1218,77 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(segundo).toMatchObject({ evidence: { text: 'Resumo revisado.' } })
   })
 
+  describe('retry pendente: a chave esta retida, entao a evidencia nao muda', () => {
+    const AVISO = 'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.'
+
+    async function falharDeRede(depois: (call: number) => Response | Promise<Response>) {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/complete': (_init, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : depois(call),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencher(7, { text: 'Resumo entregue no caderno.', link: 'https://x.dev/a' })
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+      await within(card(7)).findByTestId('mission-completion-error')
+      return fetchMock
+    }
+
+    it('depois de uma falha retry, os campos ficam desabilitados, com o aviso ligado', async () => {
+      await falharDeRede(() => Response.json(comRecompensa(pendenteComEvidencia)))
+
+      const aviso = within(card(7)).getByTestId('evidence-retry-notice')
+      expect(aviso).toHaveTextContent(AVISO)
+      for (const rotulo of ['O que você fez', 'Link (opcional)']) {
+        const campo = within(card(7)).getByLabelText(rotulo)
+        expect(campo).toBeDisabled()
+        expect(campo.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+      }
+      // O rascunho continua la, congelado, e o Tentar de novo esta a mao.
+      expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue(
+        'Resumo entregue no caderno.',
+      )
+      expect(within(card(7)).getByRole('button', { name: /Tentar de novo/ })).toBeEnabled()
+    })
+
+    it('o retry com sucesso mostra o painel, sem formulario e sem aviso', async () => {
+      const fetchMock = await falharDeRede(() => Response.json(comRecompensa(pendenteComEvidencia)))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await within(card(7)).findByTestId('evaluation-panel')
+      expect(within(card(7)).queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+      expect(within(card(7)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+      const [primeiro, segundo] = corpos(fetchMock, 7)
+      expect(segundo).toEqual(primeiro)
+    })
+
+    it('o retry que falha por outro motivo (422) libera os campos de novo', async () => {
+      await falharDeRede(() => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await waitFor(() => {
+        expect(within(card(7)).getByLabelText('O que você fez')).toBeEnabled()
+      })
+      expect(within(card(7)).getByLabelText('Link (opcional)')).toBeEnabled()
+      expect(within(card(7)).queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+    })
+
+    it('o retry que falha DE NOVO por rede continua travado', async () => {
+      await falharDeRede(() => Promise.reject(new TypeError('Failed to fetch')))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await waitFor(() => {
+        expect(within(card(7)).getByRole('button', { name: /Tentar de novo/ })).toBeEnabled()
+      })
+      expect(within(card(7)).getByLabelText('O que você fez')).toBeDisabled()
+      expect(within(card(7)).getByTestId('evidence-retry-notice')).toHaveTextContent(AVISO)
+    })
+  })
+
   it('o rascunho sobrevive a "Atualizar o quadro": o cartao remonta e o texto continua', async () => {
     const fetchMock = routeFetch({
       'GET /api/missions': (_init, call) =>

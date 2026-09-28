@@ -11,10 +11,12 @@ const VAZIO: EvidenceDraft = { text: '', link: '' }
 function Controlado({
   inicial = VAZIO,
   disabled = false,
+  retryPending = false,
   onChange,
 }: {
   inicial?: EvidenceDraft
   disabled?: boolean
+  retryPending?: boolean
   onChange?: (draft: EvidenceDraft) => void
 }) {
   const [draft, setDraft] = useState(inicial)
@@ -22,6 +24,7 @@ function Controlado({
     <EvidenceForm
       draft={draft}
       disabled={disabled}
+      retryPending={retryPending}
       onChange={(d) => {
         setDraft(d)
         onChange?.(d)
@@ -191,5 +194,28 @@ describe('EvidenceForm', () => {
 
     expect(screen.getByLabelText('O que você fez')).toBeDisabled()
     expect(screen.getByLabelText('Link (opcional)')).toBeDisabled()
+  })
+
+  it('com retry pendente, os dois campos ficam desabilitados e o aviso os descreve', () => {
+    render(<Controlado inicial={{ text: 'Feito', link: '' }} retryPending />)
+
+    const aviso = screen.getByTestId('evidence-retry-notice')
+    expect(aviso).toHaveTextContent(
+      'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.',
+    )
+    const texto = screen.getByLabelText('O que você fez')
+    const link = screen.getByLabelText('Link (opcional)')
+    expect(texto).toBeDisabled()
+    expect(link).toBeDisabled()
+    expect(texto.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+    expect(link.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+  })
+
+  it('sem retry pendente, nao ha aviso e os campos editam', () => {
+    render(<Controlado inicial={{ text: 'Feito', link: '' }} />)
+
+    expect(screen.queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('O que você fez')).toBeEnabled()
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-describedby')
   })
 })
