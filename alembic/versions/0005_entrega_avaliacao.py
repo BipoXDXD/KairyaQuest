@@ -102,18 +102,24 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bonus = (
-        op.get_bind()
-        .execute(
-            sa.text("SELECT count(*) FROM xp_entries WHERE source = 'evaluation_bonus'")
-        )
-        .scalar_one()
-    )
+    conexao = op.get_bind()
+    bonus = conexao.execute(
+        sa.text("SELECT count(*) FROM xp_entries WHERE source = 'evaluation_bonus'")
+    ).scalar_one()
     if bonus:
         raise RuntimeError(
             f"{bonus} lancamento(s) evaluation_bonus gravado(s): a unicidade so por "
             "missao os recusaria; apague-os de proposito antes de voltar para 0004"
         )
+    # As duas tabelas caem no fim, e com elas todo texto que a pessoa escreveu e
+    # todo veredito: nao se apaga isso em silencio.
+    for tabela in ("mission_evidence", "mission_evaluations"):
+        linhas = conexao.execute(sa.text(f"SELECT count(*) FROM {tabela}")).scalar_one()
+        if linhas:
+            raise RuntimeError(
+                f"{linhas} linha(s) em {tabela}: voltar para 0004 apagaria as "
+                "evidencias e as avaliacoes; apague-as de proposito antes"
+            )
     op.drop_constraint("ck_xp_entries_source", "xp_entries", type_="check")
     op.create_check_constraint(
         "ck_xp_entries_source", "xp_entries", "source IN ('mission_completed')"

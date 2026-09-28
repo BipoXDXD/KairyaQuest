@@ -26,6 +26,12 @@ from focusquest.modules.tutoring.provider import (
 # (medido: 3 chamadas com demora nos cabecalhos ou 500; 1 com o corte no meio).
 TENTATIVAS = 2
 
+# Teto de saida da AVALIACAO, proprio e maior que o do chat (1024): o
+# thinking consome o mesmo `max_tokens`, e um `feedback` de ate 1500
+# caracteres mais o JSON da ferramenta precisam caber com folga. Truncado, o
+# `input` sairia parcial (ver o `stop_reason` em `avaliar`).
+MAX_TOKENS_DA_AVALIACAO = 2048
+
 DESCRICAO_DA_FERRAMENTA = (
     "Propõe uma missão de estudo. NÃO cria nada: a pessoa vê a proposta num "
     "cartão e decide se confirma ou recusa. Use no máximo uma vez por "
@@ -129,29 +135,35 @@ class ProvedorAnthropic:
                     yield Fim()
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
-        """A entrada da chamada de `ferramenta`, com `tool_choice` FORCADO nela
-        (E12). O stream e consumido inteiro por dentro; so `message_stop` prova
-        que a resposta terminou (M3), como na conversa."""
+        """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou.
+
+        `tool_choice` e `auto` (EM3), e nao FORCADO na ferramenta: a referencia
+        da API diz que o forcado da 400 em alguns modelos (Fable 5.1, Mythos
+        5.1) e exige thinking desligado no Bedrock, o que prenderia a avaliacao
+        ao modelo configurado. Quem manda o modelo chamar `record_evaluation`
+        e o sistema da avaliacao; se ele nao chamar, o resultado e `None`, que
+        o servico grava como `avaliacao_invalida`. `strict` faz a entrada
+        obedecer ao esquema. O stream e consumido inteiro por dentro; so
+        `message_stop` prova que a resposta terminou (M3), como na conversa.
+        """
         definicao: ToolParam = {
             "name": ferramenta.nome,
             "description": ferramenta.descricao,
             "input_schema": ferramenta.esquema,
+            "strict": True,
         }
         entrada: dict[str, Any] | None = None
         terminou = False
+        motivo_da_parada: str | None = None
         with (
             _traduzir_erros(),
             self._cliente.messages.stream(
                 model=self._modelo,
-                max_tokens=self._max_tokens,
+                max_tokens=MAX_TOKENS_DA_AVALIACAO,
                 system=turno.sistema,
                 messages=_mensagens_da_api(turno),
                 tools=[definicao],
-                tool_choice={
-                    "type": "tool",
-                    "name": ferramenta.nome,
-                    "disable_parallel_tool_use": True,
-                },
+                tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
         ):
             for evento in stream:
@@ -161,8 +173,14 @@ class ProvedorAnthropic:
                     and evento.content_block.name == ferramenta.nome
                 ):
                     entrada = dict(evento.content_block.input)
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
                     terminou = True
         if not terminou:
             raise ProvedorIndisponivelError("o stream terminou sem message_stop")
+        if motivo_da_parada != "tool_use":
+            # `max_tokens` (ou outra parada) deixa um `input` possivelmente
+            # parcial: nao o entrega como se fosse uma avaliacao valida.
+            return None
         return entrada

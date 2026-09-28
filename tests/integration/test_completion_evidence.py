@@ -169,6 +169,17 @@ def test_reenvio_com_evidencia_onde_nao_havia_e_operacao_reutilizada(
         ({"text": "ok", "link": "https://a b"}, "link"),
         ({"text": "ok", "link": "https://" + "a" * 1993}, "link"),
         ({"text": "ok", "extra": 1}, "extra"),
+        # NUL: o PostgreSQL recusa o byte em `text`; sem a guarda do schema
+        # viraria 500 em vez de 422.
+        ({"text": "a\x00b"}, "text"),
+        ({"text": "ok", "link": "https://a.b/\x00"}, "link"),
+        # o strip do pydantic (Rust, Unicode White_Space) remove U+0085: sobra vazio.
+        ({"text": "\u0085"}, "text"),
+        ({"text": "🔥" * 4001}, "text"),
+        ({"text": "é" * 2001 + "é" * 2000}, "text"),
+        ({"text": "ok", "link": "https://"}, "link"),
+        ({"text": "ok", "link": ""}, "link"),
+        ({"text": "ok", "link": "http://"}, "link"),
     ],
 )
 def test_evidencia_invalida_e_422(
@@ -191,6 +202,94 @@ def test_quatro_mil_emojis_passam(client: TestClient, relogio_fixo: datetime) ->
         {"operation_id": "op-7", "evidence": {"text": "🔥" * 4000}},
     )
     assert resposta.status_code == 200, resposta.text
+
+
+@pytest.mark.parametrize(
+    ("texto", "gravado"),
+    [
+        ("  " + "a" * 4000 + "  ", "a" * 4000),
+        ("é" * 4000, "é" * 4000),
+        # CONTRATO (medido): o strip e o do pydantic (Rust, Unicode
+        # White_Space), NAO o `str.strip()` do Python. U+FEFF nao e removido
+        # (o trim() do JS remove); U+0085 e removido.
+        ("\ufeffabc", "\ufeffabc"),
+        ("\u0085abc\u0085", "abc"),
+        # medido: `str.strip()` removeria U+001C..U+001F; o pydantic NAO.
+        ("\u001c\u001fabc", "\u001c\u001fabc"),
+        # so U+001C: nao e "vazio" para o servidor (`str.strip()` o esvaziaria).
+        ("\u001c", "\u001c"),
+    ],
+    ids=[
+        "teto-depois-do-strip",
+        "4000-pontos-de-codigo-combinantes",
+        "feff-fica",
+        "nel-sai",
+        "fs-fica",
+        "so-fs-fica",
+    ],
+)
+def test_texto_valido_e_gravado_como_o_strip_do_pydantic_o_deixa(
+    client: TestClient, relogio_fixo: datetime, texto: str, gravado: str
+) -> None:
+    missao = _criar(client)
+    resposta = _concluir(
+        client,
+        missao["id"],
+        {"operation_id": "op-t", "evidence": {"text": texto}},
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["evidence"]["text"] == gravado
+
+
+@pytest.mark.parametrize(
+    ("evidencia", "link"),
+    [
+        ({"text": "ok", "link": None}, None),
+        ({"text": "ok"}, None),
+        ({"text": "ok", "link": "  https://a.b/x  "}, "https://a.b/x"),
+    ],
+    ids=["null", "ausente", "com-espacos"],
+)
+def test_link_opcional_e_sem_espacos_nas_pontas(
+    client: TestClient,
+    relogio_fixo: datetime,
+    evidencia: dict[str, Any],
+    link: str | None,
+) -> None:
+    missao = _criar(client)
+    resposta = _concluir(
+        client, missao["id"], {"operation_id": "op-l", "evidence": evidencia}
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["evidence"]["link"] == link
+
+
+def test_concluir_de_novo_com_outra_chave_e_evidencia_nao_muda_a_gravada(
+    client: TestClient, session: Session, relogio_fixo: datetime
+) -> None:
+    """Missao ja concluida + operacao NOVA com outra evidencia: e a transicao
+    ilegal de sempre (409), e a evidencia da primeira conclusao fica intacta."""
+    missao = _criar(client)
+    _concluir(
+        client,
+        missao["id"],
+        {"operation_id": "op-a", "evidence": {"text": "Primeira", "link": None}},
+    )
+    resposta = _concluir(
+        client,
+        missao["id"],
+        {"operation_id": "op-b", "evidence": {"text": "Segunda"}},
+    )
+    assert resposta.status_code == 409
+    assert resposta.json()["code"] == "transicao_ilegal"
+    session.expire_all()
+    gravada = session.get(MissionEvidence, missao["id"])
+    assert gravada is not None
+    assert (gravada.text, gravada.link) == ("Primeira", None)
+    lista = client.get("/api/missions").json()
+    assert [m["evidence"] for m in lista if m["id"] == missao["id"]] == [
+        {"text": "Primeira", "link": None}
+    ]
 
 
 def test_a_recompensa_da_conclusao_nao_muda_com_um_bonus_gravado(
