@@ -1,4 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import type { EvidenceDraft } from './types'
+
+const EMPTY_DRAFT: EvidenceDraft = { text: '', link: '' }
 
 /**
  * O que cada conclusao de missao usa do quadro: a chave e o aviso de voo.
@@ -13,7 +16,17 @@ export interface CompletionRegistry {
    * houver, uma nova, que passa a ser dela ate `release`.
    */
   operationIdFor: (missionId: number) => string
-  /** Tira a chave da missao do registro: o proximo pedido gera outra. */
+  /**
+   * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
+   * formulario, pelo mesmo motivo da chave: o reload remonta os cartoes.
+   */
+  draftFor: (missionId: number) => EvidenceDraft
+  /** Guarda o rascunho da evidencia da missao. */
+  saveDraft: (missionId: number, draft: EvidenceDraft) => void
+  /**
+   * Tira a chave E o rascunho da missao do registro: o proximo pedido gera
+   * outra chave, e o formulario recomeca vazio.
+   */
   release: (missionId: number) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
@@ -52,6 +65,7 @@ export interface UseCompletionRegistryResult {
  */
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {
   const operationIds = useRef(new Map<number, string>())
+  const drafts = useRef(new Map<number, EvidenceDraft>())
   const inFlight = useRef(0)
   const reloadPending = useRef(false)
   const [waitingForCompletion, setWaitingForCompletion] = useState(false)
@@ -66,8 +80,13 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
         }
         return operationId
       },
+      draftFor: (missionId) => drafts.current.get(missionId) ?? EMPTY_DRAFT,
+      saveDraft: (missionId, draft) => {
+        drafts.current.set(missionId, draft)
+      },
       release: (missionId) => {
         operationIds.current.delete(missionId)
+        drafts.current.delete(missionId)
       },
       started: () => {
         inFlight.current += 1

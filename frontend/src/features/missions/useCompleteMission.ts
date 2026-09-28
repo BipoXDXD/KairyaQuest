@@ -3,6 +3,8 @@ import { postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
+import { describeEvidence } from './evidenceLimit'
+import type { EvidenceDraft } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
 /**
@@ -26,8 +28,13 @@ export type CompletionState =
 
 export interface UseCompleteMissionResult {
   state: CompletionState
-  /** Envia a conclusao. Depois de uma falha, e tambem o "tentar de novo". */
-  complete: () => void
+  /**
+   * Envia a conclusao, com evidencia se houver rascunho. Depois de uma falha,
+   * e tambem o "tentar de novo". Um rascunho que nao pode ser enviado (texto
+   * vazio, link ruim) nao envia nada: a tela ja o barra no botao, e mandar a
+   * conclusao SEM a evidencia que a pessoa quis dar seria trocar a entrega.
+   */
+  complete: (evidence?: EvidenceDraft) => void
 }
 
 /**
@@ -70,41 +77,50 @@ export function useCompleteMission(
 ): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
 
-  const complete = useCallback(() => {
-    // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
-    // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
-    // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
-    // que nunca vai settle. Antes desta ordem, uma excecao aqui deixava o
-    // contador do registro preso em 1 para sempre (regressao medida na
-    // revisao da Task 6).
-    const operationId = registry.operationIdFor(missionId)
-    setState({ status: 'submitting' })
-    // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
-    // ja encontra esta conclusao em voo.
-    registry.started()
+  const complete = useCallback(
+    (evidence?: EvidenceDraft) => {
+      const described = evidence === undefined ? undefined : describeEvidence(evidence)
+      if (described !== undefined && described.body === null) {
+        return
+      }
 
-    postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
-      operation_id: operationId,
-    })
-      .then((completion) => {
-        registry.release(missionId)
-        const { reward, ...mission } = completion
-        setState({ status: 'completed', mission, reward })
-        onCompleted?.()
+      // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
+      // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
+      // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
+      // que nunca vai settle. Antes desta ordem, uma excecao aqui deixava o
+      // contador do registro preso em 1 para sempre (regressao medida na
+      // revisao da Task 6).
+      const operationId = registry.operationIdFor(missionId)
+      setState({ status: 'submitting' })
+      // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
+      // ja encontra esta conclusao em voo.
+      registry.started()
+
+      postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
+        operation_id: operationId,
+        ...(described === undefined ? {} : { evidence: described.body }),
       })
-      .catch((error: unknown) => {
-        const failure = describeCompletionFailure(error)
-        if (failure.recovery !== 'retry') {
+        .then((completion) => {
           registry.release(missionId)
-        }
-        setState({ status: 'failed', failure })
-      })
-      .finally(() => {
-        // Por ultimo, depois do estado final: se havia recarga esperando, ela
-        // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
-        registry.settled()
-      })
-  }, [missionId, registry, onCompleted])
+          const { reward, ...mission } = completion
+          setState({ status: 'completed', mission, reward })
+          onCompleted?.()
+        })
+        .catch((error: unknown) => {
+          const failure = describeCompletionFailure(error)
+          if (failure.recovery !== 'retry') {
+            registry.release(missionId)
+          }
+          setState({ status: 'failed', failure })
+        })
+        .finally(() => {
+          // Por ultimo, depois do estado final: se havia recarga esperando, ela
+          // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
+          registry.settled()
+        })
+    },
+    [missionId, registry, onCompleted],
+  )
 
   return { state, complete }
 }

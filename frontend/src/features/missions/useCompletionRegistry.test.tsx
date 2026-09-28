@@ -146,3 +146,48 @@ describe('useCompletionRegistry -- a recarga', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('useCompletionRegistry -- o rascunho da evidencia', () => {
+  it('draftFor devolve o rascunho vazio para missao sem rascunho', () => {
+    const { result } = renderRegistry()
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
+  })
+
+  it('saveDraft guarda por missao e draftFor devolve o que foi guardado', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    registry.saveDraft(7, { text: 'Feito', link: 'https://x.com' })
+
+    expect(registry.draftFor(7)).toEqual({ text: 'Feito', link: 'https://x.com' })
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+  })
+
+  it('o rascunho sobrevive ao reload do quadro', () => {
+    const { result } = renderRegistry()
+    result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+    act(() => {
+      result.current.reload()
+    })
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+  })
+
+  it('release apaga a chave E o rascunho da missao, e so dela', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.saveDraft(7, { text: 'Feito', link: '' })
+    registry.saveDraft(8, { text: 'Outra', link: '' })
+
+    registry.release(7)
+
+    expect(registry.draftFor(7)).toEqual({ text: '', link: '' })
+    expect(registry.draftFor(8)).toEqual({ text: 'Outra', link: '' })
+    expect(registry.operationIdFor(7)).toBe(K2)
+    vi.restoreAllMocks()
+  })
+})

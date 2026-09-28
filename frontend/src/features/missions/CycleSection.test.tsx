@@ -21,6 +21,9 @@ const diaria: Mission = {
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
 }
 const diariaConcluida: Mission = {
   ...diaria,

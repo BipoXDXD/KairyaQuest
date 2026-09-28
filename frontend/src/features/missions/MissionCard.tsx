@@ -244,7 +244,10 @@ export function MissionCard({
       <CompletionControls
         mission={mission}
         completion={completion}
-        onComplete={complete}
+        // Arrow, e nao `complete` cru: o onClick passaria o evento como rascunho.
+        onComplete={() => {
+          complete()
+        }}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}

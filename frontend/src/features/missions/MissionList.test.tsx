@@ -21,6 +21,9 @@ const pendente: Mission = {
   completed_at: null,
   xp: 100,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
 }
 
 const concluida: Mission = {
@@ -38,6 +41,9 @@ const concluida: Mission = {
   completed_at: '2026-09-19T13:10:00Z',
   xp: 220,
   actual_duration_minutes: 70,
+  verification: 'autodeclarada',
+  evidence: null,
+  evaluation: null,
 }
 
 const emAndamento: Mission = { ...pendente, id: 9, state: 'em_andamento' }
