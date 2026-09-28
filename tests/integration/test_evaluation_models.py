@@ -90,6 +90,15 @@ def test_evidencia_aceita(session: Session, missao_id: int, link: str | None) ->
     )
 
 
+def test_evidencia_aceita_o_link_de_2000_caracteres(
+    session: Session, missao_id: int
+) -> None:
+    session.execute(
+        text(_EVIDENCIA),
+        {"m": missao_id, "t": "ok", "l": "https://" + "a" * 1992, "s": AGORA},
+    )
+
+
 _AVALIACAO = (
     "INSERT INTO mission_evaluations (mission_id, state, attempt, verdict, feedback, "
     "error_code, model, requested_at, finished_at) "
@@ -123,6 +132,60 @@ _AVALIACAO = (
             "ck_mission_evaluations_falha_com_codigo",
         ),
         ({"st": "avaliando", "fim": AGORA}, "ck_mission_evaluations_avaliando_sem_fim"),
+        # A outra metade de cada CHECK biconditional: o campo preenchido em
+        # estado que nao o admite. Uma implicacao simples deixaria todos passarem.
+        pytest.param(
+            {"st": "avaliando", "v": "atende", "f": "ok"},
+            "ck_mission_evaluations_concluida_com_veredito",
+            id="avaliando-com-veredito",
+        ),
+        pytest.param(
+            {
+                "st": "falhou",
+                "v": "atende",
+                "f": "ok",
+                "e": "tempo_esgotado",
+                "fim": AGORA,
+            },
+            "ck_mission_evaluations_concluida_com_veredito",
+            id="falhou-com-veredito",
+        ),
+        pytest.param(
+            {"st": "concluida", "v": "atende", "f": None, "fim": AGORA},
+            "ck_mission_evaluations_concluida_com_veredito",
+            id="concluida-com-veredito-sem-feedback",
+        ),
+        pytest.param(
+            {
+                "st": "concluida",
+                "v": "atende",
+                "f": "ok",
+                "e": "tempo_esgotado",
+                "fim": AGORA,
+            },
+            "ck_mission_evaluations_falha_com_codigo",
+            id="concluida-com-codigo",
+        ),
+        pytest.param(
+            {"st": "avaliando", "e": "tempo_esgotado"},
+            "ck_mission_evaluations_falha_com_codigo",
+            id="avaliando-com-codigo",
+        ),
+        pytest.param(
+            {"st": "concluida", "v": "atende", "f": "ok", "fim": None},
+            "ck_mission_evaluations_avaliando_sem_fim",
+            id="concluida-sem-fim",
+        ),
+        pytest.param(
+            {"st": "falhou", "e": "tempo_esgotado", "fim": None},
+            "ck_mission_evaluations_avaliando_sem_fim",
+            id="falhou-sem-fim",
+        ),
+        pytest.param(
+            {"st": "concluida", "v": "atende", "f": "x" * 1501, "fim": AGORA},
+            "ck_mission_evaluations_feedback",
+            id="feedback-1501",
+        ),
     ],
 )
 def test_avaliacao_recusada(
@@ -139,6 +202,37 @@ def test_avaliacao_recusada(
         "fim": None,
     }
     _recusa(session, _AVALIACAO, base | campos, nome)
+
+
+@pytest.mark.parametrize(
+    "campos",
+    [
+        pytest.param({}, id="avaliando"),
+        pytest.param(
+            {"st": "concluida", "v": "parcial", "f": "x" * 1500, "fim": AGORA},
+            id="concluida-feedback-1500",
+        ),
+        pytest.param(
+            {"st": "falhou", "e": "avaliacao_invalida", "fim": AGORA}, id="falhou"
+        ),
+    ],
+)
+def test_avaliacao_aceita(
+    session: Session, missao_id: int, campos: dict[str, object]
+) -> None:
+    """Os tres estados legitimos e a borda de 1500: os CHECKs nao recusam o
+    que e valido."""
+    base: dict[str, object] = {
+        "m": missao_id,
+        "st": "avaliando",
+        "a": 1,
+        "v": None,
+        "f": None,
+        "e": None,
+        "r": AGORA,
+        "fim": None,
+    }
+    session.execute(text(_AVALIACAO), base | campos)
 
 
 def test_uma_avaliacao_por_missao(session: Session, missao_id: int) -> None:

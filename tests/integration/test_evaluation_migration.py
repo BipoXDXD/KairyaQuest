@@ -103,3 +103,30 @@ def test_o_downgrade_falha_alto_com_bonus_gravado(
             command.downgrade(cfg, "0004")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_o_downgrade_devolve_as_restricoes_do_livro_razao_da_0004(
+    banco_migrado: Engine,
+) -> None:
+    """Depois do downgrade: unicidade SO por missao e CHECK so com
+    `mission_completed`, como antes da 0005."""
+    cfg = alembic_config()
+    try:
+        command.downgrade(cfg, "0004")
+        with banco_migrado.connect() as conexao:
+            unicas = {
+                u["name"]: tuple(u["column_names"])
+                for u in inspect(conexao).get_unique_constraints("xp_entries")
+            }
+            fonte = conexao.execute(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE "
+                    "conname = 'ck_xp_entries_source' "
+                    "AND conrelid = 'xp_entries'::regclass"
+                )
+            ).scalar_one()
+        assert unicas == {"uq_xp_entries_mission_id": ("mission_id",)}
+        assert "mission_completed" in fonte
+        assert "evaluation_bonus" not in fonte
+    finally:
+        command.upgrade(cfg, "head")
