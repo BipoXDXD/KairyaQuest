@@ -19,6 +19,9 @@ const missao: Mission = {
   completed_at: null,
   xp: 100,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
 }
 
 function pendingForever() {
