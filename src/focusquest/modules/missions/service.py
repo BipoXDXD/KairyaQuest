@@ -172,8 +172,9 @@ def concluir_missao(
     sucesso repetido -- justamente a promessa que a idempotencia existe para
     cumprir.
 
-    Reusar um `operation_id` em OUTRA missao nao e nenhuma das duas coisas:
-    e chave gasta, e recebe `OperacaoReutilizadaError`. Esse caso tem dois
+    Reusar um `operation_id` em OUTRA missao, ou na MESMA com OUTRA evidencia,
+    nao e nenhuma das duas coisas: e chave gasta, e recebe
+    `OperacaoReutilizadaError`. Esse caso tem dois
     caminhos possiveis -- a consulta abaixo encontra a operacao alheia, ou a
     restricao unica recusa o INSERT quando a operacao alheia foi gravada
     depois da consulta -- e os DOIS terminam no mesmo erro. Sem isso, o mesmo

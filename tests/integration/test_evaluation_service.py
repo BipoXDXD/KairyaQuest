@@ -22,6 +22,7 @@ from sqlalchemy import Engine, delete, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
+import focusquest.modules.evaluation.service as servico_da_avaliacao
 from focusquest.core.errors import (
     AvaliacaoEmAndamentoError,
     MissaoNaoEncontradaError,
@@ -260,6 +261,33 @@ def test_atende_conclui_e_credita_metade_do_xp(
     assert _saldo(fabrica) == antes + BONUS
 
 
+def test_o_veredito_e_o_bonus_sao_gravados_na_mesma_transacao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Se o bonus falha depois de o resultado ter sido registrado, NADA do
+    resultado fica: a avaliacao segue `avaliando` e nao ha bonus. Um `commit`
+    entre os dois deixaria um `atende` sem bonus para sempre."""
+    mission_id = missoes.concluida()
+    falso.roteiro = _veredito("atende")
+    antes = _saldo(fabrica)
+
+    def _bonus_que_falha(*_: object, **__: object) -> None:
+        raise RuntimeError("o bonus falhou")
+
+    monkeypatch.setattr(servico_da_avaliacao, "registrar_bonus", _bonus_que_falha)
+    with pytest.raises(RuntimeError, match="o bonus falhou"):
+        _avaliar(fabrica, tutoria, mission_id)
+    avaliacao = _lida(fabrica, mission_id)
+    assert avaliacao.state is EstadoDaAvaliacao.AVALIANDO
+    assert avaliacao.verdict is None
+    assert _bonus_gravados(fabrica, mission_id) == 0
+    assert _saldo(fabrica) == antes
+
+
 @pytest.mark.parametrize("veredito", ["parcial", "nao_atende"])
 def test_parcial_e_nao_atende_nao_creditam_nada(
     fabrica: sessionmaker[Session],
@@ -437,7 +465,7 @@ def test_o_limite_total_vale_mesmo_com_a_resposta_valida(
     falso: ServidorAnthropicFalso,
     missoes: Missoes,
 ) -> None:
-    """M5: o timeout do SDK e por leitura; o limite da tutoria e do total.
+    """O timeout do SDK e por leitura; o limite da tutoria e do total.
     Uma resposta `atende` que chega depois dele e `tempo_esgotado`."""
     mission_id = missoes.concluida()
     falso.roteiro = _veredito("atende")
@@ -664,6 +692,6 @@ def test_reconstruir_sem_a_missao_e_nao_encontrada(
     fabrica: sessionmaker[Session],
 ) -> None:
     """A missao apagada entre a transacao 2 e a leitura final: o 404 de
-    sempre, e nao um `AssertionError` que viraria 500."""
+    sempre, e nao um 500."""
     with pytest.raises(MissaoNaoEncontradaError):
         _reconstruir(fabrica, 2**31 - 1)

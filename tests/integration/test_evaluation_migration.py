@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, delete, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,7 +20,21 @@ from focusquest.modules.missions.service import concluir_missao, criar_missao
 from .conftest import alembic_config
 
 ESTUDANTE = 1
+REVISAO = "0005"
 AGORA = datetime(2026, 9, 28, 15, tzinfo=UTC)
+
+
+def _anterior_a_0005() -> str:
+    """A revisao de que a 0005 desce, lida do proprio script.
+
+    Fixar `"0004"` quebraria quando entrasse uma 0006 entre elas; ler o
+    `down_revision` faz o teste seguir a cadeia sozinho.
+    """
+    script = ScriptDirectory.from_config(alembic_config())
+    anterior = script.get_revision(REVISAO)
+    assert anterior is not None
+    assert isinstance(anterior.down_revision, str)
+    return anterior.down_revision
 
 
 def _nova_missao(session: Session) -> int:
@@ -44,9 +59,9 @@ def missao_concluida(session: Session) -> int:
 def test_a_0005_cria_as_tabelas_e_o_downgrade_as_remove(banco_migrado: Engine) -> None:
     cfg = alembic_config()
     try:
-        command.downgrade(cfg, "0004")
+        command.downgrade(cfg, _anterior_a_0005())
         assert "mission_evidence" not in inspect(banco_migrado).get_table_names()
-        command.upgrade(cfg, "0005")
+        command.upgrade(cfg, REVISAO)
         nomes = set(inspect(banco_migrado).get_table_names())
         assert {"mission_evidence", "mission_evaluations"} <= nomes
     finally:
@@ -100,7 +115,7 @@ def test_o_downgrade_falha_alto_com_bonus_gravado(
     cfg = alembic_config()
     try:
         with pytest.raises(RuntimeError, match="evaluation_bonus"):
-            command.downgrade(cfg, "0004")
+            command.downgrade(cfg, _anterior_a_0005())
     finally:
         command.upgrade(cfg, "head")
 
@@ -112,7 +127,7 @@ def test_o_downgrade_devolve_as_restricoes_do_livro_razao_da_0004(
     `mission_completed`, como antes da 0005."""
     cfg = alembic_config()
     try:
-        command.downgrade(cfg, "0004")
+        command.downgrade(cfg, _anterior_a_0005())
         with banco_migrado.connect() as conexao:
             unicas = {
                 u["name"]: tuple(u["column_names"])
@@ -169,7 +184,7 @@ def test_o_downgrade_falha_alto_com_evidencia_ou_avaliacao_gravada(
     banco_migrado: Engine, missao_com_evidencia_e_avaliacao_commitadas: int, tabela: str
 ) -> None:
     """Sem bonus, o `drop_table` levaria em silencio os textos e os vereditos:
-    o downgrade recusa, e o banco fica como estava (versao 0005 e linhas)."""
+    o downgrade recusa, e o banco fica como estava (a versao de antes e as linhas)."""
     cfg = alembic_config()
     mission_id = missao_com_evidencia_e_avaliacao_commitadas
     outra = (
@@ -183,7 +198,7 @@ def test_o_downgrade_falha_alto_com_evidencia_ou_avaliacao_gravada(
                 text(f"DELETE FROM {outra} WHERE mission_id = :m"), {"m": mission_id}
             )
         with pytest.raises(RuntimeError, match=tabela):
-            command.downgrade(cfg, "0004")
+            command.downgrade(cfg, _anterior_a_0005())
         with banco_migrado.connect() as conexao:
             versao = conexao.execute(
                 text("SELECT version_num FROM alembic_version")
@@ -195,7 +210,7 @@ def test_o_downgrade_falha_alto_com_evidencia_ou_avaliacao_gravada(
             unicas = {
                 u["name"] for u in inspect(conexao).get_unique_constraints("xp_entries")
             }
-        assert versao == "0005"
+        assert versao == ScriptDirectory.from_config(cfg).get_current_head()
         assert restam == 1
         assert unicas == {"uq_xp_entries_mission_id_source"}
     finally:

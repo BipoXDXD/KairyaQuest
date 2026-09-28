@@ -1,4 +1,4 @@
-"""Concluir com evidencia (Task 3 do incremento E, `submit_activity`).
+"""Concluir com evidencia (`submit_activity`, incremento E).
 
 O `client` e o `relogio_fixo` sao copiados de `test_progression_api.py`, pelo
 mesmo motivo: a substituicao amarra a requisicao a sessao do teste e a um
@@ -194,7 +194,7 @@ def test_evidencia_invalida_e_422(
 
 
 def test_quatro_mil_emojis_passam(client: TestClient, relogio_fixo: datetime) -> None:
-    """Review Focus 1: o teto conta pontos de codigo, como a tela."""
+    """O teto conta pontos de codigo, como a tela."""
     missao = _criar(client)
     resposta = _concluir(
         client,

@@ -16,11 +16,10 @@ thread antes de qualquer disputa de trava acontecer. "antes" SEMPRE conclui,
 `pendente`/`perdida`) ou `TransicaoIlegalError` se travar DEPOIS (a diaria ja
 esta `concluida`). Medido: com o `with_for_update` removido de `_buscar` (hoje
 `buscar_para_escrever`), o resultado desta funcao continua o mesmo sempre que
-"antes" trava primeiro -- so muda quando "depois" trava primeiro, e aí e a
-REGRA DO DIA, nao a trava, quem barraria a segunda conclusao (ver a mutacao
-no relatorio da Tarefa 4, "Fix round 1"). Este teste prova o contrato da
-VIRADA DO DIA -- uma conclusao so, do lado certo da meia-noite -- e NAO prova
-o mecanismo do `FOR UPDATE`.
+"antes" trava primeiro -- so muda quando "depois" trava primeiro, e ai e a
+REGRA DO DIA, nao a trava, quem barraria a segunda conclusao. Este teste prova o
+contrato da VIRADA DO DIA -- uma conclusao so, do lado certo da meia-noite --
+e NAO prova o mecanismo do `FOR UPDATE`.
 
 `test_duas_conclusoes_do_mesmo_lado_da_meia_noite_produzem_uma_so` e quem
 prova isso: dois relogios do MESMO lado da meia-noite (23:59:58 e 23:59:59,
