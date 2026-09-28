@@ -93,7 +93,7 @@ Migração `alembic/versions/0005_entrega_avaliacao.py` (`revision = "0005"`,
 |---|---|---|
 | `mission_id` | `INTEGER` | PK, FK → `missions.id` `ON DELETE CASCADE` |
 | `text` | `TEXT` | NOT NULL, `CHECK (char_length(text) BETWEEN 1 AND 4000)` (`ck_mission_evidence_text`) |
-| `link` | `TEXT` | nulo; `CHECK (link IS NULL OR (link ~ '^https?://' AND char_length(link) <= 2000))` (`ck_mission_evidence_link`) |
+| `link` | `TEXT` | nulo; `CHECK (link IS NULL OR (link ~* '^https?://' AND char_length(link) <= 2000))` (`ck_mission_evidence_link`) |
 | `submitted_at` | `TIMESTAMPTZ` | NOT NULL — o mesmo instante do `completed_at` |
 
 Uma por missão (a PK). **Garantido só pelo serviço, e declarado:** a
@@ -222,7 +222,7 @@ A resposta (`MissionCompletionRead`) é a de hoje, com os campos novos do
 **`MissionRead`** ganha, derivados na leitura: `verification`
 (`autodeclarada` | `com_evidencia` | `null` enquanto não concluída),
 `evidence` (`{text, link}` ou `null`) e `evaluation` (`null` ou
-`{state, verdict, feedback, bonus_xp, error_code, model, finished_at}`). Vale
+`{state, verdict, feedback, error_code, model, finished_at}`). Vale
 para a listagem, o ciclo e a trilha — nenhuma leitura esconde a própria
 entrega de quem a fez.
 
@@ -234,7 +234,6 @@ entrega de quem a fez.
     "state": "concluida",
     "verdict": "atende",
     "feedback": "…",
-    "bonus_xp": 110,
     "error_code": null,
     "model": "claude-opus-5",
     "finished_at": "2026-09-28T20:14:03Z"
@@ -268,9 +267,6 @@ Cinco códigos entram no `CodigoDeErro` de `main.py`: `sem_evidencia`,
 `tempo_esgotado`. Os dois últimos já existiam só no stream (`CodigoDoStream`)
 e passam a ter também caminho HTTP, com o mesmo valor; um teste confere que
 não divergem.
-
-O `bonus_xp` da leitura é o valor do lançamento `evaluation_bonus` da missão
-(0 sem ele), lido do livro-razão — nunca recalculado pela regra.
 
 ## Frontend
 
@@ -360,3 +356,13 @@ por mutação depois; toda guarda nova tem um teste que a faz dizer não.
   auxiliares.
 - O texto exato das mensagens de falha da avaliação e do contador da
   evidência.
+
+## Emendas (2026-09-28, antes do plano)
+
+Feitas ao escrever o plano, com o código aberto, antes de qualquer
+implementação; o texto acima já as incorpora.
+
+| # | O que a spec dizia | O que vale | Motivo |
+|---|---|---|---|
+| EM1 | `MissionRead.evaluation` trazia `bonus_xp`, lido do livro-razão | O resumo da avaliação no `MissionRead` **não** tem o valor do bônus. O número sai só no `reward` da resposta de `POST /evaluation`, reconstruído do livro-razão; depois de recarregar, o cartão diz "Bônus de XP creditado ao seu saldo" para o veredito `atende`, e o painel de progresso mostra o saldo. | Ler `xp_entries` para montar o `MissionRead` faria `missions` depender dos modelos de `progression` também na leitura — mais uma aresta do par da pendência 88. Recalcular pela regra seria a segunda fonte da verdade que a própria spec recusou. |
+| EM2 | O link valia com `^https?://` (sensível a maiúsculas) | Sem diferenciar maiúsculas: `~*` no `CHECK`, `(?i)` no schema, e a tela só vira âncora o que casa com `/^https?:\/\//i`. | Quem cola `HTTPS://…` de um celular receberia 422 por um detalhe que não muda o endereço. |
