@@ -6,13 +6,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from focusquest.core.clock import Clock, get_clock
-from focusquest.core.database import get_engine, get_session
+from focusquest.core.database import SessaoDaRequisicao, get_engine
 from focusquest.core.errors import PrazoExpiradoError, ProvedorNaoConfiguradoError
+from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
-from focusquest.modules.missions.router import USUARIO_UNICO
 from focusquest.modules.missions.schemas import MAIOR_INTEIRO_DA_COLUNA, MissionRead
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.schemas import (
@@ -43,7 +43,6 @@ from focusquest.modules.tutoring.sse import evento_sse, fechando_ao_cancelar
 
 router = APIRouter(prefix="/api/tutoring", tags=["tutoring"])
 
-SessaoDaRequisicao = Annotated[Session, Depends(get_session)]
 TutoriaConfigurada = Annotated[Tutoria | None, Depends(get_tutoria)]
 Relogio = Annotated[Clock, Depends(get_clock)]
 IdDaAcao = Annotated[int, Path(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)]

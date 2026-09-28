@@ -116,3 +116,8 @@ def get_session(engine: Annotated[Engine, Depends(get_engine)]) -> Iterator[Sess
     """
     with Session(bind=engine, expire_on_commit=False) as session:
         yield session
+
+
+# A sessao da requisicao, escrita uma vez. Repetir o `Annotated` em cada
+# assinatura convidaria a divergirem.
+SessaoDaRequisicao = Annotated[Session, Depends(get_session)]
