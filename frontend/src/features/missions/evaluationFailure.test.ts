@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import { describeEvaluationFailure } from './evaluationFailure'
+import { describeEvaluationErrorCode, describeEvaluationFailure } from './evaluationFailure'
 
 // Escrita por extenso, e nao importada do modulo: se a mensagem generica
 // mudasse por engano, um teste que a importasse concordaria com ela.
@@ -68,5 +68,23 @@ describe('describeEvaluationFailure', () => {
 
   it('um code herdado do prototipo nao vira traducao', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, 'toString'))).toEqual(GENERIC)
+  })
+})
+
+describe('describeEvaluationErrorCode', () => {
+  // O `error_code` de uma avaliacao `falhou` vinda da API (a pagina recarregou)
+  // passa pelo MESMO mapa do erro HTTP: a mensagem nao pode depender de a
+  // pessoa ter visto a falha ao vivo ou depois.
+  it('traduz o code gravado pelo mesmo mapa do erro HTTP', () => {
+    expect(describeEvaluationErrorCode('tempo_esgotado')).toEqual({
+      message: 'A avaliação demorou demais. Tente de novo.',
+      recovery: 'retry',
+    })
+  })
+
+  it('code desconhecido, nulo ou do prototipo cai no generico', () => {
+    expect(describeEvaluationErrorCode('novo_code')).toEqual(GENERIC)
+    expect(describeEvaluationErrorCode(null)).toEqual(GENERIC)
+    expect(describeEvaluationErrorCode('constructor')).toEqual(GENERIC)
   })
 })

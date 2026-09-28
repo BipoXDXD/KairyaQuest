@@ -178,6 +178,7 @@ describe('Headquarters', () => {
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-24T10:00:00Z',
+      verification: 'autodeclarada',
       reward: recompensa,
     }
     stubViewport('desktop')
@@ -264,6 +265,7 @@ describe('Headquarters', () => {
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-23T15:00:00Z',
+      verification: 'autodeclarada',
     }
     const recompensa: Reward = {
       xp_awarded: 40,
@@ -438,7 +440,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     )
 
     await act(async () => {
-      resolver(Response.json({ ...pendente, state: 'concluida' }))
+      resolver(Response.json({ ...pendente, state: 'concluida', verification: 'autodeclarada' }))
       await post
     })
 

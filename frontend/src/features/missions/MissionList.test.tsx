@@ -1033,3 +1033,230 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
     expect(screen.getByTestId('missions-reload-status')).toBeEmptyDOMElement()
   })
 })
+
+describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
+  const B: Mission = { ...pendente, id: 8, instructions: 'Revisar as anotacoes de grafos' }
+  const pendenteComEvidencia: Mission = {
+    ...pendente,
+    state: 'concluida',
+    availability: 'concluida',
+    completed_at: '2026-09-18T15:00:00Z',
+    verification: 'com_evidencia',
+    evidence: { text: 'Resumo entregue no caderno.', link: 'https://x.dev/resumo' },
+  }
+  const bonus: Reward = { ...recompensaPadrao, xp_awarded: 50 }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function card(id: number): HTMLElement {
+    const item = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === String(id))
+    if (item === undefined) {
+      throw new Error(`cartao ${String(id)} fora da tela`)
+    }
+    return item
+  }
+
+  function preencher(id: number, draft: { text?: string; link?: string }) {
+    const alvo = within(card(id))
+    if (alvo.queryByLabelText('O que você fez') === null) {
+      fireEvent.click(alvo.getByRole('button', { name: 'Entregar com evidência (opcional)' }))
+    }
+    if (draft.text !== undefined) {
+      fireEvent.change(alvo.getByLabelText('O que você fez'), { target: { value: draft.text } })
+    }
+    if (draft.link !== undefined) {
+      fireEvent.change(alvo.getByLabelText('Link (opcional)'), { target: { value: draft.link } })
+    }
+  }
+
+  function corpos(fetchMock: Mock, id: number): unknown[] {
+    return requestsTo(fetchMock, `POST /api/missions/${String(id)}/complete`).map(
+      (init) => JSON.parse(String(init.body)) as unknown,
+    )
+  }
+
+  it('o formulario de evidencia aparece so na missao nao concluida', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente, concluida]) })
+
+    render(<MissionList />)
+
+    await screen.findByTestId('missions-list')
+    expect(within(card(7)).getByTestId('evidence-toggle')).toBeInTheDocument()
+    expect(within(card(8)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+    // A concluida tem o painel, com o selo.
+    expect(within(card(8)).getByTestId('evaluation-verification')).toHaveTextContent(
+      'Autodeclarada',
+    )
+    expect(within(card(7)).queryByTestId('evaluation-panel')).not.toBeInTheDocument()
+  })
+
+  it('Concluir com rascunho preenchido manda a evidencia (sem espacos nas pontas)', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: '  Resumo entregue no caderno. ', link: 'https://x.dev/resumo' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(corpo).toMatchObject({
+      evidence: { text: 'Resumo entregue no caderno.', link: 'https://x.dev/resumo' },
+    })
+  })
+
+  it('Concluir sem texto manda a conclusao de sempre, sem a chave evidence', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () =>
+        Response.json(comRecompensa({ ...pendenteComEvidencia, evidence: null })),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: '   ' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(Object.keys(corpo as object)).toEqual(['operation_id'])
+  })
+
+  it('Concluir fica desabilitado com link ruim, e com link sem texto', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    const concluir = within(card(7)).getByTestId('mission-complete')
+
+    preencher(7, { text: 'Fiz', link: 'ftp://x' })
+    expect(concluir).toBeDisabled()
+
+    preencher(7, { link: 'https://x.dev' })
+    expect(concluir).toBeEnabled()
+
+    preencher(7, { text: '' })
+    expect(concluir).toBeDisabled()
+
+    preencher(7, { link: '' })
+    expect(concluir).toBeEnabled()
+  })
+
+  it('durante o envio, os campos da evidencia ficam desabilitados', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => new Promise<Response>(() => {}),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Fiz' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    expect(within(card(7)).getByLabelText('O que você fez')).toBeDisabled()
+    expect(within(card(7)).getByLabelText('Link (opcional)')).toBeDisabled()
+  })
+
+  it('o rascunho sobrevive a uma falha de rede, e o Tentar de novo manda a MESMA evidencia', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': (_init, call) =>
+        call === 1
+          ? Promise.reject(new TypeError('Failed to fetch'))
+          : Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByTestId('mission-completion-error')
+    expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue(
+      'Resumo entregue no caderno.',
+    )
+    fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [primeiro, segundo] = corpos(fetchMock, 7)
+    expect(segundo).toEqual(primeiro)
+  })
+
+  it('o rascunho sobrevive a "Atualizar o quadro": o cartao remonta e o texto continua', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'concluida' }]),
+      'POST /api/missions/8/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Metade do resumo', link: 'https://x.dev/a' })
+    const campoAntes = within(card(7)).getByLabelText('O que você fez')
+
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    fireEvent.click(await within(card(8)).findByTestId('mission-reload'))
+
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    await waitFor(() => {
+      expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    const campoDepois = within(card(7)).getByLabelText('O que você fez')
+    // REMONTOU (outro elemento), e o texto veio do registro do quadro.
+    expect(campoDepois).not.toBe(campoAntes)
+    expect(campoDepois).toHaveValue('Metade do resumo')
+    expect(within(card(7)).getByLabelText('Link (opcional)')).toHaveValue('https://x.dev/a')
+  })
+
+  it('depois do sucesso, o cartao mostra o painel da avaliacao e some o formulario', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    const painel = await within(card(7)).findByTestId('evaluation-panel')
+    expect(within(painel).getByTestId('evaluation-verification')).toHaveTextContent('Com evidência')
+    expect(
+      within(painel).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).toBeInTheDocument()
+    expect(within(card(7)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+  })
+
+  it('o bonus da avaliacao avisa a pagina pelo mesmo onMissionCompleted', async () => {
+    const onMissionCompleted = vi.fn()
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendenteComEvidencia]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: 'Cobre o criterio.',
+            error_code: null,
+            model: 'modelo-x',
+            finished_at: '2026-09-18T16:00:00Z',
+          },
+          reward: bonus,
+        }),
+    })
+    render(<MissionList onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+
+    expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+50 XP de bônus')
+    expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+  })
+})

@@ -69,10 +69,17 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
   return Object.hasOwn(FAILURE_BY_CODE, code)
 }
 
+/**
+ * A mensagem e a acao para um `code` cru: o de um erro HTTP ou o `error_code`
+ * de uma avaliacao `falhou` que veio na leitura da missao (a pagina
+ * recarregou). Um mapa so para os dois caminhos: a mensagem nao depende de a
+ * pessoa ter visto a falha ao vivo ou depois.
+ */
+export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
+  return code !== null && isEvaluationErrorCode(code) ? FAILURE_BY_CODE[code] : GENERIC
+}
+
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
-  if (error instanceof ApiError && error.code !== null && isEvaluationErrorCode(error.code)) {
-    return FAILURE_BY_CODE[error.code]
-  }
-  return GENERIC
+  return error instanceof ApiError ? describeEvaluationErrorCode(error.code) : GENERIC
 }

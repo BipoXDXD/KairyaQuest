@@ -30,6 +30,7 @@ const diariaConcluida: Mission = {
   state: 'concluida',
   availability: 'concluida',
   completed_at: '2026-09-23T15:00:00Z',
+  verification: 'autodeclarada',
 }
 const especial: Mission = {
   ...diaria,
@@ -188,6 +189,42 @@ describe('CycleSection', () => {
     await waitFor(() => {
       expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
     })
+  })
+
+  it('o bonus da avaliacao da diaria chega ao onMissionCompleted da pagina', async () => {
+    const onMissionCompleted = vi.fn()
+    const comEvidencia: Mission = {
+      ...diariaConcluida,
+      verification: 'com_evidencia',
+      evidence: { text: 'Cinco exercicios feitos.', link: null },
+    }
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ mission: comEvidencia })),
+      'POST /api/missions/31/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: 'Cobre o criterio.',
+            error_code: null,
+            model: 'modelo-x',
+            finished_at: '2026-09-23T16:00:00Z',
+          },
+          reward: { ...recompensaPadrao, xp_awarded: 20 },
+        }),
+    })
+    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+
+    expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+20 XP de bônus')
+    expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('a diaria concluida autodeclarada mostra o selo no cartao', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
+    render(<CycleSection />)
+    expect(await screen.findByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
   })
 
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {

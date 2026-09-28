@@ -1,6 +1,11 @@
+import { useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { EvaluationPanel } from './EvaluationPanel'
+import { EvidenceForm } from './EvidenceForm'
+import { describeEvidence } from './evidenceLimit'
 import { RewardAnnouncement } from './RewardAnnouncement'
+import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
@@ -78,6 +83,7 @@ function CompletionControls({
   mission,
   completion,
   onComplete,
+  completeBlocked,
   onReload,
   reloadWaiting,
   reloadLabel,
@@ -85,6 +91,8 @@ function CompletionControls({
   mission: Mission
   completion: CompletionState
   onComplete: () => void
+  /** O rascunho da evidencia tem conteudo que nao pode ser enviado. */
+  completeBlocked: boolean
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
@@ -104,7 +112,7 @@ function CompletionControls({
         <button
           type="button"
           data-testid="mission-complete"
-          disabled={completion.status === 'submitting'}
+          disabled={completion.status === 'submitting' || completeBlocked}
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
@@ -153,6 +161,7 @@ export function MissionCard({
   onReload,
   reloadWaiting,
   onCompleted,
+  onRewarded,
   titleLevel = 3,
   reloadLabel = 'Atualizar o quadro',
 }: {
@@ -161,6 +170,12 @@ export function MissionCard({
   onReload: () => void
   reloadWaiting: boolean
   onCompleted?: () => void
+  /**
+   * O bonus da avaliacao da Tifa foi creditado. Quem usa o cartao liga ao
+   * MESMO aviso da conclusao (P3 do D): o saldo mudou, o painel de progresso
+   * atualiza.
+   */
+  onRewarded?: () => void
   /**
    * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
    * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
@@ -176,11 +191,31 @@ export function MissionCard({
   reloadLabel?: string
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
+  // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
+  // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
+  // texto morreria com eles, como a chave de operacao morria (pendencia 35).
+  // O `useState` fica porque o registro e um `useRef` -- mudar o rascunho la
+  // nao renderiza nada.
+  const [draft, setDraft] = useState<EvidenceDraft>(() => registry.draftFor(listed.id))
+  const changeDraft = (next: EvidenceDraft) => {
+    setDraft(next)
+    registry.saveDraft(listed.id, next)
+  }
+  // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
+  // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
+  // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
+  const draftInUse = draft.text.trim() !== '' || draft.link.trim() !== ''
+  const completeBlocked = draftInUse && !describeEvidence(draft).sendable
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
   const mission = completion.status === 'completed' ? completion.mission : listed
   const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
+  // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
+  // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
+  const offersEvidence =
+    mission.state !== 'concluida' &&
+    !(completion.status === 'failed' && completion.failure.recovery === 'refresh')
 
   return (
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
@@ -241,17 +276,29 @@ export function MissionCard({
         )}
       </dl>
 
+      {offersEvidence && (
+        <EvidenceForm
+          draft={draft}
+          onChange={changeDraft}
+          disabled={completion.status === 'submitting'}
+        />
+      )}
+
       <CompletionControls
         mission={mission}
         completion={completion}
-        // Arrow, e nao `complete` cru: o onClick passaria o evento como rascunho.
         onComplete={() => {
-          complete()
+          complete(draftInUse ? draft : undefined)
         }}
+        completeBlocked={completeBlocked}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
       />
+
+      {mission.state === 'concluida' && (
+        <EvaluationPanel mission={mission} onRewarded={onRewarded} />
+      )}
     </li>
   )
 }

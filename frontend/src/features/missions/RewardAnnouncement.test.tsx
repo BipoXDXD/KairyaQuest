@@ -19,6 +19,16 @@ describe('RewardAnnouncement', () => {
     expect(screen.getByTestId('reward-xp')).toHaveTextContent('+220 XP')
   })
 
+  it('o bonus da avaliacao diz "de bônus" junto do XP; a conclusao, nao', () => {
+    const { rerender } = render(<RewardAnnouncement reward={reward({ xp_awarded: 110 })} bonus />)
+
+    expect(screen.getByTestId('reward-xp')).toHaveTextContent(/^\+110 XP de bônus$/)
+
+    rerender(<RewardAnnouncement reward={reward({ xp_awarded: 110 })} />)
+
+    expect(screen.getByTestId('reward-xp')).toHaveTextContent(/^\+110 XP$/)
+  })
+
   it('anuncia a subida de nivel so quando o nivel muda', () => {
     const { rerender } = render(
       <RewardAnnouncement reward={reward({ level_before: 4, level_after: 5 })} />,
