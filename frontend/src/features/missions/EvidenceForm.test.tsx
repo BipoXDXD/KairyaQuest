@@ -138,6 +138,29 @@ describe('EvidenceForm', () => {
     expect(link).not.toHaveAttribute('aria-describedby')
   })
 
+  it('depois do primeiro blur, editar para valido apaga o erro e a proxima digitacao invalida nao o anuncia de novo', () => {
+    render(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+    fireEvent.change(link, { target: { value: 'x' } })
+    fireEvent.blur(link)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.change(link, { target: { value: 'https://x.dev' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // Apagar um caractere quebra o link: sem novo blur, nada e anunciado.
+    fireEvent.change(link, { target: { value: 'https:/' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.blur(link)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    // Link vazio tambem e valido: reseta.
+    fireEvent.change(link, { target: { value: '' } })
+    fireEvent.change(link, { target: { value: 'h' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('sair do campo (blur) com link valido nao mostra erro', () => {
     render(<Controlado />)
     abrir()
@@ -222,7 +245,7 @@ describe('EvidenceForm', () => {
     expect(screen.getByLabelText('Link (opcional)')).toBeDisabled()
   })
 
-  it('com retry pendente, os dois campos ficam desabilitados e o aviso os descreve', () => {
+  it('com retry pendente, os campos ficam SOMENTE LEITURA (focaveis) e o aviso os descreve', () => {
     render(<Controlado inicial={{ text: 'Feito', link: '' }} retryPending />)
 
     const aviso = screen.getByTestId('evidence-retry-notice')
@@ -231,8 +254,13 @@ describe('EvidenceForm', () => {
     )
     const texto = screen.getByLabelText('O que você fez')
     const link = screen.getByLabelText('Link (opcional)')
-    expect(texto).toBeDisabled()
-    expect(link).toBeDisabled()
+    for (const campo of [texto, link]) {
+      expect(campo).toBeEnabled()
+      expect(campo).toHaveAttribute('readonly')
+      expect(campo).toHaveAttribute('aria-readonly', 'true')
+      campo.focus()
+      expect(document.activeElement).toBe(campo)
+    }
     expect(texto.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
     expect(link.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
   })
@@ -242,6 +270,8 @@ describe('EvidenceForm', () => {
 
     expect(screen.queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
     expect(screen.getByLabelText('O que você fez')).toBeEnabled()
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-readonly')
     expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-describedby')
   })
 })

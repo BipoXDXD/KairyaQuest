@@ -70,6 +70,12 @@ describe('describeEvaluationFailure', () => {
     })
   })
 
+  it('um 422 com code DESCONHECIDO tambem e evidencia recusada (nao "tente de novo")', () => {
+    expect(describeEvaluationFailure(new ApiError('x', 422, 'codigo_futuro')).recovery).toBe(
+      'unavailable',
+    )
+  })
+
   it('um code conhecido vence o status 422', () => {
     expect(describeEvaluationFailure(new ApiError('x', 422, 'sem_evidencia')).recovery).toBe(
       'refresh',

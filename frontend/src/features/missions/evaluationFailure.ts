@@ -87,7 +87,12 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  * pessoa ter visto a falha ao vivo ou depois.
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
-  return code !== null && isEvaluationErrorCode(code) ? FAILURE_BY_CODE[code] : GENERIC
+  return knownFailure(code) ?? GENERIC
+}
+
+/** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
+function knownFailure(code: string | null): EvaluationFailure | null {
+  return code !== null && isEvaluationErrorCode(code) ? FAILURE_BY_CODE[code] : null
 }
 
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
@@ -95,6 +100,9 @@ export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
     return GENERIC
   }
-  const described = describeEvaluationErrorCode(error.code)
-  return error.status === 422 && described === GENERIC ? EVIDENCE_REJECTED : described
+  const known = knownFailure(error.code)
+  if (known !== null) {
+    return known
+  }
+  return error.status === 422 ? EVIDENCE_REJECTED : GENERIC
 }

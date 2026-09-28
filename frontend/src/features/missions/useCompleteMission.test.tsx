@@ -577,6 +577,50 @@ describe('useCompleteMission', () => {
       expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
     })
 
+    it('falha retry marca o retry pendente no registro; um novo sucesso o limpa', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+          .mockResolvedValueOnce(Response.json(concluidaResposta)),
+      )
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+      expect(result.current.registry.isRetryPending(7)).toBe(true)
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('completed')
+      })
+      expect(result.current.registry.isRetryPending(7)).toBe(false)
+    })
+
+    it('falha sem retry (422) NAO deixa retry pendente', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ detail: [] }, { status: 422 })),
+      )
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete({ text: 'Feito', link: '' })
+      })
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('failed')
+      })
+
+      expect(result.current.registry.isRetryPending(7)).toBe(false)
+    })
+
     it('no sucesso o registro esquece a chave e o rascunho', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(concluidaResposta)))
       const { result } = renderCompletion()

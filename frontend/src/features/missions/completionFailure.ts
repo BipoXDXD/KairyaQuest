@@ -69,6 +69,10 @@ const UNCONFIRMED: CompletionFailure = {
  * o MESMO pedido daria o mesmo 422 para sempre: dizer "tente de novo e seguro"
  * (achado S-I2) prendia a pessoa num laco. A chave sai (`retry-with-new-operation`
  * nao a retem) e o rascunho fica, editavel, para ser corrigido (E17).
+ *
+ * Todo 422 sem `code` conhecido vale como evidencia recusada: o `operation_id`
+ * e gerado pelo cliente (um UUID), entao nunca e ele o campo invalido -- o que o
+ * servidor pode recusar com 422 e a evidencia.
  */
 const EVIDENCE_REJECTED: CompletionFailure = {
   message: 'A evidência não foi aceita. Revise o texto e o link.',

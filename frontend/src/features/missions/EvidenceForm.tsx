@@ -39,7 +39,8 @@ const RETRY_NOTICE =
  * `retryPending`: a ultima conclusao falhou de um jeito que segura a chave (a
  * entrega anterior pode ter chegado ao servidor). Com a MESMA chave, uma
  * evidencia editada seria recusada (409) e a edicao, perdida em silencio
- * (achado S-I1): os campos ficam desabilitados, com o aviso ligado a eles, e o
+ * (achado S-I1): os campos ficam SOMENTE LEITURA (`readOnly` + `aria-readonly`, e nao
+ * `disabled`: continuam focaveis e o leitor de tela le o aviso ligado a eles), e o
  * "Tentar de novo" reenvia o mesmo rascunho.
  *
  * `describedBy` e o id do titulo da missao: o nome do toggle e o mesmo em
@@ -68,7 +69,6 @@ export function EvidenceForm({
   const linkErrorId = `${id}-link-error`
   const textMissingId = `${id}-text-missing`
   const retryNoticeId = `${id}-retry-notice`
-  const locked = disabled || retryPending
   const described = describeEvidence(draft)
   // O erro do link so aparece (e so e anunciado) depois que a pessoa SAI do
   // campo: `role="alert"` no primeiro caractere ("h") interromperia o leitor de
@@ -112,7 +112,9 @@ export function EvidenceForm({
               data-testid="evidence-text"
               rows={3}
               value={draft.text}
-              disabled={locked}
+              disabled={disabled}
+              readOnly={retryPending}
+              aria-readonly={retryPending ? true : undefined}
               aria-describedby={joinIds(
                 retryPending ? retryNoticeId : null,
                 described.counter === null ? null : counterId,
@@ -144,7 +146,9 @@ export function EvidenceForm({
               type="url"
               inputMode="url"
               value={draft.link}
-              disabled={locked}
+              disabled={disabled}
+              readOnly={retryPending}
+              aria-readonly={retryPending ? true : undefined}
               aria-invalid={linkError === null ? undefined : true}
               aria-describedby={joinIds(
                 retryPending ? retryNoticeId : null,
@@ -154,6 +158,12 @@ export function EvidenceForm({
                 setLinkTouched(true)
               }}
               onChange={(event) => {
+                // O erro reaparece so no proximo blur: com o link valido (ou
+                // vazio) o "tocado" volta a falso, e digitar depois de um blur
+                // nao dispara o `alert` a cada tecla.
+                if (describeEvidence({ ...draft, link: event.target.value }).linkError === null) {
+                  setLinkTouched(false)
+                }
                 onChange({ ...draft, link: event.target.value })
               }}
               className={FIELD_CLASS}

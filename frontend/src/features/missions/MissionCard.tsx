@@ -324,7 +324,7 @@ export function MissionCard({
           draft={draft}
           onChange={changeDraft}
           disabled={completion.status === 'submitting'}
-          retryPending={completion.status === 'failed' && completion.failure.recovery === 'retry'}
+          retryPending={registry.isRetryPending(listed.id)}
           describedBy={titleId}
         />
       )}

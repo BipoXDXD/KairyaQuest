@@ -39,6 +39,15 @@ export interface CompletionRegistry {
    * conclusao chama isto.
    */
   discardDraft: (missionId: number) => void
+  /**
+   * A ultima falha da missao deixou a chave RETIDA (`recovery: 'retry'`): a
+   * entrega anterior pode ter chegado, e so a mesma chave, com o mesmo
+   * rascunho, torna o reenvio seguro. Mora aqui, e nao no cartao, porque o
+   * reload remonta os cartoes e a chave retida sobrevive a ele.
+   */
+  isRetryPending: (missionId: number) => boolean
+  /** Marca a missao como em retry pendente. `release` desmarca. */
+  markRetryPending: (missionId: number) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
   /** Um POST de conclusao terminou, com qualquer resultado. */
@@ -77,6 +86,7 @@ export interface UseCompletionRegistryResult {
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {
   const operationIds = useRef(new Map<number, string>())
   const drafts = useRef(new Map<number, EvidenceDraft>())
+  const retryPending = useRef(new Set<number>())
   const inFlight = useRef(0)
   const reloadPending = useRef(false)
   const [waitingForCompletion, setWaitingForCompletion] = useState(false)
@@ -97,6 +107,11 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       },
       release: (missionId) => {
         operationIds.current.delete(missionId)
+        retryPending.current.delete(missionId)
+      },
+      isRetryPending: (missionId) => retryPending.current.has(missionId),
+      markRetryPending: (missionId) => {
+        retryPending.current.add(missionId)
       },
       discardDraft: (missionId) => {
         drafts.current.delete(missionId)
