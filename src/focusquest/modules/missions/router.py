@@ -13,10 +13,10 @@ e o quarto endpoint esqueceria dela.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, status
-from sqlalchemy.orm import Session
 
 from focusquest.core.clock import Clock, get_clock
-from focusquest.core.database import get_session
+from focusquest.core.database import SessaoDaRequisicao
+from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa, ler_missao
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
@@ -34,20 +34,7 @@ from focusquest.modules.missions.service import (
 from focusquest.modules.progression.schemas import RewardRead
 from focusquest.modules.progression.service import recompensa_da_missao
 
-# O usuario unico do incremento 1a, semeado pela migracao (README s8). O
-# recorte de usuario unico e EXPLICITO, e nao ha autenticacao improvisada: o
-# dono nao vem de token nem de cabecalho, vem daqui.
-#
-# A constante e o ponto que muda quando houver autenticacao -- cada rota vai
-# receber o usuario por dependencia em vez de ler este numero --, e e por isso
-# que ela tem nome em vez de aparecer como `1` em tres chamadas.
-USUARIO_UNICO = 1
-
 router = APIRouter(prefix="/api/missions", tags=["missions"])
-
-# A sessao da requisicao, escrita uma vez. Repetir o `Annotated` em tres
-# assinaturas convidaria a divergirem.
-SessaoDaRequisicao = Annotated[Session, Depends(get_session)]
 
 # O identificador da missao no caminho, limitado a faixa da coluna `id` (int4).
 # Sem o teto, `/api/missions/99999999999/complete` chegava ao banco e estourava

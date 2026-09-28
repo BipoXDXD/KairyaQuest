@@ -4,6 +4,7 @@ import pytest
 
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
     MissionState,
     MissionType,
     TransicaoIlegalError,
@@ -14,6 +15,7 @@ from focusquest.modules.missions.domain import (
     xp_da_missao,
 )
 from focusquest.modules.progression.domain import bonus_da_avaliacao
+from focusquest.modules.tutoring.domain import CodigoDoStream
 
 
 @pytest.mark.parametrize(
@@ -55,31 +57,51 @@ def test_evidencia_em_missao_nao_concluida_e_defeito_e_nao_vira_verificacao() ->
         verificacao_da_missao(MissionState.PENDENTE, True)
 
 
-@pytest.mark.parametrize(
-    ("atual", "destino"),
-    [
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.CONCLUIDA),
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.FALHOU),
-        (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.AVALIANDO),
-    ],
-)
+_LEGAIS = [
+    (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.CONCLUIDA),
+    (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.FALHOU),
+    (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.AVALIANDO),
+]
+
+# O complemento das legais entre TODOS os pares (9 - 3 = 6), gerado e nao
+# escrito a mao: uma transicao nova no enum entra aqui como ilegal ate alguem
+# decidir o contrario.
+_ILEGAIS = [
+    (atual, destino)
+    for atual in EstadoDaAvaliacao
+    for destino in EstadoDaAvaliacao
+    if (atual, destino) not in _LEGAIS
+]
+
+
+@pytest.mark.parametrize(("atual", "destino"), _LEGAIS)
 def test_transicoes_legais_da_avaliacao(
     atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
 ) -> None:
+    # Sem assercao explicita de proposito: a transicao legal passa por nao levantar.
     validar_transicao_da_avaliacao(atual, destino)
 
 
-@pytest.mark.parametrize(
-    ("atual", "destino"),
-    [
-        (EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.AVALIANDO),
-        (EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.FALHOU),
-        (EstadoDaAvaliacao.AVALIANDO, EstadoDaAvaliacao.AVALIANDO),
-        (EstadoDaAvaliacao.FALHOU, EstadoDaAvaliacao.CONCLUIDA),
-    ],
-)
+@pytest.mark.parametrize(("atual", "destino"), _ILEGAIS)
 def test_transicoes_ilegais_da_avaliacao(
     atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
 ) -> None:
-    with pytest.raises(TransicaoIlegalError, match=f"'{atual.value}'"):
+    # A mensagem traz os dois estados: "ir de 'atual' para 'destino'".
+    with pytest.raises(
+        TransicaoIlegalError,
+        match=f"ir de '{atual.value}' para '{destino.value}'",
+    ):
         validar_transicao_da_avaliacao(atual, destino)
+
+
+def test_falhas_da_avaliacao_e_codigos_do_stream_tem_o_mesmo_texto() -> None:
+    """As falhas que existem dos dois lados tem o mesmo valor em texto: a
+    tela le `error_code` da avaliacao e do chat pelo mesmo vocabulario. So
+    `avaliacao_invalida` e da avaliacao e nao existe no stream. (Importar
+    `tutoring.domain` aqui e aceitavel: e teste; os modulos de producao nao
+    se importam.)"""
+    do_stream = {c.value for c in CodigoDoStream}
+    compartilhadas = {f.value for f in FalhaDaAvaliacao} - {"avaliacao_invalida"}
+    assert compartilhadas == {"provedor_indisponivel", "tempo_esgotado"}
+    assert compartilhadas <= do_stream
+    assert FalhaDaAvaliacao.AVALIACAO_INVALIDA.value not in do_stream
