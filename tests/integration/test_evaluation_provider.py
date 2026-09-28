@@ -1,4 +1,5 @@
-"""O provedor avalia: chamada com a ferramenta forcada, contra o falso."""
+"""O provedor avalia contra o falso: `tool_choice` auto com
+`disable_parallel_tool_use` e a ferramenta em modo `strict` (EM3)."""
 
 import pytest
 
