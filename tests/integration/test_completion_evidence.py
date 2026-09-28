@@ -216,6 +216,8 @@ def test_quatro_mil_emojis_passam(client: TestClient, relogio_fixo: datetime) ->
         ("\u0085abc\u0085", "abc"),
         # medido: `str.strip()` removeria U+001C..U+001F; o pydantic NAO.
         ("\u001c\u001fabc", "\u001c\u001fabc"),
+        # so U+001C: nao e "vazio" para o servidor (`str.strip()` o esvaziaria).
+        ("\u001c", "\u001c"),
     ],
     ids=[
         "teto-depois-do-strip",
@@ -223,6 +225,7 @@ def test_quatro_mil_emojis_passam(client: TestClient, relogio_fixo: datetime) ->
         "feff-fica",
         "nel-sai",
         "fs-fica",
+        "so-fs-fica",
     ],
 )
 def test_texto_valido_e_gravado_como_o_strip_do_pydantic_o_deixa(
