@@ -157,6 +157,9 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
   it('o rascunho vazio e imutavel: mutar o de uma missao nao contamina o das outras', () => {
     const { result } = renderRegistry()
     const { registry } = result.current
+    // O cast tira o `Readonly` do tipo de proposito: o teste precisa TENTAR
+    // escrever para provar que o objeto e congelado em tempo de execucao, e o
+    // compilador recusaria a escrita num tipo somente-leitura.
     const vazio = registry.draftFor(7) as { text: string; link: string }
 
     // Modulo ESM roda em strict mode: escrever num objeto congelado lanca.
