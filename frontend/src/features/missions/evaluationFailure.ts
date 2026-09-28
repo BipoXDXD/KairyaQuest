@@ -9,7 +9,7 @@ import type { EvaluationErrorCode } from './types'
  * - `refresh`: nao ha o que repetir; a missao mudou ou sumiu, e a acao util e
  *   recarregar para ver o estado de verdade.
  * - `unavailable`: repetir provavelmente nao adianta agora (provedor sem
- *   configuracao, evidencia recusada); a tela so informa, e o botao continua
+ *   configuracao); a tela so informa, e o botao continua
  *   habilitado (E18): quem corrigiu a causa nao precisa recarregar.
  */
 export type EvaluationRecovery = 'retry' | 'refresh' | 'unavailable'
@@ -63,16 +63,6 @@ const GENERIC: EvaluationFailure = {
 }
 
 /**
- * O 422: o servidor recusou a evidencia gravada. Repetir o pedido nao a muda e
- * daria o mesmo 422, entao nao ha "tentar de novo" (`unavailable`: a tela so
- * informa), ao contrario da mensagem generica (achado S-I2).
- */
-const EVIDENCE_REJECTED: EvaluationFailure = {
-  message: 'A evidência não foi aceita. Revise o texto e o link.',
-  recovery: 'unavailable',
-}
-
-/**
  * `Object.hasOwn`, e nao `code in FAILURE_BY_CODE`: o operador `in` percorre o
  * prototipo e diria sim para `toString` ou `constructor`.
  */
@@ -104,5 +94,14 @@ export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (known !== null) {
     return known
   }
-  return error.status === 422 ? EVIDENCE_REJECTED : GENERIC
+  // Sem `code` conhecido, so dois status dizem que a missao nao esta la:
+  // - 404 sem `code` (esse traz `missao_nao_encontrada`): rota ausente ou deploy
+  //   desencontrado. Repetir nao adianta; recarregar mostra a verdade.
+  // - 422: `POST /evaluation` nao tem corpo, entao o unico 422 possivel e o do
+  //   id do caminho fora da faixa -- uma missao que nao existe. NAO e evidencia
+  //   recusada (a conclusao e que tem corpo, e la o 422 e outra coisa).
+  if ((error.status === 404 && error.code === null) || error.status === 422) {
+    return FAILURE_BY_CODE.missao_nao_encontrada
+  }
+  return GENERIC
 }

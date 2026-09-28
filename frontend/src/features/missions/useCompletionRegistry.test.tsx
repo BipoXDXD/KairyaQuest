@@ -157,6 +157,9 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
   it('o rascunho vazio e imutavel: mutar o de uma missao nao contamina o das outras', () => {
     const { result } = renderRegistry()
     const { registry } = result.current
+    // O cast tira o `Readonly` do tipo de proposito: o teste precisa TENTAR
+    // escrever para provar que o objeto e congelado em tempo de execucao, e o
+    // compilador recusaria a escrita num tipo somente-leitura.
     const vazio = registry.draftFor(7) as { text: string; link: string }
 
     // Modulo ESM roda em strict mode: escrever num objeto congelado lanca.
@@ -189,9 +192,8 @@ describe('useCompletionRegistry -- o rascunho da evidencia', () => {
     expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
   })
 
-  // Fix-1 da Task 7 (E17/§7): a chave e o rascunho saem por caminhos
-  // DIFERENTES. A falha sem retry libera a chave, mas o rascunho so sai no
-  // sucesso -- este teste substitui o "release apaga a chave E o rascunho".
+  // E17/§7: a chave e o rascunho saem por caminhos DIFERENTES. A falha sem
+  // retry libera a chave, mas o rascunho so sai no sucesso.
   it('release apaga SO a chave da missao; o rascunho fica', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
     const { result } = renderRegistry()

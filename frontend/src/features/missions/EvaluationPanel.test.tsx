@@ -233,7 +233,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
   it('falha 503: a mensagem "fora do ar", e o botao continua HABILITADO (E18)', async () => {
     // E18: o botao fica sempre habilitado; o 503 vira mensagem. Desabilitar
     // mataria o botao ate remontar o cartao, mesmo com a chave configurada
-    // depois (achado M3 da revisao Opus).
+    // depois.
     const fetchMock = routeFetch({
       [KEY]: (_init, call) =>
         call === 1
@@ -272,16 +272,21 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(onRewarded).not.toHaveBeenCalled()
   })
 
-  it('falha 422: a tela diz que a evidencia nao foi aceita, sem "tente de novo"', async () => {
+  it('falha 422: o id fora da faixa e missao inexistente, entao manda atualizar, sem "tente de novo"', async () => {
     routeFetch({ [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }) })
     render(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
     const alerta = await screen.findByRole('alert')
-    expect(alerta).toHaveTextContent('A evidência não foi aceita. Revise o texto e o link.')
+    expect(alerta).toHaveTextContent(
+      'Esta missão não está mais disponível. Atualize para ver o estado atual.',
+    )
     expect(alerta).not.toHaveTextContent(/tente de novo|tentar de novo/i)
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).not.toBeInTheDocument()
   })
 
   it('falha 502: a mensagem e "Tentar de novo", que pede de novo', async () => {
@@ -348,6 +353,30 @@ describe('EvaluationPanel -- fix-1 da revisao', () => {
     ).not.toBeInTheDocument()
     fireEvent.click(atualizar)
     expect(onReload).toHaveBeenCalledTimes(1)
+  })
+
+  it('com uma conclusao em voo (reloadWaiting), o botao de recarga fica desabilitado e diz a espera', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+    })
+    const onReload = vi.fn()
+    render(
+      <EvaluationPanel
+        mission={comEvidencia}
+        onReload={onReload}
+        reloadLabel="Atualizar o quadro"
+        reloadWaiting
+      />,
+    )
+
+    fireEvent.click(botaoPedir())
+
+    const espera = await screen.findByTestId('evaluation-reload')
+    expect(espera).toBeDisabled()
+    expect(espera).toHaveTextContent('Aguardando a conclusão em andamento…')
+    expect(espera).not.toHaveTextContent('Atualizar o quadro')
+    fireEvent.click(espera)
+    expect(onReload).not.toHaveBeenCalled()
   })
 
   it('o botao de recarga nao aparece fora da falha refresh', () => {

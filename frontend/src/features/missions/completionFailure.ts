@@ -8,9 +8,10 @@ import type { MissionErrorCode } from './types'
  *   rede e do erro sem `code`: nao se sabe se o servidor concluiu, e o reenvio
  *   com a mesma chave e idempotente -- devolve a conclusao que ja existe, ou
  *   conclui agora, mas nunca conclui duas vezes (README §7).
- * - `retry-with-new-operation`: tentar de novo com um `operation_id` NOVO. So
- *   o `operacao_reutilizada` pede isso: a chave pertence a outra operacao, e a
- *   mesma chave seria recusada para sempre.
+ * - `retry-with-new-operation`: tentar de novo com um `operation_id` NOVO. Dois
+ *   casos: o `operacao_reutilizada` (a chave pertence a outra operacao, e a
+ *   mesma seria recusada para sempre) e o 422 (a evidencia foi recusada e nada
+ *   foi gravado; a chave sai e o rascunho fica, para ser corrigido).
  * - `refresh`: nao ha o que repetir. A missao ja estava concluida ou nao existe
  *   mais, e a acao util e recarregar o quadro para ver o estado de verdade.
  */
@@ -53,9 +54,10 @@ const FAILURE_BY_CODE: Record<MissionErrorCode, CompletionFailure> = {
 }
 
 /**
- * A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais
- * novo (o 422 tem mapeamento proprio, acima). Nao se sabe se a conclusao aconteceu, e a mensagem diz a unica coisa
- * certa -- que repetir nao duplica.
+ * A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo
+ * (o 404 sem `code` e o 422 tem mapeamento proprio, em
+ * `describeCompletionFailure`). Nao se sabe se a conclusao aconteceu, e a
+ * mensagem diz a unica coisa certa -- que repetir nao duplica.
  */
 const UNCONFIRMED: CompletionFailure = {
   message:
@@ -67,7 +69,7 @@ const UNCONFIRMED: CompletionFailure = {
  * O 422: o servidor leu o pedido e recusou a evidencia (texto vazio depois do
  * recorte, link fora do formato, acima do limite). Nada foi gravado, e repetir
  * o MESMO pedido daria o mesmo 422 para sempre: dizer "tente de novo e seguro"
- * (achado S-I2) prendia a pessoa num laco. A chave sai (`retry-with-new-operation`
+ * prenderia a pessoa num laco. A chave sai (`retry-with-new-operation`
  * nao a retem) e o rascunho fica, editavel, para ser corrigido (E17).
  *
  * Todo 422 sem `code` conhecido vale como evidencia recusada: o `operation_id`
@@ -100,6 +102,12 @@ function isMissionErrorCode(code: string): code is MissionErrorCode {
 export function describeCompletionFailure(error: unknown): CompletionFailure {
   if (error instanceof ApiError && error.code !== null && isMissionErrorCode(error.code)) {
     return FAILURE_BY_CODE[error.code]
+  }
+  // Um 404 SEM `code` nao e o da missao (esse traz `missao_nao_encontrada`):
+  // e rota ausente ou deploy desencontrado. Repetir nao adianta e a mensagem de
+  // "tentar de novo e seguro" seria promessa vazia; recarregar mostra a verdade.
+  if (error instanceof ApiError && error.status === 404 && error.code === null) {
+    return FAILURE_BY_CODE.missao_nao_encontrada
   }
   if (error instanceof ApiError && error.status === 422) {
     return EVIDENCE_REJECTED

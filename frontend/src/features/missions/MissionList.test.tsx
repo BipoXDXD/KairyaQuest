@@ -770,7 +770,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(listGets(fetchMock)).toBe(2)
   })
 
-  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o novo Concluir manda a MESMA chave', async () => {
+  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o Tentar de novo manda a MESMA chave', async () => {
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
       posts: {
@@ -788,12 +788,14 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
 
     // Nada em voo: o reload e imediato.
     expect(listGets(fetchMock)).toBe(2)
-    // O cartao de A REMONTOU: voltou a "Concluir", e nao ao "Tentar de novo".
+    // O cartao de A REMONTOU: o aviso da falha sumiu, mas a chave continua
+    // retida no registro, entao o botao segue dizendo "Tentar de novo" --
+    // "Concluir" sugeriria um envio novo, e ele reenvia a MESMA chave.
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
     })
     const concluirA = within(card(7)).getByTestId('mission-complete')
-    expect(concluirA).toHaveTextContent('Concluir')
+    expect(concluirA).toHaveTextContent('Tentar de novo')
     expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
 
     fireEvent.click(concluirA)
@@ -1312,7 +1314,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
         expect(within(card(7)).getByLabelText('O que você fez')).not.toBe(campoAntes)
       })
       // O cartao remontou (idle, sem a mensagem de falha), e a chave retida
-      // continua valendo: editar de novo perderia a entrega (S-I1).
+      // continua valendo: editar de novo perderia a entrega.
       expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
       expect(within(card(7)).getByLabelText('O que você fez')).toHaveAttribute('readonly')
       expect(within(card(7)).getByLabelText('Link (opcional)')).toHaveAttribute('readonly')
@@ -1377,6 +1379,41 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     const campoDepois = within(card(8)).getByLabelText('O que você fez')
     expect(campoDepois).not.toBe(campoAntes)
     expect(campoDepois).toHaveValue('Texto do oito')
+  })
+
+  it('o botao de recarga da avaliacao espera a conclusao em voo, como o da conclusao', async () => {
+    let terminar: (resposta: Response) => void = () => undefined
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([{ ...pendenteComEvidencia }, B]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+      'POST /api/missions/8/complete': () =>
+        new Promise<Response>((resolve) => {
+          terminar = resolve
+        }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    // A conclusao de 8 fica em voo; a avaliacao de 7 falha pedindo atualizar.
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    fireEvent.click(within(card(7)).getByTestId('evaluation-request'))
+
+    // O quadro so "espera" depois do pedido de recarga com algo em voo.
+    fireEvent.click(await within(card(7)).findByTestId('evaluation-reload'))
+    const recarga = within(card(7)).getByTestId('evaluation-reload')
+    expect(recarga).toBeDisabled()
+    expect(recarga).toHaveTextContent('Aguardando a conclusão em andamento…')
+
+    await act(async () => {
+      terminar(Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }))
+      await Promise.resolve()
+    })
+    // A conclusao terminou: a recarga esperada acontece e remonta os cartoes.
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    expect(within(card(7)).queryByTestId('evaluation-reload')).not.toBeInTheDocument()
   })
 
   it('depois de concluir, o foco nao se perde para o body: vai para o titulo do cartao', async () => {

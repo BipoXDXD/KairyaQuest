@@ -173,7 +173,7 @@ describe('useRequestEvaluation', () => {
     })
   })
 
-  it('falha 422: a evidencia foi recusada, e nao "tente de novo"', async () => {
+  it('falha 422: o id fora da faixa e uma missao que nao existe, entao manda atualizar', async () => {
     routeFetch({
       [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }),
     })
@@ -187,8 +187,8 @@ describe('useRequestEvaluation', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'A evidência não foi aceita. Revise o texto e o link.',
-          recovery: 'unavailable',
+          message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
+          recovery: 'refresh',
         },
       })
     })

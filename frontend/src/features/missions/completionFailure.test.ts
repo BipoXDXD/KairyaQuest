@@ -97,6 +97,17 @@ describe('describeCompletionFailure', () => {
     })
   })
 
+  it('um 404 SEM code (rota ausente, deploy desencontrado) manda atualizar, nao "tente de novo"', () => {
+    expect(describeCompletionFailure(new ApiError('x', 404, null))).toEqual({
+      message: 'Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais.',
+      recovery: 'refresh',
+    })
+  })
+
+  it('um 404 com code DESCONHECIDO nao e tratado como 404 sem code', () => {
+    expect(describeCompletionFailure(new ApiError('x', 404, 'codigo_futuro'))).toEqual(UNCONFIRMED)
+  })
+
   it('um code conhecido vence o status 422', () => {
     const erro = new ApiError('x', 422, 'missao_expirada')
 

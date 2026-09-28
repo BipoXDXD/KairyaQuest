@@ -209,11 +209,11 @@ describe('useCompleteMission', () => {
   ])(
     'mantem a MESMA chave depois de %s, seguido de sucesso',
     async (_descricao, respostaDeFalha) => {
-      // README §7: nenhuma dessas respostas diz se o servidor concluiu. So a
-      // falha de rede reenviava a mesma chave antes desta rodada -- aqui a
-      // mesma garantia vale para qualquer resposta HTTP sem `code` conhecido.
-      // O 422 saiu desta lista (S-I2): ele prova que nada foi gravado, e tem
-      // teste proprio -- a chave sai e o rascunho fica.
+      // README §7: nenhuma dessas respostas diz se o servidor concluiu, entao a
+      // garantia da mesma chave vale para qualquer resposta HTTP sem `code`
+      // conhecido, e nao so para a falha de rede. O 422 nao esta nesta lista:
+      // ele prova que nada foi gravado, e tem teste proprio -- a chave sai e o
+      // rascunho fica.
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(respostaDeFalha())

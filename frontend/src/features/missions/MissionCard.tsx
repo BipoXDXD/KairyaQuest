@@ -4,6 +4,7 @@ import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
+import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
@@ -23,15 +24,18 @@ const RELOAD_BUTTON_CLASS =
   'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none ' +
   'disabled:cursor-not-allowed disabled:opacity-60'
 
-/** O texto do "Atualizar o quadro" enquanto espera uma conclusao em voo. */
-const RELOAD_WAITING_LABEL = 'Aguardando a conclusão em andamento…'
-
-/** O texto do botao de concluir em cada estado em que ele aparece. */
-function completeLabel(completion: CompletionState): string {
+/**
+ * O texto do botao de concluir em cada estado em que ele aparece.
+ *
+ * `retryPending` vem do REGISTRO, nao do estado do cartao: o reload remonta o
+ * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
+ * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete.
+ */
+function completeLabel(completion: CompletionState, retryPending: boolean): string {
   if (completion.status === 'submitting') {
     return 'Concluindo…'
   }
-  return completion.status === 'failed' ? 'Tentar de novo' : 'Concluir'
+  return completion.status === 'failed' || retryPending ? 'Tentar de novo' : 'Concluir'
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo. */
@@ -46,7 +50,7 @@ function statusText(completion: CompletionState): string {
  * Por que o rascunho em uso nao pode sair, ou `null` se pode (ou nao ha
  * rascunho). O texto mora JUNTO do Concluir, fora do disclosure: com o
  * formulario recolhido, o botao desabilitado continua com o motivo a vista e
- * ligado por `aria-describedby` (fix-1 da Task 7).
+ * ligado por `aria-describedby`.
  */
 function blockedReason(draft: EvidenceDraft): string | null {
   const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
@@ -105,6 +109,7 @@ function CompletionControls({
   completion,
   onComplete,
   blocked,
+  retryPending,
   onReload,
   reloadWaiting,
   reloadLabel,
@@ -114,6 +119,8 @@ function CompletionControls({
   onComplete: () => void
   /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
   blocked: string | null
+  /** A chave desta missao esta retida no registro (falha que se repete). */
+  retryPending: boolean
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
@@ -139,7 +146,7 @@ function CompletionControls({
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
-          {completeLabel(completion)}{' '}
+          {completeLabel(completion, retryPending)}{' '}
           <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
       )}
@@ -230,7 +237,7 @@ export function MissionCard({
     registry.saveDraft(listed.id, next)
   }
   // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
-  // concluir sem ele trocaria a entrega que a pessoa quis dar (Task 6). Sem
+  // concluir sem ele trocaria a entrega que a pessoa quis dar. Sem
   // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
   const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const titleId = useId()
@@ -253,6 +260,7 @@ export function MissionCard({
   }, [completed])
   // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
   // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
+  const retryPending = registry.isRetryPending(listed.id)
   const offersEvidence =
     mission.state !== 'concluida' &&
     !(completion.status === 'failed' && completion.failure.recovery === 'refresh')
@@ -324,7 +332,7 @@ export function MissionCard({
           draft={draft}
           onChange={changeDraft}
           disabled={completion.status === 'submitting'}
-          retryPending={registry.isRetryPending(listed.id)}
+          retryPending={retryPending}
           describedBy={titleId}
         />
       )}
@@ -336,6 +344,7 @@ export function MissionCard({
           complete(draftInUse ? draft : undefined)
         }}
         blocked={blockedReason(draft)}
+        retryPending={retryPending}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
@@ -347,6 +356,7 @@ export function MissionCard({
           onRewarded={onRewarded}
           onReload={onReload}
           reloadLabel={reloadLabel}
+          reloadWaiting={reloadWaiting}
           describedBy={titleId}
         />
       )}

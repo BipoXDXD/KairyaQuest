@@ -38,8 +38,8 @@ const RETRY_NOTICE =
  *
  * `retryPending`: a ultima conclusao falhou de um jeito que segura a chave (a
  * entrega anterior pode ter chegado ao servidor). Com a MESMA chave, uma
- * evidencia editada seria recusada (409) e a edicao, perdida em silencio
- * (achado S-I1): os campos ficam SOMENTE LEITURA (`readOnly` + `aria-readonly`, e nao
+ * evidencia editada seria recusada (409) e a edicao, perdida em silencio:
+ * os campos ficam SOMENTE LEITURA (`readOnly` + `aria-readonly`, e nao
  * `disabled`: continuam focaveis e o leitor de tela le o aviso ligado a eles), e o
  * "Tentar de novo" reenvia o mesmo rascunho.
  *
@@ -72,7 +72,7 @@ export function EvidenceForm({
   const described = describeEvidence(draft)
   // O erro do link so aparece (e so e anunciado) depois que a pessoa SAI do
   // campo: `role="alert"` no primeiro caractere ("h") interromperia o leitor de
-  // tela no meio da digitacao (M4). E o mais simples que serve -- sem timer, e
+  // tela no meio da digitacao. E o mais simples que serve -- sem timer, e
   // o motivo do Concluir bloqueado ja esta a vista fora do disclosure.
   const linkError = linkTouched ? described.linkError : null
   const textMissing = stripEnds(draft.text) === '' && stripEnds(draft.link) !== ''
