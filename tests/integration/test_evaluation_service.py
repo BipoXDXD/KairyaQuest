@@ -22,6 +22,7 @@ from sqlalchemy import Engine, delete, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
+import focusquest.modules.evaluation.service as servico_da_avaliacao
 from focusquest.core.errors import (
     AvaliacaoEmAndamentoError,
     MissaoNaoEncontradaError,
@@ -258,6 +259,33 @@ def test_atende_conclui_e_credita_metade_do_xp(
     assert resultado.recompensa.xp_total == antes + BONUS
     assert _bonus_gravados(fabrica, mission_id) == 1
     assert _saldo(fabrica) == antes + BONUS
+
+
+def test_o_veredito_e_o_bonus_sao_gravados_na_mesma_transacao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Se o bonus falha depois de o resultado ter sido registrado, NADA do
+    resultado fica: a avaliacao segue `avaliando` e nao ha bonus. Um `commit`
+    entre os dois deixaria um `atende` sem bonus para sempre."""
+    mission_id = missoes.concluida()
+    falso.roteiro = _veredito("atende")
+    antes = _saldo(fabrica)
+
+    def _bonus_que_falha(*_: object, **__: object) -> None:
+        raise RuntimeError("o bonus falhou")
+
+    monkeypatch.setattr(servico_da_avaliacao, "registrar_bonus", _bonus_que_falha)
+    with pytest.raises(RuntimeError, match="o bonus falhou"):
+        _avaliar(fabrica, tutoria, mission_id)
+    avaliacao = _lida(fabrica, mission_id)
+    assert avaliacao.state is EstadoDaAvaliacao.AVALIANDO
+    assert avaliacao.verdict is None
+    assert _bonus_gravados(fabrica, mission_id) == 0
+    assert _saldo(fabrica) == antes
 
 
 @pytest.mark.parametrize("veredito", ["parcial", "nao_atende"])
