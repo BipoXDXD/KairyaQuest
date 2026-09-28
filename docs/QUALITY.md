@@ -919,7 +919,7 @@ honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
 porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
 projeto, mas o efeito prático é o mesmo e vale estar escrito.
 
-## 9. O servidor falso da Anthropic (Incrementos 1b-1 e 1b-2)
+## 9. O servidor falso da Anthropic (Incrementos 1b-1, 1b-2 e E)
 
 > **Fonte de verdade:** `tests/integration/provedor_falso.py`,
 > `tests/integration/conftest.py` (fixtures `falso`, `fabrica`, `tutoria`,
@@ -1008,6 +1008,64 @@ A camada 3 existe desde a Task 8 do 1b-2. As camadas 1 e 2 provam que o falso
   resposta (texto e proposta). Regravar é só pelo dono, com o comando da
   seção "Comandos" do `docs/HANDOFF.md`, nunca no gate — o CI nunca chama a
   Anthropic.
+
+### A avaliação nas camadas 1 e 2 (Incremento E)
+
+O E acrescentou ao provedor um segundo método, `avaliar(turno, ferramenta)`, no
+mesmo adaptador (decisão E12): `messages.stream` com `tool_choice` **forçado**
+na ferramenta (`{"type": "tool", "name": …, "disable_parallel_tool_use":
+True}`), sem pedir thinking, consumindo o stream inteiro por dentro. **Nenhum
+servidor falso novo:** o `ServidorAnthropicFalso` das camadas 1 e 2 serve a
+avaliação como serve a conversa.
+
+- **O falso roteirizado com `tool_name`.** O bloco de chamada de ferramenta do
+  roteiro (`ChamadaDeFerramenta`) ganhou o nome. Até o E o falso só emitia
+  `create_mission`; agora o roteiro escolhe o nome da ferramenta, e o padrão
+  continua `create_mission`, então nada do que existia muda. No JSON do
+  roteiro (`roteiro_do_json`, chave `blocks`) o bloco é `{"tool_input": {...}}`
+  (padrão) ou `{"tool_input": {...}, "tool_name": "record_evaluation"}`;
+  `tool_name` precisa ser um texto **não vazio**, senão `roteiro_do_json`
+  levanta `ValueError` ("tool_name precisa ser um texto nao vazio"), e
+  qualquer outra forma de bloco continua sendo "bloco desconhecido". O tipo
+  `Bloco` de `frontend/tests/e2e/falso.ts` acompanha (o cenário de E2E que o
+  usa é da parte 2 desta documentação). Provado do lado Python por
+  `tests/integration/test_falso_do_e2e.py`
+  (`test_tool_name_escolhe_a_ferramenta_e_o_padrao_e_create_mission` e dois
+  casos de recusa: `tool_name` não texto e `tool_name` vazio); **visto
+  reprovando** por mutação (o `_bloco` ignorando `tool_name`).
+- **`avaliar` testado contra o falso** (`tests/integration/test_evaluation_provider.py`,
+  7 testes), com o SDK real: devolve a entrada da ferramenta; força a
+  ferramenta **na requisição** (o teste lê a requisição recebida pelo falso:
+  `tool_choice` do tipo `tool`, com o nome); sem pedir thinking (`thinking` fora do corpo); sem chamar a ferramenta
+  devolve `None`; **ignora** uma chamada de outra ferramenta; um stream cortado sem
+  `message_stop` é `ProvedorIndisponivelError`; erro HTTP é
+  `ProvedorIndisponivelError`; demora além do limite é `TempoEsgotadoError`.
+  **Vistos reprovando** por mutação: `tool_choice` `auto`; sem conferir o
+  `name` do bloco; sem a checagem de `message_stop`.
+- **O vocabulário de erro é um só.** `FalhaDaAvaliacao`
+  (`provedor_indisponivel`, `tempo_esgotado`, `avaliacao_invalida`) é
+  amarrada por teste a `CodigoDoStream`: os dois primeiros valores são
+  subconjunto dele, e `avaliacao_invalida` **não** existe no stream (só a
+  avaliação tem "o modelo não chamou a ferramenta ou mandou saída fora do
+  esquema"). Um erro do provedor sai igual na conversa e na avaliação porque
+  `_traduzir_erros` (`anthropic_provider.py`) é compartilhado; a lacuna que a
+  mutação de **metade** de um ramo dele achou está na pendência 97 do
+  `docs/HANDOFF.md`.
+
+### Camada 3 da avaliação: não existe, é pendência
+
+A referência da camada 3 (`tests/integration/referencia_da_api_real.json`)
+guarda **uma** resposta real, de **texto e proposta**, sem `tool_choice`
+forçado. As camadas 1 e 2 provam que o adaptador de `avaliar` fala com o SDK
+fixado; **nenhuma prova que a API real aceita `tool_choice` forçado com o
+`claude-opus-5`**, que manda um bloco de thinking sem que a requisição o peça
+(seção acima). É a pendência 91 do `docs/HANDOFF.md`: uma chamada real de
+avaliação, **pelo dono**, com a chave do Keychain só para o processo da API,
+gravando a sequência de tipos de evento — o mesmo roteiro da pendência 42. Se a
+API recusar, o erro sai como `502 provedor_indisponivel` **gravado**, nunca
+como bônus; o plano B (`tool_choice: auto`, com `avaliacao_invalida` quando não
+houver chamada) está na spec. Como a camada 3 da conversa, **o CI nunca chama a
+Anthropic**.
 
 ### O falso como processo (E2E)
 

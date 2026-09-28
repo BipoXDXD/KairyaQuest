@@ -31,6 +31,13 @@ estão na `main`: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR #14 (C) em
 `8ab91ce` e o PR #17 (D) em `af6f50d`, os três em 2026-09-25; o PR #18
 acrescentou o `CONTINUACAO.md` na raiz (ver "Revisão-base" em
 `docs/HANDOFF.md`).
+Ao fim, o que o **Incremento E** (entrega com evidência e avaliação) já
+criou nesta branch, entre `fe37820` e `22c6a7e`: a migração `0005`, o
+`core/usuario_unico.py`, os modelos e os schemas da entrega, o método
+`avaliar` do provedor e a tela da evidência e da avaliação, com os testes
+correspondentes (ver "Alterações do Incremento E" em `docs/HANDOFF.md`). O
+módulo `evaluation` (Task 5) **ainda não está na árvore**: entra na parte 2
+desta documentação.
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -48,7 +55,8 @@ FocusQuest/
 │   │   ├── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
 │   │   ├── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
 │   │   ├── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
-│   │   └── 0004_progressao.py     # xp_entries e user_achievements, com o backfill retroativo por cópias congeladas (D8) (D)
+│   │   ├── 0004_progressao.py     # xp_entries e user_achievements, com o backfill retroativo por cópias congeladas (D8) (D)
+│   │   └── 0005_entrega_avaliacao.py  # mission_evidence e mission_evaluations; xp_entries único por (mission_id, source) e o CHECK de source com evaluation_bonus (E, decisões E14 e EM2)
 │   ├── README
 │   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
 │   └── script.py.mako             # modelo de migração nova
@@ -79,24 +87,34 @@ FocusQuest/
 │   │   │   │   ├── useCurrentPlan.test.tsx
 │   │   │   │   └── useCurrentPlan.ts     # busca GET /api/plans/current; reload/refresh/refreshFailed (C, Tasks 2 e 5)
 │   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
-│   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc)
+│   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc); o bônus da avaliação da diária chega ao onMissionCompleted (E, Task 7)
 │   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8); onMissionCompleted opcional avisa o painel de progressão (D, Task 8)
-│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4)
+│   │   │   │   ├── EvaluationPanel.test.tsx
+│   │   │   │   ├── EvaluationPanel.tsx    # o selo de verificação, a evidência, o botão "Pedir avaliação da Tifa" e os estados da avaliação (avaliando, concluída, falhou, fora do ar); o veredito em texto e ícone e o rótulo fixo de interpretação do modelo; sem `section` rotulada (landmark-unique) (E, Task 7)
+│   │   │   │   ├── EvidenceForm.test.tsx
+│   │   │   │   ├── EvidenceForm.tsx       # o disclosure "Entregar com evidência (opcional)": texto e link controlados, contador, erro do link; recolhido, os campos ficam fora do DOM (E, Task 7, decisão E17)
+│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4); guarda o rascunho da evidência no registro, liga o EvidenceForm e o EvaluationPanel e explica por que o Concluir está bloqueado, por aria-describedby (E, Task 7)
 │   │   │   │   ├── MissionList.test.tsx
 │   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle; onMissionCompleted repassado a cada MissionCard (D, Task 8)
+│   │   │   │   ├── evaluationFailure.test.ts
+│   │   │   │   ├── evaluationFailure.ts # mapa exaustivo code → mensagem e recovery (retry, refresh, unavailable) da avaliação; describeEvaluationErrorCode também para o error_code de uma avaliação `falhou` vinda da API (E, Tasks 6 e 7)
+│   │   │   │   ├── evidenceLimit.test.ts
+│   │   │   │   ├── evidenceLimit.ts     # describeEvidence: tetos de 4000 e 2000 em pontos de código, o formato do link, o contador a partir de 3600 (E, Task 6)
 │   │   │   │   ├── completionFailure.test.ts
 │   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B)
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
-│   │   │   │   ├── types.ts             # Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
+│   │   │   │   ├── types.ts             # (E, Task 6: EvaluationErrorCode, EvaluationResult e EvidenceDraft) Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
 │   │   │   │   ├── useCompleteMission.test.tsx
-│   │   │   │   ├── useCompleteMission.ts # conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
+│   │   │   │   ├── useCompleteMission.ts # (E: complete(evidence?), com rascunho inválido sem POST; o rascunho só sai no sucesso, decisões E17/RE4) conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
-│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera
+│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera; o rascunho da evidência por missão (draftFor/saveDraft/discardDraft), com release só da chave (E, Task 6 e fix round da Task 7)
 │   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
 │   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, P9); atualiza sozinho na volta à aba (C, Task 5); só a resposta do pedido mais recente decide (C, fix round 1, commit e195128)
 │   │   │   │   ├── useMissions.test.tsx
-│   │   │   │   └── useMissions.ts
+│   │   │   │   ├── useMissions.ts
+│   │   │   │   ├── useRequestEvaluation.test.tsx
+│   │   │   │   └── useRequestEvaluation.ts # pede a avaliação; guarda de voo; onRewarded só com reward != null; callback que lança não vira falha (E, Tasks 6 e 6m)
 │   │   │   ├── progression/       # saldo, nível e conquistas (D); o contrato do reward da conclusão mora em shared/types/reward.ts e é consumido por missions, não por esta feature
 │   │   │   │   ├── ProgressPanel.test.tsx
 │   │   │   │   ├── ProgressPanel.tsx      # role="progressbar" com aria-label (Ruling R13) e aria-valuetext; a lista de conquistas; ProgressPanelHandle.refresh via useImperativeHandle (D, Tasks 6 e 8)
@@ -151,7 +169,7 @@ FocusQuest/
 │   │   │   │   ├── deadline.test.ts
 │   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
 │   │   │   └── types/              # tipos compartilhados por mais de uma feature (C, docs/ARCHITECTURE.md §5)
-│   │   │       ├── mission.ts      # Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
+│   │   │       ├── mission.ts      # (E, Task 6: Verification, Verdict, EvaluationState, Evidence, EvaluationSummary e os campos verification/evidence/evaluation de Mission, sem bonus_xp, EM1) Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
 │   │   │       └── reward.ts       # Reward, UnlockedAchievement, MissionCompletion — o contrato do reward da conclusão, usado por features/missions (D, Task 7); reward é `Reward | null | undefined` de propósito (Ruling R6)
 │   │   ├── test/                  # infraestrutura de teste, não código de aplicação (docs/QUALITY.md §3)
 │   │   │   ├── fetchRoutes.ts     # routeFetch: fetch falso roteado por metodo/URL, um Response novo por chamada
@@ -167,7 +185,7 @@ FocusQuest/
 │   ├── tests/
 │   │   ├── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
 │   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1); lê GET /api/progress antes de concluir e confere o reward/painel contra antes + xp da missão (D, Task 9, decisão P6); espera a opacidade do anúncio chegar a 1 antes do axe (D, Ruling R12)
-│   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes
+│   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
 │   │   │   └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
@@ -202,8 +220,9 @@ FocusQuest/
 │       │   ├── base.py            # base declarativa do SQLAlchemy
 │       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
 │       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
-│       │   ├── database.py        # engine e sessão por requisição
-│       │   └── errors.py          # erros de domínio comuns
+│       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
+│       │   ├── errors.py          # erros de domínio comuns
+│       │   └── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
 │       ├── modules/
 │       │   ├── __init__.py
 │       │   ├── missions/
@@ -212,24 +231,24 @@ FocusQuest/
 │       │   │   ├── cycle_router.py  # POST /api/plans, GET /api/plans/current, GET /api/cycle (B)
 │       │   │   ├── cycle_schemas.py # contratos do plano semanal e do ciclo (B)
 │       │   │   ├── cycle_service.py # criar plano, ler plano/ciclo/missao, historico, ocultacao (B)
-│       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B) — sem FastAPI nem SQLAlchemy
-│       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B)
-│       │   │   ├── router.py      # as três rotas de /api/missions; concluir devolve MissionCompletionRead, com reward reconstruído do banco depois do commit (D, decisão D10)
-│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B); MissionCompletionRead(MissionRead) com reward: RewardRead (D)
-│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B); concluir_missao chama progression.registrar_conclusao depois do try/flush da MissionOperation (D, decisão P1)
+│       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B); Veredito, EstadoDaAvaliacao, FalhaDaAvaliacao, Verificacao, verificacao_da_missao e a tabela de transições da avaliação (E) — sem FastAPI nem SQLAlchemy
+│       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B); MissionEvidence e MissionEvaluation, com os relacionamentos Mission.evidence/evaluation (E, decisão E11: os dados da entrega moram aqui)
+│       │   │   ├── router.py      # as três rotas de /api/missions; concluir devolve MissionCompletionRead, com reward reconstruído do banco depois do commit (D, decisão D10) e passa evidencia= ao serviço (E); USUARIO_UNICO e SessaoDaRequisicao vêm de core/
+│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B); MissionCompletionRead(MissionRead) com reward: RewardRead (D); EvidenceIn/EvidenceRead, EvaluationSummaryRead e os campos verification/evidence/evaluation do MissionRead, sem bonus_xp (E, decisão EM1)
+│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B); concluir_missao chama progression.registrar_conclusao depois do try/flush da MissionOperation (D, decisão P1); ganhou o parâmetro evidencia (NovaEvidencia): reenvio com evidência diferente é operacao_reutilizada, e a linha de mission_evidence é gravada na transição (E, decisão E1)
 │       │   ├── progression/       # saldo, nível e conquistas (D); ver §3, "O módulo progression e a direção das dependências"
 │       │   │   ├── __init__.py
-│       │   │   ├── domain.py      # puro: xp_para_o_nivel/nivel_do_saldo (curva D4, aritmética inteira), faixa_do_nivel, Codigo, CATALOGO, conquistas_satisfeitas, maior_sequencia — sem banco nem relógio
-│       │   │   ├── models.py      # XpEntry (o livro-razão, D2) e UserAchievement (D5), com os nomes de restrição do plano
-│       │   │   ├── router.py      # GET /api/progress, sem commit (é leitura)
+│       │   │   ├── domain.py      # (E: bonus_da_avaliacao(veredito, xp), a regra única do bônus) puro: xp_para_o_nivel/nivel_do_saldo (curva D4, aritmética inteira), faixa_do_nivel, Codigo, CATALOGO, conquistas_satisfeitas, maior_sequencia — sem banco nem relógio
+│       │   │   ├── models.py      # XpEntry (o livro-razão, D2) e UserAchievement (D5), com os nomes de restrição do plano; FONTE_BONUS e a unicidade por (mission_id, source) (E, decisão E14)
+│       │   │   ├── router.py      # GET /api/progress, sem commit (é leitura); USUARIO_UNICO de core/ (E)
 │       │   │   ├── schemas.py     # AchievementRead, ProgressRead, UnlockedAchievementRead, RewardRead
-│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10), ler_progresso; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
+│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10; filtra source = mission_completed, E14), ler_progresso; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
 │       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
 │       │       ├── __init__.py
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
 │       │       ├── models.py      # TutorMessage, TutorAction
-│       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`
+│       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12)
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice forçado, e _traduzir_erros compartilhado com responder (E)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
@@ -252,13 +271,17 @@ FocusQuest/
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
 │   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6); criação sob demanda atrás da guarda (Frente 0)
+│   │   ├── test_completion_evidence.py  # concluir com evidência: grava, reenvio igual/diferente, os 422, a recompensa com um bônus gravado, MissionRead (E, Task 3)
 │   │   ├── test_cycle_api.py      # o contrato HTTP do ciclo: formas, recusas, códigos, ocultação por 404 (B, Task 5)
 │   │   ├── test_cycle_completion.py  # ocultação e regra do dia na conclusão, listagem só de avulsas (B, Task 4)
 │   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
 │   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
+│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, cada restrição dizendo não com o nome, o downgrade que falha alto com bônus gravado (E, Task 2)
+│   │   ├── test_evaluation_models.py  # os CHECKs das duas tabelas por INSERT cru, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
+│   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice forçado, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
 │   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
-│   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2)
+│   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2); o bloco com tool_name e o padrão create_mission (E, Task 4)
 │   │   ├── test_health.py
 │   │   ├── test_install_gitleaks.py  # o script de download do Gitleaks, verificação de checksum e retentativa
 │   │   ├── test_migrations.py
@@ -284,6 +307,7 @@ FocusQuest/
 │       ├── test_clock.py
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
+│       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
@@ -484,15 +508,22 @@ importa de volta — por isso a carga dos módulos funciona. No nível do
 `missions/service.py` chama `registrar_conclusao` (o crédito na mesma
 transação, D3), `missions/router.py` chama `recompensa_da_missao` (D10) e
 `missions/schemas.py` usa `RewardRead`; no outro sentido,
-`progression/service.py` lê os fatos de `missions` (acima), `progression/domain.py`
-usa `cycle_domain.sequencia_ate` e `progression/router.py` importa
-`USUARIO_UNICO` de `missions/router.py`. O mesmo vale para `tutoring` e
+`progression/service.py` lê os fatos de `missions` (acima) e
+`progression/domain.py` usa `cycle_domain.sequencia_ate` — e
+`progression/domain.py` importa `Veredito` de `missions.domain` (o
+`bonus_da_avaliacao` do E). O mesmo vale para `tutoring` e
 `progression` (`tutoring.service` lê o progresso; `progression.service` lê
 `TutorAction`). **Registro anterior, corrigido na retomada de 2026-09-28:**
 este parágrafo afirmava que `missions` não importava nada de `progression`,
 o que era falso desde a Task 3 do D. É uma tensão real com a convenção 2 do
 §5, registrada como pendência 88 em `docs/HANDOFF.md`, com o motivo de não
-ser desfeita agora.
+ser desfeita agora. **Atualização do Incremento E:** `USUARIO_UNICO` **não**
+está mais em `missions/router.py`. Mora em `core/usuario_unico.py` (decisão
+E16, `docs/HANDOFF.md`, pendência 88), com `SessaoDaRequisicao` em
+`core/database.py`; os quatro routers importam de `core/`, e o único
+`import` de `missions.router` que sobrou é o de `main.py`. Isso desfaz só
+a aresta `progression/router.py → missions/router.py`; os dois pares de
+pacotes continuam.
 
 Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
 `commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
@@ -519,7 +550,8 @@ concluir missão ou confirmar recompensa por conta própria.
 | `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
 
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
-  constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
+  constante `USUARIO_UNICO = 1` de `core/usuario_unico.py` (desde o E; até
+  o D morava em `missions/router.py`). Não há autenticação, sessão
   nem token.
 - **O instante da conclusão vem do relógio injetado.** A rota de concluir
   recebe o relógio pela dependência `get_clock` (`core/clock.py`) e o repassa
@@ -583,7 +615,9 @@ concluir missão ou confirmar recompensa por conta própria.
   `completed_at`, mais dois campos **derivados, nunca gravados**: `xp`
   (calculado da dificuldade, decisão A4) e `actual_duration_minutes`
   (minutos inteiros entre início e conclusão, ou `null`). Não publica
-  `user_id` nem `created_at`.
+  `user_id` nem `created_at`. **Desde o E** ganhou mais três, também
+  derivados: `verification`, `evidence` e `evaluation` (ver "O contrato HTTP
+  da entrega com evidência", abaixo).
 - **Estados**: `pendente`, `em_andamento` e `concluida`, com `concluida`
   terminal (decisão A5). Os valores ficam em português — são dados, não
   chave de payload. Não existe endpoint de iniciar missão: `em_andamento` e
@@ -831,6 +865,89 @@ O `GET /api/missions`, o `GET /api/cycle` e o `GET /api/plans/current` **não**
 mudam — nenhum dos três pode ganhar `reward` ou `achievements`, porque os
 tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
 `MissionCompletionRead`.
+
+### O contrato HTTP da entrega com evidência que existe (Incremento E)
+
+> **Fonte de verdade:** `src/focusquest/modules/missions/router.py`,
+> `src/focusquest/modules/missions/schemas.py`,
+> `src/focusquest/modules/missions/service.py` (`concluir_missao`) e
+> `src/focusquest/modules/missions/domain.py` (`verificacao_da_missao`).
+
+Só o que já existe nesta branch: **o `POST /api/missions/{id}/complete`
+estendido** e os campos novos do `MissionRead`. O `POST
+/api/missions/{id}/evaluation` e o módulo `evaluation` entram na parte 2
+desta documentação, depois do merge da Task 5.
+
+Não há rota nova de entrega (decisão E1): entregar e concluir são o mesmo
+ato, com uma ordem de conclusão, uma idempotência (`operation_id`) e um
+crédito.
+
+**O corpo do `POST /api/missions/{mission_id}/complete`** ganhou o campo
+opcional `evidence`:
+
+```json
+{
+  "operation_id": "…",
+  "evidence": { "text": "Resolvi os 10 exercícios do capítulo 3.", "link": "https://…" }
+}
+```
+
+- **`evidence.text`**: obrigatório dentro de `evidence`, **sem espaço nas
+  pontas** (o schema apara antes de validar) e de **1 a 4000 pontos de
+  código** (`TAMANHO_MAXIMO_DA_EVIDENCIA`). Um texto só de espaços é vazio
+  depois de aparado, e vira 422.
+- **`evidence.link`**: opcional (`null` ou ausente), aparado, de até **2000
+  caracteres** (`TAMANHO_MAXIMO_DO_LINK`), casando `(?i)^https?://\S+$`: só
+  `http`/`https` (sem diferenciar maiúsculas, decisão EM2) e sem espaço. **O
+  backend nunca abre o link** (E3). O `CHECK` do banco repete a regra (`~*
+  '^https?://\S+$'`, `ck_mission_evidence_link`).
+- **`evidence` não aceita campo a mais** (`extra="forbid"`): um campo
+  desconhecido é 422, e não ignorado em silêncio.
+- **Sem `evidence`, nada muda** em relação ao D: a missão é concluída como
+  `autodeclarada`.
+
+**Os erros que a evidência acrescenta:**
+
+| Situação | Status | `code` | Observação |
+|---|---|---|---|
+| `evidence` inválida: texto vazio ou longo, link sem `http(s)`, longo ou com espaço, campo a mais | `422` | — | Formato nativo do FastAPI; o `loc` termina em `text`, `link` ou `extra` (com `body` e `evidence` antes) |
+| **Mesmo `operation_id` com outra evidência**: texto ou link diferentes, evidência onde antes não havia, ou sem evidência onde havia | `409` | `operacao_reutilizada` | "Mesmo id, outro conteúdo" — o desenho do `client_message_id` do 1b-1. Conferido **depois** da checagem de que a operação é da mesma missão. O cliente gera um `operation_id` novo e repete |
+| Reenvio com a **mesma** evidência | `200` | — | O mesmo corpo do primeiro envio, `reward` incluído, como no D |
+
+A evidência é gravada **na mesma transação** da conclusão: a linha de
+`mission_evidence` entra no `flush` da transição, com `submitted_at` igual ao
+`completed_at`, antes do crédito do XP. Uma por missão (a PK). **Garantido só
+pelo serviço, e declarado:** a evidência só existe para missão `concluida` e só
+é gravada na conclusão; o banco não impede uma linha de evidência para missão
+pendente.
+
+**O `MissionRead`** (e, portanto, o `MissionCompletionRead`, a listagem, o
+ciclo e a trilha) ganhou três campos, **derivados na leitura, nunca gravados**
+(decisão E4, o mesmo motivo do `xp`):
+
+| Campo | Valor |
+|---|---|
+| `verification` | `"autodeclarada"` (concluída sem evidência), `"com_evidencia"` (concluída com evidência) ou `null` (missão ainda não concluída). É `verificacao_da_missao(estado, tem_evidencia)`; **não** vira "avaliada": a avaliação é o campo seguinte |
+| `evidence` | `{"text": …, "link": …}` (`link` pode ser `null`) ou `null` |
+| `evaluation` | `null` ou `{"state", "verdict", "feedback", "error_code", "model", "finished_at"}`: `state` é `avaliando`, `concluida` ou `falhou`; `verdict` (`atende`, `parcial`, `nao_atende`) e `feedback` só existem em `concluida`; `error_code` (`provedor_indisponivel`, `tempo_esgotado`, `avaliacao_invalida`) só em `falhou`; `model` é o modelo que interpretou (transparência do README §5) |
+
+**O `MissionRead` não traz `bonus_xp`** (emenda EM1). O resumo da avaliação não
+publica quanto o bônus valeu: ler `xp_entries` para montar o `MissionRead`
+faria `missions` depender dos modelos de `progression` também na leitura, e
+recalcular pela regra seria uma segunda fonte da verdade. Depois de recarregar,
+o cartão diz "Bônus de XP creditado ao seu saldo" para o veredito `atende`, e o
+painel de progresso mostra o saldo.
+
+**A recompensa da conclusão não muda com um bônus gravado depois.**
+`recompensa_da_missao` filtra `source = 'mission_completed'` (decisão E14): com
+dois lançamentos por missão no livro-razão, sem o filtro o `.one()` quebraria.
+O teste que grava o bônus e relê a conclusão prova o filtro; a mutação que o
+tira reprova com `MultipleResultsFound`.
+
+**Onde moram os dados** (E11, `docs/HANDOFF.md`): a evidência
+e a avaliação são **dados da missão** — as tabelas ficam em
+`modules/missions/models.py`, e o `MissionRead` as lê dali, sem importar
+nenhum módulo novo.
 
 ### Frontend — parte descrição, parte contrato
 
