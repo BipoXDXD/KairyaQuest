@@ -54,6 +54,19 @@ class Turno:
     mensagens: tuple[MensagemDoTurno, ...]
 
 
+@dataclass(frozen=True)
+class Ferramenta:
+    """Uma ferramenta que o chamador define e o provedor FORCA o modelo a usar.
+
+    E parametro, e nao constante do adaptador, para `tutoring` nao importar
+    `evaluation`: quem conhece a rubrica e `evaluation`.
+    """
+
+    nome: str
+    descricao: str
+    esquema: dict[str, Any]
+
+
 class ProvedorIndisponivelError(Exception):
     """O provedor recusou ou falhou, depois das tentativas."""
 
@@ -69,5 +82,14 @@ class Provedor(Protocol):
         Um GERADOR, e nao um iteravel qualquer: o servico o fecha (`close()`)
         quando o cliente desconecta, e o fechamento precisa chegar ao stream
         HTTP do provedor.
+        """
+        ...
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        """A entrada da chamada de `ferramenta`, ou `None` se o modelo terminou
+        sem chama-la. A entrada ainda NAO foi validada.
+
+        Levanta `ProvedorIndisponivelError` (inclusive no stream cortado, sem
+        `message_stop`) e `TempoEsgotadoError`.
         """
         ...

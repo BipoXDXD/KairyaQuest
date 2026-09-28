@@ -12,6 +12,7 @@ from focusquest.modules.tutoring.domain import TipoDeAcao
 from focusquest.modules.tutoring.provider import (
     Delta,
     EventoDoProvedor,
+    Ferramenta,
     Fim,
     Proposta,
     ProvedorIndisponivelError,
@@ -46,6 +47,14 @@ def esquema_da_proposta() -> dict[str, Any]:
     return esquema
 
 
+def _mensagens_da_api(turno: Turno) -> list[MessageParam]:
+    """As mensagens do turno no formato da API, para a conversa e a avaliacao."""
+    return [
+        {"role": mensagem.papel, "content": mensagem.texto}
+        for mensagem in turno.mensagens
+    ]
+
+
 class ProvedorAnthropic:
     """Fala com a API de Mensagens pelo SDK oficial, sincrono."""
 
@@ -75,16 +84,12 @@ class ProvedorAnthropic:
             "description": DESCRICAO_DA_FERRAMENTA,
             "input_schema": esquema_da_proposta(),
         }
-        mensagens: list[MessageParam] = [
-            {"role": mensagem.papel, "content": mensagem.texto}
-            for mensagem in turno.mensagens
-        ]
         try:
             with self._cliente.messages.stream(
                 model=self._modelo,
                 max_tokens=self._max_tokens,
                 system=turno.sistema,
-                messages=mensagens,
+                messages=_mensagens_da_api(turno),
                 tools=[ferramenta],
                 # Uma proposta por resposta (README s14).
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
@@ -106,3 +111,46 @@ class ProvedorAnthropic:
             raise ProvedorIndisponivelError(
                 f"o provedor falhou: {type(erro).__name__}"
             ) from erro
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        """A entrada da chamada de `ferramenta`, com `tool_choice` FORCADO nela
+        (E12). O stream e consumido inteiro por dentro; so `message_stop` prova
+        que a resposta terminou (M3), como na conversa."""
+        definicao: ToolParam = {
+            "name": ferramenta.nome,
+            "description": ferramenta.descricao,
+            "input_schema": ferramenta.esquema,
+        }
+        entrada: dict[str, Any] | None = None
+        terminou = False
+        try:
+            with self._cliente.messages.stream(
+                model=self._modelo,
+                max_tokens=self._max_tokens,
+                system=turno.sistema,
+                messages=_mensagens_da_api(turno),
+                tools=[definicao],
+                tool_choice={
+                    "type": "tool",
+                    "name": ferramenta.nome,
+                    "disable_parallel_tool_use": True,
+                },
+            ) as stream:
+                for evento in stream:
+                    if (
+                        evento.type == "content_block_stop"
+                        and isinstance(evento.content_block, ToolUseBlock)
+                        and evento.content_block.name == ferramenta.nome
+                    ):
+                        entrada = dict(evento.content_block.input)
+                    elif evento.type == "message_stop":
+                        terminou = True
+        except (anthropic.APITimeoutError, httpx2.TimeoutException) as erro:
+            raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
+        except (anthropic.APIError, httpx2.TransportError) as erro:
+            raise ProvedorIndisponivelError(
+                f"o provedor falhou: {type(erro).__name__}"
+            ) from erro
+        if not terminou:
+            raise ProvedorIndisponivelError("o stream terminou sem message_stop")
+        return entrada

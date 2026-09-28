@@ -65,6 +65,21 @@ def test_roteiro_do_json_monta_texto_ferramenta_e_opcoes() -> None:
     )
 
 
+def test_tool_name_escolhe_a_ferramenta_e_o_padrao_e_create_mission() -> None:
+    roteiro = roteiro_do_json(
+        {
+            "blocks": [
+                {"tool_input": {"verdict": "atende"}, "tool_name": "record_evaluation"},
+                {"tool_input": {"difficulty": 2}},
+            ]
+        }
+    )
+    assert roteiro.blocos == (
+        ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),
+        ChamadaDeFerramenta({"difficulty": 2}, nome="create_mission"),
+    )
+
+
 @pytest.mark.parametrize(
     ("dados", "roteiro"),
     [
@@ -91,6 +106,14 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
         ({"blocks": [{"text": "nao e lista"}]}, "text precisa ser uma lista de textos"),
         ({"blocks": [{"text": [1]}]}, "text precisa ser uma lista de textos"),
         ({"blocks": [{"tool_input": []}]}, "tool_input precisa ser um objeto"),
+        (
+            {"blocks": [{"tool_input": {}, "tool_name": 3}]},
+            "tool_name precisa ser um texto nao vazio",
+        ),
+        (
+            {"blocks": [{"tool_input": {}, "tool_name": ""}]},
+            "tool_name precisa ser um texto nao vazio",
+        ),
         (
             {"blocks": [], "cut_after_events": "3"},
             "cut_after_events precisa ser inteiro",

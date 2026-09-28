@@ -64,11 +64,19 @@ def _bloco(dados: object) -> Texto | ChamadaDeFerramenta:
         ):
             raise ValueError("text precisa ser uma lista de textos")
         return Texto(tuple(pedacos))
-    if isinstance(dados, dict) and set(dados) == {"tool_input"}:
+    if isinstance(dados, dict) and set(dados) in (
+        {"tool_input"},
+        {"tool_input", "tool_name"},
+    ):
         entrada = dados["tool_input"]
         if not isinstance(entrada, dict):
             raise ValueError("tool_input precisa ser um objeto")
-        return ChamadaDeFerramenta(entrada)
+        if "tool_name" not in dados:
+            return ChamadaDeFerramenta(entrada)
+        nome = dados["tool_name"]
+        if not isinstance(nome, str) or not nome:
+            raise ValueError("tool_name precisa ser um texto nao vazio")
+        return ChamadaDeFerramenta(entrada, nome=nome)
     raise ValueError(f"bloco desconhecido: {dados!r}")
 
 
