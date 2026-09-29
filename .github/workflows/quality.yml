@@ -16,6 +16,18 @@ concurrency:
 
 jobs:
   # -------------------------------------------------------------------------
+  # Sobre o `runs-on` de todos os jobs
+  # -------------------------------------------------------------------------
+  # Fixado em `ubuntu-24.04`, e nao em `ubuntu-latest`: o GitHub migra o
+  # `ubuntu-latest` para o Ubuntu 26 em 2026-10-19, e o gate nao deve mudar de
+  # sistema por baixo do codigo (pendencia 99 do docs/HANDOFF.md). O que
+  # depende da imagem: o apt do `playwright install --with-deps` (o
+  # Playwright declara suporte por versao do Ubuntu) e o curl 8.5.0 que o
+  # scripts/install-gitleaks.sh assume. Os servicos (postgres:18.6-alpine) e o
+  # binario do Gitleaks nao dependem dela. REVISITAR em 2026-12-01: subir para
+  # a versao seguinte de proposito, com um PR que rode o gate inteiro nela.
+  #
+  # -------------------------------------------------------------------------
   # Sobre os `timeout-minutes` de todos os jobs
   # -------------------------------------------------------------------------
   # O padrao do runner e SEIS HORAS. Um job travado -- o caso obvio e o
@@ -36,7 +48,7 @@ jobs:
   # passar a bater no teto por crescimento legitimo, o conserto e subir o
   # numero com a medicao nova, nunca remover a linha.
   check-web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # ~3s de alvo + checkout/setup-node/npm ci. Teto largo para um `npm ci`
     # com cache frio.
     timeout-minutes: 10
@@ -54,7 +66,7 @@ jobs:
         run: make check-web
 
   check-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # ~4s de alvo + checkout/setup-uv/`uv sync --locked` + a subida do servico
     # PostgreSQL (imagem baixada e 15 tentativas de healthcheck). Mais folga
     # que o check-web porque aqui ha um servico para esperar.
@@ -99,7 +111,7 @@ jobs:
         run: make check-api
 
   check-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # O job mais caro, e por isso o teto mais alto: ele paga TODO o preparo dos
     # outros dois (npm ci + uv sync + servico PostgreSQL) mais o
     # `playwright install --with-deps chromium`, que instala bibliotecas de
@@ -146,7 +158,7 @@ jobs:
       - name: Criar o banco de teste
         run: PGPASSWORD=focusquest_local psql -h 127.0.0.1 -p 55432 -U focusquest -d focusquest -v ON_ERROR_STOP=1 -f scripts/init-test-db.sql
       # `--with-deps` AQUI, e nao no macOS: o installDeps() do Playwright so
-      # trata win32 e linux. Em darwin ele e no-op; no runner ubuntu-latest e
+      # trata win32 e linux. Em darwin ele e no-op; no runner ubuntu-24.04 e
       # ele que instala as bibliotecas de sistema do Chromium.
       #
       # SEM cache, de proposito (decisao registrada no docs/HANDOFF.md). Medido
@@ -165,7 +177,7 @@ jobs:
         run: make check-e2e
 
   check-secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # ~0,3s de alvo. O unico custo real e o download do Gitleaks (21 MB) feito
     # pelo scripts/install-gitleaks.sh -- que, com o cache abaixo, so acontece
     # quando o cache falta. O pior caso das novas tentativas do curl no script
@@ -198,7 +210,7 @@ jobs:
         run: make check-secrets
 
   quality-gate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
     # de proposito -- se ELE travar, travou algo do proprio Actions.
     timeout-minutes: 5

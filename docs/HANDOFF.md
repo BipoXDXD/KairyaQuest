@@ -4080,15 +4080,28 @@ ledger; nenhum é bug esquecido.
     #4 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
     repositório **anterior**, apagado; no recriado eles não existem. Os hashes de commit citados
     continuam valendo no histórico local.
-99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.** O aviso
-    foi **observado** pelo controlador nas anotações do CI da `main` do
-    repositório recriado (2026-09-28). Os jobs de
-    `.github/workflows/quality.yml` usam `runs-on: ubuntu-latest`, então
-    passam a rodar na imagem nova sem mudança no arquivo. Nada foi medido
-    sobre a imagem nova; se algum passo do gate depender da versão do sistema
-    (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da data.
-    Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as atualizações
-    da imagem.
+99. ~~**Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.**~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os cinco jobs de `.github/workflows/quality.yml`
+    passaram a `runs-on: ubuntu-24.04`, e um bloco de comentário no topo de
+    `jobs:` registra o porquê. O aviso continua sendo o que era: **observado**
+    pelo controlador nas anotações do CI da `main` (2026-09-28), não medido.
+    Conferência feita nesta resolução, por leitura do workflow e dos scripts,
+    do que depende da imagem: (a) o `playwright install --with-deps` (apt
+    do sistema; o Playwright declara suporte por versão do Ubuntu) — é o
+    passo que a troca de imagem mais arriscaria; (b) o curl 8.5.0 que o
+    `scripts/install-gitleaks.sh` assume (`docs/QUALITY.md` §4 já cita
+    `ubuntu-24.04`); (c) `shasum`/`sha256sum`, presentes na imagem. **Não
+    dependem da imagem:** o serviço `postgres:18.6-alpine` (container), o
+    binário do Gitleaks (`linux_x64`, conferido por hash), `setup-node` e
+    `setup-uv` (baixam o que pedem). **Estado: não executado no CI** — a
+    mudança de runner só se prova quando o PR rodar o workflow; localmente,
+    o que foi verificado é que o YAML carrega e que o `make check` aprova.
+    **Custo aceito:** a imagem deixa de receber as atualizações do
+    `ubuntu-latest`, e uma imagem fixada acaba sendo aposentada pelo GitHub
+    (data não consultada nesta sessão) — por isso a data de revisão abaixo.
+    **Revisitar em 2026-12-01:** subir para a versão seguinte de propósito,
+    num PR que rode o gate inteiro nela (o comentário no workflow repete a data).
 100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
     log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
     funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
