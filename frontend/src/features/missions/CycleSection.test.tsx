@@ -24,6 +24,7 @@ const diaria: Mission = {
   verification: null,
   evidence: null,
   evaluation: null,
+  reschedules: [],
 }
 const diariaConcluida: Mission = {
   ...diaria,

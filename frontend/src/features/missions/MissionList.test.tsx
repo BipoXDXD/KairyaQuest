@@ -24,6 +24,7 @@ const pendente: Mission = {
   verification: null,
   evidence: null,
   evaluation: null,
+  reschedules: [],
 }
 
 const concluida: Mission = {
@@ -44,6 +45,7 @@ const concluida: Mission = {
   verification: 'autodeclarada',
   evidence: null,
   evaluation: null,
+  reschedules: [],
 }
 
 const emAndamento: Mission = { ...pendente, id: 9, state: 'em_andamento' }
