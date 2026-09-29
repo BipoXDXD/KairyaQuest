@@ -32,13 +32,12 @@ estão na `main`: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR #14 (C) em
 acrescentou o `CONTINUACAO.md` na raiz (ver "Revisão-base" em
 `docs/HANDOFF.md`).
 Ao fim, o que o **Incremento E** (entrega com evidência e avaliação) criou
-entre `fe37820` e a integração das Tasks 5 e 5b e das duas ondas
-pré-finais (`0a09100`): a migração `0005`, o `core/usuario_unico.py`, os
+entre `fe37820` e o código final do incremento (`79fa4e5`): a migração `0005`, o `core/usuario_unico.py`, os
 modelos e os schemas da entrega, o módulo `evaluation` e os registros da
 avaliação em `missions/evaluation_records.py`, o método `avaliar` do
 provedor e a tela da evidência e da avaliação, com os testes
-correspondentes (ver "Alterações do Incremento E" em `docs/HANDOFF.md`). O
-E2E da avaliação (Task 8) não entra nesta árvore.
+correspondentes, o E2E da avaliação e o `reloadWaiting.ts` (ver "Alterações do
+Incremento E" em `docs/HANDOFF.md`).
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -106,6 +105,7 @@ FocusQuest/
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
 │   │   │   │   ├── types.ts             # (E, Task 6: EvaluationErrorCode, EvaluationResult e EvidenceDraft) Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
+│   │   │   │   ├── reloadWaiting.ts     # RELOAD_WAITING_LABEL, o texto de espera compartilhado pelo botão de recarga da conclusão e o da avaliação; num arquivo próprio para o MissionCard e o EvaluationPanel não se importarem em círculo (E, lote MF)
 │   │   │   │   ├── useCompleteMission.test.tsx
 │   │   │   │   ├── useCompleteMission.ts # (E: complete(evidence?), com rascunho inválido sem POST; o rascunho só sai no sucesso, decisões E17/RE4) conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
 │   │   │   │   ├── useCompletionRegistry.test.tsx
@@ -186,6 +186,7 @@ FocusQuest/
 │   ├── tests/
 │   │   ├── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
 │   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1); lê GET /api/progress antes de concluir e confere o reward/painel contra antes + xp da missão (D, Task 9, decisão P6); espera a opacidade do anúncio chegar a 1 antes do axe (D, Ruling R12)
+│   │   │   ├── evaluation.spec.ts # o E2E da entrega e da avaliação: conclui com evidência, pede a avaliação, vê o veredito, o rótulo de interpretação do modelo, o bônus e o total do painel, confere o pedido ao falso (tool_choice auto, strict, sistema; EM3), axe no cartão avaliado e a leitura depois do reload (E, Task 8; docs/QUALITY.md §9)
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)

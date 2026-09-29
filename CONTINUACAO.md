@@ -1,7 +1,7 @@
 # Retomar o FocusQuest
 
 Resumo para retomar o projeto num clone novo (por exemplo, em outra máquina), com um agente que não tem a memória
-das sessões anteriores. Escrito em 2026-09-26, depois do merge do Incremento D.
+das sessões anteriores. Escrito em 2026-09-26, depois do merge do Incremento D; estado atualizado em 2026-09-28, com o Incremento E implementado.
 
 **Este arquivo é um ponto de partida, não a fonte de verdade.** Se algo aqui divergir do repositório, valem o
 `AGENTS.md` e o `docs/HANDOFF.md`.
@@ -41,11 +41,24 @@ Não vêm no clone, de propósito:
     livro-razão, nível 100·n, 7 conquistas, painel no Quartel-General);
   - a "Frente 0" (gate paralelo por worktree) e uma onda de correções da revisão do repositório;
   - 17 PRs até o Incremento D (o do D é o #17); este arquivo entrou num PR seguinte. CI da `main` verde.
-- **Em 2026-09-28 o repositório remoto não existia mais** (`git fetch`: "Repository not found"). Sem push, PR nem CI
-  até o dono decidir onde ele mora — `docs/HANDOFF.md`, pendência 89.
-- **Próximo: Incremento E**, entrega com evidência e avaliação (ferramentas `submit_activity` e
-  `request_reward_evaluation`, README §5 e §6). Começar pelo desenho com o dono (perguntas uma por vez, depois a
-  spec, depois o plano), sem código antes da aprovação.
+- **Incremento E implementado, ainda não mesclado.** Entrega com evidência e avaliação da Tifa
+  (`submit_activity` como conclusão com evidência; `POST /api/missions/{id}/evaluation`; bônus de metade do XP só no
+  veredito `atende`; migração `0005`; módulo `evaluation`; E2E). Vive na branch `feat/incremento-e`, aberta a partir
+  de `fe37820`; o gate passou no código final (`docs/HANDOFF.md`, "Resultados"). **Nenhuma dependência nova.**
+- **O remoto foi recriado** (`BipoXDXD/FocusQuest`, privado), com a proteção da `main` reaplicada (`quality-gate`
+  obrigatório, `enforce_admins`, sem force-push). A numeração dos PRs recomeçou em #1: os "PR #4" a "#18" dos
+  documentos são do repositório antigo (pendência 98). O PR #1, de documentação ("retomada no clone movido e
+  correções pós-incremento D"), está aberto.
+- **A PR do E está por abrir**, e só se abre com a autorização do dono. O caminho é `feat/incremento-e` -> `main`,
+  com o `quality-gate` verde e a base atualizada.
+
+## Próximos passos
+
+1. Com a autorização do dono, abrir a PR do E e esperar o CI. Empurrar **uma ref por vez** (`docs/QUALITY.md` §6).
+2. O dono faz, uma vez, a **chamada real da avaliação** (pendência 91): a chave vem do Keychain, só para o processo da
+   API. Sem ela, não se sabe se o modelo chama `record_evaluation` com `tool_choice: auto` e o esquema `strict`.
+3. Ler a lista de pendências do `docs/HANDOFF.md` (90 a 108 são do E) e escolher o próximo incremento com o dono
+   (README §14), começando pelo desenho, sem código antes da aprovação.
 
 ## Regras que não se negociam (AGENTS.md)
 

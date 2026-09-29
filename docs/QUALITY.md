@@ -1131,6 +1131,32 @@ falso" novo: o controle mora inteiramente em `tests/`, nunca em
 controle é provado do lado Python por `tests/integration/test_falso_do_e2e.py`
 (18 testes, dois deles subindo o processo de verdade).
 
+### O E2E da avaliação (Incremento E)
+
+`frontend/tests/e2e/evaluation.spec.ts` roda o circuito inteiro contra o falso
+como processo, com o bloco `{"tool_input": {...}, "tool_name":
+"record_evaluation"}` no roteiro. Um cenário, que: conclui uma missão criada pela
+API **com evidência** pela tela; pede "Pedir avaliação da Tifa"; vê o selo do
+veredito ("Critério atendido", com `exact: true`, porque a região viva também diz
+"Avaliação concluída: Critério atendido."), o **rótulo fixo** "Avaliação da Tifa —
+interpretação do modelo, não verificação automática", o `+N XP de bônus` (com `N` =
+metade do XP da missão lida da API) e o total do painel como delta do
+`GET /api/progress` de antes. **As asserções sobre o pedido ao falso são as da
+EM3:** o fluxo inteiro faz **uma** requisição ao modelo (`toHaveLength(1)`, para
+pegar uma chamada extra sem a ferramenta); nela, `tool_choice` é exatamente
+`{type: 'auto', disable_parallel_tool_use: true}`, `tools` é `[{name:
+'record_evaluation', strict: true, ...}]` e o `system` cita `record_evaluation`.
+Depois espera o fade-in do anúncio assentar (`expect.poll` na opacidade, R12 do D)
+e roda o **axe** na página com o cartão avaliado (`violations == []`); recarrega e
+confere o veredito, "Bônus de XP creditado ao seu saldo." (EM1) e o mesmo total,
+lidos do servidor. **Vistas reprovando (`make check-e2e`):** o rótulo sem "—
+interpretação do modelo…"; `// 1` no lugar de `// 2` no bônus; o `tool_choice`
+forçado (M3a) e sem `strict` (M3b); `text-slate-700` no rótulo (o axe acusa
+`color-contrast`); e, no lote ME, a frase do sistema sem `record_evaluation` e a
+chamada extra ao modelo antes de `avaliar`. **O que ele não prova:** o `strict` e o
+`auto` são afirmados no **pedido**, contra o falso; que a API real os aceita e
+que o modelo chama a ferramenta é a pendência 91 (camada 3).
+
 ### A guarda de `tests/conftest.py`: nenhum teste alcança a Anthropic
 
 `tests/conftest.py` declara uma fixture de sessão, `autouse=True`, que
