@@ -320,6 +320,7 @@ FocusQuest/
 │   └── unit/                      # sem banco
 │       ├── __init__.py
 │       ├── test_clock.py
+│       ├── test_comandos_fora_da_raiz.py  # o alembic.ini acha os scripts de qualquer diretório corrente, com -c (pendência 29)
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
@@ -639,6 +640,22 @@ traceback de um 500 com o banco inexistente. `--reload` e `--workers` não
 foram medidos. O `tests/unit/test_log.py` repete as partes automatizáveis
 num subprocesso (a configuração padrão do uvicorn aplicada por
 `dictConfig`, e a partida em `DEBUG` com chave e senha conhecidas).
+
+### Diretório de trabalho (pendência 29)
+
+Os comandos do backend rodam **da raiz do repositório**, por decisão: o
+`Settings` (e o `ConfiguracaoDeLog`) lê o `.env` do diretório **corrente**, e
+o `alembic` acha o `alembic.ini` pelo diretório corrente. O caminho do
+`.env` não é ancorado no pacote porque a suíte isola os testes do `.env`
+real trocando de diretório (`monkeypatch.chdir`), e porque o caminho
+derivado de `__file__` só é a raiz do clone na instalação editável. O
+`Makefile`, o CI e o `scripts/e2e-env.sh` (que faz `cd` para a raiz) já
+rodam dali. De outro diretório, a receita é
+`uv run --project <raiz> --env-file <raiz>/.env …` e, no Alembic,
+`-c <raiz>/alembic.ini` — o `script_location = %(here)s/alembic` do `.ini`
+acha os scripts pelo caminho do arquivo, e
+`tests/unit/test_comandos_fora_da_raiz.py` prende isso. Motivo completo e
+medição em `docs/HANDOFF.md`, pendência 29.
 
 ### O contrato HTTP que existe
 

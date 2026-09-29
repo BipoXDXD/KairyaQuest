@@ -2821,6 +2821,17 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 Ele imprime só a lista de tipos de evento e grava o mesmo no arquivo, sem
 texto, sem ids e sem a chave. Nunca crie esse arquivo à mão.
 
+Todos os comandos acima rodam **da raiz do repositório**: o `Settings` lê o
+`.env` do diretório corrente, e o `alembic` acha o `alembic.ini` pelo
+diretório corrente (pendência 29, decisão de manter). Para rodar de outro
+diretório, diga ao `uv` onde estão o projeto e o `.env`, e ao Alembic onde
+está o `.ini` — medido em 2026-09-29, de um diretório fora do clone:
+
+```bash
+uv run --project <raiz> --env-file <raiz>/.env uvicorn focusquest.main:app --host 127.0.0.1 --port 8000
+uv run --project <raiz> --env-file <raiz>/.env alembic -c <raiz>/alembic.ini upgrade head
+```
+
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
 no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
@@ -3301,7 +3312,36 @@ que não tinham chegado aqui)
     silenciosa. Diferido porque o `Makefile`, o CI e o `scripts/e2e-env.sh`
     (que faz `cd` para a raiz) já rodam da raiz. Se ninguém mexer: quem
     rodar `uv run uvicorn` ou `alembic` de outro diretório recebe o erro e
-    precisa voltar para a raiz.
+    precisa voltar para a raiz.~~
+    **Resolvida por decisão na branch `wt/lote-obs` (2026-09-29): o
+    comportamento fica, documentado, com a receita para rodar de fora e um
+    teste que a prende.** A correção sugerida — ancorar o `env_file` na raiz
+    calculada a partir do pacote (`Path(__file__).parents[3] / ".env"`) —
+    foi descartada, por três motivos. (1) **Os testes dependem do
+    comportamento atual:** nove `monkeypatch.chdir(tmp_path)` em quatro
+    arquivos da suíte (um deles no ajudante `_settings_do_arquivo`, usado por
+    boa parte do `test_config.py`) existem para tirar o `.env` real da jogada; com o caminho ancorado, eles
+    passariam a ler o `.env` do clone, e
+    `test_falha_quando_a_url_do_banco_nao_esta_no_ambiente` deixaria de
+    provar a falha — consertar exigiria reescrever o isolamento da suíte, que
+    não é o objetivo desta pendência. (2) **O caminho derivado do pacote só
+    é a raiz do clone na instalação editável;** num pacote instalado de
+    wheel ele aponta para dentro do `site-packages`, que é exatamente o
+    acoplamento frágil ao caminho do clone que não se quer. (3) **Quem roda
+    de outro lugar já tem saída, e a falha é alta:** `uv run --project
+    <raiz> --env-file <raiz>/.env …` carrega o `.env` no ambiente do
+    processo (o `Settings` lê do ambiente), e o `alembic.ini` já usa
+    `script_location = %(here)s/alembic`, então `-c <raiz>/alembic.ini`
+    basta para o Alembic achar os scripts. Medido de um diretório fora do
+    clone: sem a receita, o `Settings` estoura `Field required` e o
+    `alembic` reprova com `No 'script_location' key found in configuration`;
+    com ela, o `Settings` lê o banco do `.env`, `alembic -c … heads`
+    responde `0005 (head)` e `alembic -c … -x test=true current`, com o
+    `--env-file`, também. A receita está em "Comandos"; o teste novo
+    `tests/unit/test_comandos_fora_da_raiz.py` prende a metade que é deste
+    repositório (o `alembic.ini` achar os scripts pelo caminho dele, de
+    qualquer diretório corrente — com `script_location = alembic` ele
+    reprova). O que ficou: pendência 151.
 30. **`/api/missions/` com barra final responde `307`** para
     `/api/missions` (redirecionamento automático do Starlette; medido). O
     cliente do frontend chama sem a barra, então nada quebra hoje. Diferido
@@ -4207,6 +4247,17 @@ ledger; nenhum é bug esquecido.
     uma linha nova de `_log` que interpole a configuração não é pega por
     teste nenhum — é revisão. Se ninguém mexer: nada quebra; o custo aparece
     no dia em que houver mais de um processo ou um coletor de log.
+151. **Rodar de fora da raiz continua exigindo a receita da pendência 29**
+    (branch `wt/lote-obs`, 2026-09-29). `uv run uvicorn …` ou `alembic …`
+    sem `--project`/`--env-file`/`-c`, de outro diretório, falham como
+    antes — alto, não em silêncio. A própria suíte também depende da raiz:
+    `alembic_config()` em `tests/integration/conftest.py` abre
+    `Config("alembic.ini")`, relativo; o `Makefile`, o CI e o
+    `scripts/e2e-env.sh` já rodam da raiz. O `--env-file` do `uv` carrega o
+    `.env` no **ambiente**, e o `Settings` só é estrito no arquivo
+    (pendência 12): por esse caminho, uma chave `FOCUSQUEST_*` desconhecida
+    no `.env` é descartada em silêncio em vez de reprovar. Se ninguém mexer:
+    nada muda para quem trabalha da raiz.
 
 ## Próximo incremento
 
