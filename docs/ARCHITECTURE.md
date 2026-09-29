@@ -327,7 +327,7 @@ FocusQuest/
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
-│       ├── test_log.py            # o nível de log, o handler único, terceiros fora do DEBUG, a convivência com o uvicorn e nenhum segredo no stderr (pendência 13)
+│       ├── test_log.py            # o nível de log, o handler único, terceiros fora do DEBUG, a configuração padrão do uvicorn aplicada por dictConfig, o desligamento que devolve o estado e nenhum segredo no stderr (pendência 13)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
@@ -613,7 +613,10 @@ Mínimo de propósito, sem dependência nova: `core/log.py` e o `lifespan` de
   chave desconhecida do `.env`.
 - **Configurado na partida (`lifespan`), não na importação.** O uvicorn
   aplica a configuração de log dele antes de importar o app; importar
-  `focusquest.main` num teste não mexe no logging do processo.
+  `focusquest.main` num teste não mexe no logging do processo. A saída do
+  `lifespan` desfaz o que a partida fez (o nível do `focusquest` volta ao de
+  antes, e sai o handler que ela pôs na raiz — só esse): um
+  `with TestClient(app)` na suíte não deixa estado para o teste seguinte.
 - **O handler vai na raiz, e só se a raiz não tiver nenhum**
   (`logging.basicConfig`). O uvicorn, na configuração padrão, põe handler
   nos loggers `uvicorn*` com `propagate: false` e nenhum na raiz: as linhas

@@ -48,22 +48,39 @@ _log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
-    """Configura o log na partida, e nao na importacao deste modulo.
+    """Configura o log na partida, e nao na importacao deste modulo, e o
+    devolve como estava no desligamento.
 
     Na partida porque o uvicorn aplica a configuracao de log DELE antes de
     importar o app, e a do app vem depois e se soma a dela, sem desfaze-la; e
-    porque importar
-    `focusquest.main` (os testes, o OpenAPI) nao deve mexer no logging do
-    processo de quem importa. Um nivel invalido derruba a partida com
-    `ValidationError`, que e onde um erro de configuracao deve aparecer.
+    porque importar `focusquest.main` (os testes, o OpenAPI) nao deve mexer no
+    logging do processo de quem importa. Um nivel invalido derruba a partida
+    com `ValidationError`, que e onde um erro de configuracao deve aparecer.
+
+    O `finally` desfaz o que a partida fez -- o nivel do logger `focusquest` e
+    o handler que ela tenha posto na raiz. Sob o uvicorn o processo acaba
+    logo depois; e num processo que sobe o app mais de uma vez (a suite, com
+    `with TestClient(app)`), sem isso o nivel da partida ficaria valendo para
+    o resto do processo.
 
     A linha registrada diz o nivel, e so ele: nenhum outro campo da
     configuracao entra no log.
     """
+    raiz = logging.getLogger()
+    app_logger = logging.getLogger("focusquest")
+    handlers_de_antes = raiz.handlers[:]
+    nivel_de_antes = app_logger.level
     nivel = ConfiguracaoDeLog().log_level
     configurar_logging(nivel)
     _log.info("log configurado no nivel %s", nivel)
-    yield
+    try:
+        yield
+    finally:
+        for handler in raiz.handlers[:]:
+            if handler not in handlers_de_antes:
+                raiz.removeHandler(handler)
+                handler.close()
+        app_logger.setLevel(nivel_de_antes)
 
 
 app = FastAPI(title="FocusQuest", lifespan=_ciclo_de_vida)

@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from focusquest.core.config import ConfiguracaoDeLog
-from focusquest.core.log import FORMATO, configurar_logging
+from focusquest.core.log import configurar_logging
 from focusquest.main import app
 
 
@@ -46,6 +46,10 @@ def _raiz_limpa() -> Iterator[logging.Logger]:
     handlers, nivel_da_raiz = raiz.handlers[:], raiz.level
     nivel_do_app = app_logger.level
     raiz.handlers = []
+    # O nivel de um processo recem-aberto, fixado aqui: um `--log-level` na
+    # linha de comando do pytest (ou `log_level` no pyproject) muda o nivel da
+    # raiz, e os testes reprovariam pelo ambiente, nao por defeito.
+    raiz.setLevel(logging.WARNING)
     try:
         yield raiz
     finally:
@@ -128,7 +132,10 @@ def test_configurar_instala_um_handler_so_na_raiz() -> None:
         formatador = raiz.handlers[0].formatter
         nivel_do_app = logging.getLogger("focusquest").level
     assert formatador is not None
-    assert formatador._fmt == FORMATO
+    registro = logging.LogRecord(
+        "focusquest.x", logging.INFO, __file__, 1, "mensagem", None, None
+    )
+    assert formatador.format(registro).endswith(" INFO focusquest.x: mensagem")
     assert nivel_do_app == logging.DEBUG
 
 
@@ -156,7 +163,9 @@ def test_debug_do_app_nao_liga_debug_de_terceiros() -> None:
         configurar_logging("DEBUG")
         app_em_debug = logging.getLogger("focusquest.x").isEnabledFor(logging.DEBUG)
         nivel_da_raiz = raiz.level
-        ligados = [t for t in terceiros if logging.getLogger(t).isEnabledFor(20)]
+        ligados = [
+            t for t in terceiros if logging.getLogger(t).isEnabledFor(logging.INFO)
+        ]
     assert app_em_debug
     assert nivel_da_raiz == logging.WARNING
     assert ligados == []
@@ -166,15 +175,49 @@ def test_a_partida_do_app_aplica_o_nivel_configurado(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """O `lifespan` do app e quem chama a configuracao: o uvicorn (e o
-    `TestClient` como gerenciador de contexto) o executa na partida."""
+    `TestClient` como gerenciador de contexto) o executa na partida. O
+    estado e lido DENTRO do `with`, enquanto o app esta de pe."""
     monkeypatch.setenv("FOCUSQUEST_LOG_LEVEL", "DEBUG")
-    with _raiz_limpa() as raiz:
-        with TestClient(app) as cliente:
-            assert cliente.get("/health").status_code == 200
+    with _raiz_limpa() as raiz, TestClient(app) as cliente:
+        assert cliente.get("/health").status_code == 200
         nivel_do_app = logging.getLogger("focusquest").level
         quantos_handlers = len(raiz.handlers)
     assert nivel_do_app == logging.DEBUG
     assert quantos_handlers == 1
+
+
+def test_o_desligamento_do_app_devolve_o_logging_como_estava(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sair do `lifespan` desfaz o que a partida fez: o nivel do `focusquest`
+    volta ao de antes e o handler que ela pos na raiz sai.
+
+    Sem isso, cada `with TestClient(app)` da suite deixava o `focusquest` no
+    nivel da partida pelo resto do processo -- e um `caplog.set_level(DEBUG)`
+    na raiz passaria a perder, em silencio, o DEBUG do app (revisao M1).
+    """
+    monkeypatch.setenv("FOCUSQUEST_LOG_LEVEL", "ERROR")
+    app_logger = logging.getLogger("focusquest")
+    with _raiz_limpa() as raiz:
+        app_logger.setLevel(logging.NOTSET)
+        with TestClient(app) as cliente:
+            assert cliente.get("/health").status_code == 200
+        nivel_depois = app_logger.level
+        handlers_depois = raiz.handlers[:]
+    assert nivel_depois == logging.NOTSET
+    assert handlers_depois == []
+
+
+def test_o_desligamento_do_app_nao_tira_handler_de_quem_configurou_antes() -> None:
+    """So sai o handler que a partida pos. Um handler que ja estava na raiz
+    (o `--log-config` de quem roda, os de captura do pytest) continua la."""
+    existente = logging.NullHandler()
+    with _raiz_limpa() as raiz:
+        raiz.addHandler(existente)
+        with TestClient(app) as cliente:
+            assert cliente.get("/health").status_code == 200
+        handlers_depois = raiz.handlers[:]
+    assert handlers_depois == [existente]
 
 
 # O que roda nos subprocessos abaixo. Um processo novo e o unico jeito de ver
@@ -196,17 +239,28 @@ _SOB_O_UVICORN = textwrap.dedent(
 )
 
 
-def _rodar(script: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
+def _rodar(
+    script: str, ambiente: dict[str, str] | None = None, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Roda `script` num Python novo, sem nenhuma `FOCUSQUEST_*` herdada.
+
+    Sem `check=True` de proposito: a falha do subprocesso vira um `assert`
+    com o stderr dele na mensagem, e nao um `CalledProcessError` mudo.
+    Precisa do pacote instalado (editavel, como o `uv sync` deixa): o
+    `focusquest` e importado pelo `sys.executable`, e com `cwd` fora da raiz.
+    """
     env = {k: v for k, v in os.environ.items() if not k.startswith("FOCUSQUEST_")}
-    env.update(ambiente)
-    return subprocess.run(
+    env.update(ambiente or {})
+    resultado = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
         env=env,
-        check=True,
+        cwd=cwd,
         timeout=60,
     )
+    assert resultado.returncode == 0, resultado.stderr
+    return resultado
 
 
 def test_sob_a_configuracao_do_uvicorn_cada_linha_sai_uma_vez() -> None:
@@ -249,21 +303,16 @@ def test_em_debug_a_partida_e_o_ready_nao_logam_segredo(tmp_path: Path) -> None:
     stderr vazio passaria este teste sem provar que o log estava ligado.
     """
     url = f"postgresql+psycopg://focusquest:{SENHA}@127.0.0.1:1/qualquer_test"
-    resultado = subprocess.run(
-        [sys.executable, "-c", _PARTIDA_EM_DEBUG],
-        capture_output=True,
-        text=True,
-        cwd=tmp_path,
-        env={
-            **{k: v for k, v in os.environ.items() if not k.startswith("FOCUSQUEST_")},
+    resultado = _rodar(
+        _PARTIDA_EM_DEBUG,
+        {
             "FOCUSQUEST_LOG_LEVEL": "DEBUG",
             "FOCUSQUEST_ANTHROPIC_API_KEY": CHAVE,
             "FOCUSQUEST_ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
             "FOCUSQUEST_DATABASE_URL": url,
             "FOCUSQUEST_TEST_DATABASE_URL": url,
         },
-        check=True,
-        timeout=60,
+        cwd=tmp_path,
     )
     saida = resultado.stdout + resultado.stderr
     assert "focusquest.main: log configurado no nivel DEBUG" in saida

@@ -3098,7 +3098,8 @@ ninguém mexer.
     ou acima chega ao stderr, pelo `lastResort` do Python — o `INFO` de
     "missão não encontrada" não aparece; o `WARNING` de acesso negado,
     sim. Sob o uvicorn não foi medido.~~
-    **Resolvida na branch `wt/lote-obs` (2026-09-29):** `core/log.py`
+    **Resolvida na sessão de 2026-09-29 (lote-obs, commit `914b46e`, com as
+    correções da revisão por cima):** `core/log.py`
     (`configurar_logging`) chamado pelo `lifespan` de `main.py`, sem
     dependência nova. Nível por `FOCUSQUEST_LOG_LEVEL` (padrão `INFO`,
     qualquer caixa, valor desconhecido derruba a partida), lido por
@@ -3113,8 +3114,11 @@ ninguém mexer.
     senha da URL do banco não aparece — nem no traceback de um 500. Testes em
     `tests/unit/test_log.py` (inclusive dois subprocessos: a configuração
     padrão do uvicorn aplicada por `dictConfig`, e a partida em `DEBUG` com
-    chave e senha conhecidas). Detalhes em `docs/ARCHITECTURE.md`,
-    "Logging". O que ficou: pendência 150.
+    chave e senha conhecidas). O desligamento (a saída do `lifespan`)
+    devolve o nível do `focusquest` e tira o handler que a partida pôs na
+    raiz — sem isso, cada `with TestClient(app)` da suíte deixava o nível da
+    partida valendo para o resto do processo (revisão, M1). Detalhes em
+    `docs/ARCHITECTURE.md`, "Logging". O que ficou: pendência 150.
 14. **A engine é uma global de módulo em `core/database.py`**, não um recurso
     do `lifespan` do app: há uma corrida teórica na criação e nenhum
     `dispose()` no desligamento. Movê-la para o `lifespan` é mudança de
@@ -3313,14 +3317,17 @@ que não tinham chegado aqui)
     (que faz `cd` para a raiz) já rodam da raiz. Se ninguém mexer: quem
     rodar `uv run uvicorn` ou `alembic` de outro diretório recebe o erro e
     precisa voltar para a raiz.~~
-    **Resolvida por decisão na branch `wt/lote-obs` (2026-09-29): o
-    comportamento fica, documentado, com a receita para rodar de fora e um
+    **Resolvida por decisão na sessão de 2026-09-29 (lote-obs, commit
+    `e23cc79`): o comportamento fica, documentado, com a receita para rodar de fora e um
     teste que a prende.** A correção sugerida — ancorar o `env_file` na raiz
     calculada a partir do pacote (`Path(__file__).parents[3] / ".env"`) —
     foi descartada, por três motivos. (1) **Os testes dependem do
-    comportamento atual:** nove `monkeypatch.chdir(tmp_path)` em quatro
-    arquivos da suíte (um deles no ajudante `_settings_do_arquivo`, usado por
-    boa parte do `test_config.py`) existem para tirar o `.env` real da jogada; com o caminho ancorado, eles
+    comportamento atual:** na base `580f6cc` há oito
+    `monkeypatch.chdir(tmp_path)` em três arquivos (`test_config.py` 4,
+    `test_tutoring_api.py` 3, `test_health.py` 1; medido com
+    `git grep -n monkeypatch.chdir 580f6cc -- tests`), um deles no ajudante
+    `_settings_do_arquivo`, usado por boa parte do `test_config.py`. Eles
+    existem para tirar o `.env` real da jogada; com o caminho ancorado,
     passariam a ler o `.env` do clone, e
     `test_falha_quando_a_url_do_banco_nao_esta_no_ambiente` deixaria de
     provar a falha — consertar exigiria reescrever o isolamento da suíte, que
@@ -4231,7 +4238,7 @@ ledger; nenhum é bug esquecido.
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
 150. **O logging da pendência 13 é mínimo, e o que ele não cobre ficou sem
-    medir ou sem fazer** (branch `wt/lote-obs`, 2026-09-29). (a) Sob o
+    medir ou sem fazer** (sessão de 2026-09-29, lote-obs). (a) Sob o
     uvicorn, só a configuração padrão foi medida: `--reload`, `--workers`
     e um `--log-config` que configure a raiz não foram rodados (o último é
     respeitado por construção — `basicConfig` não faz nada se a raiz já tem
@@ -4248,7 +4255,7 @@ ledger; nenhum é bug esquecido.
     teste nenhum — é revisão. Se ninguém mexer: nada quebra; o custo aparece
     no dia em que houver mais de um processo ou um coletor de log.
 151. **Rodar de fora da raiz continua exigindo a receita da pendência 29**
-    (branch `wt/lote-obs`, 2026-09-29). `uv run uvicorn …` ou `alembic …`
+    (sessão de 2026-09-29, lote-obs). `uv run uvicorn …` ou `alembic …`
     sem `--project`/`--env-file`/`-c`, de outro diretório, falham como
     antes — alto, não em silêncio. A própria suíte também depende da raiz:
     `alembic_config()` em `tests/integration/conftest.py` abre
