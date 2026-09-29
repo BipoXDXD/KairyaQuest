@@ -351,7 +351,8 @@ function TrailContent({
  * A trilha e lida ao montar, e atualizada em silencio (`useRefreshOnReturn`,
  * dentro de `useCurrentPlan`) quando a aba volta a ficar visivel ou a janela
  * recebe foco: sem isso, a aba aberta na virada do dia mostraria o dia
- * anterior ate recarregar. Se essa atualizacao falhar, o aviso `trail-stale` avisa que a trilha pode estar desatualizada.
+ * anterior ate recarregar. Se essa atualizacao falhar, o aviso `trail-stale`
+ * avisa que a trilha pode estar desatualizada.
  */
 export function CampaignTrail({
   onOpenHeadquarters,

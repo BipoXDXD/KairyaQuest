@@ -108,7 +108,7 @@ describe('CycleSection', () => {
     expect(within(cartao).getByTestId('mission-instructions')).toHaveTextContent(
       diaria.instructions,
     )
-    // m3: o titulo do cartao da missao de hoje e h3 por padrao, como sempre foi.
+    // O titulo do cartao da missao de hoje e h3 por padrao, como sempre foi.
     expect(
       within(cartao).getByRole('heading', { level: 3, name: diaria.instructions }),
     ).toBeInTheDocument()
@@ -241,7 +241,7 @@ describe('CycleSection', () => {
     })
     render(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
-    // m3: o titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
+    // O titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
     // (`titleLevel={4}`, em CycleSection.tsx) -- por isso os dois cabem na
     // mesma secao sem colidir no mesmo nivel. Antes do conserto os dois eram
     // h3, e so o `name` desambiguava a consulta abaixo.
@@ -305,7 +305,7 @@ describe('CycleSection', () => {
     expect(await screen.findByTestId('mission-item')).toBeInTheDocument()
   })
 
-  it('I1: a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+  it('a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
     // O cenario: o `focus` chega enquanto a carga
     // inicial esta em voo, o `refresh` dele falha, e a carga inicial so
     // assenta DEPOIS (e e descartada, por ser mais velha). Antes do conserto
@@ -367,7 +367,7 @@ describe('CycleSection', () => {
     expect(screen.queryByTestId('cycle-stale')).toBeNull()
   })
 
-  it('m4: a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
+  it('a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
     render(<CycleSection />)
     // O ATRIBUTO, e nao so `getByRole('status')`: o `<p>` nao tem role
@@ -375,7 +375,7 @@ describe('CycleSection', () => {
     expect(await screen.findByTestId('cycle-streak')).toHaveAttribute('role', 'status')
   })
 
-  it('m5: o botao de recuperacao do cartao do ciclo diz "Atualizar a missão de hoje", nao "Atualizar o quadro"', async () => {
+  it('o botao de recuperacao do cartao do ciclo diz "Atualizar a missão de hoje", nao "Atualizar o quadro"', async () => {
     routeFetch({
       'GET /api/cycle': () => Response.json(ciclo()),
       'POST /api/missions/31/complete': () =>
@@ -394,7 +394,7 @@ describe('CycleSection', () => {
     expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
   })
 
-  it('m1: se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
+  it('se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
     // O cenario: a diaria 31 e concluida perto da meia-noite, e a
     // resposta do refresh ja e a diaria 32 de amanha. Sem `key={mission.id}`
     // em CycleSection.tsx, o MESMO MissionCard continua montado, preso em
@@ -432,7 +432,7 @@ describe('CycleSection', () => {
     expect(within(cartao).getByTestId('mission-complete')).toBeInTheDocument()
   })
 
-  it('m7: a especial CONCLUIDA dentro da janela mostra "Concluída" e nao oferece Concluir', async () => {
+  it('a especial CONCLUIDA dentro da janela mostra "Concluída" e nao oferece Concluir', async () => {
     const especialConcluida: Mission = {
       ...especial,
       state: 'concluida',

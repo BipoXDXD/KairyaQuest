@@ -86,7 +86,7 @@ function blockedReason(draft: EvidenceDraft): string | null {
  *   `reloadLabel` no lugar do Concluir. Repetir so daria o mesmo erro;
  *   recarregar mostra o estado de verdade. O rotulo e "Atualizar o quadro" por
  *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
- *   (m5): a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
+ *   a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
  *   ali nao atualiza um "quadro" -- recarrega o ciclo.
  * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
  *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
@@ -212,7 +212,7 @@ export function MissionCard({
    */
   onRewarded?: () => void
   /**
-   * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
+   * O nivel do titulo do cartao. Padrao `3` (`<h3>`), como sempre foi no
    * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
    * especial: sem isso, o `<h3>` do titulo da secao ("Missão especial — bônus
    * da sequência") e o `<h3>` do titulo do cartao colidiam no mesmo nivel,
@@ -220,7 +220,7 @@ export function MissionCard({
    */
   titleLevel?: 3 | 4
   /**
-   * O texto do botao de recuperacao (m5). Padrao "Atualizar o quadro", como
+   * O texto do botao de recuperacao. Padrao "Atualizar o quadro", como
    * sempre foi. Ver o comentario de `CompletionControls` acima.
    */
   reloadLabel?: string

@@ -3310,6 +3310,8 @@ que não tinham chegado aqui)
     a conclusão…"), que é segura mas imprecisa. Os handlers também não
     declaram `responses`, então o `/openapi.json` não publica o corpo de
     erro. Amarrar de verdade pediria gerar os tipos a partir do OpenAPI.
+    Outro espelho à mão, do mesmo tipo: `MAX_DIFFICULTY`
+    (`shared/types/mission.ts`) e o `DIFICULDADE_MAXIMA` do backend (pendência 66).
     **Atualizada no 1b-2 (continua aberta):** desde o 1b-2, são **dois**
     espelhos à mão no frontend: `MissionErrorCode`
     (`features/missions/types.ts`) e, na tutoria, `PreStreamErrorCode`,
@@ -3716,8 +3718,8 @@ C".
     inspeção visual (pendência 61).~~ **Resolvida no lote do frontend
     (2026-09-29):** a raiz do QG ficou só com `lg:flex`; quem pinta o fundo e
     fixa a altura mínima é a `div` do `App.tsx` (Campanhas já dependia só
-    dela). A inspeção visual que a pendência pedia foi feita num Chromium real
-    (Playwright, API simulada, 390x844 e 1280x800, quadro vazio e com 12
+    dela). A inspeção visual que a pendência pedia foi feita num Chromium real,
+    à mão (script descartável, sem versão no repositório; Playwright, API simulada, 390x844 e 1280x800, quadro vazio e com 12
     missões): retângulos de `main`, painel da Tifa e raiz e as capturas de tela
     **idênticos** antes e depois em três dos quatro cenários. **A única
     diferença**, no celular com o quadro curto: a altura do documento cai de
@@ -3764,9 +3766,10 @@ C".
     `ProposalCard.difficulty.test.tsx`) que trocam `MAX_DIFFICULTY` por 7 com
     `vi.mock` e exigem "3 de 7" e "2 de 7" na tela: reprovaram antes da troca
     ("Received: 3 de 5") e reprovam de novo se o literal 5 voltar (mutação, uma
-    por cartão). **Continua aberto:** nada amarra o `MAX_DIFFICULTY` ao
-    `DIFICULDADE_MAXIMA` do backend (o espelho é à mão, como o comentário da
-    constante diz).
+    por cartão). **Continua aberto**, agora como parte da
+    pendência 32: nada amarra o `MAX_DIFFICULTY` ao `DIFICULDADE_MAXIMA` do
+    backend (o espelho é à mão, como o comentário da constante diz), e o
+    remédio é o mesmo — gerar os tipos a partir do OpenAPI.
 
 *Aceitas, sem ação*
 
@@ -3793,7 +3796,7 @@ C".
     React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
     pedido não tem efeito colateral. Aceito; um `AbortController` no
     `refresh` seria a saída se um dia importar. **Reavaliada no lote do
-    frontend (2026-09-29) e mantida aberta:** não há como provar a guarda com
+    frontend (2026-09-29) e mantida como aceita:** não há como provar a guarda com
     um teste que reprove antes (RED). Depois da desmontagem, o `setState` não
     renderiza nada, o `result.current` de `renderHook` continua com o último
     valor e o React 19 não emite aviso algum, então nenhum efeito observável
@@ -4197,7 +4200,7 @@ ledger; nenhum é bug esquecido.
 107. **Etiquetas de revisão remanescentes em títulos de teste e em
     comentários** (revisões dos lotes MF e MB; a revisão de comentários pedia tirar
     a etiqueta e manter o porquê). **Frontend resolvido no lote do frontend
-    (2026-09-29):** ~~`MissionList.test.tsx` ("M12", os quatro títulos `fix-1:`,
+    (2026-09-29; segunda passada depois da revisão do lote):** ~~`MissionList.test.tsx` ("M12", os quatro títulos `fix-1:`,
     "Task 8" e "Incremento A, Task 6"), `EvaluationPanel.test.tsx` (`describe`
     "fix-1 da revisão", "(M2)"), `EvidenceForm.test.tsx` ("(M4)"), os comentários
     de "Task 8, incremento D", "achado ..." e "revisão" em `CycleSection`,
@@ -4207,11 +4210,19 @@ ledger; nenhum é bug esquecido.
     reflow de `useCompletionRegistry.ts` e o comentário de
     `shared/types/mission.ts` ("`EvaluationSummary` da API", que agora diz
     `EvaluationSummaryRead`, no backend)~~; o mesmo vale para as etiquetas
-    equivalentes das specs E2E (`Task N`, `Ruling`, `Review Focus`, `achado`).
-    Os títulos que começam com um **identificador de caso** (`T1:`, `I1:`,
-    `m1:`, `D1`, `P1`, `C1`, `Q1`) foram mantidos de propósito: são a chave que
-    liga o teste a um caso do plano, e não citam uma revisão. **Restam,
-    no backend:** rótulos de medição ("M8", "M6 e M7", "(M3)") em
+    equivalentes das specs E2E e dos comentários (`Task N`, `Ruling`, `Review
+    Focus`, `achado`, `R12`, `m1` a `m7`, `I1`), reescritas para dizer o motivo
+    sem citar a revisão (incluindo `Campaigns.tsx`, `mission.ts`,
+    `completionFailure.ts`, `CycleSection.tsx`, `MissionCard.tsx` e
+    `civilDate.test.ts`); as etiquetas `I1:` e `m1:` a `m7:` saíram também dos
+    títulos de teste. **Ficaram, de propósito, só os identificadores de caso do
+    plano** nos títulos: `T1` a `T7` (`MissionList.test.tsx`), `D1` a `D9`
+    (`useDecideAction.test.tsx`), `P1` a `P32` (`TutorPanel.test.tsx`), `C1` a
+    `C10` (`ProposalCard.test.tsx`) e `Q1`/`Q2` (`Headquarters.test.tsx`): são a
+    numeração dos casos do plano, e não citam uma revisão. Também ficaram as
+    referências a **decisões numeradas** que têm tabela neste documento (`E17`,
+    `E18`, `EM1`, `D16`, `K2`, `K5`), porque apontam para uma decisão
+    registrada, e não para um achado de revisão. **Restam, no backend:** rótulos de medição ("M8", "M6 e M7", "(M3)") em
     `anthropic_provider.py`, além de `tutoring/service.py`, `context.py:98` e
     `test_tutoring_context.py:113`. Parte disso vem de incrementos anteriores ao
     E, e nada tem efeito no produto.

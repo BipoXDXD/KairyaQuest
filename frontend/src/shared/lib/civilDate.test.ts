@@ -47,12 +47,13 @@ describe('civilWeekday', () => {
     // O processo de teste fica fixado em Asia/Tokyo (vite.config.ts), a
     // LESTE de UTC. A armadilha que a spec nomeia -- `new Date('2026-09-21')`
     // e a meia-noite UTC, que em Sao Paulo ainda e domingo -- so aparece a
-    // OESTE, e e isto que este teste guarda (Ruling R7; mesmo padrao do teste
-    // "data civil a oeste de utc" do E2E do ciclo, 5d250b3).
+    // OESTE, e e isto que este teste guarda (mesmo padrao do teste
+    // "data civil a oeste de utc" do E2E do ciclo).
     //
     // Ele NAO prova que o formatador fixa o fuso em UTC: o meio-dia UTC em
     // Sao Paulo e 9h do MESMO dia, entao tirar o `timeZone: 'UTC'` passa aqui
-    // (medido). Quem prova isso e o teste
+    // (medido: com o `timeZone: 'UTC'`
+    // removido, este teste continua passando). Quem prova isso e o teste
     // seguinte, a LESTE, alem de +12h.
     vi.resetModules()
     vi.stubEnv('TZ', 'America/Sao_Paulo')
@@ -65,8 +66,8 @@ describe('civilWeekday', () => {
     // Sem o `timeZone: 'UTC'` no formatador, a segunda-feira vira
     // terca-feira -- e nao e so em Kiritimati: todo fuso real a partir de
     // +12h (Auckland, Fiji, Tonga, Kiritimati) tem essa mesma margem
-    // insuficiente, e por isso mata o mutante (Tokyo, +9h, e Sao Paulo, -3h, deixam ele
-    // vivo).
+    // insuficiente, e por isso mata o mutante (Tokyo, +9h, e Sao Paulo, -3h, deixam
+    // ele vivo).
     vi.resetModules()
     vi.stubEnv('TZ', 'Pacific/Kiritimati')
     const { civilWeekday: civilWeekdayEmKiritimati } = await import('./civilDate')

@@ -10,7 +10,7 @@
  * tipos da mesma resposta para manter em sincronia com o backend.
  *
  * `features/missions/types.ts` NAO reexporta estes nomes: quem precisar deles
- * importa daqui diretamente (R3 do controlador do Incremento C).
+ * importa daqui diretamente (um reexport deixaria dois caminhos para o mesmo tipo).
  *
  * Os nomes dos campos estao em `snake_case` e em ingles porque sao as chaves do
  * payload -- contrato que atravessa a rede.

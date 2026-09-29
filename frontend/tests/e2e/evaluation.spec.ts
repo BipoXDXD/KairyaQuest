@@ -122,7 +122,8 @@ test('conclui com evidencia, pede a avaliacao e ve o bonus e o painel', async ({
   ])
   expect(daAvaliacao[0]?.system).toContain('record_evaluation')
 
-  // R12 do D: esperar o fade-in assentar antes do axe.
+  // Espera o fade-in do anuncio assentar antes do axe (o axe no meio da animacao
+  // acusaria contraste insuficiente).
   await expect
     .poll(() =>
       cartao

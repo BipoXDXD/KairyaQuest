@@ -24,7 +24,7 @@ interface CardProps {
   onCompleted: () => void
   /** O bonus da avaliacao: so avisa a pagina (a sequencia nao muda com ele). */
   onRewarded?: () => void
-  /** m5: aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
+  /** Aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
   reloadLabel: string
 }
 
@@ -59,7 +59,7 @@ function CycleLoaded({
         </p>
       ) : (
         <ul role="list" className="flex flex-col gap-3">
-          {/* m1: a chave pela ID da missao, e nao pela POSICAO. Sem ela, um
+          {/* A chave pela ID da missao, e nao pela POSICAO. Sem ela, um
               `refresh` que devolve outra missao (a diaria de amanha, se a
               conclusao caiu perto da meia-noite e a resposta chegou depois)
               mantem a MESMA instancia do cartao -- e ela continua presa no
@@ -68,7 +68,7 @@ function CycleLoaded({
           <MissionCard key={cycle.mission.id} mission={cycle.mission} {...card} />
         </ul>
       )}
-      {/* m4: `role="status"` desde o primeiro render do estado carregado -- um
+      {/* `role="status"` desde o primeiro render do estado carregado -- um
           leitor de tela so anuncia mudanca numa regiao viva que ja estava no
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
           diaria) nem o texto que muda quando ela chega ao marco eram
@@ -87,7 +87,7 @@ function CycleLoaded({
             Missão especial — bônus da sequência
           </h3>
           <ul role="list" className="flex flex-col gap-3">
-            {/* m1: mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
             <MissionCard key={cycle.special.id} mission={cycle.special} {...card} titleLevel={4} />
           </ul>
         </div>

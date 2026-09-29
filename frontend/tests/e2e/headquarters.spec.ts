@@ -347,7 +347,7 @@ test('concluir pela tela muda o estado no servidor, e a tela concluida e acessiv
   await expect(item.getByTestId('mission-state')).toHaveText('Concluída')
   await expect(item.getByTestId('mission-complete')).toHaveCount(0)
 
-  // R12: espera a animacao de entrada do anuncio assentar
+  // Espera a animacao de entrada do anuncio assentar
   // (`motion-safe:animate-[reward-in_400ms_ease-out]`, no `<div
   // data-testid="reward">` de RewardAnnouncement.tsx) antes do axe. Sem isto,
   // o axe podia auditar um quadro no MEIO do fade-in (opacidade parcial) e

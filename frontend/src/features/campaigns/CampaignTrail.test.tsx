@@ -133,7 +133,7 @@ describe('CampaignTrail', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('I1: a aba que volta durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+  it('a aba que volta durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
     let resolverInicial: (resposta: Response) => void = () => undefined
     routeFetch({
       'GET /api/plans/current': (_init, call) => {

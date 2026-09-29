@@ -47,8 +47,7 @@ function diaCivil(civil: string, deslocamento: number): string {
 /**
  * Se duas caixas de `boundingBox()` se sobrepoem. Uma caixa NULA reprova: e
  * o elemento sem caixa (oculto ou fora do layout), e tratar isso como "sem
- * sobreposicao" deixaria passar um botao escondido (por isso a
- * caixa nula reprova, em vez de passar).
+ * sobreposicao" deixaria passar um botao escondido.
  */
 function caixasSeSobrepoem(
   a: { x: number; y: number; width: number; height: number } | null,
@@ -161,7 +160,7 @@ test('concluir a missao de hoje leva a sequencia a 1, no servidor, e a tela conc
     `${(antes.xp_total + xp).toLocaleString('pt-BR')} XP no total`,
   )
 
-  // R12: espera a animacao de entrada do anuncio assentar antes do axe. Sem
+  // Espera a animacao de entrada do anuncio assentar antes do axe. Sem
   // isto, o axe podia auditar o anuncio no meio do fade-in (opacidade
   // parcial) e acusar contraste insuficiente -- a cor final passa com folga.
   await expect

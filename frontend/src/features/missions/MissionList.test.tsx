@@ -587,8 +587,9 @@ describe('MissionList -- concluir', () => {
 })
 
 describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
-  // A e B, as duas missoes do cenario da pendencia 35 do HANDOFF: A tem a conclusao em voo, B recebe `transicao_ilegal` e e dela
-  // que sai o "Atualizar o quadro".
+  // A e B, as duas missoes do cenario da pendencia 35 do HANDOFF: A tem a
+  // conclusao em voo, B recebe `transicao_ilegal` e e dela que sai o
+  // "Atualizar o quadro".
   const missaoA: Mission = pendente
   const missaoB: Mission = {
     ...pendente,
