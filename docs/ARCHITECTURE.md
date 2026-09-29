@@ -732,8 +732,10 @@ mesmo padrão dos estados de `missions`
 
 **O stream do `POST /messages`**, eventos SSE nesta ordem: `user_message`
 (a pergunta já gravada, com o `id` do banco) → `delta` zero ou mais vezes
-(`{"text": "…"}`) → um final, só um: `done` (a resposta completa e as ações
-dela, emitido **depois do commit**) ou `error` (`{"code": "…"}`, emitido
+(`{"text": "…"}`) → um final, só um: `done` (a resposta gravada e as ações
+dela, emitido **depois do commit** — `status` `completa`, ou `interrompida`,
+com o texto parcial e sem ação, quando o modelo parou por `stop_reason:
+max_tokens`, pendência 45 do `docs/HANDOFF.md`) ou `error` (`{"code": "…"}`, emitido
 **depois** de a falha estar gravada como `falhou`). Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do

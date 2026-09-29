@@ -559,3 +559,77 @@ def test_listar_traz_as_acoes_embutidas(session: Session) -> None:
     session.expire_all()
     *_, ultima = listar_mensagens(session, ESTUDANTE)
     assert [a.state for a in ultima.actions] == [EstadoDaAcao.PROPOSTA]
+
+
+# --- O corte pelo teto de tokens (pendencia 45) ----------------------------
+
+
+def test_resposta_cortada_por_max_tokens_fica_interrompida(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """O `message_stop` chegou, mas por `max_tokens`: o texto e parcial. Ele
+    fica gravado e visivel, marcado `interrompida` -- e nao `completa`, que o
+    faria parecer inteiro para a tela e para o historico do turno seguinte."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco da ", "explica")),), stop_reason="max_tokens"
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
+    assert final.mensagem.content == "Comeco da explica"
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.INTERROMPIDA,
+        "Comeco da explica",
+        None,
+    )
+
+
+def test_proposta_cortada_por_max_tokens_nao_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """Com o corte, a entrada da ferramenta pode estar pela metade: nenhuma
+    acao nasce dela, mesmo que o que chegou passe no `MissionCreate`."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
+        stop_reason="max_tokens",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto-acao")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
+    assert final.mensagem.actions == []
+    assert _resposta(fabrica, preparo.resposta_id).actions == []
+
+
+def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A cortada nao conta como resposta: o mesmo id pede uma resposta nova
+    ao modelo, como depois de qualquer `interrompida`."""
+    cid = conversa.id("teto-reenvio")
+    falso.roteiro = Roteiro(blocos=(Texto(("meio",)),), stop_reason="max_tokens")
+    primeiro = _para_gerar(_preparar(fabrica, tutoria, cid))
+    list(_transmitir(fabrica, tutoria, primeiro))
+
+    falso.roteiro = Roteiro(blocos=(Texto(("inteira",)),))
+    segundo = _preparar(fabrica, tutoria, cid)
+
+    assert isinstance(segundo, ParaGerar)
+    assert segundo.resposta_id != primeiro.resposta_id
+    *_, final = _transmitir(fabrica, tutoria, segundo)
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.status is StatusDaMensagem.COMPLETA
+    assert len(falso.recebidas) == 2

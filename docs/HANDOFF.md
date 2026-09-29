@@ -3486,7 +3486,7 @@ que não tinham chegado aqui)
     `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (Task 6, fix
     round 1/5) — discriminaram a mutação em **5 de 5** execuções cada, sem
     nenhuma passagem por acidente. Não há taxa parcial a acompanhar.
-45. **Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
+45. ~~**Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
     `completa`, e não como cortada.** A guarda da medição M3 cobre o corte de
     **transporte** (a conexão cai e a iteração termina em silêncio, sem
     `Fim`); ela não distingue um `Fim` que chega porque o modelo terminou de
@@ -3499,7 +3499,40 @@ que não tinham chegado aqui)
     corte veio antes do `tool_use`. A tela não tem como distinguir: o
     `MessageRead` não carrega o `stop_reason`. Resolver pede mudar o backend
     (gravar o `stop_reason`, ou tratar `max_tokens` como `interrompida`) —
-    fora do escopo do 1b-2, que não muda `src/focusquest/`.
+    fora do escopo do 1b-2, que não muda `src/focusquest/`.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(tutoria): resposta cortada por
+    max_tokens fica interrompida`).** **Decisão:** a resposta cortada pelo
+    teto de tokens é gravada `interrompida`, com o texto parcial, **sem
+    ação**, e chega ao cliente no `done` de sempre. Escolhida por ser a que
+    menos muda contrato: nenhum valor de enum novo (`interrompida` já existe
+    na coluna, no `CHECK` e no `MessageStatus` do frontend), nenhuma coluna
+    nem migração, nenhum `error_code` novo e nenhum evento SSE novo — muda só
+    **qual** `status` o `done` pode carregar. As alternativas custavam mais:
+    gravar o `stop_reason` pede migração, schema e tela; `falhou` com um
+    `error_code` novo pede um código no `CodigoDoStream`, no
+    `StreamErrorCode` e no mapa exaustivo de `messageFailure.ts`, e trataria
+    como falha do provedor algo que é um limite configurado. `interrompida`
+    também é a leitura honesta — "a resposta não chegou inteira" — e traz de
+    graça o que se quer: a tela marca "Resposta interrompida" e oferece o
+    "Tentar de novo" do histórico (`pendingFromHistory`), o reenvio com o
+    mesmo id gera resposta nova (só a `completa` conta como resposta), e o
+    `_historico` do turno seguinte já exclui a `interrompida`, então o texto
+    cortado não volta ao modelo. A proposta é descartada porque a entrada da
+    ferramenta pode ter chegado pela metade. **Frontend:** nenhuma mudança de
+    código; um teste novo (`TutorPanel.test.tsx`, P33) prova o fluxo do
+    `done` `interrompida` (marca, nota de reenvio, reenvio com o mesmo id).
+    **Backend:** `Fim` ganhou `cortada: bool = False`; o adaptador guarda o
+    `stop_reason` do `message_delta` e emite `Fim(cortada=True)` quando é
+    `max_tokens`; `transmitir` grava `interrompida` e zera a proposta; a
+    docstring de `StatusDaMensagem` e o `docs/ARCHITECTURE.md` (o stream do
+    `POST /messages`) passaram a descrever o caso. RED visto: o teste do
+    adaptador reprovou com `TypeError` (o `Fim` sem o campo) e os de serviço
+    com `completa` no lugar de `interrompida`. Mutações: o adaptador emitindo
+    `Fim()` sempre reprova 5 testes; o serviço gravando sempre `completa`
+    reprova 4; sem o descarte da proposta, 2 (a ação nascia de uma entrada
+    cortada); no frontend, a marca de `interrompida` nula reprova o P33 (e
+    P5, P14, P30), e `pendingFromHistory` tratando `interrompida` como
+    resolvida reprova o P33 e o P17. Limitações novas: 120 e 121.
 46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
     o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
     não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
@@ -4209,6 +4242,25 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+
+**Criadas pelo lote back (2026-09-29)**
+
+120. **Só `max_tokens` conta como corte; os outros `stop_reason` continuam
+     gravando `completa`.** O adaptador de conversa (`responder`) distingue
+     apenas `max_tokens` (pendência 45). `model_context_window_exceeded` —
+     também uma resposta truncada — e `refusal` chegariam como `completa`. O
+     servidor falso só roteiriza `end_turn`, `tool_use` e `max_tokens`, e uma
+     guarda sem teste que a prove não entrou. Resolver: estender o `Literal`
+     do `Roteiro` e tratar a janela de contexto como corte (e decidir o que a
+     recusa deve mostrar).
+121. **A região viva anuncia "Tifa terminou de responder." também para a
+     resposta cortada pelo teto de tokens.** O `done` `interrompida` leva o
+     envio a `idle` com `finished`, e o texto da região viva
+     (`TutorPanel.tsx`) não olha o `status` da resposta. Quem enxerga vê a
+     marca "Resposta interrompida" e a nota de reenvio; quem usa leitor de
+     tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
+     pede o estado `idle` carregar o `status` da resposta (ou a região viva
+     ler a última mensagem) e um texto próprio para o corte.
 
 ## Próximo incremento
 
