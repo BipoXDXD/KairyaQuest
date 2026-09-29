@@ -4248,6 +4248,22 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
+    2026-09-29; consequência da pendência 99). Os jobs rodam em
+    `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
+    subir a versão de propósito, num PR que rode o gate inteiro na imagem
+    nova (o ponto de atrito provável é o apt do `playwright install
+    --with-deps`). A mudança de `ubuntu-latest` para `ubuntu-24.04` **não foi
+    executada no CI** ainda: fica provada, ou não, no primeiro PR que rodar o
+    workflow.
+131. **As configurações de `.run/` nunca foram abertas no PyCharm** (lote de
+    infraestrutura, 2026-09-29; pendência 17). Os testes só garantem o que se
+    lê nos arquivos. Falta, na IDE: abrir o projeto, ver as cinco
+    configurações aparecerem, executar **API**, **Testes backend** e **Gate**,
+    e **Frontend** / **Testes frontend** com um Node configurado; e conferir se
+    o `$PROJECT_DIR$/.venv/bin/python` é resolvido no `SDK_HOME` e se o módulo
+    `focusquest` existe num clone com outro nome de pasta. Se algo divergir, a
+    correção é no formato dos arquivos e no `tests/unit/test_run_configs.py`.
 
 ## Próximo incremento
 
