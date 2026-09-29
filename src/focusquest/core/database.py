@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from typing import Annotated, Any
 
 from fastapi import Depends
+from pydantic import ValidationError
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import ConnectionPoolEntry, Pool
@@ -90,6 +91,23 @@ def get_engine() -> Engine:
     if _engine is None:
         _engine = create_engine_from_url(Settings().database_url)
     return _engine
+
+
+def get_engine_se_configurada() -> Engine | None:
+    """A engine, ou None quando a configuracao do banco falta ou e invalida.
+
+    So o `/ready` usa (pendencia 28): ali "sem configuracao" e um estado a
+    responder com 503, e nao um 500. Com `Depends(get_engine)`, o
+    `ValidationError` do `Settings` estoura na resolucao da dependencia, antes
+    de a rota poder traduzi-lo. As rotas de negocio continuam em `get_engine`:
+    para elas, faltar configuracao e defeito de implantacao, e 500 e a verdade.
+    A engine continua preguicosa e global (pendencia 14): nada aqui a cria na
+    partida, e o `/health` segue sem tocar em nada disto.
+    """
+    try:
+        return get_engine()
+    except ValidationError:
+        return None
 
 
 def get_session(engine: Annotated[Engine, Depends(get_engine)]) -> Iterator[Session]:

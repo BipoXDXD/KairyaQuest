@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from focusquest.core.database import get_engine
+from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
@@ -296,7 +296,8 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready(
-    engine: Annotated[Engine, Depends(get_engine)], response: Response
+    engine: Annotated[Engine | None, Depends(get_engine_se_configurada)],
+    response: Response,
 ) -> dict[str, str]:
     """Readiness. Abre a `connection` e consulta de verdade: um readiness que
     nao consulta mente sobre estar pronto.
@@ -310,7 +311,14 @@ def ready(
     O corpo e em ingles de proposito. `/ready` e contrato de API, lido por
     orquestrador e por monitoramento; o texto em portugues que a pessoa le
     pertence ao frontend, que traduz o estado.
+
+    Sem configuracao de banco (`engine` None), tambem 503 -- nao pronto --,
+    com `not_configured` no lugar de `unavailable`: o corpo diz se o banco
+    esta fora do ar ou se a implantacao nem sabe onde ele esta (pendencia 28).
     """
+    if engine is None:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "database": "not_configured"}
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

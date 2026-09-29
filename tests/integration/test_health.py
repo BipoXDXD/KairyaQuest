@@ -9,7 +9,11 @@ from sqlalchemy import Engine
 
 from focusquest.core import database
 from focusquest.core.config import Settings
-from focusquest.core.database import create_engine_from_url, get_engine
+from focusquest.core.database import (
+    create_engine_from_url,
+    get_engine,
+    get_engine_se_configurada,
+)
 from focusquest.main import app
 
 
@@ -26,7 +30,11 @@ def override_engine() -> Iterator[Callable[[Engine], None]]:
     """
 
     def _aplicar(engine: Engine) -> None:
+        # As DUAS portas por onde uma rota recebe a engine: `get_engine` (as
+        # rotas de negocio) e `get_engine_se_configurada` (o /ready, desde a
+        # pendencia 28). Substituir so uma deixaria o /ready no banco real.
         app.dependency_overrides[get_engine] = lambda: engine
+        app.dependency_overrides[get_engine_se_configurada] = lambda: engine
 
     yield _aplicar
     app.dependency_overrides.clear()
@@ -128,6 +136,41 @@ def test_ready_falha_quando_o_banco_nao_responde(
 
     assert resposta.status_code == 503
     assert resposta.json() == {"status": "unavailable", "database": "unavailable"}
+
+
+def test_ready_sem_configuracao_de_banco_responde_503(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pendencia 28: sem configuracao, "nao pronto" e 503, como com o banco
+    fora do ar -- e nao o 500 do `ValidationError` estourando na resolucao da
+    dependencia. O corpo separa os dois casos: `not_configured` aqui,
+    `unavailable` quando o banco configurado nao responde.
+
+    Mesmo cenario do teste do /health sem configuracao: sem .env (o chdir) e
+    sem as variaveis no ambiente, `Settings()` falha.
+    """
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with TestClient(app) as c:
+        resposta = c.get("/ready")
+
+    assert resposta.status_code == 503
+    assert resposta.json() == {"status": "unavailable", "database": "not_configured"}
+
+
+def test_get_engine_se_configurada_devolve_a_engine_compartilhada(
+    monkeypatch: pytest.MonkeyPatch, descartar_engines: list[Engine]
+) -> None:
+    """Com configuracao, a dependencia do /ready e a MESMA engine das rotas de
+    negocio: o /ready precisa provar o banco que a aplicacao usa, e nao outro."""
+    monkeypatch.setattr(database, "_engine", None)
+    engine = database.get_engine_se_configurada()
+    assert engine is not None
+    descartar_engines.append(engine)
+    assert engine is database.get_engine()
 
 
 def test_get_engine_cria_uma_vez_e_reaproveita(

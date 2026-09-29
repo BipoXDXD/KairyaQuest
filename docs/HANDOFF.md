@@ -3267,7 +3267,7 @@ que não tinham chegado aqui)
     fusos. Efeito no contrato: todo instante lido do banco sai com `Z`; o 201
     da criação continua ecoando o prazo com o offset que o cliente mandou
     (`docs/ARCHITECTURE.md`).
-28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
+28. ~~**`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
     `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
     `get_engine` estoura `ValidationError` antes do `try` que traduz a falha
     do banco em 503 (medido). Diferido desde a Task 4, com decisão
@@ -3275,7 +3275,28 @@ que não tinham chegado aqui)
     liveness/readiness foi a parte mais delicada da execução. Se ninguém
     mexer: um orquestrador vê "não pronto" do mesmo jeito; quem ler só o
     status não distingue "banco fora" de "implantação sem configuração". O
-    `docs/ARCHITECTURE.md` descreve os três casos.
+    `docs/ARCHITECTURE.md` descreve os três casos.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(saude): ready responde 503 sem
+    configuracao de banco`).** A correção coube no tamanho pedido e não mexe
+    na pendência 14: `core/database.py` ganhou `get_engine_se_configurada`,
+    que chama o mesmo `get_engine` e devolve `None` no `ValidationError` do
+    `Settings`; o `/ready` depende dela e responde `503` com `{"status":
+    "unavailable", "database": "not_configured"}` — o corpo separa "sem
+    configuração" de "banco fora" (`unavailable`), já que o status agora é o
+    mesmo nos dois. A engine continua global e preguiçosa, e o `/health`
+    continua sem dependência nenhuma (o teste
+    `test_health_responde_sem_configuracao_de_banco` passa sem mudança). As
+    rotas de negócio continuam em `get_engine` e respondem 500 sem
+    configuração — para elas é defeito de implantação, e trocar isso pediria
+    um `code` novo que o frontend repetiria. Testes em
+    `tests/integration/test_health.py`: o `/ready` sem `.env` e sem as
+    variáveis (RED visto: o `ValidationError` subia pelo `TestClient`) e o
+    ramo configurado de `get_engine_se_configurada` devolvendo a mesma engine
+    de `get_engine`. A fixture `override_engine` passou a substituir as duas
+    dependências (sem isso o `/ready` dos testes com engine quebrada iria ao
+    banco real); nenhuma asserção existente mudou. Mutações: tirar o `except`
+    reprova o teste novo; tirar o `503` do ramo sem configuração reprova; e
+    devolver `unavailable` no lugar de `not_configured` reprova.
 29. **Os comandos dependem de rodar da raiz do repositório.** O `Settings` lê
     o `.env` do diretório **corrente**, e o `alembic.ini` também é achado
     pelo diretório corrente. Medido fora da raiz: a aplicação estoura
