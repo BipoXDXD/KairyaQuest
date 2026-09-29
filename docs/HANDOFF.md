@@ -10,6 +10,14 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
 ## Revisão-base
 
+**Incremento F — acompanhar a execução: iniciar e reagendar missões.** Branch
+`feat/incremento-f`, aberta a partir de `580f6cc` (a `main`: o merge do PR #2,
+o Incremento E). Spec em
+`docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
+(decisões F1–F24), aprovada por delegação do dono em 2026-09-29 ("tome todas
+as decisões por mim"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`.
+**Estado de publicação: não publicado.**
+
 **Incremento E — entrega com evidência e avaliação.** Branch
 `feat/incremento-e`, aberta a partir de `fe37820` (a branch
 `docs/retomada-pos-d`, ainda local na época: o remoto não existia, pendência 89, resolvida depois). Spec em
