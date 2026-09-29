@@ -94,4 +94,41 @@ describe('useTutorStatus', () => {
       expect(result.current.state).toEqual({ status: 'available' })
     })
   })
+
+  it('depois do reload, a resposta do pedido antigo, que chega por ultimo, nao sobrescreve a nova', async () => {
+    // O `fetch` falso IGNORA o abort: a resposta velha ("indisponivel") chega
+    // DEPOIS da nova ("disponivel"), e so a guarda de `signal.aborted` no
+    // sucesso impede que ela grave o estado por cima.
+    const respostas: Array<(response: Response) => void> = []
+    routeFetch({
+      'GET /api/tutoring/status': () =>
+        new Promise<Response>((resolve) => {
+          respostas.push(resolve)
+        }),
+    })
+
+    const { result } = renderHook(() => useTutorStatus())
+    await waitFor(() => {
+      expect(respostas).toHaveLength(1)
+    })
+    act(() => {
+      result.current.reload()
+    })
+    await waitFor(() => {
+      expect(respostas).toHaveLength(2)
+    })
+
+    act(() => {
+      respostas[1]?.(Response.json({ available: true }))
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'available' })
+    })
+    await act(async () => {
+      respostas[0]?.(Response.json({ available: false }))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(result.current.state).toEqual({ status: 'available' })
+  })
 })

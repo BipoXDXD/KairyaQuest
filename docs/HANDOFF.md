@@ -3792,7 +3792,15 @@ C".
     desmontar chama `setState` num componente que não existe mais. No
     React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
     pedido não tem efeito colateral. Aceito; um `AbortController` no
-    `refresh` seria a saída se um dia importar.
+    `refresh` seria a saída se um dia importar. **Reavaliada no lote do
+    frontend (2026-09-29) e mantida aberta:** não há como provar a guarda com
+    um teste que reprove antes (RED). Depois da desmontagem, o `setState` não
+    renderiza nada, o `result.current` de `renderHook` continua com o último
+    valor e o React 19 não emite aviso algum, então nenhum efeito observável
+    separa o código com guarda do sem guarda (o teste "desmontar no meio nao
+    escreve estado de erro", de `useTutorStatus.test.tsx`, já registra a mesma
+    limitação). Sem RED não há mudança de código; o mesmo vale para
+    `useCurrentPlan.ts`, que tem o desenho idêntico.
 
 *Verificada — registro, não pendência*
 
@@ -3841,7 +3849,7 @@ C".
 
 **Revisão do repositório (2026-09-25)**
 
-77. **`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
+77. ~~**`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
     de pedidos.** Os dois abortam o pedido anterior na limpeza do efeito,
     mas o `.then()` de sucesso não confere nada — nem um `requestId`, como
     `useCycle.ts` e `useCurrentPlan.ts`, nem `controller.signal.aborted`,
@@ -3853,7 +3861,16 @@ C".
     recarga que o Quartel-General pede quando a Tifa cria uma missão
     (`Headquarters.tsx`, `reloadBoard`). Não há teste de "dois pedidos, o
     mais velho responde por último" nos dois hooks. Saída: replicar a guarda
-    de `requestId` (achado M1 da revisão de frontend).
+    de `requestId` (achado M1 da revisão de frontend).~~ **Resolvida no lote
+    do frontend (2026-09-29):** o `.then()` dos dois hooks passou a conferir
+    `controller.signal.aborted`, o mesmo teste que o `.catch()` já fazia — um
+    `requestId` seria redundante, porque cada execução do efeito tem o próprio
+    `AbortController` e a limpeza (o `reload` ou a desmontagem) o aborta. Um
+    teste novo em cada hook (`useMissions.test.tsx`, `useTutorStatus.test.tsx`)
+    usa um `fetch` que ignora o abort e faz a resposta velha chegar por
+    último: reprovou antes da guarda (o estado terminava com "Missao velha" e
+    com `unavailable`) e reprova de novo quando a guarda sai (mutação, uma por
+    hook).
 
 **Incremento D — a progressão (2026-09-25)**
 
@@ -3919,6 +3936,13 @@ C".
 86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
     repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
     N"). Redundante para quem usa leitor de tela, não incorreto.
+    **Avaliada no lote do frontend (2026-09-29) e não alterada:** o rótulo
+    "Progresso até o nível N" é a decisão R13 do controlador do D (registrada
+    na tabela de decisões, com o `aria-valuetext` mantido de propósito), e o
+    `ProgressPanel.test.tsx` o cobra pelo nome. Trocar por outro nome (por
+    exemplo "Progresso de XP") tira a redundância, mas é uma escolha de texto de
+    acessibilidade sem um único desfecho claro e desfaz uma decisão já
+    registrada — fica para o dono.
 87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
     `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
     tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
