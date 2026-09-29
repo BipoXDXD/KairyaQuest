@@ -4229,7 +4229,8 @@ B → C**. O desenho de A, B e C está em
 
 - **E — entrega com evidência e avaliação**, o incremento depois do D.
   **Implementado** em `feat/incremento-e` (base `fe37820`; código final `79fa4e5`),
-  **ainda não mesclado**: a PR está por abrir, depois da autorização do dono. Spec
+  e vai à `main` pelo **PR #2**, com commit, push, PR e merge autorizados pelo dono em
+  2026-09-28. Spec
   em `docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`
   (E1–E18, EM1–EM4); decisões e rulings em "Decisões tomadas", alterações em
   "Alterações do Incremento E", medições em "Resultados" e pendências 90 a 108. **O

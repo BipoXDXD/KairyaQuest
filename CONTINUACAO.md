@@ -41,20 +41,20 @@ Não vêm no clone, de propósito:
     livro-razão, nível 100·n, 7 conquistas, painel no Quartel-General);
   - a "Frente 0" (gate paralelo por worktree) e uma onda de correções da revisão do repositório;
   - 17 PRs até o Incremento D (o do D é o #17); este arquivo entrou num PR seguinte. CI da `main` verde.
-- **Incremento E implementado, ainda não mesclado.** Entrega com evidência e avaliação da Tifa
+- **Incremento E: vai à `main` pelo PR #2** (`feat/incremento-e` -> `main`), com commit, push, PR e merge
+  autorizados pelo dono em 2026-09-28. Entrega com evidência e avaliação da Tifa
   (`submit_activity` como conclusão com evidência; `POST /api/missions/{id}/evaluation`; bônus de metade do XP só no
   veredito `atende`; migração `0005`; módulo `evaluation`; E2E). Vive na branch `feat/incremento-e`, aberta a partir
   de `fe37820`; o gate passou no código final (`docs/HANDOFF.md`, "Resultados"). **Nenhuma dependência nova.**
 - **O remoto foi recriado** (`BipoXDXD/FocusQuest`, privado), com a proteção da `main` reaplicada (`quality-gate`
   obrigatório, `enforce_admins`, sem force-push). A numeração dos PRs recomeçou em #1: os "PR #4" a "#18" dos
   documentos são do repositório antigo (pendência 98). O PR #1, de documentação ("retomada no clone movido e
-  correções pós-incremento D"), está aberto.
-- **A PR do E está por abrir**, e só se abre com a autorização do dono. O caminho é `feat/incremento-e` -> `main`,
-  com o `quality-gate` verde e a base atualizada.
+  correções pós-incremento D"), vai à `main` junto com o #2, porque a branch do E parte dele (`fe37820`).
 
 ## Próximos passos
 
-1. Com a autorização do dono, abrir a PR do E e esperar o CI. Empurrar **uma ref por vez** (`docs/QUALITY.md` §6).
+1. Conferir que o PR #2 foi mesclado com o `quality-gate` verde e que o CI da `main` ficou verde. Empurrar sempre
+   **uma ref por vez** (`docs/QUALITY.md` §6).
 2. O dono faz, uma vez, a **chamada real da avaliação** (pendência 91): a chave vem do Keychain, só para o processo da
    API. Sem ela, não se sabe se o modelo chama `record_evaluation` com `tool_choice: auto` e o esquema `strict`.
 3. Ler a lista de pendências do `docs/HANDOFF.md` (90 a 108 são do E) e escolher o próximo incremento com o dono
