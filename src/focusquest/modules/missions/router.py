@@ -24,11 +24,13 @@ from focusquest.modules.missions.schemas import (
     MissionCompletionRead,
     MissionCreate,
     MissionRead,
+    MissionStart,
 )
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
     criar_missao,
+    iniciar_missao,
     listar_missoes,
 )
 from focusquest.modules.progression.schemas import RewardRead
@@ -124,3 +126,19 @@ def concluir(
     # no reenvio (D10): e o que torna os dois corpos identicos.
     recompensa = RewardRead.da_recompensa(recompensa_da_missao(session, missao))
     return MissionCompletionRead.da_leitura_e_recompensa(lida, recompensa)
+
+
+@router.post("/{mission_id}/start")
+def iniciar(
+    mission_id: IdDaMissao,
+    dados: MissionStart,
+    session: SessaoDaRequisicao,
+    clock: Annotated[Clock, Depends(get_clock)],
+) -> MissionRead:
+    """Inicia a missao (F1). 200, como a conclusao: muda o estado de um recurso
+    que ja existia, e o reenvio da mesma chave devolve o mesmo corpo."""
+    missao = iniciar_missao(
+        session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock
+    )
+    session.commit()
+    return MissionRead.da_leitura(ler_missao(session, missao, clock()))

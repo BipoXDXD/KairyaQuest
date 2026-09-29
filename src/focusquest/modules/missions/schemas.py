@@ -247,6 +247,12 @@ def _campos_da_entrega(
     }
 
 
+class MissionStart(BaseModel):
+    """O corpo do inicio: so a chave de idempotencia (F2)."""
+
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+
+
 class MissionComplete(BaseModel):
     """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
 
