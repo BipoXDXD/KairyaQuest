@@ -4149,21 +4149,25 @@ ledger; nenhum é bug esquecido.
     pior caso (ou contaria o tempo pela soma das tentativas do SDK).
 107. **Etiquetas de revisão remanescentes em títulos de teste e em
     comentários** (revisões dos lotes MF e MB; a revisão de comentários pedia tirar
-    a etiqueta e manter o porquê). Restaram, no frontend: `MissionList.test.tsx`
-    (o "e M12 que faz..." na linha 517, opaco; os títulos `fix-1:` nas linhas
-    1542, 1561, 1583 e 1599; "Task 8" e "Incremento A, Task 6" em comentários),
-    `EvaluationPanel.test.tsx` (`describe` "fix-1 da revisão", "(M2)"),
-    `EvidenceForm.test.tsx:127` ("(M4)"), comentários de "Task 8, incremento D" em
-    `CycleSection` e `MissionList`, "achado ..." e "revisão" em `useCycle`,
-    `useProgress`, `useCurrentPlan`, `useRefreshOnReturn`, `civilDate.test.ts`,
-    `Campaigns.test.tsx`, `App.test.tsx`, `CampaignTrail` e `types/reward.ts`
-    ("Review Focus 1"), e uma linha de comentário com mais de 100 colunas em
-    `useCompletionRegistry.ts` (reflow incompleto). No backend, rótulos de medição
-    ("M8", "M6 e M7", "(M3)") em `anthropic_provider.py`, além de `tutoring/service.py`,
-    `context.py:98` e `test_tutoring_context.py:113`. E o comentário de
-    `frontend/src/shared/types/mission.ts` que diz "`EvaluationSummary` da API"
-    quando o nome no backend é `EvaluationSummaryRead` (m8 da revisão final). Parte
-    disso vem de incrementos anteriores ao E, e nada tem efeito no produto.
+    a etiqueta e manter o porquê). **Frontend resolvido no lote do frontend
+    (2026-09-29):** ~~`MissionList.test.tsx` ("M12", os quatro títulos `fix-1:`,
+    "Task 8" e "Incremento A, Task 6"), `EvaluationPanel.test.tsx` (`describe`
+    "fix-1 da revisão", "(M2)"), `EvidenceForm.test.tsx` ("(M4)"), os comentários
+    de "Task 8, incremento D", "achado ..." e "revisão" em `CycleSection`,
+    `MissionList`, `useCycle`, `useProgress`, `useCurrentPlan`,
+    `useRefreshOnReturn`, `civilDate.test.ts`, `Campaigns.test.tsx`,
+    `App.test.tsx`, `CampaignTrail`, `types/reward.ts` ("Review Focus 1"), o
+    reflow de `useCompletionRegistry.ts` e o comentário de
+    `shared/types/mission.ts` ("`EvaluationSummary` da API", que agora diz
+    `EvaluationSummaryRead`, no backend)~~; o mesmo vale para as etiquetas
+    equivalentes das specs E2E (`Task N`, `Ruling`, `Review Focus`, `achado`).
+    Os títulos que começam com um **identificador de caso** (`T1:`, `I1:`,
+    `m1:`, `D1`, `P1`, `C1`, `Q1`) foram mantidos de propósito: são a chave que
+    liga o teste a um caso do plano, e não citam uma revisão. **Restam,
+    no backend:** rótulos de medição ("M8", "M6 e M7", "(M3)") em
+    `anthropic_provider.py`, além de `tutoring/service.py`, `context.py:98` e
+    `test_tutoring_context.py:113`. Parte disso vem de incrementos anteriores ao
+    E, e nada tem efeito no produto.
 108. **O cartão avaliado do E2E aparece nas telas das specs seguintes e entra no
     axe delas** (Task 8). O banco do E2E é compartilhado e não é limpo entre specs
     (`reiniciar()` limpa só o falso); as outras specs se protegem por delta e por id,

@@ -64,7 +64,7 @@ export interface Evidence {
   link: string | null
 }
 
-/** O resumo da avaliacao (`EvaluationSummary` da API). Sem `bonus_xp` (EM1). */
+/** O resumo da avaliacao (`EvaluationSummaryRead`, no backend). Sem `bonus_xp` (EM1). */
 export interface EvaluationSummary {
   state: EvaluationState
   verdict: Verdict | null

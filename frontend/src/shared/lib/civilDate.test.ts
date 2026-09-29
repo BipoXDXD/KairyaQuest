@@ -52,7 +52,7 @@ describe('civilWeekday', () => {
     //
     // Ele NAO prova que o formatador fixa o fuso em UTC: o meio-dia UTC em
     // Sao Paulo e 9h do MESMO dia, entao tirar o `timeZone: 'UTC'` passa aqui
-    // (medido na onda final do Incremento C). Quem prova isso e o teste
+    // (medido). Quem prova isso e o teste
     // seguinte, a LESTE, alem de +12h.
     vi.resetModules()
     vi.stubEnv('TZ', 'America/Sao_Paulo')
@@ -65,8 +65,8 @@ describe('civilWeekday', () => {
     // Sem o `timeZone: 'UTC'` no formatador, a segunda-feira vira
     // terca-feira -- e nao e so em Kiritimati: todo fuso real a partir de
     // +12h (Auckland, Fiji, Tonga, Kiritimati) tem essa mesma margem
-    // insuficiente, e por isso mata o mutante (achado m1 da revisao final
-    // do Incremento C; Tokyo, +9h, e Sao Paulo, -3h, deixam ele vivo).
+    // insuficiente, e por isso mata o mutante (Tokyo, +9h, e Sao Paulo, -3h, deixam ele
+    // vivo).
     vi.resetModules()
     vi.stubEnv('TZ', 'Pacific/Kiritimati')
     const { civilWeekday: civilWeekdayEmKiritimati } = await import('./civilDate')

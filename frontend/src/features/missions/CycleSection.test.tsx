@@ -163,7 +163,7 @@ describe('CycleSection', () => {
   })
 
   it('avisa a página quando a missão de hoje é concluída', async () => {
-    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // A PAGINA usa este aviso para atualizar o painel de progresso
     // (`refreshProgress`, em `Headquarters.tsx`) -- aqui so importa que o
     // callback e chamado, e que o refresh do PROPRIO ciclo continua
     // acontecendo do mesmo jeito (o segundo GET /api/cycle).
@@ -306,7 +306,7 @@ describe('CycleSection', () => {
   })
 
   it('I1: a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
-    // O cenario medido pela revisao final: o `focus` chega enquanto a carga
+    // O cenario: o `focus` chega enquanto a carga
     // inicial esta em voo, o `refresh` dele falha, e a carga inicial so
     // assenta DEPOIS (e e descartada, por ser mais velha). Antes do conserto
     // a secao ficava em "Consultando o ciclo..." para sempre, sem botao.
@@ -395,7 +395,7 @@ describe('CycleSection', () => {
   })
 
   it('m1: se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
-    // O cenario da revisao: a diaria 31 e concluida perto da meia-noite, e a
+    // O cenario: a diaria 31 e concluida perto da meia-noite, e a
     // resposta do refresh ja e a diaria 32 de amanha. Sem `key={mission.id}`
     // em CycleSection.tsx, o MESMO MissionCard continua montado, preso em
     // `completion.status === 'completed'` da missao 31 -- a tela mostraria a

@@ -335,13 +335,11 @@ test('concluir pela tela muda o estado no servidor, e a tela concluida e acessiv
   // Pelo NOME ACESSIVEL, que diz qual missao o botao conclui.
   await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
 
-  // P4 (Task 7): a igualdade exata sobre a regiao viva inteira
-  // (`role="status"`) quebrou quando a Task 4 passou a mandar `reward` de
-  // verdade -- o anuncio da recompensa (D16) entra na MESMA regiao, e o
-  // texto fixo mora no `<p data-testid="mission-completion-text">` filho.
-  // A prova passa a ter duas partes: o texto fixo, pelo testid do filho; e o
-  // anuncio de verdade, pelo `reward-xp` (mesma mudanca que a Task 7 ja
-  // tinha feito nos testes de unidade).
+  // A igualdade exata sobre a regiao viva inteira (`role="status"`) nao serve
+  // mais: o anuncio da recompensa (D16) entra na MESMA regiao, e o texto fixo
+  // mora no `<p data-testid="mission-completion-text">` filho. A prova tem
+  // duas partes: o texto fixo, pelo testid do filho; e o anuncio de verdade,
+  // pelo `reward-xp` (o mesmo que os testes de unidade fazem).
   await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
   const rewardXp = item.getByTestId('reward-xp')
   await expect(rewardXp).toBeVisible()
@@ -437,8 +435,8 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   // A MESMA conclusao: o `completed_at` e o do primeiro pedido, e nao um novo.
   expect(segundaConclusao.completed_at).toBe(descartadas[0]?.completed_at)
   expect(JSON.parse(segunda.request().postData() ?? '{}')).toEqual({ operation_id: chaves[0] })
-  // Mesmo ajuste do teste acima (P4 x Task 4): texto fixo pelo filho, anuncio
-  // real pelo `reward-xp`.
+  // Mesmo ajuste do teste acima: texto fixo pelo filho, anuncio real pelo
+  // `reward-xp`.
   await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
   const rewardXp = item.getByTestId('reward-xp')
   await expect(rewardXp).toBeVisible()

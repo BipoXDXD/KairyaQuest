@@ -272,8 +272,8 @@ function TrailLoaded({
 /**
  * Um estado por ramo; `ReactElement` faz um estado novo reprovar o `tsc`.
  *
- * Ate a Task 5, esta funcao era exportada a parte para o teste do
- * `trail-stale` (R4): nenhum evento chamava `refresh()`, entao o unico jeito
+ * Antes, esta funcao era exportada a parte para o teste do
+ * `trail-stale`: nenhum evento chamava `refresh()`, entao o unico jeito
  * de exercitar o ramo `refreshFailed` era dar o estado pronto direto a ela.
  * Com `useRefreshOnReturn` ligando o `refresh` real (a aba que volta a ficar
  * visivel), `CampaignTrail.test.tsx` passou a exercitar o mesmo ramo pelo
@@ -350,9 +350,8 @@ function TrailContent({
  *
  * A trilha e lida ao montar, e atualizada em silencio (`useRefreshOnReturn`,
  * dentro de `useCurrentPlan`) quando a aba volta a ficar visivel ou a janela
- * recebe foco -- fecha o achado "a aba aberta na virada do dia mostra o dia
- * anterior ate recarregar" (Task 5 do Incremento C). Se essa atualizacao
- * falhar, o aviso `trail-stale` avisa que a trilha pode estar desatualizada.
+ * recebe foco: sem isso, a aba aberta na virada do dia mostraria o dia
+ * anterior ate recarregar. Se essa atualizacao falhar, o aviso `trail-stale` avisa que a trilha pode estar desatualizada.
  */
 export function CampaignTrail({
   onOpenHeadquarters,

@@ -36,7 +36,7 @@ interface CardProps {
  * da diaria segue as mesmas regras de chave e reenvio. O `onCompleted` faz o
  * `refresh` silencioso do PROPRIO ciclo (decisao P9): a sequencia muda sem
  * desmontar o cartao; e ainda avisa `onMissionCompleted`, da PAGINA, que
- * usa o aviso para atualizar o painel de progresso (Task 8, incremento D).
+ * usa o aviso para atualizar o painel de progresso.
  */
 function CycleLoaded({
   cycle,
@@ -152,7 +152,7 @@ function CycleContent({ state, card }: { state: CycleState; card: CardProps }): 
  *
  * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao
  * feita aqui (a diaria ou a especial) -- hoje, para atualizar o painel de
- * progresso com `refresh()` silencioso (Task 8, incremento D).
+ * progresso com `refresh()` silencioso.
  */
 export function CycleSection({ onMissionCompleted }: { onMissionCompleted?: () => void }) {
   const { state, reload, refresh } = useCycle()

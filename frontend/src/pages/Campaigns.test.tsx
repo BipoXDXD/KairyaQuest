@@ -24,7 +24,7 @@ describe('Campaigns', () => {
     expect(heading).toHaveAttribute('tabindex', '-1')
     // Aguarda o `GET /api/plans/current` da montagem assentar: sem isto, a
     // resposta chega depois do fim do teste e o React avisa "not wrapped in
-    // act(...)" (achado m2 da revisao final do C).
+    // act(...)".
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 

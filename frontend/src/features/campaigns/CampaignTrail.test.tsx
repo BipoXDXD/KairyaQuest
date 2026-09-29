@@ -395,7 +395,7 @@ describe('CampaignTrail', () => {
   })
 
   it('a aba que volta a ficar visivel atualiza a trilha em silencio; se o GET falhar, ela continua na tela com o aviso trail-stale', async () => {
-    // O caminho REAL da Task 5 (fecha a pendencia da Task 3): antes, o unico
+    // O caminho REAL: antes, o unico
     // jeito de exercitar `refreshFailed` era dar o estado pronto direto a
     // `TrailContent`, porque nada chamava `refresh()`. Agora `useRefreshOnReturn`
     // liga o evento real, e este teste dispara o MESMO evento que o navegador

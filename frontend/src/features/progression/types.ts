@@ -1,5 +1,5 @@
 /**
- * O contrato de progresso como `GET /api/progress` o publica (Task 4).
+ * O contrato de progresso como `GET /api/progress` o publica.
  *
  * Os nomes dos campos estao em `snake_case` e em ingles porque sao as chaves
  * do payload -- contrato que atravessa a rede --, o mesmo motivo de

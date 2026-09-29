@@ -47,8 +47,8 @@ function diaCivil(civil: string, deslocamento: number): string {
 /**
  * Se duas caixas de `boundingBox()` se sobrepoem. Uma caixa NULA reprova: e
  * o elemento sem caixa (oculto ou fora do layout), e tratar isso como "sem
- * sobreposicao" deixaria passar um botao escondido (Ruling R14 da revisao
- * final do C).
+ * sobreposicao" deixaria passar um botao escondido (por isso a
+ * caixa nula reprova, em vez de passar).
  */
 function caixasSeSobrepoem(
   a: { x: number; y: number; width: number; height: number } | null,
@@ -126,7 +126,7 @@ test('a missao de hoje do plano semeado aparece com a data civil da API, e passa
   // sequencia comeca do zero.
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/0 de 7/)
 
-  // D16/Task 9: o axe roda com o painel de progresso ja carregado, e nao so
+  // D16: o axe roda com o painel de progresso ja carregado, e nao so
   // com o ciclo.
   await expect(page.getByTestId('progress-level')).toBeVisible()
 
@@ -152,9 +152,8 @@ test('concluir a missao de hoje leva a sequencia a 1, no servidor, e a tela conc
   await expect(ciclo.getByTestId('cycle-streak')).toHaveText('Sequência: 1 dia seguido')
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/1 de 7/)
 
-  // R11: o texto fixo pelo testid do filho, e o anuncio de verdade pelo
-  // `reward-xp` -- a mesma mudanca que a Task 8 fez em headquarters.spec.ts e
-  // tutoring.spec.ts na integracao do painel.
+  // O texto fixo pelo testid do filho, e o anuncio de verdade pelo `reward-xp`
+  // -- o mesmo desenho de headquarters.spec.ts e tutoring.spec.ts.
   await expect(ciclo.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
   const rewardXp = ciclo.getByTestId('reward-xp')
   await expect(rewardXp).toHaveText(`+${String(xp)} XP`)
@@ -183,7 +182,7 @@ test('concluir a missao de hoje leva a sequencia a 1, no servidor, e a tela conc
 })
 
 /**
- * D16/Task 9: o painel de progresso do Quartel-General, depois de o cenario
+ * D16: o painel de progresso do Quartel-General, depois de o cenario
  * anterior ter concluido a primeira missao da vida deste usuario -- a
  * conquista `first_steps` ja esta destravada, e as outras seis continuam
  * bloqueadas, com o texto que diz isso.
@@ -222,10 +221,10 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
 })
 
 /**
- * Task 6 do Incremento C: Campanhas pela navegacao lateral, com a trilha do
- * plano semeado no `beforeAll` (o cenario anterior ja concluiu a missao de
- * hoje). Testids REAIS de `CampaignTrail.tsx` (Ruling R6 do controlador do
- * C): `trail-availability`, nao `trail-day-availability`.
+ * Campanhas pela navegacao lateral, com a trilha do plano semeado no
+ * `beforeAll` (o cenario anterior ja concluiu a missao de hoje). Testids
+ * REAIS de `CampaignTrail.tsx`: `trail-availability`, nao
+ * `trail-day-availability`.
  */
 test('Campanhas abre pela navegação, com a trilha do plano semeado, e passa no axe', async ({
   page,
@@ -273,8 +272,8 @@ test('Campanhas abre pela navegação, com a trilha do plano semeado, e passa no
   expect(resultadoCampanhas.violations).toEqual([])
 
   // Voltar ao Quartel-General: o titulo dele focado, e o axe sem violacoes
-  // de novo -- as duas areas (Review Focus 2 do plano do C: um so `main`
-  // visivel por vez).
+  // de novo -- as duas areas (um so `main` visivel por
+  // vez).
   await page.getByTestId('nav-headquarters').click()
   const quartelGeneral = page.getByTestId('headquarters')
   const tituloQuartel = quartelGeneral.getByRole('heading', {
@@ -336,7 +335,7 @@ test.describe('celular', () => {
     await expect(nav).toBeVisible()
     // A trilha precisa ter CARREGADO antes da medida: com "Consultando a
     // trilha..." na tela, a medida seria da pagina quase vazia, e uma trilha
-    // que estourasse a largura passaria (achado m3 da revisao final do C).
+    // que estourasse a largura passaria.
     await expect(page.getByTestId('trail-day')).toHaveCount(7)
     await expect.poll(async () => semRolagemHorizontal(page)).toBe(true)
   })

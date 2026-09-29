@@ -6,7 +6,7 @@ import { stubViewport } from './test/viewport'
 
 /**
  * O que o Quartel-General busca na montagem: ciclo, missoes, status,
- * historico da Tifa e progresso (Task 8, incremento D); e o que Campanhas
+ * historico da Tifa e progresso; e o que Campanhas
  * busca ao abrir: a trilha da semana (`GET /api/plans/current`). O `plan` e
  * parametrizavel porque um teste precisa de um dia `disponivel` na trilha
  * (o botao "Ir ao Quartel-General"); os demais usam o padrao `null` ("sem
@@ -88,7 +88,7 @@ describe('App', () => {
     expect(screen.getByTestId('nav-headquarters')).not.toHaveAttribute('aria-current')
     // Aguarda o `GET /api/plans/current` que a trilha fez ao montar: sem
     // isto, a resposta assenta depois do fim do teste e o React avisa
-    // "not wrapped in act(...)" (achado m2 da revisao final do C).
+    // "not wrapped in act(...)".
     await screen.findByTestId('trail-no-plan')
   })
 

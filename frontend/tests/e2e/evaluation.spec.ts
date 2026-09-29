@@ -89,14 +89,14 @@ test('conclui com evidencia, pede a avaliacao e ve o bonus e o painel', async ({
   await expect(cartao.getByText('Com evidência')).toBeVisible()
 
   await cartao.getByRole('button', { name: 'Pedir avaliação da Tifa' }).click()
-  // `exact`: a regiao viva tambem diz "Avaliação concluída: Critério atendido."
-  // (Task 7, decisao 6), e o que se afere aqui e o selo do veredito.
+  // `exact`: a regiao viva tambem diz "Avaliação concluída: Critério atendido.",
+  // e o que se afere aqui e o selo do veredito.
   await expect(cartao.getByText('Critério atendido', { exact: true })).toBeVisible()
   await expect(
     cartao.getByText('Avaliação da Tifa — interpretação do modelo, não verificação automática'),
   ).toBeVisible()
   const bonus = Math.floor(missao.xp / 2)
-  // O anuncio do bonus diz "de bônus" junto do XP (Task 7, decisao 3), para nao
+  // O anuncio do bonus diz "de bônus" junto do XP, para nao
   // parecer uma segunda conclusao; o `toHaveText` compara o texto inteiro.
   await expect(cartao.getByTestId('evaluation-panel').getByTestId('reward-xp')).toHaveText(
     `+${String(bonus)} XP de bônus`,
