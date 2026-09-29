@@ -44,6 +44,7 @@ class TipoDeAcao(StrEnum):
     """O que a acao faz. E o nome da ferramenta que o modelo chamou."""
 
     CRIAR_MISSAO = "create_mission"
+    REAGENDAR_MISSAO = "reschedule_mission"
 
 
 class CodigoDoStream(StrEnum):

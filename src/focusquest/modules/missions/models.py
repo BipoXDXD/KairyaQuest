@@ -26,6 +26,9 @@ from focusquest.modules.missions.domain import (
     FalhaDaAvaliacao,
     MissionState,
     MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
+    TipoDeOperacao,
     Veredito,
 )
 
@@ -47,6 +50,11 @@ _TIPOS_SQL = ", ".join(f"'{tipo.value}'" for tipo in MissionType)
 _ESTADOS_DA_AVALIACAO_SQL = ", ".join(f"'{e.value}'" for e in EstadoDaAvaliacao)
 _VEREDITOS_SQL = ", ".join(f"'{v.value}'" for v in Veredito)
 _FALHAS_SQL = ", ".join(f"'{f.value}'" for f in FalhaDaAvaliacao)
+
+# Mesmo motivo, para o historico de reagendamentos e o `kind` das operacoes.
+_MOTIVOS_SQL = ", ".join(f"'{m.value}'" for m in MotivoDoReagendamento)
+_ORIGENS_SQL = ", ".join(f"'{o.value}'" for o in OrigemDoReagendamento)
+_TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
 
 
 class MissionStateText(TypeDecorator[MissionState]):
@@ -118,6 +126,30 @@ class FalhaDaAvaliacaoText(TypeDecorator[FalhaDaAvaliacao]):
         self, value: Any, dialect: Dialect
     ) -> FalhaDaAvaliacao | None:
         return None if value is None else FalhaDaAvaliacao(value)
+
+
+class MotivoDoReagendamentoText(TypeDecorator[MotivoDoReagendamento]):
+    """TEXT no banco, MotivoDoReagendamento no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> MotivoDoReagendamento:
+        return MotivoDoReagendamento(value)
+
+
+class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
+    """TEXT no banco, OrigemDoReagendamento no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> OrigemDoReagendamento:
+        return OrigemDoReagendamento(value)
 
 
 class WeeklyPlan(Base):
@@ -215,6 +247,11 @@ class Mission(Base):
     evaluation: Mapped[MissionEvaluation | None] = relationship(
         cascade="all, delete-orphan", lazy="select"
     )
+    # Em ordem de gravacao (F12). `lazy="select"`: mais uma consulta pequena por
+    # missao lida (pendencia 96).
+    reschedules: Mapped[list[MissionReschedule]] = relationship(
+        order_by="MissionReschedule.id", cascade="all, delete-orphan", lazy="select"
+    )
 
     # As restricoes sao repetidas aqui porque o modelo precisa DESCREVER a
     # tabela que a migracao criou, com os mesmos nomes. Nao e o modelo que
@@ -254,6 +291,14 @@ class Mission(Base):
             ["weekly_plans.id", "weekly_plans.user_id"],
             name="fk_missions_plano_do_usuario",
         ),
+        CheckConstraint(
+            "state <> 'em_andamento' OR started_at IS NOT NULL",
+            name="ck_missions_em_andamento_iniciada",
+        ),
+        CheckConstraint(
+            "started_at IS NULL OR completed_at IS NULL OR started_at <= completed_at",
+            name="ck_missions_inicio_antes_da_conclusao",
+        ),
         UniqueConstraint("plan_id", "day", name="uq_missions_plan_id_day"),
         Index(
             "uq_missions_especial_por_plano",
@@ -283,6 +328,45 @@ class MissionOperation(Base):
     # por ele que um `DROP CONSTRAINT` futuro vai chamar a restricao.
     __table_args__ = (
         UniqueConstraint("operation_id", name="uq_mission_operations_operation_id"),
+        CheckConstraint(
+            f"kind IN ({_TIPOS_DE_OPERACAO_SQL})", name="ck_mission_operations_kind"
+        ),
+    )
+
+
+class MissionReschedule(Base):
+    """Um reagendamento do prazo (F12). So de insercao: o servico nunca faz
+    UPDATE nem DELETE aqui -- e o historico que nao se reescreve (README s8)."""
+
+    __tablename__ = "mission_reschedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE")
+    )
+    # A operacao que o gravou (F13): o reenvio acha a linha por aqui.
+    operation_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("mission_operations.operation_id", ondelete="CASCADE")
+    )
+    previous_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    new_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[MotivoDoReagendamento] = mapped_column(MotivoDoReagendamentoText)
+    origin: Mapped[OrigemDoReagendamento] = mapped_column(OrigemDoReagendamentoText)
+    rescheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("operation_id", name="uq_mission_reschedules_operation_id"),
+        CheckConstraint(
+            f"reason IN ({_MOTIVOS_SQL})", name="ck_mission_reschedules_reason"
+        ),
+        CheckConstraint(
+            f"origin IN ({_ORIGENS_SQL})", name="ck_mission_reschedules_origin"
+        ),
+        CheckConstraint(
+            "new_deadline <> previous_deadline",
+            name="ck_mission_reschedules_prazo_mudou",
+        ),
+        Index("ix_mission_reschedules_mission_id", "mission_id"),
     )
 
 
