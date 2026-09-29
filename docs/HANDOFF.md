@@ -3099,10 +3099,12 @@ ninguém mexer.
     2026-09-29 (lote de infraestrutura, branch `wt/lote-infra`), por
     correção na origem, sem `filterwarnings` que esconda nada.** Medido antes
     de mexer (`pytest -W default`, starlette 1.6.0, anyio 4.15.1): **um** aviso,
-    não dois — o do `httpx` já não aparecia porque o `httpx2` virou dependência
-    direta na tutoria (`e8a424c`) e o `starlette.testclient` o prefere (lê-se
-    no próprio `testclient.py`: `import httpx2`, com o `httpx` só como
-    fallback que avisa). O que restava era o alias: o `testclient.py` do
+    não dois. Que o do `httpx` tenha sumido quando o `httpx2` virou dependência
+    direta na tutoria (`e8a424c`) é **conferido no código e na cronologia**, não
+    medido naquele commit: a pendência é de 2026-09-18, o `e8a424c` de
+    2026-09-19, e o `starlette.testclient` prefere o `httpx2` (lê-se no
+    próprio `testclient.py`: `import httpx2`, com o `httpx` só como fallback
+    que avisa). O que restava era o alias: o `testclient.py` do
     Starlette 1.6.0 escreve `anyio.abc.BlockingPortal` numa anotação de nível
     de módulo, e o `anyio` 4.15.1 avisa a cada importação (linha 53 do
     arquivo). **Correção:** `uv lock --upgrade-package starlette` levou o
@@ -3123,9 +3125,30 @@ ninguém mexer.
     coleta com `DeprecationWarning: The anyio.abc.BlockingPortal alias is
     deprecated`; com o novo, 15 testes passam. A segunda linha foi provada
     por um teste descartável que emitiu a mensagem do fallback (virou erro).
-    **Custo/risco:** o Starlette é um pacote recente (seis dias); o `uv.lock`
-    fixa o hash. Se algum dia o Starlette regredir (um `uv lock` refeito do
-    zero, por exemplo), o sintoma agora é um erro de coleta, não um aviso.
+    **Custo/risco.** O Starlette **não é só dependência de teste**: é o
+    framework ASGI que serve todas as rotas da API e o SSE da tutoria
+    (`StreamingResponse` em `modules/tutoring/router.py`), então a troca
+    1.6.0 → 1.7.0 muda código de **runtime**, não só o `TestClient`. O que tem
+    seis dias é a **versão** 1.7.0 (upload de 2026-09-23, conforme o
+    `uv.lock`), não o pacote; o `uv.lock` fixa o hash. **Notas de versão
+    lidas** (`docs/release-notes.md` do sdist do 1.7.0, baixado do PyPI): a
+    1.7.0 acrescenta o `OpenTelemetryMiddleware` (experimental) e outros
+    recursos, exige `anyio>=4.0.0,<5` (o projeto fixa 4.15.1) e traz correções
+    em `BaseHTTPMiddleware`, CORS, `StaticFiles`, `FileResponse`, multipart e
+    WebSocket; a única linha sobre `TestClient`/`anyio` é o conserto do alias
+    (#3498). Uma busca em `src/` não achou uso de nenhum desses componentes
+    (só `StreamingResponse` e o roteamento do FastAPI), mas isso é leitura, não
+    prova de ausência de efeito. **A evidência de que a troca não quebrou a
+    API é o gate completo, rodado por mim depois dela:** 827 testes de backend
+    passando (integração e SSE inclusos), cobertura de 100%, e os 18
+    cenários E2E do Chromium, além dos 614 testes do frontend. **Regressão
+    possível:** o `pyproject.toml` **não pina** o Starlette (os demais pacotes
+    diretos são `==`); quem o fixa é só o `uv.lock`, e o FastAPI 0.141.1 aceita
+    `starlette>=0.46.0` (METADATA), sem teto. Logo o lock só voltaria a uma
+    versão com o alias por um `git revert`/`git checkout` do `uv.lock` ou por
+    um pino futuro em versão antiga; nesse caso o sintoma agora é um erro de
+    coleta, não um aviso. (Um `uv lock` refeito do zero pegaria a versão mais
+    nova, não a antiga.)
 16. **O interpretador do projeto no PyCharm aponta para o Python do
     Homebrew, não para o `.venv`.** `.idea/` é ignorado pelo git e não foi
     alterado às cegas. Efeito: avisos de import não resolvido no editor; o
@@ -4153,7 +4176,9 @@ ledger; nenhum é bug esquecido.
     do sistema; o Playwright declara suporte por versão do Ubuntu) — é o
     passo que a troca de imagem mais arriscaria; (b) o curl 8.5.0 que o
     `scripts/install-gitleaks.sh` assume (`docs/QUALITY.md` §4 já cita
-    `ubuntu-24.04`); (c) `shasum`/`sha256sum`, presentes na imagem. **Não
+    `ubuntu-24.04`); (c) `shasum`/`sha256sum`, presentes na imagem; (d) o
+    `psql`, pré-instalado na imagem e usado sem instalação nos passos "Criar o
+    banco de teste" de `check-api` e `check-e2e` (`quality.yml`). **Não
     dependem da imagem:** o serviço `postgres:18.6-alpine` (container), o
     binário do Gitleaks (`linux_x64`, conferido por hash), `setup-node` e
     `setup-uv` (baixam o que pedem). **Estado: não executado no CI** — a
@@ -4264,6 +4289,9 @@ ledger; nenhum é bug esquecido.
     o `$PROJECT_DIR$/.venv/bin/python` é resolvido no `SDK_HOME` e se o módulo
     `focusquest` existe num clone com outro nome de pasta. Se algo divergir, a
     correção é no formato dos arquivos e no `tests/unit/test_run_configs.py`.
+    Limitação conhecida: o `Gate.run.xml` fixa `INTERPRETER_PATH=/bin/zsh`, então
+    só serve no macOS do dono (num clone Linux ou Windows, ajustar ou usar o
+    terminal).
 
 ## Próximo incremento
 

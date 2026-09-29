@@ -597,7 +597,10 @@ registrada nas limitações (seção 6).
 
 Os jobs rodam em `ubuntu-24.04`, fixado, e não em `ubuntu-latest`: o GitHub
 migra o `latest` para o Ubuntu 26 em 2026-10-19, e o gate não deve trocar de
-sistema sem que alguém decida (pendência 99 do `docs/HANDOFF.md`). O custo é
+sistema sem que alguém decida (pendência 99 do `docs/HANDOFF.md`). Dependem
+da imagem o apt do `playwright install --with-deps`, o curl 8.5.0 do
+`scripts/install-gitleaks.sh` e o `psql` pré-instalado, usado nos passos
+"Criar o banco de teste". O custo é
 subir a versão à mão; a data de revisão está no comentário do workflow.
 
 Os `timeout-minutes` existem porque o padrão do runner é seis horas: um job
