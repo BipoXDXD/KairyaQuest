@@ -3082,11 +3082,28 @@ ninguém mexer.
     silêncio. Um erro de digitação numa variável opcional exportada no shell
     ou no CI passaria despercebido (hoje só há um campo opcional,
     `db_port`).
-13. **Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
+13. ~~**Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
     no código. Medido fora do uvicorn: sem handler na raiz, só o `WARNING`
     ou acima chega ao stderr, pelo `lastResort` do Python — o `INFO` de
     "missão não encontrada" não aparece; o `WARNING` de acesso negado,
-    sim. Sob o uvicorn não foi medido.
+    sim. Sob o uvicorn não foi medido.~~
+    **Resolvida na branch `wt/lote-obs` (2026-09-29):** `core/log.py`
+    (`configurar_logging`) chamado pelo `lifespan` de `main.py`, sem
+    dependência nova. Nível por `FOCUSQUEST_LOG_LEVEL` (padrão `INFO`,
+    qualquer caixa, valor desconhecido derruba a partida), lido por
+    `ConfiguracaoDeLog` — que não exige banco e que o `Settings` herda, para
+    o campo ser declarado uma vez e o `Settings` continuar recusando chave
+    desconhecida. O handler vai na raiz só se ela não tiver nenhum
+    (`basicConfig`), e o nível vale só para o logger `focusquest`: a raiz
+    fica em `WARNING`, e o DEBUG do `httpx`, do SDK `anthropic` e o INFO do
+    `sqlalchemy.engine` continuam desligados. Medido sob o uvicorn real, nos
+    níveis padrão, `DEBUG` e `WARNING`: a linha da partida e o `INFO` de
+    "missão não encontrada" saem uma vez cada, as do uvicorn também, e a
+    senha da URL do banco não aparece — nem no traceback de um 500. Testes em
+    `tests/unit/test_log.py` (inclusive dois subprocessos: a configuração
+    padrão do uvicorn aplicada por `dictConfig`, e a partida em `DEBUG` com
+    chave e senha conhecidas). Detalhes em `docs/ARCHITECTURE.md`,
+    "Logging". O que ficou: pendência 150.
 14. **A engine é uma global de módulo em `core/database.py`**, não um recurso
     do `lifespan` do app: há uma corrida teórica na criação e nenhum
     `dispose()` no desligamento. Movê-la para o `lifespan` é mudança de
@@ -4173,6 +4190,23 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+150. **O logging da pendência 13 é mínimo, e o que ele não cobre ficou sem
+    medir ou sem fazer** (branch `wt/lote-obs`, 2026-09-29). (a) Sob o
+    uvicorn, só a configuração padrão foi medida: `--reload`, `--workers`
+    e um `--log-config` que configure a raiz não foram rodados (o último é
+    respeitado por construção — `basicConfig` não faz nada se a raiz já tem
+    handler —, e o teste unitário o prova com um handler na raiz, não com o
+    uvicorn). (b) Texto simples, sem identificador de requisição nem JSON:
+    correlacionar as linhas de uma requisição depende do instante. (c) O
+    log é configurado na partida: uma linha emitida na importação de um
+    módulo cairia no `lastResort` (hoje não há nenhuma). (d) O Alembic
+    continua com a configuração de log do `alembic.ini`, que não lê
+    `FOCUSQUEST_LOG_LEVEL`. (e) A garantia contra vazar segredo é
+    estrutural (o nível não liga o DEBUG de terceiros, e nenhuma linha do app
+    registra configuração) e testada nos caminhos da partida e do `/ready`;
+    uma linha nova de `_log` que interpole a configuração não é pega por
+    teste nenhum — é revisão. Se ninguém mexer: nada quebra; o custo aparece
+    no dia em que houver mais de um processo ou um coletor de log.
 
 ## Próximo incremento
 

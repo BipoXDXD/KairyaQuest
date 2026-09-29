@@ -139,6 +139,18 @@ def test_a_chave_nao_aparece_na_representacao(
     assert "sk-ant-segredo" not in str(settings)
 
 
+def test_o_nivel_de_log_e_campo_declarado_do_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`FOCUSQUEST_LOG_LEVEL` no .env nao pode derrubar o `Settings` com
+    `extra_forbidden`: o campo vem de `ConfiguracaoDeLog`, que o `Settings`
+    herda -- um lugar so onde o nivel e declarado e validado."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, "FOCUSQUEST_LOG_LEVEL=warning\n"
+    )
+    assert settings.log_level == "WARNING"
+
+
 def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Os padroes da spec -- e o endereco da API escrito por extenso.
 

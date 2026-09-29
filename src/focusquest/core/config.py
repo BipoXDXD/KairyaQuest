@@ -1,10 +1,43 @@
 """Configuracao da aplicacao, lida do ambiente."""
 
-from pydantic import Field, SecretStr
+from typing import Annotated, Literal
+
+from pydantic import BeforeValidator, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Os nomes que o `logging` conhece, em caixa alta. `NOTSET` fica de fora: no
+# logger do app ele quer dizer "herde da raiz" (so WARNING ou acima), que e o
+# estado de antes de haver configuracao, e nao um nivel que se escolhe.
+NivelDeLog = Annotated[
+    Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    BeforeValidator(lambda valor: valor.upper() if isinstance(valor, str) else valor),
+]
 
-class Settings(BaseSettings):
+
+class ConfiguracaoDeLog(BaseSettings):
+    """O nivel de log, lido SEM exigir o resto da configuracao (pendencia 13).
+
+    Existe separada do `Settings` porque a partida configura o log antes de
+    qualquer coisa tocar no banco, e o `/health` responde sem configuracao de
+    banco: ler o nivel pelo `Settings` exigiria `FOCUSQUEST_DATABASE_URL`.
+
+    `extra="ignore"` e so desta classe: o .env tem as outras chaves do
+    projeto, e quem as recusa, se forem desconhecidas, e o `Settings` -- que
+    HERDA `log_level` daqui, para o campo ser declarado e validado num lugar
+    so (e para `FOCUSQUEST_LOG_LEVEL` no .env nao virar `extra_forbidden`).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="FOCUSQUEST_",
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    log_level: NivelDeLog = "INFO"
+
+
+class Settings(ConfiguracaoDeLog):
     """Configuracao da aplicacao.
 
     Nenhum campo tem valor padrao para credencial de BANCO: esquecer de
@@ -27,8 +60,14 @@ class Settings(BaseSettings):
     existe.
     """
 
+    # `extra="forbid"` escrito, e nao herdado do padrao: a classe-mae ignora
+    # chave desconhecida, e sem esta linha o `Settings` passaria a ignorar
+    # tambem.
     model_config = SettingsConfigDict(
-        env_prefix="FOCUSQUEST_", env_file=".env", env_ignore_empty=True
+        env_prefix="FOCUSQUEST_",
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="forbid",
     )
 
     database_url: str

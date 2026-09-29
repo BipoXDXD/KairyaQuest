@@ -221,9 +221,10 @@ FocusQuest/
 │       │   ├── __init__.py
 │       │   ├── base.py            # base declarativa do SQLAlchemy
 │       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
-│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
+│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_; ConfiguracaoDeLog, o nível de log lido sem exigir banco, que o Settings herda (pendência 13)
 │       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
 │       │   ├── errors.py          # erros de domínio comuns a mais de um módulo; SemEvidenciaError e AvaliacaoEmAndamentoError (E). Sem import de modules/: o teste tests/unit/test_core_sem_modulos.py o exige
+│       │   ├── log.py             # configurar_logging: handler no stderr só se a raiz não tiver um, nível só no logger focusquest (pendência 13)
 │       │   └── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
 │       ├── modules/
 │       │   ├── __init__.py
@@ -325,6 +326,7 @@ FocusQuest/
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
+│       ├── test_log.py            # o nível de log, o handler único, terceiros fora do DEBUG, a convivência com o uvicorn e nenhum segredo no stderr (pendência 13)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
@@ -594,6 +596,49 @@ final, revertendo o que ficou pela metade.
 A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
+
+### Logging (pendência 13)
+
+Mínimo de propósito, sem dependência nova: `core/log.py` e o `lifespan` de
+`main.py`. O que ele faz, e por quê:
+
+- **Nível por `FOCUSQUEST_LOG_LEVEL`**, padrão `INFO`, aceito em qualquer
+  caixa (`debug` = `DEBUG`); `DEBUG`, `INFO`, `WARNING`, `ERROR` ou
+  `CRITICAL`. Um valor desconhecido derruba a **partida** com
+  `ValidationError` (medido sob o uvicorn: `Application startup failed`).
+  O campo mora em `ConfiguracaoDeLog`, que lê só ele (`extra="ignore"`) e
+  por isso **não exige configuração de banco** — o `/health` continua
+  respondendo sem banco. O `Settings` herda o campo, e continua recusando
+  chave desconhecida do `.env`.
+- **Configurado na partida (`lifespan`), não na importação.** O uvicorn
+  aplica a configuração de log dele antes de importar o app; importar
+  `focusquest.main` num teste não mexe no logging do processo.
+- **O handler vai na raiz, e só se a raiz não tiver nenhum**
+  (`logging.basicConfig`). O uvicorn, na configuração padrão, põe handler
+  nos loggers `uvicorn*` com `propagate: false` e nenhum na raiz: as linhas
+  dele não passam pelo handler do app, e as do app saem uma vez. Um
+  `--log-config` que configure a raiz, ou os handlers de captura do pytest,
+  são respeitados: nada é empilhado por cima.
+- **O nível vale só para o logger `focusquest`.** A raiz fica em `WARNING`.
+  Pedir `DEBUG` não liga o DEBUG do `httpx`/`httpcore` nem do SDK
+  `anthropic` (que registram as requisições) nem o INFO do
+  `sqlalchemy.engine` (que registra cada SQL) — é por essas torneiras que a
+  chave e a URL do banco vazariam. Os `WARNING` de terceiros continuam
+  saindo, agora no formato do app, em vez do `lastResort` do Python.
+- **Formato:** `%(asctime)s %(levelname)s %(name)s: %(message)s`, texto
+  simples no stderr. Log estruturado (JSON) entra quando houver quem o
+  consuma.
+
+Medido sob o uvicorn real (`uv run uvicorn focusquest.main:app`), nos níveis
+padrão, `DEBUG` e `WARNING`: a linha `INFO focusquest.main: log configurado
+no nivel …` aparece uma vez na partida (e some em `WARNING`); o `INFO` de
+"missão não encontrada" de um `POST /api/missions/999999/complete` aparece
+uma vez; as linhas do uvicorn continuam no formato dele, uma vez cada; a
+senha da URL do banco não aparece no stderr nem no stdout — nem no
+traceback de um 500 com o banco inexistente. `--reload` e `--workers` não
+foram medidos. O `tests/unit/test_log.py` repete as partes automatizáveis
+num subprocesso (a configuração padrão do uvicorn aplicada por
+`dictConfig`, e a partida em `DEBUG` com chave e senha conhecidas).
 
 ### O contrato HTTP que existe
 
