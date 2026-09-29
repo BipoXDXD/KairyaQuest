@@ -70,7 +70,7 @@ class Encontro:
 
     `chegadas` conta as threads que passaram pelo ponto: o teste afirma que
     foram todas, e por isso nao fica verde por engano se a forma do SQL mudar
-    e o listener deixar de casar (m3 da revisao). `primeira` avisa quando a
+    e o listener deixar de casar. `primeira` avisa quando a
     primeira thread chegou, para o teste soltar a segunda so depois.
     """
 

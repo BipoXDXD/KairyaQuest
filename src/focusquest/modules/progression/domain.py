@@ -2,7 +2,7 @@
 
 Nenhuma funcao daqui toca o banco nem le o relogio (spec, "Dominio puro"). A
 migracao 0004 tem COPIAS CONGELADAS destas regras (D8): mudar algo aqui nao
-reescreve o passado, e o teste de equivalencia da Task 3 so vale para a regra
+reescreve o passado, e o teste de equivalencia da migracao so vale para a regra
 de hoje.
 """
 

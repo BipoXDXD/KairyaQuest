@@ -2821,6 +2821,17 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 Ele imprime só a lista de tipos de evento e grava o mesmo no arquivo, sem
 texto, sem ids e sem a chave. Nunca crie esse arquivo à mão.
 
+Todos os comandos acima rodam **da raiz do repositório**: o `Settings` lê o
+`.env` do diretório corrente, e o `alembic` acha o `alembic.ini` pelo
+diretório corrente (pendência 29, decisão de manter). Para rodar de outro
+diretório, diga ao `uv` onde estão o projeto e o `.env`, e ao Alembic onde
+está o `.ini` — medido em 2026-09-29, de um diretório fora do clone:
+
+```bash
+uv run --project <raiz> --env-file <raiz>/.env uvicorn focusquest.main:app --host 127.0.0.1 --port 8000
+uv run --project <raiz> --env-file <raiz>/.env alembic -c <raiz>/alembic.ini upgrade head
+```
+
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
 no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
@@ -3082,11 +3093,32 @@ ninguém mexer.
     silêncio. Um erro de digitação numa variável opcional exportada no shell
     ou no CI passaria despercebido (hoje só há um campo opcional,
     `db_port`).
-13. **Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
+13. ~~**Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
     no código. Medido fora do uvicorn: sem handler na raiz, só o `WARNING`
     ou acima chega ao stderr, pelo `lastResort` do Python — o `INFO` de
     "missão não encontrada" não aparece; o `WARNING` de acesso negado,
-    sim. Sob o uvicorn não foi medido.
+    sim. Sob o uvicorn não foi medido.~~
+    **Resolvida na sessão de 2026-09-29 (lote-obs, commit `914b46e`, com as
+    correções da revisão por cima):** `core/log.py`
+    (`configurar_logging`) chamado pelo `lifespan` de `main.py`, sem
+    dependência nova. Nível por `FOCUSQUEST_LOG_LEVEL` (padrão `INFO`,
+    qualquer caixa, valor desconhecido derruba a partida), lido por
+    `ConfiguracaoDeLog` — que não exige banco e que o `Settings` herda, para
+    o campo ser declarado uma vez e o `Settings` continuar recusando chave
+    desconhecida. O handler vai na raiz só se ela não tiver nenhum
+    (`basicConfig`), e o nível vale só para o logger `focusquest`: a raiz
+    fica em `WARNING`, e o DEBUG do `httpx`, do SDK `anthropic` e o INFO do
+    `sqlalchemy.engine` continuam desligados. Medido sob o uvicorn real, nos
+    níveis padrão, `DEBUG` e `WARNING`: a linha da partida e o `INFO` de
+    "missão não encontrada" saem uma vez cada, as do uvicorn também, e a
+    senha da URL do banco não aparece — nem no traceback de um 500. Testes em
+    `tests/unit/test_log.py` (inclusive dois subprocessos: a configuração
+    padrão do uvicorn aplicada por `dictConfig`, e a partida em `DEBUG` com
+    chave e senha conhecidas). O desligamento (a saída do `lifespan`)
+    devolve o nível do `focusquest` e tira o handler que a partida pôs na
+    raiz — sem isso, cada `with TestClient(app)` da suíte deixava o nível da
+    partida valendo para o resto do processo (revisão, M1). Detalhes em
+    `docs/ARCHITECTURE.md`, "Logging". O que ficou: pendência 150.
 14. **A engine é uma global de módulo em `core/database.py`**, não um recurso
     do `lifespan` do app: há uma corrida teórica na criação e nenhum
     `dispose()` no desligamento. Movê-la para o `lifespan` é mudança de
@@ -3284,7 +3316,39 @@ que não tinham chegado aqui)
     silenciosa. Diferido porque o `Makefile`, o CI e o `scripts/e2e-env.sh`
     (que faz `cd` para a raiz) já rodam da raiz. Se ninguém mexer: quem
     rodar `uv run uvicorn` ou `alembic` de outro diretório recebe o erro e
-    precisa voltar para a raiz.
+    precisa voltar para a raiz.~~
+    **Resolvida por decisão na sessão de 2026-09-29 (lote-obs, commit
+    `e23cc79`): o comportamento fica, documentado, com a receita para rodar de fora e um
+    teste que a prende.** A correção sugerida — ancorar o `env_file` na raiz
+    calculada a partir do pacote (`Path(__file__).parents[3] / ".env"`) —
+    foi descartada, por três motivos. (1) **Os testes dependem do
+    comportamento atual:** na base `580f6cc` há oito
+    `monkeypatch.chdir(tmp_path)` em três arquivos (`test_config.py` 4,
+    `test_tutoring_api.py` 3, `test_health.py` 1; medido com
+    `git grep -n monkeypatch.chdir 580f6cc -- tests`), um deles no ajudante
+    `_settings_do_arquivo`, usado por boa parte do `test_config.py`. Eles
+    existem para tirar o `.env` real da jogada; com o caminho ancorado,
+    passariam a ler o `.env` do clone, e
+    `test_falha_quando_a_url_do_banco_nao_esta_no_ambiente` deixaria de
+    provar a falha — consertar exigiria reescrever o isolamento da suíte, que
+    não é o objetivo desta pendência. (2) **O caminho derivado do pacote só
+    é a raiz do clone na instalação editável;** num pacote instalado de
+    wheel ele aponta para dentro do `site-packages`, que é exatamente o
+    acoplamento frágil ao caminho do clone que não se quer. (3) **Quem roda
+    de outro lugar já tem saída, e a falha é alta:** `uv run --project
+    <raiz> --env-file <raiz>/.env …` carrega o `.env` no ambiente do
+    processo (o `Settings` lê do ambiente), e o `alembic.ini` já usa
+    `script_location = %(here)s/alembic`, então `-c <raiz>/alembic.ini`
+    basta para o Alembic achar os scripts. Medido de um diretório fora do
+    clone: sem a receita, o `Settings` estoura `Field required` e o
+    `alembic` reprova com `No 'script_location' key found in configuration`;
+    com ela, o `Settings` lê o banco do `.env`, `alembic -c … heads`
+    responde `0005 (head)` e `alembic -c … -x test=true current`, com o
+    `--env-file`, também. A receita está em "Comandos"; o teste novo
+    `tests/unit/test_comandos_fora_da_raiz.py` prende a metade que é deste
+    repositório (o `alembic.ini` achar os scripts pelo caminho dele, de
+    qualquer diretório corrente — com `script_location = alembic` ele
+    reprova). O que ficou: pendência 151.
 30. **`/api/missions/` com barra final responde `307`** para
     `/api/missions` (redirecionamento automático do Starlette; medido). O
     cliente do frontend chama sem a barra, então nada quebra hoje. Diferido
@@ -4158,12 +4222,29 @@ ledger; nenhum é bug esquecido.
     `useProgress`, `useCurrentPlan`, `useRefreshOnReturn`, `civilDate.test.ts`,
     `Campaigns.test.tsx`, `App.test.tsx`, `CampaignTrail` e `types/reward.ts`
     ("Review Focus 1"), e uma linha de comentário com mais de 100 colunas em
-    `useCompletionRegistry.ts` (reflow incompleto). No backend, rótulos de medição
-    ("M8", "M6 e M7", "(M3)") em `anthropic_provider.py`, além de `tutoring/service.py`,
-    `context.py:98` e `test_tutoring_context.py:113`. E o comentário de
+    `useCompletionRegistry.ts` (reflow incompleto). E o comentário de
     `frontend/src/shared/types/mission.ts` que diz "`EvaluationSummary` da API"
     quando o nome no backend é `EvaluationSummaryRead` (m8 da revisão final). Parte
     disso vem de incrementos anteriores ao E, e nada tem efeito no produto.
+
+    **Backend (sessão de 2026-09-29, lote-obs):** feito. Em `src/`, `tests/`,
+    `alembic/` e `scripts/`, 33 arquivos tiveram só comentários, docstrings e
+    títulos de teste reescritos (nenhum comportamento mudou; nenhuma função de
+    teste foi renomeada). Saíram as citações de revisão — rótulos de medição
+    (`medicao M2`, `M3`, `M4`, `M5`, `M6 e M7`, `M8`, `M9`, `M1`), `Task N` que
+    só cita a tarefa, `Review Focus N`, `fix round N/5`, "mutacao N do brief",
+    "Step N", `m3 da revisao`, `revisao M1`, `R4 corrigida`, "medido pelo
+    revisor", "revisao final da branch", "revisao da Frente 0" — e cada frase
+    passou a dizer o motivo (por exemplo, "o `Fim` não cobre o esgotamento de
+    `tutor_max_tokens`" no lugar de "M3 não cobre"). Também saiu a referência a
+    `task-6-report.md` em `test_tutoring_acoes.py`, arquivo que nem está no
+    repositório. **Ficou de propósito:** ids de decisão e de caso com tabela
+    neste documento ou na spec (`C1`–`C13`, `D8`, `P3`, `P4`, `P6`, `P7`, `F9`,
+    `A4`, `D-a`/`E1`), a "emenda M1" da spec do 1b em `tutoring/sse.py` e
+    `tutoring/router.py` (é o número de uma emenda daquele documento, com a
+    medição completa), `REVISAO = "0005"` em `test_evaluation_migration.py` (é a
+    revisão do Alembic, não da revisão de código), e o verbo "medido" solto,
+    que descreve um fato observado e não cita revisão.
 108. **O cartão avaliado do E2E aparece nas telas das specs seguintes e entra no
     axe delas** (Task 8). O banco do E2E é compartilhado e não é limpo entre specs
     (`reiniciar()` limpa só o falso); as outras specs se protegem por delta e por id,
@@ -4173,6 +4254,34 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+150. **O logging da pendência 13 é mínimo, e o que ele não cobre ficou sem
+    medir ou sem fazer** (sessão de 2026-09-29, lote-obs). (a) Sob o
+    uvicorn, só a configuração padrão foi medida: `--reload`, `--workers`
+    e um `--log-config` que configure a raiz não foram rodados (o último é
+    respeitado por construção — `basicConfig` não faz nada se a raiz já tem
+    handler —, e o teste unitário o prova com um handler na raiz, não com o
+    uvicorn). (b) Texto simples, sem identificador de requisição nem JSON:
+    correlacionar as linhas de uma requisição depende do instante. (c) O
+    log é configurado na partida: uma linha emitida na importação de um
+    módulo cairia no `lastResort` (hoje não há nenhuma). (d) O Alembic
+    continua com a configuração de log do `alembic.ini`, que não lê
+    `FOCUSQUEST_LOG_LEVEL`. (e) A garantia contra vazar segredo é
+    estrutural (o nível não liga o DEBUG de terceiros, e nenhuma linha do app
+    registra configuração) e testada nos caminhos da partida e do `/ready`;
+    uma linha nova de `_log` que interpole a configuração não é pega por
+    teste nenhum — é revisão. Se ninguém mexer: nada quebra; o custo aparece
+    no dia em que houver mais de um processo ou um coletor de log.
+151. **Rodar de fora da raiz continua exigindo a receita da pendência 29**
+    (sessão de 2026-09-29, lote-obs). `uv run uvicorn …` ou `alembic …`
+    sem `--project`/`--env-file`/`-c`, de outro diretório, falham como
+    antes — alto, não em silêncio. A própria suíte também depende da raiz:
+    `alembic_config()` em `tests/integration/conftest.py` abre
+    `Config("alembic.ini")`, relativo; o `Makefile`, o CI e o
+    `scripts/e2e-env.sh` já rodam da raiz. O `--env-file` do `uv` carrega o
+    `.env` no **ambiente**, e o `Settings` só é estrito no arquivo
+    (pendência 12): por esse caminho, uma chave `FOCUSQUEST_*` desconhecida
+    no `.env` é descartada em silêncio em vez de reprovar. Se ninguém mexer:
+    nada muda para quem trabalha da raiz.
 
 ## Próximo incremento
 

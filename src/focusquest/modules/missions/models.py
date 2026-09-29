@@ -152,7 +152,7 @@ class WeeklyPlan(Base):
 class User(Base):
     """Usuario dono das missoes.
 
-    Nao faz parte do brief da tarefa, e existe por uma razao estrutural:
+    Existe por uma razao estrutural, e nao de negocio:
     `Mission.user_id` e `ForeignKey("users.id")`, e o SQLAlchemy resolve esse
     alvo procurando a tabela em `Base.metadata`. Sem `users` registrada, a
     configuracao dos mappers levanta NoReferencedTableError no primeiro uso

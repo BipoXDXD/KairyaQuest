@@ -355,7 +355,7 @@ def test_ler_especial_revelada_responde_pelo_mesmo_caminho_da_trilha(
     session: Session,
 ) -> None:
     """Depois do marco, `ler_missao` na especial devolve a leitura normal, e
-    nao o 404 de nao revelada -- e o mesmo caso da trilha (Task 4 a usa)."""
+    nao o 404 de nao revelada -- e o mesmo caso da trilha, que a usa."""
     _semana_inteira(session)
     especial = session.scalars(
         select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)

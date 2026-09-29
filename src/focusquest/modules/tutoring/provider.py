@@ -32,7 +32,7 @@ class Fim:
     """A resposta terminou de verdade (`message_stop`).
 
     Existe porque o fim da iteracao nao prova nada: um stream cortado no meio
-    termina a iteracao em silencio (medicao M3 do plano do 1b-1). So quem
+    termina a iteracao em silencio (o SDK nao denuncia o corte). So quem
     recebeu `Fim` pode gravar a resposta como `completa`.
     """
 

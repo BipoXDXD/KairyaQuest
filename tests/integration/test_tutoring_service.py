@@ -1,7 +1,7 @@
 """Preparar e transmitir um turno, com o banco real e o servidor falso.
 
 O gerador `transmitir` e consumido direto, e nao por HTTP: o `TestClient`
-bufferiza a resposta inteira (medicao M9), e so aqui da para olhar o banco NO
+bufferiza a resposta inteira, e so aqui da para olhar o banco NO
 INSTANTE de cada evento.
 """
 
@@ -211,7 +211,8 @@ def test_stream_cortado_sem_fim_vira_provedor_indisponivel(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
-    """A guarda da medicao M3: sem ela, o texto parcial viraria `completa`."""
+    """A guarda do `Fim` (o SDK nao denuncia o corte): sem ela, o texto parcial
+    viraria `completa`."""
     # Corta depois do primeiro pedaco ("meio"), antes do segundo.
     falso.roteiro = Roteiro(
         blocos=(Texto(("meio", "resto")),), cortar_apos_eventos=APOS_O_PRIMEIRO_PEDACO
@@ -246,7 +247,7 @@ def test_o_limite_total_e_medido_pelo_relogio(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
-    """O timeout do SDK e por espera (M5); o limite total e do servico. Um
+    """O timeout do SDK e por espera; o limite total e do servico. Um
     relogio que anda 61 s por leitura estoura o limite de 60 s no primeiro
     pedaco, sem `sleep`."""
     falso.roteiro = Roteiro(blocos=(Texto(("um", "dois", "tres")),))
@@ -264,8 +265,8 @@ def test_fechar_o_gerador_grava_interrompida_sem_acao(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
-    """E o que a desconexao do cliente faz ao gerador (via o invoucro da
-    Task 7): `close()` no meio."""
+    """E o que a desconexao do cliente faz ao gerador (via o invoucro
+    `fechando_ao_cancelar`): `close()` no meio."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("meio", "resto")), ChamadaDeFerramenta(PROPOSTA_VALIDA))
     )
