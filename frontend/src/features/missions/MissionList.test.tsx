@@ -372,7 +372,12 @@ describe('MissionList -- concluir', () => {
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
     // O rotulo sai da missao que a API DEVOLVEU, e nao de um palpite da tela.
-    const statusDepois = await screen.findByTestId('mission-completion-status')
+    // Espera o TEXTO final, e nao o elemento: a regiao ja estava na tela antes
+    // do clique, entao `findByTestId` a achava na hora e a assercao rodava com
+    // "Concluindo a missão…", antes de a resposta chegar (intermitente sob
+    // carga).
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
     expect(statusDepois).toBe(statusAntes)
     expect(statusDepois).toHaveAttribute('role', 'status')
     expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
