@@ -107,6 +107,11 @@ def _instante_representavel(prazo: datetime) -> datetime:
     return prazo
 
 
+# O instante com fuso e representavel em UTC: a regra do `deadline` da criacao,
+# com nome, porque o reagendamento (F9) e a proposta da Tifa (F15) usam a MESMA.
+PrazoComFuso = Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
+
+
 class MissionCreate(BaseModel):
     """O que a API aceita para criar uma missao.
 
@@ -135,7 +140,7 @@ class MissionCreate(BaseModel):
     completion_criterion: str = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
-    deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
+    deadline: PrazoComFuso
 
 
 # Teto TECNICO de um identificador gerado pelo cliente (`operation_id` aqui e

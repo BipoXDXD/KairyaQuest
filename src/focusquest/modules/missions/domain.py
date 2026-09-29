@@ -179,3 +179,65 @@ def validar_transicao_da_avaliacao(
             f"nao e possivel ir de '{atual.value}' para '{destino.value}'; "
             f"a partir de '{atual.value}' so se pode ir para: {alvo}"
         )
+
+
+class TipoDeOperacao(StrEnum):
+    """O `kind` de `mission_operations`: QUAL operacao a chave nomeou. A
+    UNIQUE e sobre `operation_id` sozinho, entao uma chave gasta num tipo esta
+    gasta nos outros (ver `CONCLUSAO` em service.py)."""
+
+    CONCLUSAO = "complete"
+    INICIO = "start"
+    REAGENDAMENTO = "reschedule"
+
+
+class MotivoDoReagendamento(StrEnum):
+    """Por que o prazo mudou (README s5). Fechado de proposito (F10): a maquina
+    distingue, e texto livre seria mais um dado nao confiavel no prompt."""
+
+    DIFICULDADE = "dificuldade"
+    FALTA_DE_TEMPO = "falta_de_tempo"
+    MUDANCA_DE_PRIORIDADE = "mudanca_de_prioridade"
+
+
+class OrigemDoReagendamento(StrEnum):
+    """Quem pediu: a pessoa pela tela, ou a Tifa por proposta confirmada."""
+
+    USUARIO = "usuario"
+    TIFA = "tifa"
+
+
+class ProblemaDoNovoPrazo(StrEnum):
+    """Por que um novo prazo nao serve. O servico traduz cada um no erro dele."""
+
+    NO_PASSADO = "no_passado"
+    INALTERADO = "inalterado"
+
+
+def problema_do_novo_prazo(
+    novo: datetime, atual: datetime, agora: datetime
+) -> ProblemaDoNovoPrazo | None:
+    """O que impede `novo` de ser o prazo, ou `None` (F9).
+
+    O passado vem primeiro: um prazo vencido igual ao atual e, antes de tudo,
+    um prazo vencido -- e a mensagem que ajuda a pessoa. Antecipar e permitido.
+    Instantes comparam como instantes: o mesmo momento em `Z` e em `-03:00` e
+    o mesmo prazo.
+    """
+    if novo.tzinfo is None or atual.tzinfo is None or agora.tzinfo is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    if novo <= agora:
+        return ProblemaDoNovoPrazo.NO_PASSADO
+    if novo == atual:
+        return ProblemaDoNovoPrazo.INALTERADO
+    return None
+
+
+def validar_reagendamento(estado: MissionState) -> None:
+    """Reagendar vale em `pendente` e `em_andamento` (F8); a concluida nao tem
+    mais prazo a cumprir. Mesmo erro (e mesmo `code`) da transicao ilegal."""
+    if estado is MissionState.CONCLUIDA:
+        raise TransicaoIlegalError(
+            "nao e possivel reagendar uma missao 'concluida'; "
+            "so se reagenda o que ainda nao foi feito"
+        )
