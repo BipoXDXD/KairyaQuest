@@ -55,7 +55,7 @@ def _sobrepor(chave: Any, valor: Any) -> None:
 def cliente(banco_migrado: Engine, tutoria: Tutoria) -> Iterator[TestClient]:
     """A tutoria contra o falso, o banco de teste e o relogio fixo.
 
-    Commita de verdade: o stream grava em sessoes proprias (M2). Quem usa este
+    Commita de verdade: o stream grava em sessoes proprias. Quem usa este
     cliente registra seus `client_message_id` na fixture `conversa`.
     """
     sobrepostos: dict[Callable[..., Any], Callable[..., Any]] = {

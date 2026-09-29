@@ -3,7 +3,7 @@
 As duas dependencias que as rotas consomem moram aqui, e nao em `main.py`, por
 uma razao estrutural: `main.py` importa o router para registra-lo, entao um
 router que precisasse importar `main.py` de volta fecharia um ciclo de imports
--- e o `get_engine` nasceu em `main.py` porque, na Task 4, `/ready` era o unico
+-- e o `get_engine` nasceu em `main.py` porque `/ready` era o unico
 consumidor. Agora ha dois modulos consumindo, que e exatamente a condicao que o
 `docs/ARCHITECTURE.md` poe para uma peca viver em `core/`: "configuracao,
 conexao e infraestrutura comum a todos os modulos".

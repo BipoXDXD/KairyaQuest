@@ -110,7 +110,7 @@ def test_o_historico_nunca_comeca_pela_tutora() -> None:
 
 
 def test_mensagem_sem_texto_nem_acao_e_descartada() -> None:
-    """Uma `completa` vazia (M3 nao cobre esgotamento de `tutor_max_tokens`)
+    """Uma `completa` vazia (o `Fim` nao cobre esgotamento de `tutor_max_tokens`)
     nao pode chegar a API: ela rejeita mensagem sem texto. Descartada, as
     duas perguntas do usuario ao redor ficam adjacentes e se fundem, como
     qualquer par do mesmo papel."""

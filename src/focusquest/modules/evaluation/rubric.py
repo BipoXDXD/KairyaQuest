@@ -63,7 +63,7 @@ def _esquema_da_saida() -> dict[str, Any]:
     """O `input_schema` gerado do `EvaluationOutput`, pronto para a
     ferramenta estrita.
 
-    A tecnica de `esquema_da_proposta` (M8): a docstring do schema, e aqui
+    A tecnica de `esquema_da_proposta`: a docstring do schema, e aqui
     tambem a do enum `Veredito` (que entra em `$defs`), e de manutencao e nao
     serve ao modelo. A descricao para o modelo e `DESCRICAO_DA_FERRAMENTA`.
     O `additionalProperties: false` que o modo estrito exige vem do

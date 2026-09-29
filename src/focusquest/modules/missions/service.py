@@ -1,7 +1,7 @@
 """Casos de uso da missao: orquestram o dominio e a persistencia.
 
 Nenhuma funcao daqui conhece `Request`, `Response` ou codigo HTTP -- a
-traducao para a web e da Task 9. E nenhuma delas commita: quem abre a
+traducao para a web e da camada de rotas. E nenhuma delas commita: quem abre a
 transacao e quem a fecha. O servico faz `flush`, que e o suficiente para o
 banco atribuir identificadores e aplicar restricoes, e deixa a decisao de
 tornar tudo permanente para o dono da transacao.

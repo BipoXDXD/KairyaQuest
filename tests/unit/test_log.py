@@ -194,7 +194,7 @@ def test_o_desligamento_do_app_devolve_o_logging_como_estava(
 
     Sem isso, cada `with TestClient(app)` da suite deixava o `focusquest` no
     nivel da partida pelo resto do processo -- e um `caplog.set_level(DEBUG)`
-    na raiz passaria a perder, em silencio, o DEBUG do app (revisao M1).
+    na raiz passaria a perder, em silencio, o DEBUG do app.
     """
     monkeypatch.setenv("FOCUSQUEST_LOG_LEVEL", "ERROR")
     app_logger = logging.getLogger("focusquest")

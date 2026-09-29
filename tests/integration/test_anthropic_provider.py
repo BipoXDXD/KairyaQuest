@@ -106,7 +106,7 @@ def test_a_requisicao_leva_o_que_a_spec_manda(falso: ServidorAnthropicFalso) -> 
     (ferramenta,) = corpo["tools"]
     assert ferramenta["name"] == "create_mission"
     esquema = ferramenta["input_schema"]
-    # A docstring de manutencao do MissionCreate nao vai para o modelo (M8).
+    # A docstring de manutencao do MissionCreate nao vai para o modelo.
     assert "description" not in esquema
     assert "title" not in esquema
     assert set(esquema["required"]) == {
@@ -129,7 +129,7 @@ def test_a_chave_e_a_passada_explicitamente(falso: ServidorAnthropicFalso) -> No
 def test_stream_cortado_termina_sem_fim_e_sem_erro(
     falso: ServidorAnthropicFalso,
 ) -> None:
-    """Documenta a medicao M3: o SDK nao denuncia o corte. Quem trata a falta
+    """Documenta que o SDK nao denuncia o corte. Quem trata a falta
     do `Fim` e o servico."""
     # Corta depois do primeiro pedaco ("meio"), antes do segundo.
     falso.roteiro = Roteiro(

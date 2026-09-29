@@ -4222,12 +4222,29 @@ ledger; nenhum é bug esquecido.
     `useProgress`, `useCurrentPlan`, `useRefreshOnReturn`, `civilDate.test.ts`,
     `Campaigns.test.tsx`, `App.test.tsx`, `CampaignTrail` e `types/reward.ts`
     ("Review Focus 1"), e uma linha de comentário com mais de 100 colunas em
-    `useCompletionRegistry.ts` (reflow incompleto). No backend, rótulos de medição
-    ("M8", "M6 e M7", "(M3)") em `anthropic_provider.py`, além de `tutoring/service.py`,
-    `context.py:98` e `test_tutoring_context.py:113`. E o comentário de
+    `useCompletionRegistry.ts` (reflow incompleto). E o comentário de
     `frontend/src/shared/types/mission.ts` que diz "`EvaluationSummary` da API"
     quando o nome no backend é `EvaluationSummaryRead` (m8 da revisão final). Parte
     disso vem de incrementos anteriores ao E, e nada tem efeito no produto.
+
+    **Backend (sessão de 2026-09-29, lote-obs):** feito. Em `src/`, `tests/`,
+    `alembic/` e `scripts/`, 33 arquivos tiveram só comentários, docstrings e
+    títulos de teste reescritos (nenhum comportamento mudou; nenhuma função de
+    teste foi renomeada). Saíram as citações de revisão — rótulos de medição
+    (`medicao M2`, `M3`, `M4`, `M5`, `M6 e M7`, `M8`, `M9`, `M1`), `Task N` que
+    só cita a tarefa, `Review Focus N`, `fix round N/5`, "mutacao N do brief",
+    "Step N", `m3 da revisao`, `revisao M1`, `R4 corrigida`, "medido pelo
+    revisor", "revisao final da branch", "revisao da Frente 0" — e cada frase
+    passou a dizer o motivo (por exemplo, "o `Fim` não cobre o esgotamento de
+    `tutor_max_tokens`" no lugar de "M3 não cobre"). Também saiu a referência a
+    `task-6-report.md` em `test_tutoring_acoes.py`, arquivo que nem está no
+    repositório. **Ficou de propósito:** ids de decisão e de caso com tabela
+    neste documento ou na spec (`C1`–`C13`, `D8`, `P3`, `P4`, `P6`, `P7`, `F9`,
+    `A4`, `D-a`/`E1`), a "emenda M1" da spec do 1b em `tutoring/sse.py` e
+    `tutoring/router.py` (é o número de uma emenda daquele documento, com a
+    medição completa), `REVISAO = "0005"` em `test_evaluation_migration.py` (é a
+    revisão do Alembic, não da revisão de código), e o verbo "medido" solto,
+    que descreve um fato observado e não cita revisão.
 108. **O cartão avaliado do E2E aparece nas telas das specs seguintes e entra no
     axe delas** (Task 8). O banco do E2E é compartilhado e não é limpo entre specs
     (`reiniciar()` limpa só o falso); as outras specs se protegem por delta e por id,

@@ -8,7 +8,7 @@ seguro:
    resposta `gerando`. Nenhuma transacao fica aberta durante a geracao.
 2. `transmitir`, um gerador que chama o provedor e grava o final em sessoes
    PROPRIAS. Ele nao pode usar a sessao da requisicao: na desconexao, a
-   dependencia `get_session` fecha antes do `finally` do gerador (medicao M2).
+   dependencia `get_session` fecha antes do `finally` do gerador (medido).
 
 Nenhuma funcao daqui conhece HTTP, e nenhuma conhece o SDK.
 """
@@ -55,7 +55,7 @@ from focusquest.modules.tutoring.provider import (
 )
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
-# limite total (medicao M5) so e conferido quando um evento chega: um
+# limite total so e conferido quando um evento chega: um
 # provedor que nao emite nada fica preso ao timeout POR ESPERA do SDK, nao a
 # este numero. A folga cobre a gravacao final e o relogio de maquinas
 # diferentes.
@@ -242,7 +242,7 @@ def transmitir(
                     proposta = evento.entrada
                 else:
                     terminou = True
-                # Limite TOTAL, pelo relogio injetavel (medicao M5).
+                # Limite TOTAL, pelo relogio injetavel.
                 if clock() - inicio > tutoria.limite:
                     raise TempoEsgotadoError("a resposta passou do limite total")
         finally:
@@ -260,7 +260,7 @@ def transmitir(
     texto = "".join(partes)
     dados: MissionCreate | None = None
     if codigo is None and not terminou:
-        # O corte que o SDK nao denuncia (medicao M3).
+        # O corte que o SDK nao denuncia: sem `Fim`, a resposta nao terminou.
         codigo = CodigoDoStream.PROVEDOR_INDISPONIVEL
     if codigo is None and proposta is not None:
         try:

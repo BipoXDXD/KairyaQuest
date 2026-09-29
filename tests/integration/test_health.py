@@ -145,10 +145,10 @@ def test_get_engine_cria_uma_vez_e_reaproveita(
     override_engine.
 
     O modulo em questao e `core/database.py`, e nao `main.py`: a dependencia
-    mudou de casa na Task 9, quando ganhou um segundo consumidor (o router das
+    mudou de casa quando ganhou um segundo consumidor (o router das
     missoes) -- um router que importasse `main.py` de volta fecharia um ciclo de
-    imports. O cache global, e a corrida que ele permite, continuam identicos ao
-    que a Task 4 registrou; so o arquivo e outro.
+    imports. O cache global, e a corrida que ele permite, continuam identicos aos
+    de antes; so o arquivo e outro.
     """
     monkeypatch.setattr(database, "_engine", None)
     primeira = database.get_engine()
