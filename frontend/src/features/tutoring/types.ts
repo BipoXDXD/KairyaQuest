@@ -7,8 +7,8 @@
  * dado, e nunca vao crus para a tela.
  *
  * Esta feature nao importa nada de `features/missions/` (`docs/ARCHITECTURE.md`
- * §5, regra 1): a missao criada pela confirmacao e descrita aqui so pelo que o
- * cartao mostra.
+ * §5, regra 1): a missao criada (ou reagendada) pela confirmacao e descrita
+ * aqui so pelo que o cartao mostra.
  */
 
 export type MessageRole = 'user' | 'tutor'
@@ -30,14 +30,64 @@ export interface MissionProposal {
   deadline: string
 }
 
-export interface ActionRead {
+/**
+ * Os motivos de reagendamento. Espelham o enum do backend (`missions`), a mao
+ * (pendencia 32). A copia e DESTA feature, e nao importada de
+ * `shared/types/mission.ts`: o cartao so precisa do texto, e a lista e curta.
+ */
+export type RescheduleReason = 'dificuldade' | 'falta_de_tempo' | 'mudanca_de_prioridade'
+
+/**
+ * O texto de cada motivo, EXAUSTIVO sobre o tipo: um motivo novo reprova o
+ * `tsc` ate ganhar texto. Espelha os rotulos da tela da missao, a mao
+ * (pendencia 32).
+ */
+export const RESCHEDULE_REASON_LABELS: Record<RescheduleReason, string> = {
+  dificuldade: 'Dificuldade',
+  falta_de_tempo: 'Falta de tempo',
+  mudanca_de_prioridade: 'Mudança de prioridade',
+}
+
+/**
+ * A proposta de `reschedule_mission` (spec do F, "A ferramenta
+ * `reschedule_mission` e a acao"). `mission_id`, `new_deadline` e `reason` sao
+ * a entrada do modelo; `instructions` e `previous_deadline` sao o RETRATO que o
+ * backend escreveu ao gravar a proposta (F16) -- o que a pessoa viu quando
+ * decidiu. O cartao nao busca a missao: isso seria importar `missions`.
+ */
+export interface RescheduleProposal {
+  mission_id: number
+  new_deadline: string
+  reason: RescheduleReason
+  instructions: string
+  previous_deadline: string
+}
+
+/** O que toda acao tem, qualquer que seja o `kind`. */
+interface ActionBase {
   id: number
-  kind: 'create_mission'
   state: ActionState
-  payload: MissionProposal
+  /** A missao afetada, so depois de `executada`. */
   mission_id: number | null
   error_code: string | null
 }
+
+export interface CreateMissionAction extends ActionBase {
+  kind: 'create_mission'
+  payload: MissionProposal
+}
+
+export interface RescheduleMissionAction extends ActionBase {
+  kind: 'reschedule_mission'
+  payload: RescheduleProposal
+}
+
+/**
+ * Uma acao proposta pela Tifa, discriminada pelo `kind`: o `payload` so tem
+ * tipo depois de se saber o `kind`. Um `kind` novo reprova o `tsc` em quem
+ * escolhe o cartao (`ProposalCard`).
+ */
+export type ActionRead = CreateMissionAction | RescheduleMissionAction
 
 export interface MessageRead {
   id: number
@@ -91,4 +141,8 @@ export type StreamErrorCode = 'provedor_indisponivel' | 'tempo_esgotado' | 'prop
  * Espelham o `CodigoDeErro`, a mao (pendencia 32).
  */
 export type ActionErrorCode =
-  'operacao_reutilizada' | 'transicao_ilegal' | 'prazo_expirado' | 'acao_nao_encontrada'
+  | 'operacao_reutilizada'
+  | 'transicao_ilegal'
+  | 'prazo_expirado'
+  | 'acao_nao_encontrada'
+  | 'reagendamento_invalido'

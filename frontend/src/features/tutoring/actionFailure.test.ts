@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import { describeActionFailure } from './actionFailure'
+import { describeActionFailure, failedActionText } from './actionFailure'
 
 describe('describeActionFailure', () => {
   it.each([
@@ -56,5 +56,66 @@ describe('describeActionFailure', () => {
       message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
       recovery: 'retry',
     })
+  })
+
+  it('reagendamento_invalido: a acao foi gravada falhou, e o cartao passa a esse estado', () => {
+    for (const attempted of ['confirm', 'reject'] as const) {
+      expect(
+        describeActionFailure(new ApiError('x', 409, 'reagendamento_invalido'), attempted),
+      ).toEqual({
+        message:
+          'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',
+        recovery: 'invalidated',
+      })
+    }
+  })
+
+  it('confirmar um reagendamento sem resposta diz que o prazo nao muda duas vezes', () => {
+    expect(
+      describeActionFailure(new ApiError('x', null, null), 'confirm', 'reschedule_mission'),
+    ).toEqual({
+      message:
+        'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      recovery: 'retry',
+    })
+  })
+
+  it('recusar um reagendamento tem o mesmo texto generico da criacao', () => {
+    expect(
+      describeActionFailure(new ApiError('x', null, null), 'reject', 'reschedule_mission'),
+    ).toEqual({
+      message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
+      recovery: 'retry',
+    })
+  })
+
+  it('o code conhecido vale para os dois tipos de acao', () => {
+    expect(
+      describeActionFailure(
+        new ApiError('x', 409, 'transicao_ilegal'),
+        'confirm',
+        'reschedule_mission',
+      ),
+    ).toEqual({
+      message: 'Esta proposta já foi decidida. Atualize a conversa para ver o estado atual.',
+      recovery: 'refresh',
+    })
+  })
+})
+
+describe('failedActionText', () => {
+  it.each([
+    ['prazo_expirado', 'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.'],
+    [
+      'reagendamento_invalido',
+      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',
+    ],
+    ['proposta_invalida', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    // Um code que existe no mapa mas nao e gravado na acao cai no generico.
+    ['transicao_ilegal', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    ['toString', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    [null, 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+  ])('a acao gravada falhou com %s', (code, text) => {
+    expect(failedActionText(code)).toBe(text)
   })
 })
