@@ -61,6 +61,22 @@ describe('App', () => {
     await settleHeadquarters()
   })
 
+  it('so a raiz do App pinta o fundo e fixa a altura minima; a do Quartel-General so organiza o layout', async () => {
+    stubPage()
+
+    const { container } = render(<App />)
+
+    const raizDoApp = container.firstElementChild
+    const raizDoQuartel = screen.getByTestId('headquarters').parentElement
+    expect(raizDoApp).toHaveClass('min-h-screen', 'bg-slate-950', 'text-slate-100')
+    // Duplicar `min-h-screen` na pagina soma a altura da navegacao no celular:
+    // a tela curta ganha uma rolagem sem conteudo (medido: 905px contra 844px).
+    for (const classe of ['min-h-screen', 'bg-slate-950', 'text-slate-100']) {
+      expect(raizDoQuartel).not.toHaveClass(classe)
+    }
+    await settleHeadquarters()
+  })
+
   it('abre no Quartel-General, marcado como area atual na navegacao', async () => {
     stubPage()
 

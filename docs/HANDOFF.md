@@ -3707,13 +3707,25 @@ C".
 
 *Abertas — dívida pequena*
 
-62. **A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
+62. ~~**A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
     (`frontend/src/pages/Headquarters.tsx`, a `div` raiz: `min-h-screen
     bg-slate-950 text-slate-100 lg:flex`). Desde a Task 1 o `App.tsx` já
     envolve as duas áreas numa `div` com as mesmas classes; dentro dele, as
     da raiz do QG são redundantes (inofensivas: mesma cor, mesma altura
     mínima). Ficou da aterrissagem da Task 1 para não mexer em layout sem
-    inspeção visual (pendência 61).
+    inspeção visual (pendência 61).~~ **Resolvida no lote do frontend
+    (2026-09-29):** a raiz do QG ficou só com `lg:flex`; quem pinta o fundo e
+    fixa a altura mínima é a `div` do `App.tsx` (Campanhas já dependia só
+    dela). A inspeção visual que a pendência pedia foi feita num Chromium real
+    (Playwright, API simulada, 390x844 e 1280x800, quadro vazio e com 12
+    missões): retângulos de `main`, painel da Tifa e raiz e as capturas de tela
+    **idênticos** antes e depois em três dos quatro cenários. **A única
+    diferença**, no celular com o quadro curto: a altura do documento cai de
+    905px para 844px — o `min-h-screen` duplicado somava a altura da navegação
+    do topo (61px) e criava uma rolagem sem conteúdo. Provado por um teste novo
+    em `App.test.tsx` (só a raiz do `App` tem as classes; reprovou antes da
+    troca e reprova nas duas mutações: classes de volta na página, ou fora do
+    `App`).
 63. **`CampaignTrail.tsx` tem cerca de 370 linhas** (371, medido), com dez
     subcomponentes num arquivo só
     (`frontend/src/features/campaigns/CampaignTrail.tsx`). Candidato a
