@@ -3093,10 +3093,39 @@ ninguém mexer.
     contrato, não refatoração: a engine passaria a nascer na partida, e o
     `/health` deixaria de responder sem configuração de banco — que é o que
     um teste exige hoje.
-15. **Duas `DeprecationWarning` de dependência** aparecem em toda execução do
+15. ~~**Duas `DeprecationWarning` de dependência** aparecem em toda execução do
     pytest: o `TestClient` do Starlette pedindo outro pacote no lugar do
-    `httpx`, e o alias `anyio.abc.BlockingPortal`. Não são deste código;
-    pedem uma decisão de `filterwarnings` em tarefa própria.
+    `httpx`, e o alias `anyio.abc.BlockingPortal`.~~ **Resolvida em
+    2026-09-29 (lote de infraestrutura, branch `wt/lote-infra`), por
+    correção na origem, sem `filterwarnings` que esconda nada.** Medido antes
+    de mexer (`pytest -W default`, starlette 1.6.0, anyio 4.15.1): **um** aviso,
+    não dois — o do `httpx` já não aparecia porque o `httpx2` virou dependência
+    direta na tutoria (`e8a424c`) e o `starlette.testclient` o prefere (lê-se
+    no próprio `testclient.py`: `import httpx2`, com o `httpx` só como
+    fallback que avisa). O que restava era o alias: o `testclient.py` do
+    Starlette 1.6.0 escreve `anyio.abc.BlockingPortal` numa anotação de nível
+    de módulo, e o `anyio` 4.15.1 avisa a cada importação (linha 53 do
+    arquivo). **Correção:** `uv lock --upgrade-package starlette` levou o
+    Starlette de 1.6.0 para **1.7.0** (publicado em 2026-09-23, conforme o
+    `upload-time` do lock), cujo `testclient.py` usa
+    `anyio.from_thread.BlockingPortal`. Só o `uv.lock` mudou (3 linhas: versão,
+    URL e hash do sdist e da roda); nenhuma dependência nova nem pino novo no
+    `pyproject.toml` — o Starlette continua transitivo do FastAPI
+    (`starlette>=0.46.0`). Medido depois: `make check-api` com **827 testes
+    passando e nenhum bloco de avisos**, cobertura de 100%.
+    **Guarda:** duas linhas de `filterwarnings` no `pyproject.toml`, ambas
+    `error:` e por **mensagem exata** (o alias do `BlockingPortal` e o aviso do
+    fallback para o `httpx`), para que os dois voltem como erro de coleta e
+    não como aviso que ninguém lê, caso um `uv lock` regrida o Starlette.
+    Nenhum outro aviso virou erro (medido: um `DeprecationWarning` qualquer
+    continua só aviso). **Prova da guarda:** com o `uv.lock` anterior
+    (Starlette 1.6.0) o `tests/integration/test_evaluation_api.py` reprova na
+    coleta com `DeprecationWarning: The anyio.abc.BlockingPortal alias is
+    deprecated`; com o novo, 15 testes passam. A segunda linha foi provada
+    por um teste descartável que emitiu a mensagem do fallback (virou erro).
+    **Custo/risco:** o Starlette é um pacote recente (seis dias); o `uv.lock`
+    fixa o hash. Se algum dia o Starlette regredir (um `uv lock` refeito do
+    zero, por exemplo), o sintoma agora é um erro de coleta, não um aviso.
 16. **O interpretador do projeto no PyCharm aponta para o Python do
     Homebrew, não para o `.venv`.** `.idea/` é ignorado pelo git e não foi
     alterado às cegas. Efeito: avisos de import não resolvido no editor; o
