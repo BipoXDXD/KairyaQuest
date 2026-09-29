@@ -4238,6 +4238,26 @@ B → C**. O desenho de A, B e C está em
   a verificação automática (90), o upload (92) e contestar o veredito (93). A
   pendência 3 (iniciar missão) continua aberta.
 
+- **F — acompanhar a execução: iniciar e reagendar missões**, o incremento
+  depois do E. **Desenhado, não implementado.** Tema escolhido pelo controlador
+  da sessão autônoma de 2026-09-29, com o dono ausente; **o desenho foi
+  aprovado por delegação do dono** (2026-09-29, "tome todas as decisões por
+  mim"), e o dono pode revogar qualquer decisão. Spec em
+  `docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
+  (decisões F1–F24, recorte, contratos, migração `0006`, "Para o dono
+  decidir"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`
+  (Tasks 0–12, com dependências, paralelismo em até quatro worktrees e a
+  classe simples/complexa de cada tarefa). **Recorte:** fecha a pendência 3
+  (`POST /api/missions/{id}/start`), cria o reagendamento com motivo
+  (`POST /api/missions/{id}/reschedule`; dificuldade, falta de tempo ou
+  mudança de prioridade) e o histórico de replanejamento (`mission_reschedules`,
+  README §8), e dá à Tifa a ferramenta de proposta `reschedule_mission`, que só
+  executa depois da confirmação. **Fora:** cobranças com preferências de
+  intensidade, frequência, horários e pausa (ficam para o **G**), dividir
+  missão, `propose_plan` e reagendar diária ou especial. As pendências novas
+  que o F vai criar estão reservadas como 109–114 na spec e só entram na lista
+  de "Abertas" quando o código existir (Task 12 do plano).
+
 **O que o C encontrou pronto do B, no início:**
 
 - **`GET /api/plans/current`** (decisão P2): o C não precisou serializar o
