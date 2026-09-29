@@ -160,6 +160,7 @@ def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
         ),
         historico=20,
         limite=timedelta(seconds=60),
+        modelo="claude-opus-5",
     )
 
 

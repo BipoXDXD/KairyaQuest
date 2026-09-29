@@ -1,6 +1,12 @@
+import { useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { EvaluationPanel } from './EvaluationPanel'
+import { EvidenceForm } from './EvidenceForm'
+import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
+import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
+import type { EvidenceDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
@@ -18,15 +24,18 @@ const RELOAD_BUTTON_CLASS =
   'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none ' +
   'disabled:cursor-not-allowed disabled:opacity-60'
 
-/** O texto do "Atualizar o quadro" enquanto espera uma conclusao em voo. */
-const RELOAD_WAITING_LABEL = 'Aguardando a conclusão em andamento…'
-
-/** O texto do botao de concluir em cada estado em que ele aparece. */
-function completeLabel(completion: CompletionState): string {
+/**
+ * O texto do botao de concluir em cada estado em que ele aparece.
+ *
+ * `retryPending` vem do REGISTRO, nao do estado do cartao: o reload remonta o
+ * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
+ * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete.
+ */
+function completeLabel(completion: CompletionState, retryPending: boolean): string {
   if (completion.status === 'submitting') {
     return 'Concluindo…'
   }
-  return completion.status === 'failed' ? 'Tentar de novo' : 'Concluir'
+  return completion.status === 'failed' || retryPending ? 'Tentar de novo' : 'Concluir'
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo. */
@@ -35,6 +44,27 @@ function statusText(completion: CompletionState): string {
     return 'Concluindo a missão…'
   }
   return completion.status === 'completed' ? 'Missão concluída.' : ''
+}
+
+/**
+ * Por que o rascunho em uso nao pode sair, ou `null` se pode (ou nao ha
+ * rascunho). O texto mora JUNTO do Concluir, fora do disclosure: com o
+ * formulario recolhido, o botao desabilitado continua com o motivo a vista e
+ * ligado por `aria-describedby`.
+ */
+function blockedReason(draft: EvidenceDraft): string | null {
+  const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
+  const described = describeEvidence(draft)
+  if (!inUse || described.sendable) {
+    return null
+  }
+  if (described.linkError !== null) {
+    return `Corrija o link da evidência para concluir. ${described.linkError}`
+  }
+  if (stripEnds(draft.text) === '') {
+    return 'Conte o que você fez para concluir com o link.'
+  }
+  return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
 }
 
 /**
@@ -78,6 +108,8 @@ function CompletionControls({
   mission,
   completion,
   onComplete,
+  blocked,
+  retryPending,
   onReload,
   reloadWaiting,
   reloadLabel,
@@ -85,10 +117,15 @@ function CompletionControls({
   mission: Mission
   completion: CompletionState
   onComplete: () => void
+  /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
+  blocked: string | null
+  /** A chave desta missao esta retida no registro (falha que se repete). */
+  retryPending: boolean
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
 }) {
+  const blockedId = useId()
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
   // rotulo de estado ja diz "Concluída".
   if (mission.state === 'concluida' && completion.status === 'idle') {
@@ -104,13 +141,19 @@ function CompletionControls({
         <button
           type="button"
           data-testid="mission-complete"
-          disabled={completion.status === 'submitting'}
+          disabled={completion.status === 'submitting' || blocked !== null}
+          aria-describedby={blocked === null ? undefined : blockedId}
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
-          {completeLabel(completion)}{' '}
+          {completeLabel(completion, retryPending)}{' '}
           <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
+      )}
+      {canComplete && blocked !== null && (
+        <p id={blockedId} data-testid="mission-complete-blocked" className="text-sm text-amber-200">
+          {blocked}
+        </p>
       )}
       {failure?.recovery === 'refresh' && (
         <button
@@ -153,6 +196,7 @@ export function MissionCard({
   onReload,
   reloadWaiting,
   onCompleted,
+  onRewarded,
   titleLevel = 3,
   reloadLabel = 'Atualizar o quadro',
 }: {
@@ -161,6 +205,12 @@ export function MissionCard({
   onReload: () => void
   reloadWaiting: boolean
   onCompleted?: () => void
+  /**
+   * O bonus da avaliacao da Tifa foi creditado. Quem usa o cartao liga ao
+   * MESMO aviso da conclusao (P3 do D): o saldo mudou, o painel de progresso
+   * atualiza.
+   */
+  onRewarded?: () => void
   /**
    * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
    * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
@@ -176,18 +226,54 @@ export function MissionCard({
   reloadLabel?: string
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
+  // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
+  // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
+  // texto morreria com eles, como a chave de operacao morria (pendencia 35).
+  // O `useState` fica porque o registro e um `useRef` -- mudar o rascunho la
+  // nao renderiza nada.
+  const [draft, setDraft] = useState<EvidenceDraft>(() => registry.draftFor(listed.id))
+  const changeDraft = (next: EvidenceDraft) => {
+    setDraft(next)
+    registry.saveDraft(listed.id, next)
+  }
+  // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
+  // concluir sem ele trocaria a entrega que a pessoa quis dar. Sem
+  // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
+  const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
+  const titleId = useId()
+  const titleRef = useRef<HTMLHeadingElement>(null)
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
   const mission = completion.status === 'completed' ? completion.mission : listed
   const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
+  // Ao concluir, o Concluir (e o formulario) saem do documento, e o foco que
+  // estava neles cairia no `body`: quem navega pelo teclado ou por leitor de
+  // tela recomecaria a pagina do topo. Vai para o titulo do cartao -- o painel
+  // que aparece esta logo abaixo dele. So se o foco REALMENTE se perdeu: se a
+  // pessoa ja foi para outro lugar enquanto o pedido voava, nao se rouba.
+  const completed = completion.status === 'completed'
+  useEffect(() => {
+    if (completed && document.activeElement === document.body) {
+      titleRef.current?.focus()
+    }
+  }, [completed])
+  // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
+  // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
+  const retryPending = registry.isRetryPending(listed.id)
+  const offersEvidence =
+    mission.state !== 'concluida' &&
+    !(completion.status === 'failed' && completion.failure.recovery === 'refresh')
 
   return (
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-4">
         <HeadingTag
+          id={titleId}
+          ref={titleRef}
+          tabIndex={-1}
           data-testid="mission-instructions"
-          className="text-base font-semibold text-slate-100"
+          className="text-base font-semibold text-slate-100 focus:outline-none"
         >
           {mission.instructions}
         </HeadingTag>
@@ -241,14 +327,39 @@ export function MissionCard({
         )}
       </dl>
 
+      {offersEvidence && (
+        <EvidenceForm
+          draft={draft}
+          onChange={changeDraft}
+          disabled={completion.status === 'submitting'}
+          retryPending={retryPending}
+          describedBy={titleId}
+        />
+      )}
+
       <CompletionControls
         mission={mission}
         completion={completion}
-        onComplete={complete}
+        onComplete={() => {
+          complete(draftInUse ? draft : undefined)
+        }}
+        blocked={blockedReason(draft)}
+        retryPending={retryPending}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
       />
+
+      {mission.state === 'concluida' && (
+        <EvaluationPanel
+          mission={mission}
+          onRewarded={onRewarded}
+          onReload={onReload}
+          reloadLabel={reloadLabel}
+          reloadWaiting={reloadWaiting}
+          describedBy={titleId}
+        />
+      )}
     </li>
   )
 }

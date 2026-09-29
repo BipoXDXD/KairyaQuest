@@ -7,6 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from focusquest.core.clock import Clock, get_clock
+from focusquest.core.database import SessaoDaRequisicao
+from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_schemas import (
     CurrentPlanRead,
     CycleRead,
@@ -20,7 +22,6 @@ from focusquest.modules.missions.cycle_service import (
     ler_ciclo,
     ler_plano_atual,
 )
-from focusquest.modules.missions.router import USUARIO_UNICO, SessaoDaRequisicao
 
 router = APIRouter(prefix="/api", tags=["cycle"])
 

@@ -14,24 +14,32 @@ da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
 from datetime import UTC, date, datetime
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 from pydantic import (
     AfterValidator,
     AwareDatetime,
     BaseModel,
+    ConfigDict,
     Field,
+    StringConstraints,
     computed_field,
 )
 
 from focusquest.modules.missions.cycle_domain import Availability
 from focusquest.modules.missions.cycle_service import MissaoLida
 from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
     MissionState,
     MissionType,
+    Veredito,
+    Verificacao,
     duracao_real,
+    verificacao_da_missao,
     xp_da_missao,
 )
+from focusquest.modules.missions.models import Mission, MissionEvaluation
 from focusquest.modules.progression.schemas import RewardRead
 
 # O teto da dificuldade aceita na ENTRADA. Escolhido em 5 por dois motivos que
@@ -137,15 +145,116 @@ class MissionCreate(BaseModel):
 TAMANHO_MAXIMO_DO_IDENTIFICADOR = 200
 
 
+TAMANHO_MAXIMO_DA_EVIDENCIA = 4000
+TAMANHO_MAXIMO_DO_LINK = 2000
+TAMANHO_MAXIMO_DO_FEEDBACK = 1500
+
+
+def _sem_nul(valor: str) -> str:
+    """Recusa o byte NUL: o PostgreSQL nao o guarda em `text`, e sem esta guarda
+    a entrega viraria um 500 em vez de um 422 que aponta o campo."""
+    if "\x00" in valor:
+        raise ValueError("o texto nao pode conter o caractere NUL")
+    return valor
+
+
+TextoDaEvidencia = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TAMANHO_MAXIMO_DA_EVIDENCIA
+    ),
+    AfterValidator(_sem_nul),
+]
+# `(?i)`: HTTPS:// colado de um celular e o mesmo endereco (EM2). `\S+`: um
+# espaco no meio nao e endereco nenhum. O backend NUNCA abre o link (E3).
+LinkDaEvidencia = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        max_length=TAMANHO_MAXIMO_DO_LINK,
+        pattern=r"(?i)^https?://\S+$",
+    ),
+    AfterValidator(_sem_nul),
+]
+
+
+class EvidenceIn(BaseModel):
+    """A evidencia de uma conclusao (E1, E3). `extra="forbid"`: um campo a mais
+    seria ignorado em silencio, e quem o mandou acharia que foi gravado."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: TextoDaEvidencia
+    link: LinkDaEvidencia | None = None
+
+
+class EvidenceRead(BaseModel):
+    """A evidencia como a API a publica."""
+
+    text: str
+    link: str | None
+
+
+class EvaluationSummaryRead(BaseModel):
+    """O resumo da avaliacao da Tifa que acompanha a missao (sem `bonus_xp`, EM1)."""
+
+    state: EstadoDaAvaliacao
+    verdict: Veredito | None
+    feedback: str | None
+    error_code: FalhaDaAvaliacao | None
+    model: str
+    finished_at: datetime | None
+
+    @classmethod
+    def da_avaliacao(cls, avaliacao: MissionEvaluation) -> EvaluationSummaryRead:
+        return cls(
+            state=avaliacao.state,
+            verdict=avaliacao.verdict,
+            feedback=avaliacao.feedback,
+            error_code=avaliacao.error_code,
+            model=avaliacao.model,
+            finished_at=avaliacao.finished_at,
+        )
+
+
+class _CamposDaEntrega(TypedDict):
+    """Os tres campos com o tipo real, para o mypy checar o `**` de quem os usa."""
+
+    verification: Verificacao | None
+    evidence: EvidenceRead | None
+    evaluation: EvaluationSummaryRead | None
+
+
+def _campos_da_entrega(
+    missao: Mission,
+) -> _CamposDaEntrega:
+    """Os tres campos novos de `MissionRead`, escritos uma vez so."""
+    return {
+        "verification": verificacao_da_missao(
+            missao.state, missao.evidence is not None
+        ),
+        "evidence": None
+        if missao.evidence is None
+        else EvidenceRead(text=missao.evidence.text, link=missao.evidence.link),
+        "evaluation": None
+        if missao.evaluation is None
+        else EvaluationSummaryRead.da_avaliacao(missao.evaluation),
+    }
+
+
 class MissionComplete(BaseModel):
-    """O identificador de operacao que torna a conclusao idempotente.
+    """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
+
+    O identificador torna a conclusao idempotente.
 
     Quem o gera e o cliente, e e por isso que ele entra no corpo: o servidor
     nao tem como saber, sozinho, se a segunda requisicao e um reenvio da
-    primeira ou uma tentativa nova.
+    primeira ou uma tentativa nova. A `evidence`, quando vem, faz parte da
+    operacao: o mesmo identificador com outra evidencia e chave gasta.
     """
 
     operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    evidence: EvidenceIn | None = None
 
 
 class MissionRead(BaseModel):
@@ -177,6 +286,9 @@ class MissionRead(BaseModel):
     state: MissionState
     started_at: datetime | None
     completed_at: datetime | None
+    verification: Verificacao | None
+    evidence: EvidenceRead | None
+    evaluation: EvaluationSummaryRead | None
 
     @classmethod
     def da_leitura(cls, lida: MissaoLida) -> MissionRead:
@@ -194,6 +306,7 @@ class MissionRead(BaseModel):
             state=missao.state,
             started_at=missao.started_at,
             completed_at=missao.completed_at,
+            **_campos_da_entrega(missao),
         )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -250,5 +363,6 @@ class MissionCompletionRead(MissionRead):
             state=missao.state,
             started_at=missao.started_at,
             completed_at=missao.completed_at,
+            **_campos_da_entrega(missao),
             reward=recompensa,
         )

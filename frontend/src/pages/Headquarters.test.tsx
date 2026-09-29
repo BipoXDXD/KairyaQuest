@@ -162,6 +162,9 @@ describe('Headquarters', () => {
       completed_at: null,
       xp: 80,
       actual_duration_minutes: null,
+      verification: null,
+      evidence: null,
+      evaluation: null,
     }
     const recompensa: Reward = {
       xp_awarded: 80,
@@ -175,6 +178,7 @@ describe('Headquarters', () => {
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-24T10:00:00Z',
+      verification: 'autodeclarada',
       reward: recompensa,
     }
     stubViewport('desktop')
@@ -252,12 +256,16 @@ describe('Headquarters', () => {
       completed_at: null,
       xp: 40,
       actual_duration_minutes: null,
+      verification: null,
+      evidence: null,
+      evaluation: null,
     }
     const diariaConcluida: Mission = {
       ...diaria,
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-23T15:00:00Z',
+      verification: 'autodeclarada',
     }
     const recompensa: Reward = {
       xp_awarded: 40,
@@ -372,6 +380,9 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     completed_at: null,
     xp: 100,
     actual_duration_minutes: null,
+    verification: null,
+    evidence: null,
+    evaluation: null,
   }
 
   const confirmed: Route = () =>
@@ -429,7 +440,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     )
 
     await act(async () => {
-      resolver(Response.json({ ...pendente, state: 'concluida' }))
+      resolver(Response.json({ ...pendente, state: 'concluida', verification: 'autodeclarada' }))
       await post
     })
 

@@ -1,4 +1,5 @@
-import type { Mission } from '../../shared/types/mission'
+import type { EvaluationSummary, Mission } from '../../shared/types/mission'
+import type { Reward } from '../../shared/types/reward'
 
 /**
  * O contrato de missao como a API o publica.
@@ -37,3 +38,34 @@ export interface Cycle {
  */
 export type MissionErrorCode =
   'missao_nao_encontrada' | 'transicao_ilegal' | 'operacao_reutilizada' | 'missao_expirada'
+
+/**
+ * Os `code` de erro que `POST /api/missions/{id}/evaluation` devolve (spec do
+ * incremento E, secao "API"). Espelha `CodigoDeErro`, em
+ * src/focusquest/main.py, a mao: um code novo entra aqui, e entao o `tsc`
+ * exige a traducao dele em `evaluationFailure.ts`.
+ */
+export type EvaluationErrorCode =
+  | 'sem_evidencia'
+  | 'avaliacao_em_andamento'
+  | 'provedor_nao_configurado'
+  | 'provedor_indisponivel'
+  | 'tempo_esgotado'
+  | 'avaliacao_invalida'
+  | 'missao_nao_encontrada'
+
+/** A resposta do pedido de avaliacao: o resumo e o bonus, se concedido agora. */
+export interface EvaluationResult {
+  evaluation: EvaluationSummary
+  /**
+   * `reward` pode faltar (deploy defasado ou contrato violado) ou vir `null`
+   * (sem bonus): quem le usa `!= null`, como o `useCompleteMission` faz.
+   */
+  reward?: Reward | null
+}
+
+/** O rascunho da evidencia, guardado por missao no registro de conclusoes. */
+export interface EvidenceDraft {
+  text: string
+  link: string
+}

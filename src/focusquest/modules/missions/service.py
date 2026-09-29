@@ -7,6 +7,7 @@ banco atribuir identificadores e aplicar restricoes, e deixa a decisao de
 tornar tudo permanente para o dono da transacao.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
@@ -27,7 +28,11 @@ from focusquest.modules.missions.domain import (
     MissionType,
     validar_transicao,
 )
-from focusquest.modules.missions.models import Mission, MissionOperation
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvidence,
+    MissionOperation,
+)
 from focusquest.modules.progression.service import registrar_conclusao
 
 # O tipo da operacao registrada em `mission_operations.kind`: QUAL operacao
@@ -115,6 +120,25 @@ def listar_missoes(session: Session, user_id: int) -> list[Mission]:
     )
 
 
+@dataclass(frozen=True)
+class NovaEvidencia:
+    """A evidencia de uma conclusao, ja validada pela borda (E3)."""
+
+    texto: str
+    link: str | None
+
+
+def _mesma_evidencia(
+    gravada: MissionEvidence | None, pedida: NovaEvidencia | None
+) -> bool:
+    """O reenvio so e o MESMO pedido se trouxer a MESMA evidencia (ou nenhuma
+    nas duas vezes): "mesmo id, outro conteudo" e chave gasta, como o
+    `client_message_id` da conversa (1b-1)."""
+    if gravada is None or pedida is None:
+        return gravada is None and pedida is None
+    return (gravada.text, gravada.link) == (pedida.texto, pedida.link)
+
+
 def concluir_missao(
     session: Session,
     user_id: int,
@@ -122,6 +146,7 @@ def concluir_missao(
     operation_id: str,
     *,
     clock: Clock,
+    evidencia: NovaEvidencia | None = None,
 ) -> Mission:
     """Conclui a missao, de forma idempotente pelo identificador de operacao.
 
@@ -147,17 +172,18 @@ def concluir_missao(
     sucesso repetido -- justamente a promessa que a idempotencia existe para
     cumprir.
 
-    Reusar um `operation_id` em OUTRA missao nao e nenhuma das duas coisas:
-    e chave gasta, e recebe `OperacaoReutilizadaError`. Esse caso tem dois
+    Reusar um `operation_id` em OUTRA missao, ou na MESMA com OUTRA evidencia,
+    nao e nenhuma das duas coisas: e chave gasta, e recebe
+    `OperacaoReutilizadaError`. Esse caso tem dois
     caminhos possiveis -- a consulta abaixo encontra a operacao alheia, ou a
     restricao unica recusa o INSERT quando a operacao alheia foi gravada
     depois da consulta -- e os DOIS terminam no mesmo erro. Sem isso, o mesmo
     engano do cliente daria 200 em sequencia e 500 em paralelo, conforme o
     escalonador.
     """
-    missao = _buscar(session, user_id, mission_id, travar=True)
+    missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
 
-    # A hora e lida AQUI, com a linha ja travada, e nao antes do `_buscar`
+    # A hora e lida AQUI, com a linha ja travada, e nao antes da busca
     # (decisao C13 da spec do ciclo diario). Lida antes, uma conclusao que
     # esperasse a trava de outra carregaria um instante anterior a espera. A
     # hora decide a ocultacao, a regra do dia e o `completed_at`.
@@ -176,6 +202,9 @@ def concluir_missao(
     )
     if ja_feita is not None:
         _exigir_mesma_operacao(ja_feita, mission_id, operation_id)
+        # Mesma chave, OUTRA evidencia: chave gasta, nao reenvio.
+        if not _mesma_evidencia(missao.evidence, evidencia):
+            raise OperacaoReutilizadaError(_reuso(operation_id))
         # Mesma missao e mesmo tipo: e reenvio, e o resultado e o de antes.
         # `missao` ja E a missao da operacao -- a conferencia acima garante.
         return missao
@@ -193,6 +222,10 @@ def concluir_missao(
     validar_transicao(missao.state, MissionState.CONCLUIDA)
     missao.state = MissionState.CONCLUIDA
     missao.completed_at = agora
+    if evidencia is not None:
+        missao.evidence = MissionEvidence(
+            text=evidencia.texto, link=evidencia.link, submitted_at=agora
+        )
     session.add(
         MissionOperation(
             operation_id=operation_id, mission_id=missao.id, kind=CONCLUSAO
@@ -254,7 +287,7 @@ def _exigir_mesma_operacao(
         raise OperacaoReutilizadaError(_reuso(operation_id))
 
 
-def _buscar(
+def buscar_para_escrever(
     session: Session, user_id: int, mission_id: int, *, travar: bool = False
 ) -> Mission:
     """A missao do usuario, ou o erro que explica o bloqueio (README s8).

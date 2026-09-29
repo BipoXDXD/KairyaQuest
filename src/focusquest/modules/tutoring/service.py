@@ -67,11 +67,15 @@ MENSAGENS_NA_TELA = 50
 
 @dataclass(frozen=True)
 class Tutoria:
-    """O provedor e os dois numeros que o servico usa, vindos do `Settings`."""
+    """O provedor, os dois numeros que o servico usa e o nome do modelo, vindos
+    do `Settings`. O `modelo` e o que a avaliacao grava como quem interpretou
+    (spec, `mission_evaluations.model`): o adaptador o usa, mas o `Protocol`
+    do provedor nao o expoe, e a gravacao nao pode depender de adaptador."""
 
     provedor: Provedor
     historico: int
     limite: timedelta
+    modelo: str
 
 
 @dataclass(frozen=True)

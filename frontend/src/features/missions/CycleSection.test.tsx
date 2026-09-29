@@ -21,12 +21,16 @@ const diaria: Mission = {
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
 }
 const diariaConcluida: Mission = {
   ...diaria,
   state: 'concluida',
   availability: 'concluida',
   completed_at: '2026-09-23T15:00:00Z',
+  verification: 'autodeclarada',
 }
 const especial: Mission = {
   ...diaria,
@@ -187,6 +191,42 @@ describe('CycleSection', () => {
     })
   })
 
+  it('o bonus da avaliacao da diaria chega ao onMissionCompleted da pagina', async () => {
+    const onMissionCompleted = vi.fn()
+    const comEvidencia: Mission = {
+      ...diariaConcluida,
+      verification: 'com_evidencia',
+      evidence: { text: 'Cinco exercicios feitos.', link: null },
+    }
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ mission: comEvidencia })),
+      'POST /api/missions/31/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: 'Cobre o criterio.',
+            error_code: null,
+            model: 'modelo-x',
+            finished_at: '2026-09-23T16:00:00Z',
+          },
+          reward: { ...recompensaPadrao, xp_awarded: 20 },
+        }),
+    })
+    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+
+    expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+20 XP de bônus')
+    expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('a diaria concluida autodeclarada mostra o selo no cartao', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
+    render(<CycleSection />)
+    expect(await screen.findByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
+  })
+
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
     render(<CycleSection />)
@@ -216,6 +256,41 @@ describe('CycleSection', () => {
     ).toBeInTheDocument()
     expect(within(secao).getByTestId('mission-xp')).toHaveTextContent('660 XP')
     expect(screen.queryByTestId('cycle-progress')).toBeNull()
+  })
+
+  it('a diaria e a especial tem rascunhos independentes, e concluir a diaria nao mexe no da especial', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
+    })
+    render(<CycleSection />)
+    const secaoEspecial = await screen.findByTestId('cycle-special')
+    const cartaoDiaria = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === '31') as HTMLElement
+    const preencher = (cartao: HTMLElement, texto: string) => {
+      fireEvent.click(within(cartao).getByRole('button', { name: /Entregar com evidência/ }))
+      fireEvent.change(within(cartao).getByLabelText('O que você fez'), {
+        target: { value: texto },
+      })
+    }
+
+    preencher(cartaoDiaria, 'Feito da diaria')
+    preencher(secaoEspecial, 'Feito da especial')
+
+    expect(within(cartaoDiaria).getByLabelText('O que você fez')).toHaveValue('Feito da diaria')
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+
+    fireEvent.click(within(cartaoDiaria).getByTestId('mission-complete'))
+    await within(cartaoDiaria).findByText('Missão concluída.')
+
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+    const [corpo] = requestsTo(fetchMock, 'POST /api/missions/31/complete').map(
+      (init) => JSON.parse(String(init.body)) as unknown,
+    )
+    expect(corpo).toMatchObject({ evidence: { text: 'Feito da diaria' } })
+    expect(requestsTo(fetchMock, 'POST /api/missions/38/complete')).toHaveLength(0)
   })
 
   it('o erro de carregamento oferece Tentar novamente', async () => {

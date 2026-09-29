@@ -17,9 +17,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from focusquest.core.base import Base
 from focusquest.modules.progression.domain import Codigo
 
-# A unica fonte de XP do D. O E acrescenta outras, e a unicidade passa a ser
-# (mission_id, source) -- registrado na spec, "Modelo de dados".
+# A fonte de XP do D. O E trouxe a segunda (o bonus da avaliacao), e a
+# unicidade passou a ser (mission_id, source) -- spec, "Modelo de dados".
 FONTE_CONCLUSAO = "mission_completed"
+FONTE_BONUS = "evaluation_bonus"
 
 _CODIGOS_SQL = ", ".join(f"'{codigo.value}'" for codigo in Codigo)
 
@@ -39,10 +40,13 @@ class XpEntry(Base):
     credited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint("mission_id", name="uq_xp_entries_mission_id"),
+        UniqueConstraint(
+            "mission_id", "source", name="uq_xp_entries_mission_id_source"
+        ),
         CheckConstraint("amount > 0", name="ck_xp_entries_amount"),
         CheckConstraint(
-            f"source IN ('{FONTE_CONCLUSAO}')", name="ck_xp_entries_source"
+            f"source IN ('{FONTE_CONCLUSAO}', '{FONTE_BONUS}')",
+            name="ck_xp_entries_source",
         ),
         Index("ix_xp_entries_user_id_id", "user_id", "id"),
     )

@@ -1,6 +1,7 @@
 """O adaptador Anthropic: a unica peca da aplicacao que importa o SDK."""
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import anthropic
@@ -12,6 +13,7 @@ from focusquest.modules.tutoring.domain import TipoDeAcao
 from focusquest.modules.tutoring.provider import (
     Delta,
     EventoDoProvedor,
+    Ferramenta,
     Fim,
     Proposta,
     ProvedorIndisponivelError,
@@ -23,6 +25,13 @@ from focusquest.modules.tutoring.provider import (
 # do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
 # (medido: 3 chamadas com demora nos cabecalhos ou 500; 1 com o corte no meio).
 TENTATIVAS = 2
+
+# Teto de saida da AVALIACAO, proprio e maior que o do chat (1024): um
+# `feedback` de ate 1500 caracteres mais o JSON da ferramenta precisam caber
+# com folga (e, nos modelos que pensam por padrao, o thinking gasta do mesmo
+# `max_tokens`). Truncado, o
+# `input` sairia parcial (ver o `stop_reason` em `avaliar`).
+MAX_TOKENS_DA_AVALIACAO = 2048
 
 DESCRICAO_DA_FERRAMENTA = (
     "Propõe uma missão de estudo. NÃO cria nada: a pessoa vê a proposta num "
@@ -44,6 +53,35 @@ def esquema_da_proposta() -> dict[str, Any]:
     esquema.pop("description", None)
     esquema.pop("title", None)
     return esquema
+
+
+@contextmanager
+def _traduzir_erros() -> Iterator[None]:
+    """Traduz as excecoes do SDK e do transporte para as do provedor.
+
+    Um ponto so, para `responder` e `avaliar`: as duas falam com o mesmo SDK e
+    tem de falhar do mesmo jeito. O `with` funciona tambem dentro do generator
+    de `responder`: um `GeneratorExit` (o consumidor parou de ler) atravessa
+    sem ser capturado.
+    """
+    try:
+        yield
+    except (anthropic.APITimeoutError, httpx2.TimeoutException) as erro:
+        # Os DOIS tipos, e nao so o do SDK: a demora no meio do stream sai
+        # como `httpx2.ReadTimeout` cru (medicao M4).
+        raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
+    except (anthropic.APIError, httpx2.TransportError) as erro:
+        raise ProvedorIndisponivelError(
+            f"o provedor falhou: {type(erro).__name__}"
+        ) from erro
+
+
+def _mensagens_da_api(turno: Turno) -> list[MessageParam]:
+    """As mensagens do turno no formato da API, para a conversa e a avaliacao."""
+    return [
+        {"role": mensagem.papel, "content": mensagem.texto}
+        for mensagem in turno.mensagens
+    ]
 
 
 class ProvedorAnthropic:
@@ -75,34 +113,76 @@ class ProvedorAnthropic:
             "description": DESCRICAO_DA_FERRAMENTA,
             "input_schema": esquema_da_proposta(),
         }
-        mensagens: list[MessageParam] = [
-            {"role": mensagem.papel, "content": mensagem.texto}
-            for mensagem in turno.mensagens
-        ]
-        try:
-            with self._cliente.messages.stream(
+        with (
+            _traduzir_erros(),
+            self._cliente.messages.stream(
                 model=self._modelo,
                 max_tokens=self._max_tokens,
                 system=turno.sistema,
-                messages=mensagens,
+                messages=_mensagens_da_api(turno),
                 tools=[ferramenta],
                 # Uma proposta por resposta (README s14).
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
-            ) as stream:
-                for evento in stream:
-                    if evento.type == "text":
-                        yield Delta(evento.text)
-                    elif evento.type == "content_block_stop" and isinstance(
-                        evento.content_block, ToolUseBlock
-                    ):
-                        yield Proposta(dict(evento.content_block.input))
-                    elif evento.type == "message_stop":
-                        yield Fim()
-        except (anthropic.APITimeoutError, httpx2.TimeoutException) as erro:
-            # Os DOIS tipos, e nao so o do SDK: a demora no meio do stream sai
-            # como `httpx2.ReadTimeout` cru (medicao M4).
-            raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
-        except (anthropic.APIError, httpx2.TransportError) as erro:
-            raise ProvedorIndisponivelError(
-                f"o provedor falhou: {type(erro).__name__}"
-            ) from erro
+            ) as stream,
+        ):
+            for evento in stream:
+                if evento.type == "text":
+                    yield Delta(evento.text)
+                elif evento.type == "content_block_stop" and isinstance(
+                    evento.content_block, ToolUseBlock
+                ):
+                    yield Proposta(dict(evento.content_block.input))
+                elif evento.type == "message_stop":
+                    yield Fim()
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou
+        ou se a resposta parou por `stop_reason` diferente de `tool_use`.
+
+        `tool_choice` e `auto` (EM3), e nao FORCADO na ferramenta: em alguns
+        modelos o forcado da 400 ou exige thinking desligado (ver a referencia
+        da API, `tool_choice`), o que prenderia a avaliacao ao modelo
+        configurado. Quem manda o modelo chamar `record_evaluation`
+        e o sistema da avaliacao; se ele nao chamar, o resultado e `None`, que
+        o servico grava como `avaliacao_invalida`. `strict` faz a entrada
+        obedecer ao esquema. O stream e consumido inteiro por dentro; so
+        `message_stop` prova que a resposta terminou (M3), como na conversa.
+        """
+        definicao: ToolParam = {
+            "name": ferramenta.nome,
+            "description": ferramenta.descricao,
+            "input_schema": ferramenta.esquema,
+            "strict": True,
+        }
+        entrada: dict[str, Any] | None = None
+        terminou = False
+        motivo_da_parada: str | None = None
+        with (
+            _traduzir_erros(),
+            self._cliente.messages.stream(
+                model=self._modelo,
+                max_tokens=MAX_TOKENS_DA_AVALIACAO,
+                system=turno.sistema,
+                messages=_mensagens_da_api(turno),
+                tools=[definicao],
+                tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+            ) as stream,
+        ):
+            for evento in stream:
+                if (
+                    evento.type == "content_block_stop"
+                    and isinstance(evento.content_block, ToolUseBlock)
+                    and evento.content_block.name == ferramenta.nome
+                ):
+                    entrada = dict(evento.content_block.input)
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
+                elif evento.type == "message_stop":
+                    terminou = True
+        if not terminou:
+            raise ProvedorIndisponivelError("o stream terminou sem message_stop")
+        if motivo_da_parada != "tool_use":
+            # `max_tokens` (ou outra parada) deixa um `input` possivelmente
+            # parcial: nao o entrega como se fosse uma avaliacao valida.
+            return None
+        return entrada

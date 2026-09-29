@@ -748,6 +748,20 @@ Sem eufemismo:
   na branch por fast-forward ou rebase, o topo da ref é validado em
   worktree isolado antes de o conteúdo sair da máquina. O que escapa
   continua sendo o commit intermediário (primeira limitação desta lista).
+- **Mover o diretório do clone quebra o `.venv` e os hooks.** Os dois
+  guardam o caminho **absoluto** de onde foram criados: cada script de
+  `.venv/bin/` começa com um shebang para `<caminho antigo>/.venv/bin/python`,
+  e cada hook de `.git/hooks/` fixa `INSTALL_PYTHON` no mesmo caminho. Medido
+  na retomada de 2026-09-28, com o clone movido de pasta: `make check`
+  aprovou o `check-web` e reprovou no `check-api` com
+  `error: Failed to spawn: mypy` / `No such file or directory` (o arquivo
+  existe; o interpretador do shebang, não). Os hooks falham **fechado**: sem o
+  Python do `INSTALL_PYTHON` e sem `pre-commit` no `PATH`, o hook imprime
+  `` `pre-commit` not found `` e sai com 1, bloqueando o commit — não o deixa
+  passar sem gate. Conserto, da raiz nova: `rm -rf .venv`,
+  `uv sync --locked` e `uv run pre-commit install --install-hooks` (o mesmo
+  passo de "Primeiro uso após clonar"). O `frontend/node_modules/` não sofre
+  disso: os links de `.bin/` são relativos.
 - **O gate roda inteiro a cada commit, e fica mais lento conforme o
   projeto cresce.** Medido nesta máquina, com o PostgreSQL já de pé e os
   caches quentes: `make check` completo em cerca de 12 segundos de relógio
@@ -905,7 +919,7 @@ honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
 porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
 projeto, mas o efeito prático é o mesmo e vale estar escrito.
 
-## 9. O servidor falso da Anthropic (Incrementos 1b-1 e 1b-2)
+## 9. O servidor falso da Anthropic (Incrementos 1b-1, 1b-2 e E)
 
 > **Fonte de verdade:** `tests/integration/provedor_falso.py`,
 > `tests/integration/conftest.py` (fixtures `falso`, `fabrica`, `tutoria`,
@@ -995,6 +1009,108 @@ A camada 3 existe desde a Task 8 do 1b-2. As camadas 1 e 2 provam que o falso
   seção "Comandos" do `docs/HANDOFF.md`, nunca no gate — o CI nunca chama a
   Anthropic.
 
+### A avaliação nas camadas 1 e 2 (Incremento E)
+
+O E acrescentou ao provedor um segundo método, `avaliar(turno, ferramenta)`, no
+mesmo adaptador (decisão E12): `messages.stream` com **`tool_choice: {"type":
+"auto", "disable_parallel_tool_use": true}`**, a ferramenta com **`strict:
+true`** e o sistema da avaliação mandando chamá-la (a emenda **EM3** da spec,
+que trocou o `tool_choice` forçado), `max_tokens` próprio (2048), sem pedir
+thinking e consumindo o stream inteiro por dentro. Só o **`stop_reason`
+`tool_use`** entrega a entrada da ferramenta; qualquer outra parada
+(`max_tokens`, `end_turn`) devolve `None`, que o serviço grava como
+`avaliacao_invalida`. **Nenhum servidor falso novo:** o `ServidorAnthropicFalso`
+das camadas 1 e 2 serve a avaliação como serve a conversa.
+
+- **O falso roteirizado com `tool_name`.** O `ChamadaDeFerramenta` do roteiro
+  em Python (`provedor_falso.py`) **já** tinha o campo `nome`, com padrão
+  `create_mission`, antes do E; o E **não** o alterou. O que o E acrescentou
+  (Task 4) foi o `tool_name` no **JSON do controle do falso do E2E**
+  (`falso_do_e2e._bloco`) e no tipo `Bloco` de `frontend/tests/e2e/falso.ts`:
+  até então um cenário de E2E só conseguia roteirizar `create_mission`, e agora
+  escolhe a ferramenta. O padrão continua `create_mission`, então nada do que
+  existia muda. No JSON do
+  roteiro (`roteiro_do_json`, chave `blocks`) o bloco é `{"tool_input": {...}}`
+  (padrão) ou `{"tool_input": {...}, "tool_name": "record_evaluation"}`;
+  `tool_name` precisa ser um texto **não vazio**, senão `roteiro_do_json`
+  levanta `ValueError` ("tool_name precisa ser um texto nao vazio"), e
+  qualquer outra forma de bloco continua sendo "bloco desconhecido". O tipo
+  `Bloco` de `frontend/tests/e2e/falso.ts` acompanha. Provado do lado Python por
+  `tests/integration/test_falso_do_e2e.py`
+  (`test_tool_name_escolhe_a_ferramenta_e_o_padrao_e_create_mission` e dois
+  casos de recusa: `tool_name` não texto e `tool_name` vazio); **visto
+  reprovando** por mutação (o `_bloco` ignorando `tool_name`).
+- **O falso roteiriza o `stop_reason`.** O `Roteiro` de `provedor_falso.py`
+  ganhou o campo `stop_reason` (`end_turn`, `tool_use` ou `max_tokens`); sem ele
+  vale o de antes (`tool_use` com ferramenta, `end_turn` sem). Provado por
+  `test_o_roteiro_escolhe_o_motivo_de_parada`; **visto reprovando** por mutação
+  (o `stop_reason` fixado em `None`). É o que permite testar a parada por
+  `max_tokens`, que deixa uma entrada possivelmente parcial.
+- **`avaliar` testado contra o falso** (`tests/integration/test_evaluation_provider.py`,
+  10 testes), com o SDK real, camadas 1 e 2: devolve a entrada da ferramenta;
+  **pede `tool_choice` `auto` com `disable_parallel_tool_use` e a ferramenta
+  `strict`** (o teste lê a requisição recebida pelo falso, e confere o nome, o
+  `input_schema` igual ao esquema publicado, o `system` e as `messages`, e que
+  `thinking` não vai no corpo); manda o `max_tokens` próprio da avaliação (2048,
+  e não o do chat); sem chamar a ferramenta devolve `None`; **ignora** uma
+  chamada de outra ferramenta; um stream cortado sem `message_stop`, ou com a
+  ferramenta completa mas **sem** `message_stop`, é `ProvedorIndisponivelError`;
+  uma resposta parada por `max_tokens` devolve `None`; erro HTTP é
+  `ProvedorIndisponivelError`; demora além do limite é `TempoEsgotadoError`.
+  **Vistos reprovando** por mutação: sem `strict`, sem `disable_parallel_tool_use`,
+  `max_tokens=self._max_tokens`, sem conferir o `name` do bloco, sem a checagem
+  de `message_stop`, sem a guarda do `stop_reason`, e o corpo com o esquema da
+  proposta, outro `system` ou outras `messages`.
+- **`avaliar_missao` testado contra o mesmo falso**
+  (`tests/integration/test_evaluation_service.py`, `test_evaluation_records.py`,
+  `test_evaluation_api.py` e `test_evaluation_concorrencia.py`, com o servidor
+  falso e o relógio injetável, **sem `sleep` para simular o tempo**: o relógio é
+  injetado; a concorrência usa uma espera ativa curta, um `time.sleep(0.01)` num
+  laço que espera a trava aparecer em `pg_stat_activity`, e um encontro com teto
+  de 1,0 s): os três vereditos com e sem
+  bônus; o pedido repetido **sem chamar o falso** (contador zero); `sem_evidencia`
+  sem chamar o falso; provedor fora, tempo esgotado e saída inválida, cada um
+  gravado como `falhou` **antes** do erro, e a nova tentativa funcionando
+  depois; o limite total (na borda exata, `>`); o corte do órfão e a folga; a
+  resposta atrasada de uma tentativa superada sem sobrescrever; a injeção na
+  evidência (que chega dentro do JSON do turno, nunca no `system`, e não mexe no
+  bônus); e, em conexões reais, dois pedidos simultâneos com um só avaliando e
+  no máximo um bônus. **O teste de concorrência precisou de um segundo ponto
+  de encontro:** com uma barreira só na largada, ele detectava 0 de 5 com a
+  trava removida (medido); com o encontro depois da primeira leitura de
+  `mission_evaluations`, 5 de 5. O teste verde leva cerca de 1,7 s.
+- **O vocabulário de erro é um só.** `FalhaDaAvaliacao`
+  (`provedor_indisponivel`, `tempo_esgotado`, `avaliacao_invalida`) é
+  amarrada por teste a `CodigoDoStream`: os dois primeiros valores são
+  subconjunto dele, e `avaliacao_invalida` **não** existe no stream (só a
+  avaliação tem "o modelo não chamou a ferramenta ou mandou saída fora do
+  esquema"). Um erro do provedor sai igual na conversa e na avaliação porque
+  `_traduzir_erros` (`anthropic_provider.py`) é compartilhado. A lacuna que a
+  mutação de **metade** de um ramo dele achou (Task 5a) foi fechada pela Task 5b:
+  `tests/unit/test_traducao_de_erros.py` tem um caso por meia-cláusula, e cada
+  mutação reprova o seu. O que segue aberto é a fusão dos 4xx de configuração em
+  `provedor_indisponivel`, sem log da causa (pendência 100 do
+  `docs/HANDOFF.md`).
+
+### Camada 3 da avaliação: não existe, é pendência
+
+A referência da camada 3 (`tests/integration/referencia_da_api_real.json`)
+guarda **uma** resposta real, de **texto e proposta** da conversa. As camadas 1 e
+2 provam que o adaptador de `avaliar` fala com o SDK fixado e que o serviço trata
+cada saída; **nenhuma prova o que só a API real responde**, e o `strict` **nem é
+validado pelo falso** (ele não simula a checagem do esquema). Não medido:
+(a) que o `claude-opus-5`, que manda um bloco de thinking sem que a requisição o
+peça (seção acima), **chama** `record_evaluation` com `tool_choice: auto` e a
+instrução do sistema, em vez de responder em texto (que vira `avaliacao_invalida`);
+(b) que a API aceita o esquema `strict` da rubrica (`additionalProperties: false`,
+sem `minLength`/`maxLength`); (c) o formato real da sequência de eventos da
+avaliação. A escolha do `auto` (EM3) vem da referência oficial da API, **não de
+uma chamada real**. É a pendência 91 do `docs/HANDOFF.md`: uma chamada real de
+avaliação, **pelo dono**, com a chave do Keychain só para o processo da API,
+gravando a sequência de tipos de evento — o mesmo roteiro da pendência 42. Se a
+API recusar o esquema, o erro sai como `502 provedor_indisponivel` **gravado**,
+nunca como bônus. Como a camada 3 da conversa, **o CI nunca chama a Anthropic**.
+
 ### O falso como processo (E2E)
 
 Desde o 1b-2 (Task 6), o E2E do Playwright precisa do falso **fora** do
@@ -1014,6 +1130,32 @@ falso" novo: o controle mora inteiramente em `tests/`, nunca em
 `get_tutoria`) que já existia desde o 1b-1 para o pytest. O contrato do
 controle é provado do lado Python por `tests/integration/test_falso_do_e2e.py`
 (18 testes, dois deles subindo o processo de verdade).
+
+### O E2E da avaliação (Incremento E)
+
+`frontend/tests/e2e/evaluation.spec.ts` roda o circuito inteiro contra o falso
+como processo, com o bloco `{"tool_input": {...}, "tool_name":
+"record_evaluation"}` no roteiro. Um cenário, que: conclui uma missão criada pela
+API **com evidência** pela tela; pede "Pedir avaliação da Tifa"; vê o selo do
+veredito ("Critério atendido", com `exact: true`, porque a região viva também diz
+"Avaliação concluída: Critério atendido."), o **rótulo fixo** "Avaliação da Tifa —
+interpretação do modelo, não verificação automática", o `+N XP de bônus` (com `N` =
+metade do XP da missão lida da API) e o total do painel como delta do
+`GET /api/progress` de antes. **As asserções sobre o pedido ao falso são as da
+EM3:** o fluxo inteiro faz **uma** requisição ao modelo (`toHaveLength(1)`, para
+pegar uma chamada extra sem a ferramenta); nela, `tool_choice` é exatamente
+`{type: 'auto', disable_parallel_tool_use: true}`, `tools` é `[{name:
+'record_evaluation', strict: true, ...}]` e o `system` cita `record_evaluation`.
+Depois espera o fade-in do anúncio assentar (`expect.poll` na opacidade, R12 do D)
+e roda o **axe** na página com o cartão avaliado (`violations == []`); recarrega e
+confere o veredito, "Bônus de XP creditado ao seu saldo." (EM1) e o mesmo total,
+lidos do servidor. **Vistas reprovando (`make check-e2e`):** o rótulo sem "—
+interpretação do modelo…"; `// 1` no lugar de `// 2` no bônus; o `tool_choice`
+forçado (M3a) e sem `strict` (M3b); `text-slate-700` no rótulo (o axe acusa
+`color-contrast`); e, no lote ME, a frase do sistema sem `record_evaluation` e a
+chamada extra ao modelo antes de `avaliar`. **O que ele não prova:** o `strict` e o
+`auto` são afirmados no **pedido**, contra o falso; que a API real os aceita e
+que o modelo chama a ferramenta é a pendência 91 (camada 3).
 
 ### A guarda de `tests/conftest.py`: nenhum teste alcança a Anthropic
 
