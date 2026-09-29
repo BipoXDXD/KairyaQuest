@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import Engine
 
 from focusquest.core import database
@@ -159,6 +160,41 @@ def test_ready_sem_configuracao_de_banco_responde_503(
 
     assert resposta.status_code == 503
     assert resposta.json() == {"status": "unavailable", "database": "not_configured"}
+
+
+@pytest.mark.parametrize(
+    ("variavel", "valor"),
+    [
+        # Um campo que nao e do banco, invalido, com a URL presente.
+        ("FOCUSQUEST_TUTOR_MAX_TOKENS", "0"),
+        # Falta so a URL de TESTE: tambem nao e "banco nao configurado".
+        ("FOCUSQUEST_TEST_DATABASE_URL", None),
+    ],
+)
+def test_ready_com_outra_configuracao_invalida_sobe_o_erro(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    settings: Settings,
+    variavel: str,
+    valor: str | None,
+) -> None:
+    """So a AUSENCIA da `database_url` vira `not_configured` (revisao I1).
+    Qualquer outro erro do `Settings` continua subindo como antes -- 500 com o
+    traceback que nomeia o campo --, em vez de um 503 que aponta o banco."""
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", settings.database_url)
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", settings.test_database_url)
+    if valor is None:
+        monkeypatch.delenv(variavel)
+    else:
+        monkeypatch.setenv(variavel, valor)
+
+    with TestClient(app) as c, pytest.raises(ValidationError) as erro:
+        c.get("/ready")
+
+    (falha,) = erro.value.errors()
+    assert falha["loc"] != ("database_url",)
 
 
 def test_get_engine_se_configurada_devolve_a_engine_compartilhada(

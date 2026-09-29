@@ -3279,9 +3279,10 @@ que não tinham chegado aqui)
     2026-09-29 (lote back, commit `fix(saude): ready responde 503 sem
     configuracao de banco`).** A correção coube no tamanho pedido e não mexe
     na pendência 14: `core/database.py` ganhou `get_engine_se_configurada`,
-    que chama o mesmo `get_engine` e devolve `None` no `ValidationError` do
-    `Settings`; o `/ready` depende dela e responde `503` com `{"status":
-    "unavailable", "database": "not_configured"}` — o corpo separa "sem
+    que chama o mesmo `get_engine` e devolve `None` quando o `Settings` não
+    tem a `database_url` (ver a correção I1 abaixo); o `/ready` depende dela
+    e responde `503` com `{"status": "unavailable", "database":
+    "not_configured"}` — o corpo separa "sem
     configuração" de "banco fora" (`unavailable`), já que o status agora é o
     mesmo nos dois. A engine continua global e preguiçosa, e o `/health`
     continua sem dependência nenhuma (o teste
@@ -3297,6 +3298,24 @@ que não tinham chegado aqui)
     banco real); nenhuma asserção existente mudou. Mutações: tirar o `except`
     reprova o teste novo; tirar o `503` do ramo sem configuração reprova; e
     devolver `unavailable` no lugar de `not_configured` reprova.
+    **Correção da revisão (I1, commit `fix(saude): so a database_url ausente
+    vira not_configured no ready`):** a primeira versão engolia **qualquer**
+    `ValidationError` do `Settings` — `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, chave
+    desconhecida no `.env`, a URL de teste ausente — e respondia 503
+    `not_configured` sem log, apontando o banco quando o erro era outro.
+    Agora `get_engine_se_configurada` só devolve `None` quando os `errors()`
+    contêm a `database_url` com `type` `missing`; qualquer outro erro sobe
+    como antes (500, com o traceback que nomeia o campo). "Contém", e não "é
+    só": sem configuração nenhuma, a URL de teste falta junto, e o banco de
+    fato não está configurado. Teste novo, parametrizado (campo inválido com a
+    URL presente; só a URL de teste ausente), exige que o `ValidationError`
+    suba — RED visto (`DID NOT RAISE`, os dois casos respondiam 503).
+    Mutações: devolver `None` sempre reprova os dois casos novos; `all` no
+    lugar de `any` reprova o caso "nada configurado". A condição `type ==
+    "missing"` é mutação **equivalente** nos testes (tirá-la não reprova
+    nada): `database_url` é `str` e, vinda do ambiente ou do `.env`, só pode
+    faltar (vazia também conta como falta, `env_ignore_empty`); ela fica como
+    documentação da intenção, a pedido da revisão.
 29. **Os comandos dependem de rodar da raiz do repositório.** O `Settings` lê
     o `.env` do diretório **corrente**, e o `alembic.ini` também é achado
     pelo diretório corrente. Medido fora da raiz: a aplicação estoura
