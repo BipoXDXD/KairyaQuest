@@ -3101,8 +3101,31 @@ ninguém mexer.
     Homebrew, não para o `.venv`.** `.idea/` é ignorado pelo git e não foi
     alterado às cegas. Efeito: avisos de import não resolvido no editor; o
     gate e os testes não são afetados.
-17. **Não existe `.run/`** com as configurações de execução compartilhadas
-    que o README §4 pede (API, frontend, testes, gate).
+17. ~~**Não existe `.run/`** com as configurações de execução compartilhadas
+    que o README §4 pede (API, frontend, testes, gate).~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`), com uma ressalva de verificação:** existem cinco
+    arquivos em `.run/` (`API`, `Frontend`, `Testes_backend`,
+    `Testes_frontend`, `Gate`), descritos e justificados no
+    `docs/ARCHITECTURE.md` §4 ("Configurações de execução do PyCharm"). Usam
+    `$PROJECT_DIR$/.venv/bin/python`, sem caminho pessoal nem segredo, e o
+    `.gitignore` não ignora `.run/` (conferido por `git check-ignore`). O que
+    é **verificado**: `tests/unit/test_run_configs.py` (XML bem formado, sem
+    caminho pessoal/segredo, não ignorado, e cada script do npm, alvo do
+    Makefile, módulo da API e pasta de testes que apontam existe), visto
+    reprovando antes dos arquivos e reprovando de novo sob seis mutações.
+    **Estado: NÃO EXECUTADO.** Os arquivos foram escritos no formato que o
+    PyCharm grava (`ProjectRunConfigurationManager`), a partir do formato
+    documentado, mas **não foram abertos nem executados no PyCharm**: o
+    agente não tem como conduzir a IDE. Possíveis surpresas a conferir na
+    primeira abertura: o PyCharm resolver `$PROJECT_DIR$` no `SDK_HOME`; o
+    módulo `focusquest` (nome do `.iml`) ter outro nome num clone com a pasta
+    diferente; as duas configurações de npm pedirem o plugin de JavaScript e
+    um Node configurado na IDE (o Node aqui vem do `fnm`, no shell); o
+    `Gate` achar `make`/`uv` no `PATH` do terminal da IDE. Nenhum arquivo do
+    `.idea/` foi tocado. A pendência 16 (interpretador do projeto no
+    PyCharm) **continua aberta**: as configurações não dependem dela, mas o
+    editor segue sem resolver os imports até a IDE apontar para o `.venv`.
 
 **Gate e E2E**
 
