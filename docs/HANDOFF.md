@@ -3720,13 +3720,18 @@ C".
     decomposição (por exemplo, o dia, o baú e a especial em arquivos
     próprios) quando a trilha crescer; hoje está coberto a 100% e não há
     segundo usuário de nenhum subcomponente.
-64. **Três títulos de teste E2E com acento fora de citação literal**
+64. ~~**Três títulos de teste E2E com acento fora de citação literal**
     (`frontend/tests/e2e/cycle.spec.ts`, os três cenários da Task 6:
     "Campanhas abre pela navegação…", "…Tab ate a navegação, Enter, e o
     foco vai para o título" e "a navegação fica visível no topo, sem
     rolagem horizontal, e não cobre…"). A convenção do arquivo é título sem
     acento, com acento só dentro de citação literal do texto da tela.
-    Cosmético; trocar muda o nome do teste no relatório do Playwright.
+    Cosmético; trocar muda o nome do teste no relatório do Playwright.~~
+    **Resolvida no lote do frontend (2026-09-29):** os três títulos ficaram
+    sem acento ("Campanhas abre pela navegacao…", "…Tab ate a navegacao,
+    Enter, e o foco vai para o titulo", "a navegacao fica visivel no topo…");
+    a citação literal `"Falar com a Tifa"` foi mantida. Verificado:
+    nenhum título de `tests/e2e/*.spec.ts` tem acento fora de aspas.
 65. **Não há teste com três ou mais pedidos concorrentes** em `useCycle` e
     `useCurrentPlan` (`frontend/src/features/missions/useCycle.test.tsx`,
     `frontend/src/features/campaigns/useCurrentPlan.test.tsx`). Os testes

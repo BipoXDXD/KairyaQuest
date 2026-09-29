@@ -226,7 +226,7 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
  * REAIS de `CampaignTrail.tsx`: `trail-availability`, nao
  * `trail-day-availability`.
  */
-test('Campanhas abre pela navegação, com a trilha do plano semeado, e passa no axe', async ({
+test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no axe', async ({
   page,
 }) => {
   await page.goto('/')
@@ -288,7 +288,7 @@ test('Campanhas abre pela navegação, com a trilha do plano semeado, e passa no
   expect(resultadoQuartel.violations).toEqual([])
 })
 
-test('Campanhas abre pelo teclado: Tab ate a navegação, Enter, e o foco vai para o título', async ({
+test('Campanhas abre pelo teclado: Tab ate a navegacao, Enter, e o foco vai para o titulo', async ({
   page,
 }) => {
   await page.goto('/')
@@ -308,7 +308,7 @@ test('Campanhas abre pelo teclado: Tab ate a navegação, Enter, e o foco vai pa
 test.describe('celular', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  test('a navegação fica visível no topo, sem rolagem horizontal, e não cobre "Falar com a Tifa"', async ({
+  test('a navegacao fica visivel no topo, sem rolagem horizontal, e nao cobre "Falar com a Tifa"', async ({
     page,
   }) => {
     await page.goto('/')
