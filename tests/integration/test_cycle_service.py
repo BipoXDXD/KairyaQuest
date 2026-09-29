@@ -363,3 +363,141 @@ def test_ler_especial_revelada_responde_pelo_mesmo_caminho_da_trilha(
     domingo = SEGUNDA + timedelta(days=6)
     lida = ler_missao(session, especial, ao_meio_dia(domingo))
     assert lida.availability is Availability.DISPONIVEL
+
+
+# Pendencia 58: a trilha e `ler_missao` produzindo os estados "de passado" --
+# a diaria PERDIDA e a especial EXPIRADA -- a partir do banco real, e nao de um
+# `Plan` montado a mao no teste do frontend.
+
+
+def test_a_trilha_mostra_as_diarias_passadas_sem_conclusao_como_perdidas(
+    session: Session,
+) -> None:
+    """Plano criado na segunda; so a terca foi concluida. Na quinta, segunda e
+    quarta aparecem `perdida` COM a missao (o conteudo continua visivel), a
+    terca `concluida`, a quinta disponivel e o resto fechado."""
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    _concluir_no_dia(session, SEGUNDA + timedelta(days=1))
+    quinta = SEGUNDA + timedelta(days=3)
+
+    trilha = ler_plano_atual(session, ESTUDANTE, clock=relogio(ao_meio_dia(quinta)))
+
+    assert trilha is not None
+    assert [d.availability for d in trilha.dias] == [
+        Availability.PERDIDA,
+        Availability.CONCLUIDA,
+        Availability.PERDIDA,
+        Availability.DISPONIVEL,
+        Availability.BLOQUEADA,
+        Availability.BLOQUEADA,
+        Availability.BLOQUEADA,
+    ]
+    segunda = trilha.dias[0].missao
+    assert segunda is not None
+    assert segunda.availability is Availability.PERDIDA
+    assert segunda.deadline == fim_do_dia(SEGUNDA)
+    assert segunda.missao.id == _diaria_do_dia(session, SEGUNDA).id
+    # A sequencia quebrou na quarta: a terca sozinha nao conta para hoje.
+    assert trilha.especial.progresso == 0
+
+
+def test_ler_missao_na_diaria_de_ontem_nao_concluida_e_perdida(
+    session: Session,
+) -> None:
+    """A mesma regra pelo caminho de `ler_missao` (o do GET e o da conclusao):
+    a diaria de ontem nao e 404 -- ja foi revelada --, e sim `perdida`."""
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    lida = ler_missao(
+        session,
+        _diaria_do_dia(session, SEGUNDA),
+        ao_meio_dia(SEGUNDA + timedelta(days=1)),
+    )
+    assert lida.availability is Availability.PERDIDA
+
+
+def _marco_na_quarta(session: Session) -> date:
+    """Faz a sequencia bater 7 na QUARTA da semana S, e nao no domingo.
+
+    Plano de S-1 criado na quinta de S-1 (segunda a quarta ficam
+    `fora_do_plano`, puladas pela sequencia), quinta a domingo concluidos: 4.
+    Plano de S criado no domingo de S-1, segunda a quarta de S concluidas: 7.
+    Com o marco no meio da semana, a janela da especial (ate o fim de quinta)
+    fecha AINDA dentro de S -- o unico jeito de a trilha da semana atual
+    mostrar a especial expirada.
+    """
+    anterior = SEGUNDA - UMA_SEMANA
+    _criar(session, semana=anterior, agora=ao_meio_dia(anterior + timedelta(days=3)))
+    for i in range(3, 7):
+        _concluir_no_dia(session, anterior + timedelta(days=i))
+    _criar(session, semana=SEGUNDA, agora=ao_meio_dia(anterior + timedelta(days=6)))
+    for i in range(3):
+        _concluir_no_dia(session, SEGUNDA + timedelta(days=i))
+    return SEGUNDA + timedelta(days=2)
+
+
+def _especial_de(session: Session, semana: date) -> Mission:
+    return session.scalars(
+        select(Mission)
+        .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
+        .where(
+            Mission.mission_type == MissionType.ESPECIAL,
+            WeeklyPlan.week_start == semana,
+        )
+    ).one()
+
+
+def test_a_trilha_mostra_a_especial_expirada_depois_da_janela(
+    session: Session,
+) -> None:
+    marco = _marco_na_quarta(session)
+    quinta = marco + timedelta(days=1)
+    sexta = marco + timedelta(days=2)
+
+    # Quinta, ultimo dia da janela: ainda disponivel.
+    na_quinta = ler_plano_atual(session, ESTUDANTE, clock=relogio(ao_meio_dia(quinta)))
+    assert na_quinta is not None
+    assert na_quinta.especial.availability is Availability.DISPONIVEL
+
+    # Sexta 00:00 em SP (03:00 UTC): a janela fechou. A especial continua na
+    # trilha COM a missao -- expirada nao e bloqueada --, e o prazo e o fim da
+    # quinta.
+    trilha = ler_plano_atual(
+        session, ESTUDANTE, clock=relogio(datetime(2026, 9, 25, 3, tzinfo=UTC))
+    )
+    assert trilha is not None
+    assert trilha.especial.availability is Availability.EXPIRADA
+    assert trilha.especial.missao is not None
+    assert trilha.especial.missao.missao.id == _especial_de(session, SEGUNDA).id
+    assert trilha.especial.missao.deadline == fim_do_dia(quinta)
+    # A quinta nao foi concluida: na sexta ela ja e `perdida`.
+    assert trilha.dias[3].availability is Availability.PERDIDA
+    assert trilha.dias[4].availability is Availability.DISPONIVEL
+    assert trilha.dias[4].dia == sexta
+
+
+def test_ler_missao_na_especial_depois_da_janela_e_expirada(
+    session: Session,
+) -> None:
+    """`ler_missao` (GET e conclusao) concorda com a trilha: depois da janela a
+    especial nao volta a ser 404 de bloqueada, e sim `expirada`."""
+    marco = _marco_na_quarta(session)
+    especial = _especial_de(session, SEGUNDA)
+
+    lida = ler_missao(session, especial, ao_meio_dia(marco + timedelta(days=2)))
+
+    assert lida.availability is Availability.EXPIRADA
+    assert lida.deadline == fim_do_dia(marco + timedelta(days=1))
+
+
+def test_o_ciclo_nao_mostra_a_especial_expirada(session: Session) -> None:
+    """No Quartel-General a especial expirada some (`special` nulo), enquanto
+    a trilha a mantem como `expirada`: as duas leituras sao verdade."""
+    marco = _marco_na_quarta(session)
+    agora = ao_meio_dia(marco + timedelta(days=2))
+
+    ciclo = ler_ciclo(session, ESTUDANTE, clock=relogio(agora))
+    trilha = ler_plano_atual(session, ESTUDANTE, clock=relogio(agora))
+
+    assert ciclo.especial is None
+    assert trilha is not None
+    assert trilha.especial.availability is Availability.EXPIRADA

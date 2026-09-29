@@ -3627,7 +3627,7 @@ que não tinham chegado aqui)
     meia-noite não dispara nenhum dos dois eventos — o Quartel-General
     oculto (K2) continua mostrando o dia anterior até a aba sair e voltar,
     ou até um recarregamento.
-58. **Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
+58. ~~**Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
     e para a diária PERDIDA na trilha** (triagem da revisão final da branch;
     já estava listado como "minor" diferido da Task 3, promovido a pendência
     aqui). `tests/integration/test_cycle_service.py` cobre a especial
@@ -3645,7 +3645,26 @@ que não tinham chegado aqui)
     que force `ler_missao`/`ler_plano_atual` a produzir os dois estados —
     isso é backend, e o Incremento C, por desenho, não muda
     `src/focusquest/` (Autorrevisão do plano do C, "Pendências do B
-    absorvidas"). Continua aberta.
+    absorvidas").~~ **Resolvida em 2026-09-29 (lote back, commit
+    `test(ciclo): diaria perdida e especial expirada na trilha contra o banco`).**
+    Cinco testes novos em `tests/integration/test_cycle_service.py`, contra o
+    PostgreSQL real e com o relógio injetado: a trilha de `ler_plano_atual`
+    com diárias `perdida` (com a missão e o prazo) ao lado de uma `concluida`;
+    `ler_missao` na diária de ontem devolvendo `perdida` (e não 404); a trilha
+    com a especial `expirada` — ainda com a missão e o prazo do fim do dia
+    seguinte ao marco —, depois de ter estado `disponivel` no último dia da
+    janela; `ler_missao` na especial fora da janela devolvendo `expirada`; e
+    `ler_ciclo` escondendo a especial expirada enquanto a trilha a mostra.
+    Para a trilha da semana **atual** exibir a especial expirada, o marco
+    precisa cair no meio da semana (com ele no domingo, a janela só fecha na
+    terça da semana seguinte, quando a trilha já é outra): o auxiliar
+    `_marco_na_quarta` monta a sequência atravessando duas semanas (quinta a
+    domingo de S-1, com o plano criado na quinta, e segunda a quarta de S).
+    Nenhum defeito encontrado: os testes passaram de primeira, e o RED foi
+    obtido por mutação — `disponibilidade_da_diaria` devolvendo `disponivel`
+    no lugar de `perdida` reprova 3 dos testes novos, e
+    `disponibilidade_da_especial` devolvendo `disponivel` no lugar de
+    `expirada` reprova outros 3.
 
 **Criadas pelo Incremento C**
 
