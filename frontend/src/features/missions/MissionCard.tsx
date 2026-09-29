@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
-import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { MAX_DIFFICULTY, MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
@@ -301,13 +301,11 @@ export function MissionCard({
         </dd>
 
         <dt className="text-slate-400">Dificuldade</dt>
-        {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
-            src/focusquest/modules/missions/schemas.py. Nada amarra os dois
-            automaticamente (isso pediria gerar o tipo a partir do OpenAPI):
-            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. A
-            terceira copia e a do cartao de proposta da Tifa
-            (`features/tutoring/ProposalCard.tsx`). */}
-        <dd data-testid="mission-difficulty">{mission.difficulty} de 5</dd>
+        {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
+            espelha `DIFICULDADE_MAXIMA` do backend a mao. */}
+        <dd data-testid="mission-difficulty">
+          {mission.difficulty} de {MAX_DIFFICULTY}
+        </dd>
 
         <dt className="text-slate-400">Estimativa</dt>
         <dd data-testid="mission-estimated-minutes">{mission.estimated_minutes} min</dd>

@@ -3739,16 +3739,22 @@ C".
     `useRefreshOnReturn`). O contador de sequência é monotônico e a guarda
     compara com o valor corrente, então o caso de N pedidos se reduz ao de
     dois por construção — mas isso é argumento, não teste.
-66. **`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
+66. ~~**`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
     lugares** (achado m5 da revisão final):
     `frontend/src/shared/types/mission.ts` exporta `MAX_DIFFICULTY = 5`, que
     a trilha usa; `frontend/src/features/missions/MissionCard.tsx` ("de 5"
     no `mission-difficulty`) e `frontend/src/features/tutoring/ProposalCard.tsx`
-    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão. Nada
-    amarra nenhum dos três ao `DIFICULDADE_MAXIMA` do backend. Não foi
-    trocado aqui porque o C não mexe nas features `missions`/`tutoring` por
-    estética; o comentário de `Mission.difficulty` foi corrigido para
-    apontar os dois arquivos certos (antes citava `MissionList.tsx`).
+    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão.~~
+    **Resolvida no lote do frontend (2026-09-29):** os dois cartões escrevem
+    `de {MAX_DIFFICULTY}` (a `tutoring` importa de `shared/`, o que a regra 1
+    do `docs/ARCHITECTURE.md` §5 permite). Provado por dois arquivos de teste
+    novos (`MissionCard.difficulty.test.tsx` e
+    `ProposalCard.difficulty.test.tsx`) que trocam `MAX_DIFFICULTY` por 7 com
+    `vi.mock` e exigem "3 de 7" e "2 de 7" na tela: reprovaram antes da troca
+    ("Received: 3 de 5") e reprovam de novo se o literal 5 voltar (mutação, uma
+    por cartão). **Continua aberto:** nada amarra o `MAX_DIFFICULTY` ao
+    `DIFICULDADE_MAXIMA` do backend (o espelho é à mão, como o comentário da
+    constante diz).
 
 *Aceitas, sem ação*
 
