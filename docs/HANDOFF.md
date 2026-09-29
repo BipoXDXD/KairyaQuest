@@ -4066,11 +4066,28 @@ ledger; nenhum é bug esquecido.
     `EvaluationPanel` recebe `reloadWaiting` (`reloadWaiting.ts`), e o botão de
     recarga fica desabilitado, com o texto de espera, enquanto a conclusão em voo
     termina.
-96. **N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
+96. ~~**N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
     O `MissionRead` deriva `verification`, `evidence` e `evaluation` dos
     relacionamentos, carregados com `lazy="select"`: cada missão listada custa
     até duas consultas a mais. Aceito enquanto o usuário tem poucas missões
-    (A2); com muitas, trocar por `selectinload` na listagem.
+    (A2); com muitas, trocar por `selectinload` na listagem.~~ **Resolvida em
+    2026-09-29 (lote back, commit `perf(missoes): selectinload de evidencia e
+    avaliacao na listagem`).** `listar_missoes` pede
+    `selectinload(Mission.evidence)` e `selectinload(Mission.evaluation)` na
+    própria consulta; o `lazy="select"` do modelo fica para a leitura de uma
+    missão só. O teste novo
+    `tests/integration/test_missions_listagem_consultas.py` conta, com um
+    ouvinte `before_cursor_execute` na conexão da sessão, as consultas que a
+    rota `listar` dispara depois de `expire_all()`: antes da correção, 8
+    missões custavam **17** consultas (1 + 2 × 8, RED visto); depois, **3**
+    para 1 e para 8 missões. Mutação: tirar qualquer um dos dois
+    `selectinload` volta a 10 consultas e reprova. Um segundo teste confere que
+    o carregamento antecipado não troca a evidência de uma missão pela de
+    outra nem perde a avaliação. Efeito colateral declarado: a montagem do
+    turno da Tifa (`tutoring/service.py`), que também usa `listar_missoes` e
+    não lê evidência nem avaliação, passa a fazer duas consultas pequenas a
+    mais por turno — custo fixo, aceito para manter uma única consulta de
+    listagem.
 97. **Minors das revisões adiados** (ledger e revisões), nenhum com efeito no
     produto: (a) os três `TypeDecorator` de `missions/models.py` são quase
     iguais, e o `cascade` de `Mission.evidence`/`Mission.evaluation` não usa

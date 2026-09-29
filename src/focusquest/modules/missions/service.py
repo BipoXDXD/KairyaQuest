@@ -12,7 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
@@ -107,10 +107,16 @@ def listar_missoes(session: Session, user_id: int) -> list[Mission]:
 
     So avulsas: a diaria e a especial aparecem pelo ciclo (`GET /api/cycle`), e
     listar uma diaria futura aqui a revelaria (C11).
+
+    `selectinload` na evidencia e na avaliacao (pendencia 96): o `MissionRead`
+    le as duas de cada missao, e com o `lazy="select"` do modelo cada missao
+    listada custava duas consultas a mais. Assim a listagem custa tres
+    consultas, qualquer que seja o tamanho dela.
     """
     return list(
         session.scalars(
             select(Mission)
+            .options(selectinload(Mission.evidence), selectinload(Mission.evaluation))
             .where(
                 Mission.user_id == user_id,
                 Mission.mission_type == MissionType.AVULSA,

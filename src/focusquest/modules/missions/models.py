@@ -206,9 +206,10 @@ class Mission(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"`: a listagem tem
-    # poucas missoes, e cada missao lida dispara ate duas consultas pequenas
-    # (evidencia e avaliacao).
+    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"` para a leitura de
+    # UMA missao (conclusao, avaliacao), onde carregar sob demanda e o certo.
+    # A listagem, que le as duas de todas as missoes, pede `selectinload` na
+    # propria consulta (`listar_missoes`, pendencia 96).
     evidence: Mapped[MissionEvidence | None] = relationship(
         cascade="all, delete-orphan", lazy="select"
     )
