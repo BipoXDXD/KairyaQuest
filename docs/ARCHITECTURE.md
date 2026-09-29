@@ -76,7 +76,6 @@ FocusQuest/
 │   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-General"/"Campanhas") (C, Task 1)
 │   │   │   ├── SideNav.test.tsx
 │   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
-│   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
 │   │   │   ├── campaigns/         # a trilha da semana (C); consome shared/types/mission.ts e shared/lib/civilDate.ts
 │   │   │   │   ├── availability.test.ts
@@ -177,7 +176,6 @@ FocusQuest/
 │   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
 │   │   │   ├── sse.ts             # quadros e corpos SSE falsos, sem rede
 │   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
-│   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
 │   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
 │   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx; @keyframes reward-in, usado só sob motion-safe: (D, Task 7)
@@ -373,12 +371,12 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   (`useRefreshOnReturn.ts`) e `shared/types/` (`mission.ts`) **nasceram no
   Incremento C** — as três eram contrato até então. A feature `campaigns`
   **nasceu no C**, a trilha da semana; `rewards` continua contrato.
-- **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
-  arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
-  não são importados por nenhum módulo — conferido com `grep` em
-  `frontend/src` e `frontend/index.html`. São restos do scaffold do Vite. A
-  remoção é mudança de código, não deste documento; está registrada como
-  pendência em `docs/HANDOFF.md`.
+- **Não existe `frontend/src/assets/`.** Os restos do scaffold do Vite
+  (`App.css`, `hero.png`, `react.svg`, `vite.svg`) eram versionados e não
+  eram importados por nenhum módulo; foram removidos em 2026-09-29 (pendência
+  24 do `docs/HANDOFF.md`), depois de `grep` em `frontend/` e nos docs sem
+  achar referência. A pasta volta a existir quando o primeiro arquivo
+  importado pelo código precisar dela.
 
 ## 2. Árvore-alvo — contrato, não descrição
 
@@ -1281,9 +1279,9 @@ recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
   contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
-- **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
-  oposição a `public/`, servido sem passar pelo bundler. Hoje nenhum dos três
-  arquivos da pasta é importado (§1).
+- **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
+  oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
+  hoje: os arquivos do scaffold foram removidos por órfãos (§1).
 - **`src/test/`** *(existe)* — infraestrutura de teste: `setup.ts` (o modo
   de teste do React), `sse.ts` (quadros SSE falsos), `fetchRoutes.ts`
   (`routeFetch`, um `fetch` falso roteado) e `viewport.ts` (`stubViewport`,
@@ -1357,7 +1355,7 @@ legitimamente pertence a ele — nunca antes.
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
 | Página (composição de features) | `frontend/src/pages/` | existe |
 | Teste ponta a ponta | `frontend/tests/e2e/` | existe |
-| Imagem ou SVG importado pelo código | `frontend/src/assets/` | existe |
+| Imagem ou SVG importado pelo código | `frontend/src/assets/` | contrato (a pasta nasce com o primeiro arquivo) |
 | Arquivo servido cru, sem bundler (favicon) | `frontend/public/` | existe |
 
 ### Backend

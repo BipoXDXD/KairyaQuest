@@ -2228,7 +2228,7 @@ código, cada um pelo hook (gate completo):
   dos dois casos da pendência 49.
 - **`e5750ad` — movimento reduzido (README §7).** O esqueleto de
   carregamento da conversa (`TutorConversation.tsx`, a única animação que chega à
-  tela — o `App.css` órfão tem `transition`, mas nenhum módulo o importa) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
+  tela — o `App.css` órfão, depois removido (pendência 24), tinha `transition`, mas nenhum módulo o importava) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
   Tailwind emite dentro de `@media (prefers-reduced-motion:
   no-preference)` (conferido no CSS do build). Teste novo em
   `TutorPanel.test.tsx`, com mutação.
@@ -3194,10 +3194,20 @@ ninguém mexer.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
     vazia** (`docs/QUALITY.md` §3). Não é evidência de 100%; a evidência é o
     limiar e o resumo.
-24. **Arquivos órfãos no frontend:** `frontend/src/App.css` e
+24. ~~**Arquivos órfãos no frontend:** `frontend/src/App.css` e
     `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`) não são
-    importados por nenhum módulo — restos do scaffold do Vite. Remover é
-    mudança de código, fora do escopo da documentação.
+    importados por nenhum módulo — restos do scaffold do Vite.~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os quatro arquivos foram removidos com `git rm`. Antes,
+    `grep` por `App.css`, `hero.png`, `react.svg`, `vite.svg`, `assets/`,
+    `import.meta.glob`, `.svg`, `.png` e `new URL` em `frontend/` (fora
+    `node_modules`/`dist`/`coverage`), nos docs, no Makefile, nos scripts e no
+    CI não achou nenhum uso: o `index.html` usa `/favicon.svg` (de `public/`),
+    e o `index.css` é o único CSS importado (`main.tsx`). A pasta
+    `frontend/src/assets/` deixou de existir; a `docs/ARCHITECTURE.md` (§1, §5
+    e a tabela "onde cada arquivo mora") passou a tratá-la como contrato. A
+    linha do README §3 (árvore-alvo) não foi tocada: é o contrato. Verificado:
+    `make check` (inclui o build do `check-e2e`) aprovou depois da remoção.
 25. **Dependência do proxy do Vite.** No dia em que o frontend for servido por
     outra coisa que não o Vite, falta CORS ou um proxy reverso.
 
