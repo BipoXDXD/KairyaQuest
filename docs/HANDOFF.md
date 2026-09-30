@@ -4178,16 +4178,18 @@ C".
     `_contexto`**, não logo depois de "Agora (UTC)" como a prosa do brief
     da Task 5 descrevia. Sem efeito funcional — é só onde a linha aparece
     dentro do texto que vai para o modelo.
-86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
+86. ~~**`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
     repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
-    N"). Redundante para quem usa leitor de tela, não incorreto.
-    **Avaliada no lote do frontend (2026-09-29) e não alterada:** o rótulo
-    "Progresso até o nível N" é a decisão R13 do controlador do D (registrada
-    na tabela de decisões, com o `aria-valuetext` mantido de propósito), e o
-    `ProgressPanel.test.tsx` o cobra pelo nome. Trocar por outro nome (por
-    exemplo "Progresso de XP") tira a redundância, mas é uma escolha de texto de
-    acessibilidade sem um único desfecho claro e desfaz uma decisão já
-    registrada — fica para o dono.
+    N"). Redundante para quem usa leitor de tela, não incorreto.~~
+    **Resolvida na sessão de 2026-09-29, por decisão do dono ("resolva de forma
+    cirúrgica"):** o `aria-label` fica como a R13 do D o fixou ("Progresso até
+    o nível N", o nome que o teste cobra) e o `aria-valuetext` perde o sufixo:
+    passa a "N de M XP". O leitor de tela ouve o nível uma vez só, no nome, e
+    o valor sem repetição; o texto visível (fora da árvore de acessibilidade)
+    continua "N de M XP até o nível N". A mudança das três expectativas de
+    `aria-valuetext` em `ProgressPanel.test.tsx` é a mudança principal (vistas
+    reprovando antes do código); mutações: voltar o texto completo ao
+    `aria-valuetext` reprova 3 testes, tirar o nível do `aria-label` reprova 1.
 87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
     `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
     tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
