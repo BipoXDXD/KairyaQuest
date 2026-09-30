@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
@@ -324,8 +324,11 @@ def transmitir(
         # A recusa (pendencia 120): o parcial que veio antes dela nao e
         # resposta, e a orientacao da API e descarta-lo. A resposta vai a
         # `falhou`, com o motivo -- e, com `codigo`, a proposta nem e validada.
+        # A recusa VENCE um limite total estourado: com o `Fim` recebido, o
+        # limite so pode ter passado nesse ultimo evento, e o motivo
+        # verdadeiro e a recusa (o `Fim` e o ultimo evento do provedor).
         texto = ""
-        codigo = codigo or CodigoDoStream.RESPOSTA_RECUSADA
+        codigo = CodigoDoStream.RESPOSTA_RECUSADA
     if codigo is None and proposta is not None:
         dados = _validar_proposta(proposta)
         if dados is None:
@@ -607,12 +610,38 @@ def _historico(session: Session, user_id: int, quantas: int) -> list[TutorMessag
     """As ultimas `quantas` mensagens COMPLETAS, em ordem cronologica.
 
     As `interrompida` e `falhou` ficam fora: meio texto confunde o modelo.
+    Fica fora tambem a PERGUNTA cuja tentativa mais recente foi recusada
+    (`resposta_recusada`): sem isso, o texto que disparou a recusa voltaria ao
+    modelo em todo turno seguinte. Ela continua gravada e na tela; reenviada,
+    a tentativa mais recente passa a ser a nova, e ela volta ao contexto.
     """
+    tentativa = aliased(TutorMessage)
+    posterior = aliased(TutorMessage)
+    recusada_por_ultimo = (
+        select(tentativa.id)
+        .where(
+            tentativa.reply_to_id == TutorMessage.id,
+            tentativa.status == StatusDaMensagem.FALHOU,
+            tentativa.error_code == CodigoDoStream.RESPOSTA_RECUSADA,
+            ~select(posterior.id)
+            .where(
+                posterior.reply_to_id == TutorMessage.id,
+                posterior.id > tentativa.id,
+            )
+            # Dois niveis de subconsulta: sem isto, o SQLAlchemy poe
+            # `tutor_messages` no FROM da interna e ela deixa de olhar a
+            # pergunta de fora (medido no SQL compilado).
+            .correlate_except(posterior)
+            .exists(),
+        )
+        .exists()
+    )
     recentes = session.scalars(
         select(TutorMessage)
         .where(
             TutorMessage.user_id == user_id,
             TutorMessage.status == StatusDaMensagem.COMPLETA,
+            ~recusada_por_ultimo,
         )
         .order_by(TutorMessage.id.desc())
         .limit(quantas)

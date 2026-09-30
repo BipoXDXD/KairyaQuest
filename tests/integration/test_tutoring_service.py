@@ -584,8 +584,8 @@ def test_resposta_cortada_fica_interrompida_com_o_motivo(
     O `error_code` `resposta_longa` e o que separa este corte das outras
     `interrompida` (desconexao, orfa), de resultado desconhecido: e por ele que
     a tela diz que a resposta ficou longa demais e sugere pedir por partes
-    (pendencia 122). Ate o lote g-tifa este teste fixava `error_code` nulo; a
-    mudanca da expectativa e a mudanca principal do incremento."""
+    (pendencia 122). A expectativa de antes era `error_code` nulo; ela mudou
+    porque o contrato passou a trazer o motivo do corte."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Comeco da ", "explica")),), stop_reason=stop_reason
     )
@@ -653,6 +653,66 @@ def test_proposta_cortada_nao_vira_acao(
 # --- A recusa (pendencia 120) ----------------------------------------------
 
 
+def test_a_pergunta_recusada_fica_fora_do_contexto_dos_turnos_seguintes(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A resposta recusada ja ficava fora do historico (so `completa` entra);
+    a PERGUNTA dela, `completa` por natureza, nao. Sem excluir, o texto que
+    disparou a recusa voltaria ao modelo em todo turno seguinte, fundido com a
+    pergunta nova. A pergunta continua gravada e na tela; so nao vai ao
+    modelo enquanto a tentativa mais recente dela for a recusada."""
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("x"), "X")
+        )
+    )
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("y"), "Y")
+        )
+    )
+
+    assert falso.recebidas[-1].corpo["messages"] == [{"role": "user", "content": "Y"}]
+    with fabrica() as sessao:
+        conteudos = [m.content for m in listar_mensagens(sessao, ESTUDANTE)]
+    assert "X" in conteudos
+
+
+def test_a_recusada_reenviada_leva_a_pergunta_e_a_respondida_volta_ao_contexto(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """O "Tentar de novo" da recusada manda a PROPRIA pergunta ao modelo: a
+    tentativa mais recente dela passa a ser a nova, e nao a recusada. Depois
+    de respondida, ela entra no contexto como qualquer pergunta."""
+    cid = conversa.id("x")
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    list(_transmitir(fabrica, tutoria, _preparar(fabrica, tutoria, cid, "X")))
+
+    falso.roteiro = Roteiro(blocos=(Texto(("agora sim",)),))
+    list(_transmitir(fabrica, tutoria, _preparar(fabrica, tutoria, cid, "X")))
+    assert falso.recebidas[-1].corpo["messages"] == [{"role": "user", "content": "X"}]
+
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("z"), "Z")
+        )
+    )
+    assert falso.recebidas[-1].corpo["messages"] == [
+        {"role": "user", "content": "X"},
+        {"role": "assistant", "content": "agora sim"},
+        {"role": "user", "content": "Z"},
+    ]
+
+
 def test_resposta_recusada_falha_sem_o_texto_parcial(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
@@ -669,6 +729,35 @@ def test_resposta_recusada_falha_sem_o_texto_parcial(
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa")))
     eventos = list(_transmitir(fabrica, tutoria, preparo))
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        CodigoDoStream.RESPOSTA_RECUSADA,
+    )
+
+
+def test_a_recusa_vence_o_limite_total_estourado_no_proprio_fim(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """Com o `Fim` da recusa ja recebido, o limite total so pode ter estourado
+    nesse ultimo evento: a resposta chegou ate o fim, e o motivo verdadeiro e
+    a recusa. O codigo e `resposta_recusada`, coerente com o texto descartado
+    (a tela descarta o parcial por esse codigo) -- e nao `tempo_esgotado`, que
+    diria "demorou demais" e mostraria o parcial recusado ate a recarga."""
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    # Tres leituras: o inicio, depois do `Delta` e depois do `Fim`. So a ultima
+    # passa do limite de 60 s.
+    leituras = iter([AGORA, AGORA, AGORA + timedelta(seconds=61)])
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa-tempo")))
+    eventos = list(
+        _transmitir(fabrica, tutoria, preparo, relogio=lambda: next(leituras))
+    )
 
     assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
     vista = _resposta(fabrica, preparo.resposta_id)

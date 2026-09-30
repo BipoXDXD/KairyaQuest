@@ -192,33 +192,35 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   expect(await requisicoes()).toHaveLength(2)
 })
 
-test('(f) a resposta cortada por tamanho: anunciada como cortada, com a nota de pedir por partes', async ({
-  page,
-}) => {
-  // Pendencias 120, 121 e 122, ponta a ponta: o SDK real le o `stop_reason`
-  // do falso, o backend grava `interrompida` com `resposta_longa`, e a tela
-  // nao diz "terminou".
-  const pergunta = `Me explica tudo de Go (e2e ${EXECUCAO})`
-  const comeco = `Go e uma linguagem (e2e ${EXECUCAO})`
-  await definirRoteiro({ blocks: [{ text: [comeco] }], stop_reason: 'max_tokens' })
-  await abrirPainel(page)
+for (const motivo of ['max_tokens', 'model_context_window_exceeded'] as const) {
+  test(`(f) a resposta cortada por tamanho (${motivo}): anunciada como cortada, com a nota de pedir por partes`, async ({
+    page,
+  }) => {
+    // Pendencias 120, 121 e 122, ponta a ponta: o SDK real le o `stop_reason`
+    // do falso, o backend grava `interrompida` com `resposta_longa`, e a tela
+    // nao diz "terminou".
+    const pergunta = `Me explica tudo de Go (${motivo}, e2e ${EXECUCAO})`
+    const comeco = `Go e uma linguagem (${motivo}, e2e ${EXECUCAO})`
+    await definirRoteiro({ blocks: [{ text: [comeco] }], stop_reason: motivo })
+    await abrirPainel(page)
 
-  await perguntar(page, pergunta)
+    await perguntar(page, pergunta)
 
-  const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco })
-  await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta interrompida')
-  await expect(page.getByTestId('tutor-live')).toHaveText(
-    'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
-  )
-  await expect(page.getByTestId('tutor-history-retry-note')).toContainText(
-    'A última resposta ficou longa demais e foi cortada. Tente pedir por partes',
-  )
-  await semViolacoes(page)
+    const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco })
+    await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta interrompida')
+    await expect(page.getByTestId('tutor-live')).toHaveText(
+      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+    )
+    await expect(page.getByTestId('tutor-history-retry-note')).toContainText(
+      'A última resposta ficou longa demais e foi cortada. Tente pedir por partes',
+    )
+    await semViolacoes(page)
 
-  const mensagens = await conversa(page)
-  const gravada = mensagens.find((m) => m.content === comeco)
-  expect([gravada?.status, gravada?.error_code]).toEqual(['interrompida', 'resposta_longa'])
-})
+    const mensagens = await conversa(page)
+    const gravada = mensagens.find((m) => m.content === comeco)
+    expect([gravada?.status, gravada?.error_code]).toEqual(['interrompida', 'resposta_longa'])
+  })
+}
 
 test('(g) a resposta recusada: alerta proprio e o parcial fora da conversa', async ({ page }) => {
   const pergunta = `Pergunta que o modelo recusa (e2e ${EXECUCAO})`

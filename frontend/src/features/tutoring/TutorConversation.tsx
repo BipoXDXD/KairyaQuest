@@ -58,7 +58,13 @@ function MessageItem({
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
       <Author role={message.role} />
-      <p className="whitespace-pre-wrap">{message.content}</p>
+      {/* Sem texto (a recusada, ou a falha antes do primeiro pedaco), a bolha
+          fica com o autor e a marca: um paragrafo vazio so abriria espaco. */}
+      {message.content !== '' && (
+        <p data-testid="tutor-message-content" className="whitespace-pre-wrap">
+          {message.content}
+        </p>
+      )}
       {mark !== null && (
         <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
           {mark}

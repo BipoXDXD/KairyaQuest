@@ -208,8 +208,8 @@ def test_resposta_cortada_chega_no_done_como_interrompida_com_o_motivo(
     """Pendencias 45, 120 e 122, pelo contrato: o `done` traz a mensagem com
     `status` `interrompida`, sem acao e com `error_code` `resposta_longa` --
     e por ele que a tela sabe que a resposta ficou longa demais, e nao que o
-    resultado e desconhecido. Ate o lote g-tifa este teste fixava
-    `error_code` nulo; a mudanca e a mudanca principal do incremento.
+    resultado e desconhecido. A expectativa de antes era `error_code` nulo;
+    ela mudou porque o contrato passou a trazer o motivo do corte.
 
     A ferramenta completa antes do corte e o pior caso de proposito
     (ver `test_proposta_cortada_nao_vira_acao`)."""

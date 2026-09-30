@@ -190,7 +190,7 @@ FocusQuest/
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
-│   │   │   └── tutoring.spec.ts   # sete cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho e a recusa (pendência 120)
+│   │   │   └── tutoring.spec.ts   # oito cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho nos dois motivos e a recusa (pendência 120)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
 │   │       └── servers.test.ts    # ambiente node: validação do deslocamento e as portas do playwright.config.ts (Frente 0)
 │   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
@@ -811,7 +811,10 @@ limite de tamanho cortou a resposta (`stop_reason` `max_tokens` ou
 `refusal`) é `error` `resposta_recusada`, com a resposta gravada `falhou`,
 **sem** o texto parcial e sem ação. O `error_code` de uma `interrompida` é
 `resposta_longa` ou nulo — nulo nas outras (desconexão, órfã), de resultado
-desconhecido. Um stream sem `done` nem
+desconhecido. O contexto mandado ao modelo (`_historico`, em `service.py`)
+leva só mensagens `completa` e deixa fora também a **pergunta** cuja tentativa
+mais recente é a recusada (`resposta_recusada`): ela continua gravada e na
+tela, e volta ao contexto quando é reenviada. Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).

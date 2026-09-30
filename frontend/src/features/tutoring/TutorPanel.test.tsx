@@ -552,9 +552,9 @@ describe('TutorPanel: o envio', () => {
     // Pendencias 45, 121 e 122: o backend grava a resposta cortada pelo teto
     // de tokens (ou pela janela de contexto) como `interrompida`, com
     // `error_code` `resposta_longa`, e a entrega no `done`. A regiao viva nao
-    // diz "terminou", e a nota orienta a pedir por partes. Ate o lote g-tifa o
-    // `done` deste teste vinha sem `error_code` e a nota era a geral; o motivo
-    // no contrato e a mudanca principal do incremento.
+    // diz "terminou", e a nota orienta a pedir por partes. Antes o `done`
+    // deste teste vinha sem `error_code` e a nota era a geral; a expectativa
+    // mudou porque o contrato passou a trazer o motivo do corte.
     const q1 = question(1, 'Me explica recursao', 'c1')
     const cortada = { ...answer(2, 1, 'Recursao e quando', 'interrompida'), error_code: LONG }
     const { fetchMock } = mountPanel({
@@ -638,6 +638,18 @@ describe('TutorPanel: o envio', () => {
     expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(
       'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
     )
+    // A recusada e gravada sem texto: a bolha mostra o autor e a marca, sem
+    // um paragrafo vazio no meio.
+    const recusada = screen
+      .getAllByTestId('tutor-message')
+      .find((li) => li.dataset.messageId === '11')!
+    expect(within(recusada).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta com falha',
+    )
+    expect(within(recusada).queryByTestId('tutor-message-content')).not.toBeInTheDocument()
+    expect(
+      within(messageWith('Pergunta recusada')).getByTestId('tutor-message-content'),
+    ).toHaveTextContent('Pergunta recusada')
   })
 
   it('P18 contador: aparece perto do limite, some longe dele, e liga ao campo', async () => {

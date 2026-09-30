@@ -9,6 +9,9 @@ from pydantic import SecretStr, ValidationError
 
 from focusquest.core.config import Settings
 
+# A raiz do repositorio, onde mora o `.env.example`.
+RAIZ = Path(__file__).resolve().parents[2]
+
 
 def test_le_a_url_do_banco_do_ambiente(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -84,7 +87,7 @@ def _settings_do_arquivo(
     aqui leria o valor do processo, nao o do .env que este teste acabou de
     escrever. O `pre-push` (scripts/check-push.sh + scripts/push-env.sh)
     exporta para o ambiente do gate toda `FOCUSQUEST_*` do .env do clone -- e
-    o `.env` copiado do `.env.example` tem `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+    o `.env` copiado do `.env.example` tem `FOCUSQUEST_TUTOR_MAX_TOKENS=4096`
     etc., nao zero. Sem este delenv, `test_limites_da_tutoria_recusam_zero`
     passava em `make check` isolado e reprovava so sob o `pre-push`: o .env
     de teste escrevia "=0", mas a variavel de ambiente exportada (nao-zero)
@@ -161,9 +164,32 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     settings = _settings_do_arquivo(monkeypatch, tmp_path, "")
     assert settings.anthropic_base_url == "https://api.anthropic.com"
     assert settings.tutor_model == "claude-opus-5"
-    assert settings.tutor_max_tokens == 1024
+    assert settings.tutor_max_tokens == 4096
     assert settings.tutor_timeout_seconds == 60
     assert settings.tutor_history_messages == 20
+
+
+def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
+    """O `.env` nasce copiado do `.env.example`, e o arquivo VENCE o padrao do
+    `Settings`: um numero velho no exemplo anularia a mudanca do padrao para
+    quem copiar. Por isso os dois andam juntos (pendencia 173: o teto subiu
+    de 1024 para 4096 e o exemplo tinha 1024)."""
+    linhas = dict(
+        linha.split("=", 1)
+        for linha in (RAIZ / ".env.example").read_text().splitlines()
+        if linha.startswith("FOCUSQUEST_TUTOR_")
+    )
+    campos = Settings.model_fields
+    assert linhas == {
+        "FOCUSQUEST_TUTOR_MODEL": str(campos["tutor_model"].default),
+        "FOCUSQUEST_TUTOR_MAX_TOKENS": str(campos["tutor_max_tokens"].default),
+        "FOCUSQUEST_TUTOR_TIMEOUT_SECONDS": str(
+            int(campos["tutor_timeout_seconds"].default)
+        ),
+        "FOCUSQUEST_TUTOR_HISTORY_MESSAGES": str(
+            campos["tutor_history_messages"].default
+        ),
+    }
 
 
 @pytest.mark.parametrize(

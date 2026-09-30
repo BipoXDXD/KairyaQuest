@@ -2924,6 +2924,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` rodado por mim sobre `bf9eb47` mais esta documentação (worktree `f-api`) | Aprovado, EXIT 0, 2m47,8s de relógio. Frontend: 48 arquivos, 833 testes, 100% nos quatro eixos (1076/1076 instruções, 826/826 ramificações, 317/317 funções, 1049/1049 linhas). `uv lock --check` aprovado. Ruff sem achados, 132 arquivos já formatados. mypy sem problemas em 127 arquivos. Backend: **993 passed**, 1 aviso (a `DeprecationWarning` já conhecida), cobertura total de 100% (1883 instruções, 320 ramificações). E2E: 18 passed. Gitleaks: `no leaks found`. |
 | `make check` rodado por mim sobre a árvore do lote g-tifa (pendências 120–122; base `9e4f191`, worktree `f-api`), antes das edições finais de documentação e da docstring de `StatusDaMensagem` | Aprovado, EXIT 0, 3m12,9s de relógio. Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 856/856 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1109 passed**, cobertura total de 100% (1983 instruções, 346 ramificações). E2E: **23 passed** (os cenários (f) e (g) novos de `tutoring.spec.ts`). Gitleaks: `no leaks found`. |
 | `make check-e2e` sob mutação, mesma árvore | O anúncio da cortada trocado por "terminou" (`announceAnswer`) reprova o (f); o serviço sem descartar o texto da recusa reprova o (g). Restaurados por `cp`. |
+| `make check` rodado por mim sobre as correções da revisão do g-tifa (por cima de `b035500`, worktree `f-api`), primeira vez | **Reprovou**, EXIT 2, no `check-web`: 2 testes de foco do `MissionList.test.tsx` (pendência 178); 859 dos 861 passaram. O arquivo isolado passou duas vezes (91/91). |
+| `make check` rodado por mim sobre a mesma árvore, em seguida | Aprovado, EXIT 0, 7m16s de relógio (máquina carregada). Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 858/858 ramificações, 325/325 funções, 1074/1074 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1113 passed**, cobertura total de 100% (1986 instruções, 346 ramificações). E2E: **24 passed**. Gitleaks: `no leaks found`. |
 
 ## Ambiente verificado
 
@@ -4860,6 +4862,18 @@ ledger; nenhum é bug esquecido.
      (antes fixavam `error_code` nulo) e o P33 do `TutorPanel.test.tsx` (o
      `done` passou a trazer `resposta_longa`, e a nota esperada é a de pedir
      por partes).
+     **Correções da revisão do lote g-tifa (aprovada com ressalvas):**
+     **I1** — a pergunta cuja tentativa mais recente é `resposta_recusada`
+     saiu do contexto do modelo (`_historico`); continua gravada e na tela, e
+     volta ao contexto quando reenviada (a tentativa nova passa a ser a mais
+     recente). **m2** — a recusa vence o limite total estourado no próprio
+     `Fim`: o código é `resposta_recusada`, coerente com o texto descartado
+     (antes saía `tempo_esgotado` com o texto vazio). **m6** — a bolha da
+     resposta sem texto (a recusada, ou a falha antes do primeiro pedaço) não
+     desenha mais um parágrafo vazio: fica o autor e a marca. **m7** — o
+     cenário (f) do E2E roda nos dois motivos de corte. **m5** — saiu a
+     etiqueta de lote dos três testes de expectativa mudada. m1, m3 e m4 estão
+     nas pendências 172, 175 e 176.
 
 **Criadas pelo lote g-tifa (2026-09-29)**
 
@@ -4880,17 +4894,40 @@ ledger; nenhum é bug esquecido.
 172. **A recusa no meio do stream aparece na tela antes de sumir** (lote
      g-tifa). Os `delta` anteriores à recusa são desenhados enquanto chegam —
      nem o backend nem a tela sabem, antes do `message_stop`, que haverá
-     recusa. O descarte vale do `error` em diante (a lista, o banco e o
-     histórico do modelo). Também não se lê o `stop_details` (a categoria da
+     recusa. O descarte vale do `error` em diante: a **resposta** sai da
+     lista (entra vazia), do banco (gravada vazia) e do histórico do modelo
+     (só `completa` entra); e a **pergunta** recusada, que continua gravada e
+     na tela, também fica fora do contexto do modelo enquanto a tentativa
+     mais recente dela for a recusada (correção I1 da revisão, abaixo). Também não se lê o `stop_details` (a categoria da
      recusa): a tela não distingue o classificador de segurança do modelo que
      declinou.
-173. **Repetir a cortada ainda repete o mesmo teto** (lote g-tifa; o fundo da
+173. ~~**Repetir a cortada ainda repete o mesmo teto** (lote g-tifa; o fundo da
      pendência 122). A tela agora diz que a resposta ficou longa demais e
      sugere pedir por partes, mas o "Tentar de novo" reenvia a mesma
      pergunta com o mesmo `tutor_max_tokens` (1024 por padrão) e tende a
      cortar de novo. Resolver de verdade pede decidir entre subir o teto,
      pedir continuação ou orientar a persona a responder em partes — decisão
-     de produto e de custo, para o dono.
+     de produto e de custo, para o dono.~~
+     **Resolvida em 2026-09-29 por decisão do dono ("subir o limite"):** o
+     padrão de `tutor_max_tokens` (`core/config.py`) subiu de 1024 para
+     **4096**, e o `.env.example` acompanha. **Por que 1024 cortava cedo:** o
+     `claude-opus-5` pensa por padrão (thinking adaptativo), e o thinking gasta
+     do mesmo `max_tokens`. O adaptador não manda `thinking` nem
+     `budget_tokens` (conferido em `anthropic_provider.py`), então não há
+     orçamento de thinking a manter abaixo do teto — nada mais a ajustar.
+     **Custo:** a saída é cobrada pelos tokens gerados de fato, não pelo teto.
+     Uma resposta que já cabia em 1024 custa o mesmo; só a que antes era
+     cortada passa a ir até onde precisa, no máximo 4096 tokens de saída —
+     a US$ 25 por milhão no `claude-opus-5`, cerca de US$ 0,10 no pior caso
+     por resposta, contra cerca de US$ 0,026 do teto antigo. **Atenção para
+     quem já tem `.env`:** o arquivo vence o padrão do `Settings`, e um `.env`
+     copiado do exemplo antigo continua com `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+     — a linha precisa ser trocada à mão em cada clone. O teste novo
+     `test_o_env_example_traz_os_padroes_da_tutoria` amarra o exemplo aos
+     padrões do `Settings`, e `test_padroes_da_tutoria` fixa 4096. O "Tentar
+     de novo" da cortada continua repetindo o mesmo teto, agora quatro vezes
+     maior; o caso da janela de contexto, que o teto não resolve, é a
+     pendência 176, e o do tempo, a 177.
 174. **Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
      reexecutar a requisição recusada noutro modelo (`fallbacks`, beta, com
      custo e modelo próprios). Não foi ligado: muda o modelo que responde,
@@ -4899,9 +4936,42 @@ ledger; nenhum é bug esquecido.
 175. **Nenhuma chamada real provou `refusal` nem `model_context_window_exceeded`**
      (lote g-tifa). Os dois são provados contra o falso, com o SDK fixado
      (camadas 1 e 2); a camada 3 não os provoca sob demanda, e este lote não
-     fez chamada real. A `avaliar` (Incremento E) já devolve `None` para
-     qualquer parada que não seja `tool_use`, mas os testes dela cobrem só
-     `max_tokens` e `end_turn`.
+     fez chamada real. A `avaliar` já devolve `None` para qualquer parada
+     que não seja `tool_use`, mas os testes dela cobrem só `max_tokens` e
+     `end_turn`. **E a avaliação não distingue a recusa** (m3 da revisão):
+     `refusal` vira `avaliacao_invalida`, e a tela da avaliação sugere tentar
+     de novo, quando repetir tende a dar o mesmo resultado — ao contrário da
+     conversa, que agora trata a recusa à parte. Não foi corrigido aqui: um
+     código novo pede entrar no CHECK de `mission_evaluations.error_code`
+     (migração `0005` congela os valores), ou seja, migração nova, além do
+     mapa da tela da avaliação.
+176. **A janela de contexto estourada tende a estourar de novo no reenvio**
+     (m4 da revisão). O `model_context_window_exceeded` é tratado como o
+     `max_tokens` (mesma marca, mesma nota de pedir por partes), mas o
+     "Tentar de novo" reenvia o mesmo histórico, e o que resolve esse caso é
+     reduzir o contexto (a orientação da API é compactar ou dividir a
+     conversa), não subir o teto. Na prática é raro: o histórico vai até
+     `tutor_history_messages` (20) e a pergunta tem limite de tamanho. Se
+     acontecer, a tela diz "pedir por partes", que ajuda só em parte.
+177. **Resposta de até 4096 tokens contra o limite total de 60 s** (lote
+     g-tifa, consequência da 173). O limite total do serviço é
+     `tutor_timeout_seconds` (60 s, `dependencies.py`), medido do início do
+     stream. Com o teto quatro vezes maior, uma resposta longa (thinking
+     incluído) pode passar de 60 s e sair `tempo_esgotado` em vez de
+     `completa`. Não medido: nenhuma chamada real foi feita neste lote. Se
+     aparecer, a decisão é subir o `tutor_timeout_seconds` (e o `.env`) —
+     para o dono, porque muda quanto a pessoa espera.
+178. **Dois testes de foco do `MissionList.test.tsx` reprovaram uma vez sob
+     carga** (lote g-tifa, correções da revisão). Num `make check` (EXIT 2), com
+     outros worktrees rodando o gate na mesma máquina, reprovaram
+     "depois de concluir, o foco nao se perde para o body" e "depois de
+     iniciar, o foco que caiu no body vai para o titulo do cartao": o foco
+     ficou no `body`, e o arquivo levou 17,3 s. O lote não toca
+     `features/missions` nem `shared` (diff vazio). O mesmo arquivo isolado
+     passou duas vezes (91/91), e o `make check` seguinte passou inteiro.
+     Suspeita não medida: o foco é movido numa tarefa assíncrona que perde a
+     corrida quando a máquina está sobrecarregada. Nada foi ignorado nem
+     afrouxado; falta achar a causa.
 
 ## Próximo incremento
 
