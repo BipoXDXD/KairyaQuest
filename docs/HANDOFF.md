@@ -2228,7 +2228,7 @@ código, cada um pelo hook (gate completo):
   dos dois casos da pendência 49.
 - **`e5750ad` — movimento reduzido (README §7).** O esqueleto de
   carregamento da conversa (`TutorConversation.tsx`, a única animação que chega à
-  tela — o `App.css` órfão tem `transition`, mas nenhum módulo o importa) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
+  tela — o `App.css` órfão, depois removido (pendência 24), tinha `transition`, mas nenhum módulo o importava) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
   Tailwind emite dentro de `@media (prefers-reduced-motion:
   no-preference)` (conferido no CSS do build). Teste novo em
   `TutorPanel.test.tsx`, com mutação.
@@ -3125,16 +3125,91 @@ ninguém mexer.
     contrato, não refatoração: a engine passaria a nascer na partida, e o
     `/health` deixaria de responder sem configuração de banco — que é o que
     um teste exige hoje.
-15. **Duas `DeprecationWarning` de dependência** aparecem em toda execução do
+15. ~~**Duas `DeprecationWarning` de dependência** aparecem em toda execução do
     pytest: o `TestClient` do Starlette pedindo outro pacote no lugar do
-    `httpx`, e o alias `anyio.abc.BlockingPortal`. Não são deste código;
-    pedem uma decisão de `filterwarnings` em tarefa própria.
+    `httpx`, e o alias `anyio.abc.BlockingPortal`.~~ **Resolvida em
+    2026-09-29 (lote de infraestrutura, branch `wt/lote-infra`), por
+    correção na origem, sem `filterwarnings` que esconda nada.** Medido antes
+    de mexer (`pytest -W default`, starlette 1.6.0, anyio 4.15.1): **um** aviso,
+    não dois. Que o do `httpx` tenha sumido quando o `httpx2` virou dependência
+    direta na tutoria (`e8a424c`) é **conferido no código e na cronologia**, não
+    medido naquele commit: a pendência é de 2026-09-18, o `e8a424c` de
+    2026-09-19, e o `starlette.testclient` prefere o `httpx2` (lê-se no
+    próprio `testclient.py`: `import httpx2`, com o `httpx` só como fallback
+    que avisa). O que restava era o alias: o `testclient.py` do
+    Starlette 1.6.0 escreve `anyio.abc.BlockingPortal` numa anotação de nível
+    de módulo, e o `anyio` 4.15.1 avisa a cada importação (linha 53 do
+    arquivo). **Correção:** `uv lock --upgrade-package starlette` levou o
+    Starlette de 1.6.0 para **1.7.0** (publicado em 2026-09-23, conforme o
+    `upload-time` do lock), cujo `testclient.py` usa
+    `anyio.from_thread.BlockingPortal`. Só o `uv.lock` mudou (3 linhas: versão,
+    URL e hash do sdist e da roda); nenhuma dependência nova nem pino novo no
+    `pyproject.toml` — o Starlette continua transitivo do FastAPI
+    (`starlette>=0.46.0`). Medido depois: `make check-api` com **827 testes
+    passando e nenhum bloco de avisos**, cobertura de 100%.
+    **Guarda:** duas linhas de `filterwarnings` no `pyproject.toml`, ambas
+    `error:` e por **mensagem exata** (o alias do `BlockingPortal` e o aviso do
+    fallback para o `httpx`), para que os dois voltem como erro de coleta e
+    não como aviso que ninguém lê, caso um `uv lock` regrida o Starlette.
+    Nenhum outro aviso virou erro (medido: um `DeprecationWarning` qualquer
+    continua só aviso). **Prova da guarda:** com o `uv.lock` anterior
+    (Starlette 1.6.0) o `tests/integration/test_evaluation_api.py` reprova na
+    coleta com `DeprecationWarning: The anyio.abc.BlockingPortal alias is
+    deprecated`; com o novo, 15 testes passam. A segunda linha foi provada
+    por um teste descartável que emitiu a mensagem do fallback (virou erro).
+    **Custo/risco.** O Starlette **não é só dependência de teste**: é o
+    framework ASGI que serve todas as rotas da API e o SSE da tutoria
+    (`StreamingResponse` em `modules/tutoring/router.py`), então a troca
+    1.6.0 → 1.7.0 muda código de **runtime**, não só o `TestClient`. O que tem
+    seis dias é a **versão** 1.7.0 (upload de 2026-09-23, conforme o
+    `uv.lock`), não o pacote; o `uv.lock` fixa o hash. **Notas de versão
+    lidas** (`docs/release-notes.md` do sdist do 1.7.0, baixado do PyPI): a
+    1.7.0 acrescenta o `OpenTelemetryMiddleware` (experimental) e outros
+    recursos, exige `anyio>=4.0.0,<5` (o projeto fixa 4.15.1) e traz correções
+    em `BaseHTTPMiddleware`, CORS, `StaticFiles`, `FileResponse`, multipart e
+    WebSocket; a única linha sobre `TestClient`/`anyio` é o conserto do alias
+    (#3498). Uma busca em `src/` não achou uso de nenhum desses componentes
+    (só `StreamingResponse` e o roteamento do FastAPI), mas isso é leitura, não
+    prova de ausência de efeito. **A evidência de que a troca não quebrou a
+    API é o gate completo, rodado por mim depois dela:** 827 testes de backend
+    passando (integração e SSE inclusos), cobertura de 100%, e os 18
+    cenários E2E do Chromium, além dos 614 testes do frontend. **Regressão
+    possível:** o `pyproject.toml` **não pina** o Starlette (os demais pacotes
+    diretos são `==`); quem o fixa é só o `uv.lock`, e o FastAPI 0.141.1 aceita
+    `starlette>=0.46.0` (METADATA), sem teto. Logo o lock só voltaria a uma
+    versão com o alias por um `git revert`/`git checkout` do `uv.lock` ou por
+    um pino futuro em versão antiga; nesse caso o sintoma agora é um erro de
+    coleta, não um aviso. (Um `uv lock` refeito do zero pegaria a versão mais
+    nova, não a antiga.)
 16. **O interpretador do projeto no PyCharm aponta para o Python do
     Homebrew, não para o `.venv`.** `.idea/` é ignorado pelo git e não foi
     alterado às cegas. Efeito: avisos de import não resolvido no editor; o
     gate e os testes não são afetados.
-17. **Não existe `.run/`** com as configurações de execução compartilhadas
-    que o README §4 pede (API, frontend, testes, gate).
+17. ~~**Não existe `.run/`** com as configurações de execução compartilhadas
+    que o README §4 pede (API, frontend, testes, gate).~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`), com uma ressalva de verificação:** existem cinco
+    arquivos em `.run/` (`API`, `Frontend`, `Testes_backend`,
+    `Testes_frontend`, `Gate`), descritos e justificados no
+    `docs/ARCHITECTURE.md` §4 ("Configurações de execução do PyCharm"). Usam
+    `$PROJECT_DIR$/.venv/bin/python`, sem caminho pessoal nem segredo, e o
+    `.gitignore` não ignora `.run/` (conferido por `git check-ignore`). O que
+    é **verificado**: `tests/unit/test_run_configs.py` (XML bem formado, sem
+    caminho pessoal/segredo, não ignorado, e cada script do npm, alvo do
+    Makefile, módulo da API e pasta de testes que apontam existe), visto
+    reprovando antes dos arquivos e reprovando de novo sob seis mutações.
+    **Estado: NÃO EXECUTADO.** Os arquivos foram escritos no formato que o
+    PyCharm grava (`ProjectRunConfigurationManager`), a partir do formato
+    documentado, mas **não foram abertos nem executados no PyCharm**: o
+    agente não tem como conduzir a IDE. Possíveis surpresas a conferir na
+    primeira abertura: o PyCharm resolver `$PROJECT_DIR$` no `SDK_HOME`; o
+    módulo `focusquest` (nome do `.iml`) ter outro nome num clone com a pasta
+    diferente; as duas configurações de npm pedirem o plugin de JavaScript e
+    um Node configurado na IDE (o Node aqui vem do `fnm`, no shell); o
+    `Gate` achar `make`/`uv` no `PATH` do terminal da IDE. Nenhum arquivo do
+    `.idea/` foi tocado. A pendência 16 (interpretador do projeto no
+    PyCharm) **continua aberta**: as configurações não dependem dela, mas o
+    editor segue sem resolver os imports até a IDE apontar para o `.venv`.
 
 **Gate e E2E**
 
@@ -3226,10 +3301,20 @@ ninguém mexer.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
     vazia** (`docs/QUALITY.md` §3). Não é evidência de 100%; a evidência é o
     limiar e o resumo.
-24. **Arquivos órfãos no frontend:** `frontend/src/App.css` e
+24. ~~**Arquivos órfãos no frontend:** `frontend/src/App.css` e
     `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`) não são
-    importados por nenhum módulo — restos do scaffold do Vite. Remover é
-    mudança de código, fora do escopo da documentação.
+    importados por nenhum módulo — restos do scaffold do Vite.~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os quatro arquivos foram removidos com `git rm`. Antes,
+    `grep` por `App.css`, `hero.png`, `react.svg`, `vite.svg`, `assets/`,
+    `import.meta.glob`, `.svg`, `.png` e `new URL` em `frontend/` (fora
+    `node_modules`/`dist`/`coverage`), nos docs, no Makefile, nos scripts e no
+    CI não achou nenhum uso: o `index.html` usa `/favicon.svg` (de `public/`),
+    e o `index.css` é o único CSS importado (`main.tsx`). A pasta
+    `frontend/src/assets/` deixou de existir; a `docs/ARCHITECTURE.md` (§1, §5
+    e a tabela "onde cada arquivo mora") passou a tratá-la como contrato. A
+    linha do README §3 (árvore-alvo) não foi tocada: é o contrato. Verificado:
+    `make check` (inclui o build do `check-e2e`) aprovou depois da remoção.
 25. **Dependência do proxy do Vite.** No dia em que o frontend for servido por
     outra coisa que não o Vite, falta CORS ou um proxy reverso.
 
@@ -4194,15 +4279,30 @@ ledger; nenhum é bug esquecido.
     #4 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
     repositório **anterior**, apagado; no recriado eles não existem. Os hashes de commit citados
     continuam valendo no histórico local.
-99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.** O aviso
-    foi **observado** pelo controlador nas anotações do CI da `main` do
-    repositório recriado (2026-09-28). Os jobs de
-    `.github/workflows/quality.yml` usam `runs-on: ubuntu-latest`, então
-    passam a rodar na imagem nova sem mudança no arquivo. Nada foi medido
-    sobre a imagem nova; se algum passo do gate depender da versão do sistema
-    (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da data.
-    Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as atualizações
-    da imagem.
+99. ~~**Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.**~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os cinco jobs de `.github/workflows/quality.yml`
+    passaram a `runs-on: ubuntu-24.04`, e um bloco de comentário no topo de
+    `jobs:` registra o porquê. O aviso continua sendo o que era: **observado**
+    pelo controlador nas anotações do CI da `main` (2026-09-28), não medido.
+    Conferência feita nesta resolução, por leitura do workflow e dos scripts,
+    do que depende da imagem: (a) o `playwright install --with-deps` (apt
+    do sistema; o Playwright declara suporte por versão do Ubuntu) — é o
+    passo que a troca de imagem mais arriscaria; (b) o curl 8.5.0 que o
+    `scripts/install-gitleaks.sh` assume (`docs/QUALITY.md` §4 já cita
+    `ubuntu-24.04`); (c) `shasum`/`sha256sum`, presentes na imagem; (d) o
+    `psql`, pré-instalado na imagem e usado sem instalação nos passos "Criar o
+    banco de teste" de `check-api` e `check-e2e` (`quality.yml`). **Não
+    dependem da imagem:** o serviço `postgres:18.6-alpine` (container), o
+    binário do Gitleaks (`linux_x64`, conferido por hash), `setup-node` e
+    `setup-uv` (baixam o que pedem). **Estado: não executado no CI** — a
+    mudança de runner só se prova quando o PR rodar o workflow; localmente,
+    o que foi verificado é que o YAML carrega e que o `make check` aprova.
+    **Custo aceito:** a imagem deixa de receber as atualizações do
+    `ubuntu-latest`, e uma imagem fixada acaba sendo aposentada pelo GitHub
+    (data não consultada nesta sessão) — por isso a data de revisão abaixo.
+    **Revisitar em 2026-12-01:** subir para a versão seguinte de propósito,
+    num PR que rode o gate inteiro nela (o comentário no workflow repete a data).
 100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
     log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
     funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
@@ -4333,6 +4433,25 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
+    2026-09-29; consequência da pendência 99). Os jobs rodam em
+    `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
+    subir a versão de propósito, num PR que rode o gate inteiro na imagem
+    nova (o ponto de atrito provável é o apt do `playwright install
+    --with-deps`). A mudança de `ubuntu-latest` para `ubuntu-24.04` **não foi
+    executada no CI** ainda: fica provada, ou não, no primeiro PR que rodar o
+    workflow.
+131. **As configurações de `.run/` nunca foram abertas no PyCharm** (lote de
+    infraestrutura, 2026-09-29; pendência 17). Os testes só garantem o que se
+    lê nos arquivos. Falta, na IDE: abrir o projeto, ver as cinco
+    configurações aparecerem, executar **API**, **Testes backend** e **Gate**,
+    e **Frontend** / **Testes frontend** com um Node configurado; e conferir se
+    o `$PROJECT_DIR$/.venv/bin/python` é resolvido no `SDK_HOME` e se o módulo
+    `focusquest` existe num clone com outro nome de pasta. Se algo divergir, a
+    correção é no formato dos arquivos e no `tests/unit/test_run_configs.py`.
+    Limitação conhecida: o `Gate.run.xml` fixa `INTERPRETER_PATH=/bin/zsh`, então
+    só serve no macOS do dono (num clone Linux ou Windows, ajustar ou usar o
+    terminal).
 150. **O logging da pendência 13 é mínimo, e o que ele não cobre ficou sem
     medir ou sem fazer** (sessão de 2026-09-29, lote-obs). (a) Sob o
     uvicorn, só a configuração padrão foi medida: `--reload`, `--workers`

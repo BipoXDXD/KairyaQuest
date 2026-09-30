@@ -76,7 +76,6 @@ FocusQuest/
 │   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-General"/"Campanhas") (C, Task 1)
 │   │   │   ├── SideNav.test.tsx
 │   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
-│   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
 │   │   │   ├── campaigns/         # a trilha da semana (C); consome shared/types/mission.ts e shared/lib/civilDate.ts
 │   │   │   │   ├── availability.test.ts
@@ -177,7 +176,6 @@ FocusQuest/
 │   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
 │   │   │   ├── sse.ts             # quadros e corpos SSE falsos, sem rede
 │   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
-│   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
 │   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
 │   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx; @keyframes reward-in, usado só sob motion-safe: (D, Task 7)
@@ -331,12 +329,19 @@ FocusQuest/
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
+│       ├── test_run_configs.py    # as configurações de .run/: XML, sem caminho pessoal, não ignoradas, e o que apontam existe (pendência 17)
 │       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
 │       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
 │       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
 │       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
 │       └── test_tutoring_sse.py      # o invólucro `fechando_ao_cancelar`
+├── .run/                          # configurações de execução compartilhadas do PyCharm (README §4); ver "Configurações de execução do PyCharm" em §4
+│   ├── API.run.xml                # uvicorn focusquest.main:app em 127.0.0.1:8000, pelo .venv do projeto
+│   ├── Frontend.run.xml           # npm run dev (frontend/)
+│   ├── Gate.run.xml               # make check, no terminal da IDE
+│   ├── Testes_backend.run.xml     # pytest sobre tests/, pelo .venv do projeto
+│   └── Testes_frontend.run.xml    # npm run test (frontend/)
 ├── .env.example                   # modelo do .env da raiz (banco e a tutoria); a chave da Anthropic fica vazia — a de verdade mora no Keychain (D-a, 1b-2)
 ├── .gitignore
 ├── .gitleaks.toml                 # configuração da varredura de segredos
@@ -359,9 +364,6 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
 
 - **Não existe `Dockerfile`.** A aplicação roda direto da árvore (`uv run`,
   `npm run`); só o PostgreSQL roda em container, pelo `compose.yaml`.
-- **Não existe `.run/`.** O README §4 manda versionar configuração de execução
-  compartilhada, e o `.gitignore` já reserva o caminho (comentando que `.run/`
-  **não** entra nele), mas o diretório ainda não foi criado.
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
@@ -376,12 +378,12 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   (`useRefreshOnReturn.ts`) e `shared/types/` (`mission.ts`) **nasceram no
   Incremento C** — as três eram contrato até então. A feature `campaigns`
   **nasceu no C**, a trilha da semana; `rewards` continua contrato.
-- **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
-  arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
-  não são importados por nenhum módulo — conferido com `grep` em
-  `frontend/src` e `frontend/index.html`. São restos do scaffold do Vite. A
-  remoção é mudança de código, não deste documento; está registrada como
-  pendência em `docs/HANDOFF.md`.
+- **Não existe `frontend/src/assets/`.** Os restos do scaffold do Vite
+  (`App.css`, `hero.png`, `react.svg`, `vite.svg`) eram versionados e não
+  eram importados por nenhum módulo; foram removidos em 2026-09-29 (pendência
+  24 do `docs/HANDOFF.md`), depois de `grep` em `frontend/` e nos docs sem
+  achar referência. A pasta volta a existir quando o primeiro arquivo
+  importado pelo código precisar dela.
 
 ## 2. Árvore-alvo — contrato, não descrição
 
@@ -1346,9 +1348,9 @@ recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
   contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
-- **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
-  oposição a `public/`, servido sem passar pelo bundler. Hoje nenhum dos três
-  arquivos da pasta é importado (§1).
+- **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
+  oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
+  hoje: os arquivos do scaffold foram removidos por órfãos (§1).
 - **`src/test/`** *(existe)* — infraestrutura de teste: `setup.ts` (o modo
   de teste do React), `sse.ts` (quadros SSE falsos), `fetchRoutes.ts`
   (`routeFetch`, um `fetch` falso roteado) e `viewport.ts` (`stubViewport`,
@@ -1422,7 +1424,7 @@ legitimamente pertence a ele — nunca antes.
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
 | Página (composição de features) | `frontend/src/pages/` | existe |
 | Teste ponta a ponta | `frontend/tests/e2e/` | existe |
-| Imagem ou SVG importado pelo código | `frontend/src/assets/` | existe |
+| Imagem ou SVG importado pelo código | `frontend/src/assets/` | contrato (a pasta nasce com o primeiro arquivo) |
 | Arquivo servido cru, sem bundler (favicon) | `frontend/public/` | existe |
 
 ### Backend
@@ -1455,7 +1457,56 @@ legitimamente pertence a ele — nunca antes.
 | Serviço de infraestrutura local (banco) | `compose.yaml` |
 | Variável de configuração do backend | um campo em `src/focusquest/core/config.py` **e** uma linha no `.env.example`. O `Settings` recusa **qualquer** chave do `.env` da raiz que não seja campo dele — com ou sem o prefixo `FOCUSQUEST_` —, então o `.env` da raiz não pode guardar variável de outro consumidor sem declará-la ali |
 | Documentação de arquitetura | este arquivo |
-| Configuração de execução compartilhada do PyCharm | `.run/` (ainda não existe; versionado de propósito) |
+| Configuração de execução compartilhada do PyCharm | `.run/*.run.xml` (existe; versionado de propósito — ver abaixo) |
+
+### Configurações de execução do PyCharm (`.run/`)
+
+O README §4 manda versionar `.run/` sem segredos. Existem cinco arquivos,
+um por coisa que a pessoa executa ou depura pela IDE:
+
+| Configuração | O que executa | Tipo no PyCharm |
+|---|---|---|
+| **API** | `python -m uvicorn focusquest.main:app --host 127.0.0.1 --port 8000`, o mesmo comando do roteiro de desenvolvimento do `docs/HANDOFF.md`; sem `--reload`, que atrapalha a depuração | Python (modo módulo) |
+| **Frontend** | `npm run dev` em `frontend/` (o proxy `/api` do Vite aponta para a porta 8000) | npm |
+| **Testes backend** | `pytest` sobre `tests/` | pytest |
+| **Testes frontend** | `npm run test` em `frontend/` (Vitest, sem cobertura) | npm |
+| **Gate** | `make check`, o mesmo alvo que os hooks e o CI executam | Shell Script, no terminal da IDE |
+
+Decisões, com o motivo de cada uma:
+
+- **O interpretador é o `.venv` do projeto**, por `$PROJECT_DIR$/.venv/bin/python`
+  (`IS_MODULE_SDK` desligado), e não o SDK do módulo. O SDK do módulo é
+  configuração pessoal da IDE e já apontou para o Python do Homebrew
+  (pendência 16); o caminho relativo à raiz vale em qualquer clone e em
+  qualquer worktree, sem caminho absoluto de usuário.
+- **Nada de `sys.path` remendado** (README §4): `ADD_SOURCE_ROOTS` e
+  `ADD_CONTENT_ROOTS` ficam desligados nas duas configurações Python. O pacote
+  `focusquest` é importável porque o `uv sync` o instala em modo editável no
+  `.venv`.
+- **O diretório de trabalho é a raiz** (`$PROJECT_DIR$`): o `Settings` lê o
+  `.env` relativo ao diretório atual (`env_file=".env"`), então a API e os
+  testes precisam partir da raiz para achar o banco.
+- **Sem segredo e sem variável de ambiente própria.** A configuração vem do
+  `.env` (ignorado pelo git) que o `Settings` lê sozinho. A chave da Tifa
+  **não** entra aqui: continua no Keychain, como no roteiro do
+  `docs/HANDOFF.md`; para a API com a Tifa, use o terminal.
+- **O gate é o `make check` sem intermediário**, no terminal da IDE: assim
+  herda o `PATH` do shell da pessoa (`uv`, `node`), que um processo lançado
+  pela interface gráfica do macOS não tem. Não há configuração para
+  `pre-commit`: o hook é do git, não do Makefile (`AGENTS.md` §4).
+- O nome do arquivo é o nome da configuração com espaços trocados por `_`,
+  que é como o PyCharm grava; nomes de uma palavra evitam a conversão.
+
+`tests/unit/test_run_configs.py` guarda o que é verificável sem a IDE: os
+arquivos existem e são XML bem formado, não trazem caminho pessoal nem
+segredo, `.run/` não está no `.gitignore`, e cada script do npm, alvo do
+Makefile, módulo da API e pasta de testes que eles apontam existe. **Não
+prova que o PyCharm os abre e executa** — os arquivos foram escritos no
+formato que o PyCharm grava, mas nunca foram abertos numa IDE (estado "não
+executado", pendência 17 do `docs/HANDOFF.md`). Requisitos: as duas
+configurações de npm exigem o plugin de JavaScript e um Node configurado na
+IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
+(`cd frontend && npm run dev`).
 
 ## 5. Convenções de fronteira
 
