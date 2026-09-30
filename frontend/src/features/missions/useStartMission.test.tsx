@@ -355,6 +355,7 @@ describe('useStartMission', () => {
       expect(reload).toHaveBeenCalledTimes(1)
     })
   })
+
   it('um Iniciar pendurado falha ao fim do prazo, solta o cartao e a espera do quadro', async () => {
     vi.useFakeTimers()
     routeFetch({ [ROTA]: pendingUntilAborted })

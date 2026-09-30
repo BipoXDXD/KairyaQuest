@@ -276,7 +276,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R14 uma falha que ja veio gravada do historico NAO e anunciada de novo', () => {
     // Abrir a conversa nao pode falar, ao leitor de tela, todas as propostas
-    // que caíram em dias anteriores.
+    // que cairam em dias anteriores.
     render(
       <Harness initial={{ ...proposta, state: 'falhou', error_code: 'reagendamento_invalido' }} />,
     )

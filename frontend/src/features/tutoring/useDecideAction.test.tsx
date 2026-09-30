@@ -306,6 +306,7 @@ describe('useDecideAction', () => {
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
   it('D11 uma confirmacao pendurada falha ao fim do prazo e o reenvio usa a MESMA chave', async () => {
     // A confirmacao pode ter executado no servidor sem que a resposta chegasse.
     vi.useFakeTimers()

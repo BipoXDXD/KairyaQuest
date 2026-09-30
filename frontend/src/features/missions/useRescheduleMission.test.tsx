@@ -436,6 +436,7 @@ describe('useRescheduleMission', () => {
     })
     expect(result.current.lastRescheduled).toEqual(segunda)
   })
+
   it('um Reagendar pendurado falha ao fim do prazo, com a acao de repetir', async () => {
     vi.useFakeTimers()
     routeFetch({ [ROTA]: pendingUntilAborted })

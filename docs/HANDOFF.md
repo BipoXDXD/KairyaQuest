@@ -4800,7 +4800,7 @@ ledger; nenhum é bug esquecido.
 190. ~~**Os POSTs de Iniciar, Reagendar e da decisão da proposta de
      reagendamento não tinham timeout**: um pedido que o navegador mantivesse
      aberto sem resposta deixava o botão em "Iniciando…" / "Confirmando…" para
-     sempre (Minor 6 da revisão da Task 10).~~ **Resolvida em
+     sempre (revisão da Task 10).~~ **Resolvida em
      2026-09-29 (lote g-front).** O `postJson` aceita `{ timeoutMs }` e as
      três hooks (`useStartMission`, `useRescheduleMission`, e `useDecideAction`
      em `confirm` **e** `reject`) passam `MUTATION_TIMEOUT_MS` (20 s, em
@@ -4816,7 +4816,7 @@ ledger; nenhum é bug esquecido.
      a mesma chave" (Iniciar, Reagendar, D11 confirmar, D12 recusar). O Iniciar
      pendurado também libera a espera do "Atualizar o quadro".
 191. ~~**A falha gravada de uma proposta não era anunciada ao leitor de tela**
-     (Minor 2 da revisão da Task 9): ao confirmar, o servidor gravava a ação
+     (revisão da Task 9): ao confirmar, o servidor gravava a ação
      como `falhou` (`prazo_expirado` ou `reagendamento_invalido`), o
      `DecisionControls` some com o botão focado e com o `role="alert"`, e o
      texto novo aparecia num `<p>` sem região viva — o foco caía no `body` sem
@@ -4847,7 +4847,11 @@ ledger; nenhum é bug esquecido.
      `ApiError` ("O servidor demorou demais para responder.") existe, mas
      nenhuma tela a lê (as mensagens vêm dos `describe*Failure`, por
      `code`/`status`). Se importar, o `ApiError` ganha um `code` próprio
-     (`tempo_esgotado`) e os três `describe*` um texto para ele.
+     (`tempo_esgotado`) e os três `describe*` um texto para ele. Um caso de
+     borda no mesmo lugar: se o 409 (ou outro erro com resposta) já chegou e o
+     timer dispara durante a leitura do corpo do erro (`readCode`), o erro vira
+     o de tempo esgotado e perde o `status`/`code` reais. É seguro — o reenvio
+     com a mesma chave devolve o mesmo 409 —, só custa uma ida a mais à rede.
 194. **O anúncio da falha gravada (191) foi provado no DOM, não num leitor de
      tela.** Os testes conferem que o texto nasce dentro de `role="alert"` e
      que o do histórico não; não foi medido o que VoiceOver, NVDA ou TalkBack
