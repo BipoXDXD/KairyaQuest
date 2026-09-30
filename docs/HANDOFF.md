@@ -2907,6 +2907,10 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` sobre a mesma árvore, depois de `rm -rf .venv`, `uv sync --locked` e `uv run pre-commit install --install-hooks` | Aprovado, EXIT 0, 1m45,6s de relógio. Frontend: **36 arquivos, 444 testes**, 100% nos quatro eixos (702/702 instruções, 452/452 ramificações, 227/227 funções, 681/681 linhas). `uv lock --check` (59 pacotes), Ruff sem achados, 97 arquivos já formatados, mypy sem problemas em 92 arquivos. Backend: **598 passed**, 1 aviso, 100% (1254 instruções, 188 ramificações). E2E: **17 passed**. Gitleaks: `no leaks found`. Os mesmos números da última linha do D. |
 | `make check` completo, rodado por mim (o agente da Task 9) sobre `79fa4e5` (o código final do incremento; árvore limpa, em `wt/e-docs`), 2026-09-28, com o PostgreSQL de pé | Aprovado, EXIT 0, **2m25,9s de relógio** (`time`: 66,5 s de usuário e 12,5 s de sistema). Frontend: **41 arquivos, 614 testes**, cobertura de 100% nos quatro eixos (867/867 instruções, 646/646 ramificações, 267/267 funções, 842/842 linhas); `eslint` sem avisos. `uv lock --check` aprovado. Ruff sem achados, 118 arquivos já formatados. mypy sem problemas em 113 arquivos. Backend: **810 testes** passando em 1m55s, 1 aviso (a `DeprecationWarning` do `anyio.abc.BlockingPortal` no Starlette, já conhecida), cobertura total de **100%** (1629 instruções e 264 ramificações, nenhuma descoberta). E2E: **18 cenários** aprovados em Chromium (14,3 s de Playwright), os 17 de antes e o da avaliação. Gitleaks: 11,24 MB varridos, **sem achados**. |
 | `git diff fe37820 -- pyproject.toml uv.lock frontend/package.json frontend/package-lock.json`, sobre a mesma árvore | **Vazio, 0 linhas** (medido por mim): o Incremento E não acrescentou nenhuma dependência. |
+| Chamada real 1 (pendência 91), `python -m integration.camada3_da_avaliacao`, 2026-09-29, sobre `aadbef5`, modelo `claude-opus-5` | **Aprovado.** Uma chamada, sem erro HTTP: o modelo chamou `record_evaluation` (sem bloco de texto), a entrada passou no `EvaluationOutput` (veredito `atende`); sequência gravada em `referencia_da_avaliacao_real.json`. |
+| Chamada real 2 (pendência 109), `python -m integration.camada3_do_reagendamento`, mesma árvore e modelo | **Aprovado.** Uma chamada: `reschedule_mission`, `mission_id` 7, `falta_de_tempo`, `2026-10-02T18:00:00-03:00`, aceito pelo `RescheduleProposal`; sequência igual à da referência da conversa, que não foi regravada. Falta repetir sobre `ae01ba9` (pendência 109). |
+| `make check` pelo hook do commit `bf9eb47` (worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
+| `make check` rodado por mim sobre `bf9eb47` mais esta documentação (worktree `f-api`) | Aprovado, EXIT 0, 2m47,8s de relógio. Frontend: 48 arquivos, 833 testes, 100% nos quatro eixos (1076/1076 instruções, 826/826 ramificações, 317/317 funções, 1049/1049 linhas). `uv lock --check` aprovado. Ruff sem achados, 132 arquivos já formatados. mypy sem problemas em 127 arquivos. Backend: **993 passed**, 1 aviso (a `DeprecationWarning` já conhecida), cobertura total de 100% (1883 instruções, 320 ramificações). E2E: 18 passed. Gitleaks: `no leaks found`. |
 
 ## Ambiente verificado
 
@@ -4229,41 +4233,39 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
-109. ~~**A conversa com duas ferramentas não foi medida contra a API real; a
+109. **A conversa com duas ferramentas não foi medida contra a API real; a
      referência da camada 3 é de uma ferramenta só** (spec do F, "Pendências
-     que o F cria"; decisão F18).~~
-     **Resolvida em 2026-09-29 (sessão autônoma, worktree `f-api`):** por uma
-     chamada real autorizada pelo dono nesta sessão, feita pelo agente com o
-     script `tests/integration/camada3_do_reagendamento.py`, a chave do
-     Keychain só para o processo, o `anthropic_base_url` padrão e o modelo
-     `claude-opus-5` (padrão do `Settings`). **Uma** chamada, pelo
-     `ProvedorAnthropic.responder` **de produção** (as duas ferramentas,
-     `create_mission` e `reschedule_mission`, sem `strict`, `tool_choice`
-     auto com `disable_parallel_tool_use`), com o `Espiao` no transporte e
-     `max_retries=0`. O turno sai do `montar_turno` com **uma** avulsa
-     pendente (transiente, `#7`, prazo em 24 h) e o pedido "Estou sem tempo
-     essa semana. Adie a missão #7 para sexta, às 18h no horário de
-     Brasília." Medido — **aprovado**: o modelo chamou `reschedule_mission`
-     (e não `create_mission`) com `mission_id` 7, `reason` `falta_de_tempo` e
-     `new_deadline` `2026-10-02T18:00:00-03:00` (a sexta certa, com fuso), e
-     a entrada passou no `RescheduleProposal`; a API aceitou o esquema das
+     que o F cria"; decisão F18). **Medida em 2026-09-29 (sessão autônoma,
+     worktree `f-api`) sobre `aadbef5` — aprovado —, mas falta repetir sobre as
+     correções da revisão da Task 7 (`ae01ba9`, worktree `f-tutor`),** que
+     mudam o que a chamada lê: segundo o controlador, a persona ganhou um bloco
+     final contra injeção, o contexto passou a usar `#` só para id de missão e
+     o prazo só aceita ISO 8601 com fuso. O merge de `ae01ba9` neste worktree
+     foi pedido pelo controlador **depois** da chamada e foi **negado** pelo
+     controle de permissões da sessão; a repetição fica para quando ele entrar
+     (o mesmo script, uma chamada). O que foi medido: uma chamada real
+     autorizada pelo dono nesta sessão, feita pelo agente com
+     `tests/integration/camada3_do_reagendamento.py`, a chave do Keychain só
+     para o processo, o `anthropic_base_url` padrão e o modelo `claude-opus-5`
+     (padrão do `Settings`), pelo `ProvedorAnthropic.responder` **de produção**
+     (as duas ferramentas, `create_mission` e `reschedule_mission`, sem
+     `strict`, `tool_choice` auto com `disable_parallel_tool_use`), com o
+     `Espiao` no transporte e `max_retries=0`. O turno sai do `montar_turno`
+     com **uma** avulsa pendente (transiente, `#7`, prazo em 24 h) e o pedido
+     "Estou sem tempo essa semana. Adie a missão #7 para sexta, às 18h no
+     horário de Brasília." Resultado: o modelo chamou `reschedule_mission` (e
+     não `create_mission`) com `mission_id` 7, `reason` `falta_de_tempo` e
+     `new_deadline` `2026-10-02T18:00:00-03:00` (a sexta certa, ISO com fuso),
+     e a entrada passou no `RescheduleProposal`; a API aceitou o esquema das
      duas ferramentas (stream, sem 400). A sequência de tipos foi a **mesma**
      da referência da conversa (thinking, texto, `tool_use`), sem o `ping`;
      por isso `tests/integration/referencia_da_api_real.json` **não foi
      regravado** (o script só regrava se a sequência mudar), e
      `tests/integration/test_camada3_do_reagendamento.py` compara o falso,
-     roteirizado com `reschedule_mission`, com ela. **O que continua não
-     medido:** uma amostra só; o circuito pela tela (o cartão de
-     reagendamento, a confirmação e o prazo novo no Quartel-General) não foi
-     exercitado com a API real; e o pedido era explícito (a missão pelo
-     número) — um pedido ambíguo, sem o `#id`, não foi medido. **Dependência
-     registrada:** a medição usou o formato do contexto desta árvore
-     (`aadbef5`: a linha `- #7: ...` do `_linha_da_pendente` e a validação do
-     prazo do `RescheduleProposal`); se a correção da Task 7 em andamento no
-     worktree `f-tutor` mudar o formato do id no contexto ou a validação ISO
-     do prazo, esta medição vale para o formato antigo e deve ser refeita com
-     o mesmo script.
-
+     roteirizado com `reschedule_mission`, com ela. **Também não medido:**
+     uma amostra só; o circuito pela tela (o cartão de reagendamento, a
+     confirmação e o prazo novo no Quartel-General); e um pedido ambíguo, sem
+     o `#id`.
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →

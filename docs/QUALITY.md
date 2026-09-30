@@ -1131,7 +1131,10 @@ scripts novos chamam o **adaptador de produção**:
   sequência mudar). `tests/integration/test_camada3_do_reagendamento.py`
   compara o falso roteirizado com `reschedule_mission` com essa referência;
   **vistos reprovando** por mutação: a guarda do endereço, a conferência do
-  nome da ferramenta e a do id da missão.
+  nome da ferramenta e a do id da missão. A medição é da árvore **anterior**
+  às correções da revisão da Task 7 do F (persona com bloco contra injeção,
+  `#` só para id de missão no contexto); repeti-la sobre elas é a pendência
+  109, ainda aberta.
 - **O que elas não provam.** Uma amostra de cada: o modelo pode deixar de
   chamar a ferramenta às vezes (na avaliação, `avaliacao_invalida`,
   repetível). Só o veredito `atende` foi pedido à API real, e nenhuma das duas
