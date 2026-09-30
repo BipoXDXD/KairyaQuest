@@ -3,8 +3,7 @@ import { formatDeadline } from '../../shared/lib/deadline'
 import { failedActionText } from './actionFailure'
 import { BoardLink, DecisionControls } from './DecisionControls'
 import { RescheduleProposalCard } from './RescheduleProposalCard'
-import type { ActionRead, CreateMissionAction } from './types'
-import type { ActionKeys } from './useActionKeys'
+import type { CreateMissionAction, ProposalCardProps } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
 
 /**
@@ -64,18 +63,6 @@ function Outcome({
         </p>
       )
   }
-}
-
-/** O que todo cartao de proposta recebe do painel, qualquer que seja o `kind`. */
-export interface ProposalCardProps<A extends ActionRead = ActionRead> {
-  action: A
-  keys: ActionKeys
-  onChanged: (action: ActionRead) => void
-  /** "O quadro mudou" (F22): chamado depois de toda confirmacao bem-sucedida. */
-  onMissionCreated: () => void
-  onRefresh: () => void
-  boardHref: string
-  onGoToBoard?: () => void
 }
 
 /**
@@ -181,10 +168,11 @@ function UnknownProposal({ action }: { action: never }): ReactElement {
  * Os dois cartoes mostram coisas diferentes -- uma missao nova; dois prazos e
  * um motivo -- e compartilham so os controles de decisao, o link do quadro e
  * o texto da falha gravada (`DecisionControls`, `BoardLink`,
- * `failedActionText`). A escolha mora AQUI, e
- * nao no painel, porque quem monta o cartao guarda a acao como a uniao
- * `ActionRead` (o estado da conversa, e o `Harness` dos testes do cartao da
- * criacao, que nao mudaram).
+ * `failedActionText`).
+ *
+ * A escolha mora AQUI, e nao no painel, porque quem monta o cartao guarda a
+ * acao como a uniao `ActionRead` (o estado da conversa, e o `Harness` dos
+ * testes do cartao da criacao, que nao mudaram).
  *
  * Tipo de retorno declarado e `default` com `never`: um `kind` novo em
  * `ActionRead` reprova o `tsc` ate ganhar cartao.

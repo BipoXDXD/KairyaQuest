@@ -78,13 +78,14 @@ function isActionErrorCode(code: string): code is ActionErrorCode {
 
 /**
  * A mensagem e a acao do cartao, decididas pelo `code` e so por ele. O `kind`
- * so escolhe o texto do "confirmar sem resposta"; o padrao e a criacao, o
- * unico tipo que existia antes do Incremento F.
+ * so escolhe o texto do "confirmar sem resposta", e e OBRIGATORIO: um padrao
+ * esconderia do `tsc` o chamador que esquecesse o `kind` de um reagendamento,
+ * e ele diria "a missao nao sera criada duas vezes".
  */
 export function describeActionFailure(
   error: unknown,
   attempted: 'confirm' | 'reject',
-  kind: ActionRead['kind'] = 'create_mission',
+  kind: ActionRead['kind'],
 ): ActionFailure {
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return BY_CODE[error.code]

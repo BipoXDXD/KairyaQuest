@@ -30,10 +30,12 @@ describe('describeActionFailure', () => {
     ],
   ])('traduz %s', (code, status, recovery, message) => {
     for (const attempted of ['confirm', 'reject'] as const) {
-      expect(describeActionFailure(new ApiError('x', status, code), attempted)).toEqual({
-        message,
-        recovery,
-      })
+      for (const kind of ['create_mission', 'reschedule_mission'] as const) {
+        expect(describeActionFailure(new ApiError('x', status, code), attempted, kind)).toEqual({
+          message,
+          recovery,
+        })
+      }
     }
   })
 
@@ -44,7 +46,7 @@ describe('describeActionFailure', () => {
     ['herdado do prototipo', new ApiError('x', 409, 'hasOwnProperty')],
     ['erro que nao e ApiError', new Error('x')],
   ])('%s: confirmar diz que repetir nao cria duas missoes', (_caso, error) => {
-    expect(describeActionFailure(error, 'confirm')).toEqual({
+    expect(describeActionFailure(error, 'confirm', 'create_mission')).toEqual({
       message:
         'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
       recovery: 'retry',
@@ -52,7 +54,9 @@ describe('describeActionFailure', () => {
   })
 
   it('recusar tem o proprio texto generico', () => {
-    expect(describeActionFailure(new ApiError('x', null, null), 'reject')).toEqual({
+    expect(
+      describeActionFailure(new ApiError('x', null, null), 'reject', 'create_mission'),
+    ).toEqual({
       message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
       recovery: 'retry',
     })
@@ -61,7 +65,11 @@ describe('describeActionFailure', () => {
   it('reagendamento_invalido: a acao foi gravada falhou, e o cartao passa a esse estado', () => {
     for (const attempted of ['confirm', 'reject'] as const) {
       expect(
-        describeActionFailure(new ApiError('x', 409, 'reagendamento_invalido'), attempted),
+        describeActionFailure(
+          new ApiError('x', 409, 'reagendamento_invalido'),
+          attempted,
+          'reschedule_mission',
+        ),
       ).toEqual({
         message:
           'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',

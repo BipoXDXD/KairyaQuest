@@ -2,8 +2,11 @@ import type { ReactElement } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { failedActionText } from './actionFailure'
 import { BoardLink, DecisionControls } from './DecisionControls'
-import type { ProposalCardProps } from './ProposalCard'
-import { RESCHEDULE_REASON_LABELS, type RescheduleMissionAction } from './types'
+import {
+  RESCHEDULE_REASON_LABELS,
+  type ProposalCardProps,
+  type RescheduleMissionAction,
+} from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
 
 /**

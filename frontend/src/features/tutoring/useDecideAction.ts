@@ -86,7 +86,7 @@ export function useDecideAction(
       .catch((error: unknown) => {
         setState({
           status: 'failed',
-          failure: describeActionFailure(error, 'reject'),
+          failure: describeActionFailure(error, 'reject', action.kind),
           attempted: 'reject',
         })
       })

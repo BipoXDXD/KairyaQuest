@@ -11,6 +11,8 @@
  * aqui so pelo que o cartao mostra.
  */
 
+import type { ActionKeys } from './useActionKeys'
+
 export type MessageRole = 'user' | 'tutor'
 
 export type MessageStatus = 'gerando' | 'completa' | 'interrompida' | 'falhou'
@@ -88,6 +90,22 @@ export interface RescheduleMissionAction extends ActionBase {
  * escolhe o cartao (`ProposalCard`).
  */
 export type ActionRead = CreateMissionAction | RescheduleMissionAction
+
+/**
+ * O que todo cartao de proposta recebe do painel, qualquer que seja o `kind`.
+ * Mora aqui, e nao no `ProposalCard`, para o cartao de cada `kind` nao
+ * importar de volta o arquivo que o escolhe.
+ */
+export interface ProposalCardProps<A extends ActionRead = ActionRead> {
+  action: A
+  keys: ActionKeys
+  onChanged: (action: ActionRead) => void
+  /** "O quadro mudou" (F22): chamado depois de toda confirmacao bem-sucedida. */
+  onMissionCreated: () => void
+  onRefresh: () => void
+  boardHref: string
+  onGoToBoard?: () => void
+}
 
 export interface MessageRead {
   id: number

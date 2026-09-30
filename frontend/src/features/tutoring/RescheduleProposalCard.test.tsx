@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatDeadline } from '../../shared/lib/deadline'
-import { routeFetch, type Route } from '../../test/fetchRoutes'
+import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { RescheduleProposalCard } from './RescheduleProposalCard'
 import type { ActionRead, RescheduleMissionAction } from './types'
 import { useActionKeys } from './useActionKeys'
@@ -277,5 +277,36 @@ describe('RescheduleProposalCard', () => {
     expect(screen.queryByTestId('proposal-confirm')).not.toBeInTheDocument()
     fireEvent.click(refresh)
     expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('R12 recusar: um POST sem corpo, o cartao marcado, e o quadro nao recarrega', async () => {
+    const fetchMock = routeFetch({
+      [REJECT]: () => Response.json({ action: { ...proposta, state: 'recusada' } }),
+    })
+    const onMissionCreated = vi.fn()
+    render(<Harness initial={proposta} onMissionCreated={onMissionCreated} />)
+
+    fireEvent.click(rejectButton())
+
+    expect(await screen.findByTestId('proposal-rejected')).toHaveTextContent('Proposta recusada')
+    expect(card()).toHaveAttribute('data-state', 'recusada')
+    expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual([{}])
+    expect(within(card()).queryByRole('button')).not.toBeInTheDocument()
+    expect(onMissionCreated).not.toHaveBeenCalled()
+  })
+
+  it('R13 falha ao recusar: o Recusar vira Tentar de novo, e o Confirmar volta ao normal', async () => {
+    routeFetch({ [REJECT]: networkFailure })
+    render(<Harness initial={proposta} />)
+
+    fireEvent.click(rejectButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Não foi possível recusar a proposta. Tentar de novo é seguro.',
+    )
+    expect(rejectButton()).toHaveAccessibleName(`Tentar de novo o reagendamento: ${INSTRUCTIONS}`)
+    expect(rejectButton()).toBeEnabled()
+    expect(confirmButton()).toHaveAccessibleName(`Confirmar o reagendamento: ${INSTRUCTIONS}`)
+    expect(confirmButton()).toBeEnabled()
   })
 })
