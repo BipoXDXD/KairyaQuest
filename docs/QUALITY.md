@@ -1242,6 +1242,33 @@ acompanhou:
   `after_blocks`, `sticky`); o cenário (h) de `tutoring.spec.ts` mostra o
   parcial e a continuação, a nota do substituto e o axe limpo.
 
+### A conclusão tardia no contexto contra a API real (pendência 180, 2026-09-30)
+
+O lote g-back (pendência 117) mudou o **texto** que o modelo recebe — a seção
+"Missões do ciclo em conclusão tardia" no contexto e o item novo do bloco
+"Reagendar" da persona — e só o texto montado estava provado (unitários e
+integração com o falso). `tests/integration/camada3_da_conclusao_tardia.py`
+monta, pelo `montar_turno` de produção e sem banco, uma avulsa pendente com
+`#id` e a diária de ontem em andamento na seção tardia, e pede "adiar a
+diária de ontem" pelo `responder` de produção (duas ferramentas, fallback
+ligado). **Aprovado** só se o modelo não propuser `reschedule_mission` e o
+stream chegar ao `message_stop`; o script mostra o texto da resposta e não
+grava nada. `test_camada3_da_conclusao_tardia.py` prova o cenário contra o
+falso; **vistos reprovando** por mutação: o veredito sem o filtro do
+reagendamento, o turno sem a seção tardia, o bloco `tool_use` não retirado da
+comparação, a guarda do endereço e o texto não capturado.
+
+**Executada em 2026-09-30, uma chamada autorizada pelo dono, sobre `c2895fa`,
+`claude-opus-5`, `max_tokens` 2048, fallback ligado: aprovada.** Nenhuma
+proposta; a sequência de tipos (thinking, texto, `message_delta`,
+`message_stop`) é **igual** à da referência da conversa sem o bloco da
+ferramenta, e a referência não foi regravada. Lido no texto: a Tifa disse que
+a diária não se adia, lembrou que ainda dá para concluir até a meia-noite de
+hoje em São Paulo (o limite certo, com a conta de horas certa para 01:19 de
+São Paulo) e ofereceu reagendar só a avulsa `#7`, se o aperto fosse nela.
+**O que não prova:** é uma amostra; não mede a especial vencida, o pedido de
+reagendar a diária pelo `#id` (ela não tem), nem a tela.
+
 ### O falso como processo (E2E)
 
 Desde o 1b-2 (Task 6), o E2E do Playwright precisa do falso **fora** do

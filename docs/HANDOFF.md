@@ -5185,6 +5185,19 @@ ledger; nenhum é bug esquecido.
     altera a sequência da referência da conversa
     (`tests/integration/referencia_da_api_real.json`, não regravada). Medir
     exige chamada paga, que este lote não fez por instrução.
+    **Medida em 2026-09-30 (integração dos lotes G), uma chamada autorizada
+    pelo dono, sobre `c2895fa`, `claude-opus-5`, `max_tokens` 2048, fallback
+    ligado — aprovada:** `python -m integration.camada3_da_conclusao_tardia`
+    (script novo; `docs/QUALITY.md` §9) com uma avulsa `#7` pendente e a
+    diária de ontem em andamento na seção tardia, e o pedido "adiar a diária
+    de ontem". Nenhuma proposta (nem `reschedule_mission`, nem para a `#7`);
+    stream até o `message_stop`; a sequência de tipos é igual à da
+    referência da conversa sem o bloco da ferramenta. No texto, a Tifa disse
+    que a diária não se adia, lembrou o limite (meia-noite de hoje em São
+    Paulo) e ofereceu reagendar só a avulsa. **Continua aberta** no que a
+    amostra não cobre: uma chamada só; a especial vencida, a sequência com
+    `reschedule_mission` sob a persona nova (a do reagendamento,
+    `camada3_do_reagendamento.py`, não foi repetida) e a tela.
 181. ~~**`_buscar_acao` e `evaluation_records._corrente` travavam sem
     `populate_existing`** (candidata da revisão da T7).~~ **Resolvida em
     2026-09-29 (lote g-back, branch `wt/f-e2e`).** O risco é real para as
