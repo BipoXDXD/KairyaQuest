@@ -121,8 +121,8 @@ export interface MissionListHandle {
  * `ref`, quando a Tifa cria uma missao) tambem.
  *
  * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao de
- * uma avulsa -- repassado a cada `MissionCard` como `onCompleted` (Task 8,
- * incremento D, para atualizar o painel de progresso) e como `onRewarded`
+ * uma avulsa -- repassado a cada `MissionCard` como `onCompleted` (para
+ * atualizar o painel de progresso) e como `onRewarded`
  * (incremento E: o bonus da avaliacao tambem muda o saldo). O quadro de avulsas
  * nao tem `refresh` proprio (ao contrario da `CycleSection`): a lista so
  * muda pelo `reload`/`requestReload` de sempre.

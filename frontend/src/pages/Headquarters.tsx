@@ -46,7 +46,7 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
     progress.current!.refresh()
   }, [])
   return (
-    <div hidden={hidden} className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
+    <div hidden={hidden} className="lg:flex">
       {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
           baixo, e sem a folga cobriria os botoes do ultimo cartao do quadro
           (README §7: a conversa nao cobre botoes). */}

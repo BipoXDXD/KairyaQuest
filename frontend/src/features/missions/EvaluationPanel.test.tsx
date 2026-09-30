@@ -327,7 +327,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
   })
 })
 
-describe('EvaluationPanel -- fix-1 da revisao', () => {
+describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -502,7 +502,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
     expect(screen.queryByTestId('evaluation-verdict')).not.toBeInTheDocument()
   })
 
-  it('falhou LIDA da API nao e um alert: cada cartao gritaria ao carregar a pagina (M2)', () => {
+  it('falhou LIDA da API nao e um alert: cada cartao gritaria ao carregar a pagina', () => {
     routeFetch({})
 
     render(

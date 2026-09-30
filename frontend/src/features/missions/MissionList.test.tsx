@@ -443,7 +443,7 @@ describe('MissionList -- concluir', () => {
   })
 
   it('avisa a página quando uma avulsa é concluída', async () => {
-    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // A PAGINA usa este aviso para atualizar o painel de progresso
     // (`refreshProgress`, em `Headquarters.tsx`) -- o quadro de avulsas nao
     // tem `refresh` proprio (ao contrario de `CycleSection`), entao aqui so
     // importa que o callback e chamado depois do sucesso.
@@ -514,7 +514,8 @@ describe('MissionList -- concluir', () => {
 
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveTextContent('Não foi possível registrar esta tentativa. Tente de novo.')
-    // O botao continua oferecido: e M12 que faz o "Tentar de novo" sumir aqui.
+    // O botao continua oferecido, agora como "Tentar de novo": a recuperacao
+    // `retry-with-new-operation` nao tira o Concluir do cartao.
     const tentarDeNovo = screen.getByRole('button', {
       name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
     })
@@ -586,9 +587,9 @@ describe('MissionList -- concluir', () => {
 })
 
 describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
-  // A e B, as duas missoes do cenario medido pela revisao final (pendencia 35
-  // do HANDOFF): A tem a conclusao em voo, B recebe `transicao_ilegal` e e dela
-  // que sai o "Atualizar o quadro".
+  // A e B, as duas missoes do cenario da pendencia 35 do HANDOFF: A tem a
+  // conclusao em voo, B recebe `transicao_ilegal` e e dela que sai o
+  // "Atualizar o quadro".
   const missaoA: Mission = pendente
   const missaoB: Mission = {
     ...pendente,
@@ -808,7 +809,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     ])
   })
 
-  it('T3: o cenario medido pela revisao final -- /7 em voo, /8 ilegal, Atualizar, e /7 de novo com a PRIMEIRA chave', async () => {
+  it('T3: com /7 em voo, /8 ilegal, Atualizar, e /7 de novo com a PRIMEIRA chave', async () => {
     const postA = deferred()
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
@@ -996,7 +997,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
   it('o reload pelo ref recarrega o quadro, e espera a conclusao em voo', async () => {
     // O ref e como a PAGINA pede a recarga depois de a Tifa criar uma missao.
     // Ele passa pelo mesmo `requestReload` do "Atualizar o quadro": com uma
-    // conclusao em voo, espera (Incremento A, Task 6).
+    // conclusao em voo, espera.
     let resolver!: (response: Response) => void
     const post = new Promise<Response>((resolve) => {
       resolver = resolve
@@ -1539,7 +1540,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(onMissionCompleted).toHaveBeenCalledTimes(1)
   })
 
-  it('fix-1: com o formulario RECOLHIDO e rascunho invalido, o motivo do Concluir desabilitado fica a vista e ligado', async () => {
+  it('com o formulario RECOLHIDO e rascunho invalido, o motivo do Concluir desabilitado fica a vista e ligado', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
     render(<MissionList />)
     await screen.findByTestId('missions-list')
@@ -1558,7 +1559,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(concluir.getAttribute('aria-describedby')).toContain(motivo.id)
   })
 
-  it('fix-1: o motivo cobre o link sem texto e o texto acima do limite, e some com o rascunho valido', async () => {
+  it('o motivo cobre o link sem texto e o texto acima do limite, e some com o rascunho valido', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
     render(<MissionList />)
     await screen.findByTestId('missions-list')
@@ -1580,7 +1581,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
   })
 
-  it('fix-1: a falha refresh da avaliacao oferece "Atualizar o quadro", que recarrega', async () => {
+  it('a falha refresh da avaliacao oferece "Atualizar o quadro", que recarrega', async () => {
     const fetchMock = routeFetch({
       'GET /api/missions': () => Response.json([pendenteComEvidencia]),
       'POST /api/missions/7/evaluation': () =>
@@ -1596,7 +1597,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     })
   })
 
-  it('fix-1: o toggle e o pedir avaliacao sao descritos pelo titulo da missao', async () => {
+  it('o toggle e o pedir avaliacao sao descritos pelo titulo da missao', async () => {
     const outra: Mission = { ...pendenteComEvidencia, id: 9, instructions: 'Revisar grafos' }
     routeFetch({ 'GET /api/missions': () => Response.json([pendente, outra]) })
     render(<MissionList />)

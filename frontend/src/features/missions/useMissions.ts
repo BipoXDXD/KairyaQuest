@@ -64,6 +64,12 @@ export function useMissions(): UseMissionsResult {
 
     requestJson<Mission[]>('/missions', controller.signal)
       .then((missions) => {
+        // Uma resposta que ja estava em processamento quando o pedido foi
+        // abortado (o `reload` ou a desmontagem limparam o efeito) e velha:
+        // gravar por cima esconderia a carga mais nova.
+        if (controller.signal.aborted) {
+          return
+        }
         setState(
           missions.length === 0 ? { status: 'empty' } : { status: 'loaded', missions: missions },
         )

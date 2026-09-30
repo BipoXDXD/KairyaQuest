@@ -3374,6 +3374,8 @@ que não tinham chegado aqui)
     a conclusão…"), que é segura mas imprecisa. Os handlers também não
     declaram `responses`, então o `/openapi.json` não publica o corpo de
     erro. Amarrar de verdade pediria gerar os tipos a partir do OpenAPI.
+    Outro espelho à mão, do mesmo tipo: `MAX_DIFFICULTY`
+    (`shared/types/mission.ts`) e o `DIFICULDADE_MAXIMA` do backend (pendência 66).
     **Atualizada no 1b-2 (continua aberta):** desde o 1b-2, são **dois**
     espelhos à mão no frontend: `MissionErrorCode`
     (`features/missions/types.ts`) e, na tutoria, `PreStreamErrorCode`,
@@ -3771,26 +3773,43 @@ C".
 
 *Abertas — dívida pequena*
 
-62. **A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
+62. ~~**A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
     (`frontend/src/pages/Headquarters.tsx`, a `div` raiz: `min-h-screen
     bg-slate-950 text-slate-100 lg:flex`). Desde a Task 1 o `App.tsx` já
     envolve as duas áreas numa `div` com as mesmas classes; dentro dele, as
     da raiz do QG são redundantes (inofensivas: mesma cor, mesma altura
     mínima). Ficou da aterrissagem da Task 1 para não mexer em layout sem
-    inspeção visual (pendência 61).
+    inspeção visual (pendência 61).~~ **Resolvida no lote do frontend
+    (2026-09-29):** a raiz do QG ficou só com `lg:flex`; quem pinta o fundo e
+    fixa a altura mínima é a `div` do `App.tsx` (Campanhas já dependia só
+    dela). A inspeção visual que a pendência pedia foi feita num Chromium real,
+    à mão (script descartável, sem versão no repositório; Playwright, API simulada, 390x844 e 1280x800, quadro vazio e com 12
+    missões): retângulos de `main`, painel da Tifa e raiz e as capturas de tela
+    **idênticos** antes e depois em três dos quatro cenários. **A única
+    diferença**, no celular com o quadro curto: a altura do documento cai de
+    905px para 844px — o `min-h-screen` duplicado somava a altura da navegação
+    do topo (61px) e criava uma rolagem sem conteúdo. Provado por um teste novo
+    em `App.test.tsx` (só a raiz do `App` tem as classes; reprovou antes da
+    troca e reprova nas duas mutações: classes de volta na página, ou fora do
+    `App`).
 63. **`CampaignTrail.tsx` tem cerca de 370 linhas** (371, medido), com dez
     subcomponentes num arquivo só
     (`frontend/src/features/campaigns/CampaignTrail.tsx`). Candidato a
     decomposição (por exemplo, o dia, o baú e a especial em arquivos
     próprios) quando a trilha crescer; hoje está coberto a 100% e não há
     segundo usuário de nenhum subcomponente.
-64. **Três títulos de teste E2E com acento fora de citação literal**
+64. ~~**Três títulos de teste E2E com acento fora de citação literal**
     (`frontend/tests/e2e/cycle.spec.ts`, os três cenários da Task 6:
     "Campanhas abre pela navegação…", "…Tab ate a navegação, Enter, e o
     foco vai para o título" e "a navegação fica visível no topo, sem
     rolagem horizontal, e não cobre…"). A convenção do arquivo é título sem
     acento, com acento só dentro de citação literal do texto da tela.
-    Cosmético; trocar muda o nome do teste no relatório do Playwright.
+    Cosmético; trocar muda o nome do teste no relatório do Playwright.~~
+    **Resolvida no lote do frontend (2026-09-29):** os três títulos ficaram
+    sem acento ("Campanhas abre pela navegacao…", "…Tab ate a navegacao,
+    Enter, e o foco vai para o titulo", "a navegacao fica visivel no topo…");
+    a citação literal `"Falar com a Tifa"` foi mantida. Verificado:
+    nenhum título de `tests/e2e/*.spec.ts` tem acento fora de aspas.
 65. **Não há teste com três ou mais pedidos concorrentes** em `useCycle` e
     `useCurrentPlan` (`frontend/src/features/missions/useCycle.test.tsx`,
     `frontend/src/features/campaigns/useCurrentPlan.test.tsx`). Os testes
@@ -3798,16 +3817,23 @@ C".
     `useRefreshOnReturn`). O contador de sequência é monotônico e a guarda
     compara com o valor corrente, então o caso de N pedidos se reduz ao de
     dois por construção — mas isso é argumento, não teste.
-66. **`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
+66. ~~**`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
     lugares** (achado m5 da revisão final):
     `frontend/src/shared/types/mission.ts` exporta `MAX_DIFFICULTY = 5`, que
     a trilha usa; `frontend/src/features/missions/MissionCard.tsx` ("de 5"
     no `mission-difficulty`) e `frontend/src/features/tutoring/ProposalCard.tsx`
-    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão. Nada
-    amarra nenhum dos três ao `DIFICULDADE_MAXIMA` do backend. Não foi
-    trocado aqui porque o C não mexe nas features `missions`/`tutoring` por
-    estética; o comentário de `Mission.difficulty` foi corrigido para
-    apontar os dois arquivos certos (antes citava `MissionList.tsx`).
+    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão.~~
+    **Resolvida no lote do frontend (2026-09-29):** os dois cartões escrevem
+    `de {MAX_DIFFICULTY}` (a `tutoring` importa de `shared/`, o que a regra 1
+    do `docs/ARCHITECTURE.md` §5 permite). Provado por dois arquivos de teste
+    novos (`MissionCard.difficulty.test.tsx` e
+    `ProposalCard.difficulty.test.tsx`) que trocam `MAX_DIFFICULTY` por 7 com
+    `vi.mock` e exigem "3 de 7" e "2 de 7" na tela: reprovaram antes da troca
+    ("Received: 3 de 5") e reprovam de novo se o literal 5 voltar (mutação, uma
+    por cartão). **Continua aberto**, agora como parte da
+    pendência 32: nada amarra o `MAX_DIFFICULTY` ao `DIFICULDADE_MAXIMA` do
+    backend (o espelho é à mão, como o comentário da constante diz), e o
+    remédio é o mesmo — gerar os tipos a partir do OpenAPI.
 
 *Aceitas, sem ação*
 
@@ -3833,7 +3859,15 @@ C".
     desmontar chama `setState` num componente que não existe mais. No
     React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
     pedido não tem efeito colateral. Aceito; um `AbortController` no
-    `refresh` seria a saída se um dia importar.
+    `refresh` seria a saída se um dia importar. **Reavaliada no lote do
+    frontend (2026-09-29) e mantida como aceita:** não há como provar a guarda com
+    um teste que reprove antes (RED). Depois da desmontagem, o `setState` não
+    renderiza nada, o `result.current` de `renderHook` continua com o último
+    valor e o React 19 não emite aviso algum, então nenhum efeito observável
+    separa o código com guarda do sem guarda (o teste "desmontar no meio nao
+    escreve estado de erro", de `useTutorStatus.test.tsx`, já registra a mesma
+    limitação). Sem RED não há mudança de código; o mesmo vale para
+    `useCurrentPlan.ts`, que tem o desenho idêntico.
 
 *Verificada — registro, não pendência*
 
@@ -3882,7 +3916,7 @@ C".
 
 **Revisão do repositório (2026-09-25)**
 
-77. **`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
+77. ~~**`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
     de pedidos.** Os dois abortam o pedido anterior na limpeza do efeito,
     mas o `.then()` de sucesso não confere nada — nem um `requestId`, como
     `useCycle.ts` e `useCurrentPlan.ts`, nem `controller.signal.aborted`,
@@ -3894,7 +3928,16 @@ C".
     recarga que o Quartel-General pede quando a Tifa cria uma missão
     (`Headquarters.tsx`, `reloadBoard`). Não há teste de "dois pedidos, o
     mais velho responde por último" nos dois hooks. Saída: replicar a guarda
-    de `requestId` (achado M1 da revisão de frontend).
+    de `requestId` (achado M1 da revisão de frontend).~~ **Resolvida no lote
+    do frontend (2026-09-29):** o `.then()` dos dois hooks passou a conferir
+    `controller.signal.aborted`, o mesmo teste que o `.catch()` já fazia — um
+    `requestId` seria redundante, porque cada execução do efeito tem o próprio
+    `AbortController` e a limpeza (o `reload` ou a desmontagem) o aborta. Um
+    teste novo em cada hook (`useMissions.test.tsx`, `useTutorStatus.test.tsx`)
+    usa um `fetch` que ignora o abort e faz a resposta velha chegar por
+    último: reprovou antes da guarda (o estado terminava com "Missao velha" e
+    com `unavailable`) e reprova de novo quando a guarda sai (mutação, uma por
+    hook).
 
 **Incremento D — a progressão (2026-09-25)**
 
@@ -3960,6 +4003,13 @@ C".
 86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
     repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
     N"). Redundante para quem usa leitor de tela, não incorreto.
+    **Avaliada no lote do frontend (2026-09-29) e não alterada:** o rótulo
+    "Progresso até o nível N" é a decisão R13 do controlador do D (registrada
+    na tabela de decisões, com o `aria-valuetext` mantido de propósito), e o
+    `ProgressPanel.test.tsx` o cobra pelo nome. Trocar por outro nome (por
+    exemplo "Progresso de XP") tira a redundância, mas é uma escolha de texto de
+    acessibilidade sem um único desfecho claro e desfaz uma decisão já
+    registrada — fica para o dono.
 87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
     `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
     tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
@@ -4211,7 +4261,7 @@ ledger; nenhum é bug esquecido.
     no máximo. Custo, portanto, só de dinheiro e de um `409` na primeira. A
     conversa tem o mesmo problema. Uma correção subiria o corte para além do
     pior caso (ou contaria o tempo pela soma das tentativas do SDK).
-107. **Etiquetas de revisão remanescentes em títulos de teste e em
+~~107. **Etiquetas de revisão remanescentes em títulos de teste e em
     comentários** (revisões dos lotes MF e MB; a revisão de comentários pedia tirar
     a etiqueta e manter o porquê). Restaram, no frontend: `MissionList.test.tsx`
     (o "e M12 que faz..." na linha 517, opaco; os títulos `fix-1:` nas linhas
@@ -4225,9 +4275,38 @@ ledger; nenhum é bug esquecido.
     `useCompletionRegistry.ts` (reflow incompleto). E o comentário de
     `frontend/src/shared/types/mission.ts` que diz "`EvaluationSummary` da API"
     quando o nome no backend é `EvaluationSummaryRead` (m8 da revisão final). Parte
-    disso vem de incrementos anteriores ao E, e nada tem efeito no produto.
+    disso vem de incrementos anteriores ao E, e nada tem efeito no produto.~~
+    **Resolvida na sessão de 2026-09-29:** o frontend e o backend foram
+    resolvidos em lotes separados e juntados na branch de integração; com os
+    dois, a pendência está inteiramente resolvida. O que ficou de fora de
+    propósito está descrito abaixo, por lado.
 
-    **Backend (sessão de 2026-09-29, lote-obs):** feito. Em `src/`, `tests/`,
+    **Frontend (lote do frontend, 2026-09-29; segunda passada depois da revisão
+    do lote):** `MissionList.test.tsx` ("M12", os quatro títulos `fix-1:`,
+    "Task 8" e "Incremento A, Task 6"), `EvaluationPanel.test.tsx` (`describe`
+    "fix-1 da revisão", "(M2)"), `EvidenceForm.test.tsx` ("(M4)"), os comentários
+    de "Task 8, incremento D", "achado ..." e "revisão" em `CycleSection`,
+    `MissionList`, `useCycle`, `useProgress`, `useCurrentPlan`,
+    `useRefreshOnReturn`, `civilDate.test.ts`, `Campaigns.test.tsx`,
+    `App.test.tsx`, `CampaignTrail`, `types/reward.ts` ("Review Focus 1"), o
+    reflow de `useCompletionRegistry.ts` e o comentário de
+    `shared/types/mission.ts` ("`EvaluationSummary` da API", que agora diz
+    `EvaluationSummaryRead`, no backend); o mesmo vale para as etiquetas
+    equivalentes das specs E2E e dos comentários (`Task N`, `Ruling`, `Review
+    Focus`, `achado`, `R12`, `m1` a `m7`, `I1`), reescritas para dizer o motivo
+    sem citar a revisão (incluindo `Campaigns.tsx`, `mission.ts`,
+    `completionFailure.ts`, `CycleSection.tsx`, `MissionCard.tsx` e
+    `civilDate.test.ts`); as etiquetas `I1:` e `m1:` a `m7:` saíram também dos
+    títulos de teste. **Ficaram, de propósito, só os identificadores de caso do
+    plano** nos títulos: `T1` a `T7` (`MissionList.test.tsx`), `D1` a `D9`
+    (`useDecideAction.test.tsx`), `P1` a `P32` (`TutorPanel.test.tsx`), `C1` a
+    `C10` (`ProposalCard.test.tsx`) e `Q1`/`Q2` (`Headquarters.test.tsx`): são a
+    numeração dos casos do plano, e não citam uma revisão. Também ficaram as
+    referências a **decisões numeradas** que têm tabela neste documento (`E17`,
+    `E18`, `EM1`, `D16`, `K2`, `K5`), porque apontam para uma decisão
+    registrada, e não para um achado de revisão.
+
+    **Backend (lote-obs, 2026-09-29):** em `src/`, `tests/`,
     `alembic/` e `scripts/`, 33 arquivos tiveram só comentários, docstrings e
     títulos de teste reescritos (nenhum comportamento mudou; nenhuma função de
     teste foi renomeada). Saíram as citações de revisão — rótulos de medição
