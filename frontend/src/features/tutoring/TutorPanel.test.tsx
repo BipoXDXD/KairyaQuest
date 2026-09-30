@@ -907,3 +907,78 @@ describe('TutorPanel: a proposta de missao', () => {
     expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
   })
 })
+
+describe('TutorPanel: o cartao escolhido pelo kind', () => {
+  const creation: ActionRead = {
+    id: 5,
+    kind: 'create_mission',
+    state: 'proposta',
+    payload: {
+      instructions: 'Estudar grafos por 40 minutos',
+      completion_criterion: 'Resumo de uma pagina',
+      difficulty: 2,
+      estimated_minutes: 40,
+      deadline: '2027-02-15T21:00:00-03:00',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+  const reschedule: ActionRead = {
+    id: 6,
+    kind: 'reschedule_mission',
+    state: 'proposta',
+    payload: {
+      mission_id: 12,
+      new_deadline: '2026-10-05T21:00:00Z',
+      reason: 'falta_de_tempo',
+      instructions: 'Resumir o capítulo 3',
+      previous_deadline: '2026-10-02T21:00:00Z',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+
+  const historyWith = (actions: unknown[]) => () =>
+    Response.json([
+      question(1, 'Me ajuda com o prazo', 'c1'),
+      { ...answer(2, 1, 'Duas propostas.'), actions },
+    ])
+
+  it('P30 uma mensagem com as duas acoes mostra um cartao de cada tipo', async () => {
+    mountPanel({ [HISTORY]: historyWith([creation, reschedule]) })
+
+    const message = await waitFor(() => messageWith('Duas propostas.'))
+    const creationCard = within(message).getByTestId('tutor-proposal')
+    const rescheduleCard = within(message).getByTestId('tutor-reschedule-proposal')
+    expect(creationCard).toHaveAttribute('data-action-id', '5')
+    expect(rescheduleCard).toHaveAttribute('data-action-id', '6')
+    expect(
+      within(creationCard).getByRole('heading', { name: 'Proposta de missão' }),
+    ).toBeInTheDocument()
+    expect(
+      within(rescheduleCard).getByRole('heading', { name: 'Proposta de reagendamento' }),
+    ).toBeInTheDocument()
+    // Cada cartao so tem o que e dele.
+    expect(within(rescheduleCard).queryByText(/Critério de conclusão/)).not.toBeInTheDocument()
+    expect(within(creationCard).queryByText(/Prazo proposto/)).not.toBeInTheDocument()
+  })
+
+  it('P31 um kind que esta versao nao conhece nao quebra a conversa', async () => {
+    // Uma API mais nova pode mandar um tipo de acao que este cliente nao sabe
+    // desenhar. O valor esta FORA do tipo: por isso o `unknown`.
+    const future = { ...creation, id: 7, kind: 'split_mission', payload: { steps: 3 } }
+    mountPanel({ [HISTORY]: historyWith([future, reschedule]) })
+
+    const message = await waitFor(() => messageWith('Duas propostas.'))
+    const unknown = within(message).getByTestId('tutor-proposal-unknown')
+    expect(unknown).toHaveTextContent('Proposta que esta versão não sabe mostrar.')
+    expect(unknown).toHaveAttribute('data-action-id', '7')
+    // O `kind` cru nao vai para a tela, e nada ali pode ser decidido.
+    expect(unknown).not.toHaveTextContent('split_mission')
+    expect(within(unknown).queryByRole('button')).not.toBeInTheDocument()
+    // O resto da conversa continua: a outra acao tem o seu cartao, e o campo funciona.
+    expect(within(message).getByTestId('tutor-reschedule-proposal')).toBeInTheDocument()
+    await ready()
+    expect(input()).toBeEnabled()
+  })
+})
