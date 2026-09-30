@@ -57,7 +57,7 @@ def test_texto_em_pedacos_e_fim(falso: ServidorAnthropicFalso) -> None:
 
 def test_a_ferramenta_vira_proposta_antes_do_fim(falso: ServidorAnthropicFalso) -> None:
     falso.roteiro = Roteiro(blocos=(Texto(("Toma:",)), ChamadaDeFerramenta(ENTRADA)))
-    assert _todos(falso) == [Delta("Toma:"), Proposta(ENTRADA), Fim()]
+    assert _todos(falso) == [Delta("Toma:"), Proposta("create_mission", ENTRADA), Fim()]
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,7 @@ def test_a_ferramenta_vira_proposta_antes_do_fim(falso: ServidorAnthropicFalso) 
         ((Texto(("Bora, ", "estudar!")),), [Delta("Bora, "), Delta("estudar!"), Fim()]),
         (
             (Texto(("Toma:",)), ChamadaDeFerramenta(ENTRADA)),
-            [Delta("Toma:"), Proposta(ENTRADA), Fim()],
+            [Delta("Toma:"), Proposta("create_mission", ENTRADA), Fim()],
         ),
     ],
 )
@@ -103,8 +103,12 @@ def test_a_requisicao_leva_o_que_a_spec_manda(falso: ServidorAnthropicFalso) -> 
     assert corpo["system"] == "SISTEMA"
     assert corpo["messages"] == [{"role": "user", "content": "oi"}]
     assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
-    (ferramenta,) = corpo["tools"]
-    assert ferramenta["name"] == "create_mission"
+    criar, reagendar = corpo["tools"]
+    assert [criar["name"], reagendar["name"]] == [
+        "create_mission",
+        "reschedule_mission",
+    ]
+    ferramenta = criar
     esquema = ferramenta["input_schema"]
     # A docstring de manutencao do MissionCreate nao vai para o modelo (M8).
     assert "description" not in esquema
@@ -189,3 +193,39 @@ def test_provedor_fora_do_ar_vira_indisponivel() -> None:
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(TURNO))
+
+
+ENTRADA_DO_REAGENDAMENTO: dict[str, Any] = {
+    "mission_id": 12,
+    "new_deadline": "2026-10-05T18:00:00-03:00",
+    "reason": "falta_de_tempo",
+}
+
+
+def test_o_reagendamento_vira_proposta_com_o_nome(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    falso.roteiro = Roteiro(
+        blocos=(
+            Texto(("Vamos mover:",)),
+            ChamadaDeFerramenta(ENTRADA_DO_REAGENDAMENTO, nome="reschedule_mission"),
+        )
+    )
+    assert _todos(falso) == [
+        Delta("Vamos mover:"),
+        Proposta("reschedule_mission", ENTRADA_DO_REAGENDAMENTO),
+        Fim(),
+    ]
+
+
+def test_o_esquema_do_reagendamento_vai_sem_a_docstring(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    _todos(falso)
+    _, reagendar = falso.recebidas[0].corpo["tools"]
+    esquema = reagendar["input_schema"]
+    assert "description" not in esquema and "title" not in esquema
+    assert set(esquema["required"]) == {"mission_id", "new_deadline", "reason"}
+    assert esquema["additionalProperties"] is False
+    assert "strict" not in reagendar  # F18: como a create_mission
