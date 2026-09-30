@@ -527,6 +527,40 @@ describe('CycleSection', () => {
     expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
   })
 
+  it('o botao de recuperacao da diaria de ontem diz "Atualizar a diária de ontem", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ streak: 0, late_daily: diariaDeOntem })),
+      'POST /api/missions/30/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a diária de ontem' }),
+    ).toBeInTheDocument()
+    // O rotulo da missao de hoje, num cartao que nao e a de hoje, mentiria.
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+  })
+
+  it('o botao de recuperacao da especial diz "Atualizar a missão especial", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/38/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a missão especial' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+  })
+
   it('se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
     // O cenario: a diaria 31 e concluida perto da meia-noite, e a
     // resposta do refresh ja e a diaria 32 de amanha. Sem `key={mission.id}`
