@@ -1,3 +1,4 @@
+import { failedActionText } from './actionFailure'
 import type { DecisionState } from './useDecideAction'
 
 const BUTTON =
@@ -101,6 +102,39 @@ export function DecisionControls({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * O texto de uma proposta que ja esta `falhou`, comum aos dois cartoes.
+ *
+ * `announce` diz se a falha acabou de ser gravada POR ESTA TELA (a decisao do
+ * cartao terminou em `failed`). So nesse caso o texto nasce como `role="alert"`:
+ * o clique fez sumir o botao focado e o alerta da falha que se repete
+ * (`DecisionControls`), e sem um aviso novo quem usa leitor de tela fica com o
+ * foco no `body` e nenhuma fala. Uma falha que ja veio gravada do historico
+ * NAO e anunciada -- abrir a conversa nao pode ler, de uma vez, todas as
+ * propostas que cairam em outros dias.
+ *
+ * O cartao continua montado quando a acao vira `falhou` (a lista chaveia pelo
+ * id da acao), e e por isso que o `decision` dele ainda sabe que a falha foi
+ * daqui.
+ */
+export function RecordedFailure({
+  errorCode,
+  announce,
+}: {
+  errorCode: string | null
+  announce: boolean
+}) {
+  return (
+    <p
+      data-testid="proposal-expired"
+      role={announce ? 'alert' : undefined}
+      className="mt-3 text-sm text-amber-200"
+    >
+      {failedActionText(errorCode)}
+    </p>
   )
 }
 

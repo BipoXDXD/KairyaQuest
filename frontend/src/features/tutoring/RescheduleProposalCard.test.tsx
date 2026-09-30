@@ -252,6 +252,39 @@ describe('RescheduleProposalCard', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('R12 a falha gravada AGORA e anunciada: o texto novo nasce dentro de um alerta', async () => {
+    // O clique some com o botao focado e com o alerta da falha que repete; sem
+    // um alerta novo, quem usa leitor de tela fica sem saber que a proposta caiu.
+    routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
+    render(<Harness initial={proposta} />)
+
+    fireEvent.click(confirmButton())
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toBe(screen.getByTestId('proposal-expired'))
+    expect(alert).toHaveTextContent(INVALIDATED_TEXT)
+  })
+
+  it('R13 o prazo expirado gravado agora tambem e anunciado', async () => {
+    routeFetch({ [CONFIRM]: withCode(422, 'prazo_expirado') })
+    render(<Harness initial={proposta} />)
+
+    fireEvent.click(confirmButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(EXPIRED_TEXT)
+  })
+
+  it('R14 uma falha que ja veio gravada do historico NAO e anunciada de novo', () => {
+    // Abrir a conversa nao pode falar, ao leitor de tela, todas as propostas
+    // que caíram em dias anteriores.
+    render(
+      <Harness initial={{ ...proposta, state: 'falhou', error_code: 'reagendamento_invalido' }} />,
+    )
+
+    expect(screen.getByTestId('proposal-expired')).toHaveTextContent(INVALIDATED_TEXT)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('R10 falha de rede: o aviso fala do prazo, e o Confirmar vira Tentar de novo', async () => {
     routeFetch({ [CONFIRM]: networkFailure })
     render(<Harness initial={proposta} />)

@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
-import { failedActionText } from './actionFailure'
-import { BoardLink, DecisionControls } from './DecisionControls'
+import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls'
 import {
   RESCHEDULE_REASON_LABELS,
   type ProposalCardProps,
@@ -61,9 +60,7 @@ function Outcome({
       )
     case 'falhou':
       return (
-        <p data-testid="proposal-expired" className="mt-3 text-sm text-amber-200">
-          {failedActionText(action.error_code)}
-        </p>
+        <RecordedFailure errorCode={action.error_code} announce={decision.status === 'failed'} />
       )
   }
 }

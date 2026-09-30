@@ -4815,6 +4815,22 @@ ledger; nenhum é bug esquecido.
      um caso de "falha no prazo, antes dele nada muda" e um de "o reenvio usa
      a mesma chave" (Iniciar, Reagendar, D11 confirmar, D12 recusar). O Iniciar
      pendurado também libera a espera do "Atualizar o quadro".
+191. ~~**A falha gravada de uma proposta não era anunciada ao leitor de tela**
+     (Minor 2 da revisão da Task 9): ao confirmar, o servidor gravava a ação
+     como `falhou` (`prazo_expirado` ou `reagendamento_invalido`), o
+     `DecisionControls` some com o botão focado e com o `role="alert"`, e o
+     texto novo aparecia num `<p>` sem região viva — o foco caía no `body` sem
+     nenhuma fala.~~ **Resolvida em 2026-09-29 (lote g-front).** O `<p
+     data-testid="proposal-expired">` dos dois cartões virou o componente
+     `RecordedFailure` (em `DecisionControls.tsx`), que recebe `announce` e só
+     então tem `role="alert"`. `announce` é `decision.status === 'failed'`: a
+     falha foi gravada **por esta tela**. Uma falha que já veio do histórico
+     **não** é anunciada, para abrir a conversa não ler de uma vez todas as
+     propostas que caíram em outros dias. O cartão continua montado quando a
+     ação vira `falhou` (a lista chaveia pelo id), e é isso que faz o
+     `decision` dele ainda saber de onde veio a falha. Testes: R12–R14 (cartão
+     de reagendamento), o par equivalente no `ProposalCard.test.tsx` e o P32
+     (no painel, dentro da mensagem da Tifa).
 192. **O Concluir e a avaliação continuam sem timeout** (lote g-front; o que
      sobrou da 37). O mecanismo existe (`postJson(..., { timeoutMs })`), mas
      não foi ligado aos dois: o Concluir é o caso da 37 e caberia ligar já com
@@ -4832,6 +4848,13 @@ ledger; nenhum é bug esquecido.
      nenhuma tela a lê (as mensagens vêm dos `describe*Failure`, por
      `code`/`status`). Se importar, o `ApiError` ganha um `code` próprio
      (`tempo_esgotado`) e os três `describe*` um texto para ele.
+194. **O anúncio da falha gravada (191) foi provado no DOM, não num leitor de
+     tela.** Os testes conferem que o texto nasce dentro de `role="alert"` e
+     que o do histórico não; não foi medido o que VoiceOver, NVDA ou TalkBack
+     falam ao inserir um `role="alert"` dentro do painel/folha da Tifa, nem se
+     a folha do celular (um `dialog`) muda o comportamento. Depois de "Atualizar
+     a conversa" o cartão remonta e não repete o aviso (de propósito). Não
+     coberto pelo axe do E2E, que só vê violações estáticas.
 
 ## Próximo incremento
 
