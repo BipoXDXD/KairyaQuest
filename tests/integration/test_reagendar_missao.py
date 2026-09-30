@@ -271,6 +271,52 @@ def test_cada_recusa_vem_antes_de_qualquer_escrita(
     assert _operacoes(session, missao.id, "reschedule") == 0
 
 
+@pytest.mark.parametrize(
+    ("prazo", "mensagem"),
+    [
+        # Sem fuso: o servico nao pode adivinhar o fuso da maquina.
+        (datetime(2026, 9, 28, 12, 0), "sem fuso"),
+        # Com fuso, mas o instante em UTC passa do ano 9999.
+        (datetime(9999, 12, 31, 23, 59, 59, tzinfo=SAO_PAULO), "fora da faixa"),
+    ],
+)
+def test_prazo_que_nao_e_instante_utc_e_recusado_sem_escrita(
+    session: Session, prazo: datetime, mensagem: str
+) -> None:
+    """Revisao da T4, I1: a borda (`PrazoComFuso`) ja recusa os dois, mas o
+    servico tambem e chamado pela Tifa (T7). Recusado ANTES de normalizar e
+    de qualquer escrita, com `ValueError` -- nunca aceito com o fuso da
+    maquina, nunca `OverflowError` cru."""
+    missao = _avulsa(session)
+    atual = missao.deadline
+    with pytest.raises(ValueError, match=mensagem):
+        _reagendar(session, missao, "op-r10", prazo=prazo)
+    assert missao.deadline == atual
+    assert _historico(session, missao.id) == []
+    assert _operacoes(session, missao.id, "reschedule") == 0
+
+
+def test_reenvio_depois_de_outro_reagendamento_devolve_a_missao_como_esta(
+    session: Session,
+) -> None:
+    """F13: o reenvio compara com a linha GRAVADA da operacao, nao com o prazo
+    corrente, e devolve a missao como esta agora (revisao da T4, M1). `op-a`
+    leva ao prazo A, `op-b` ao B; o reenvio de `op-a` e o mesmo pedido de
+    antes, responde com o prazo B e nao grava um terceiro elo."""
+    missao = _avulsa(session)
+    prazo_a, prazo_b = NOVO, NOVO + timedelta(days=1)
+    _reagendar(session, missao, "op-ra", prazo=prazo_a)
+    _reagendar(session, missao, "op-rb", prazo=prazo_b)
+    devolvida = _reagendar(
+        session, missao, "op-ra", prazo=prazo_a, agora=AGORA + timedelta(hours=1)
+    )
+    assert devolvida.deadline == prazo_b
+    assert [linha.operation_id for linha in _historico(session, missao.id)] == [
+        "op-ra",
+        "op-rb",
+    ]
+
+
 def test_a_diaria_tem_prazo_derivado(session: Session) -> None:
     _plano(session)
     diaria = _diaria(session, QUARTA)
@@ -338,6 +384,26 @@ def test_api_reenvio_e_o_mesmo_corpo(
     instante[0] = AGORA + timedelta(minutes=3)
     segunda = client.post(caminho, json=_corpo("op-a2"))
     assert segunda.json() == primeira.json()
+
+
+def test_api_reenvio_em_outro_fuso_e_o_mesmo_corpo(
+    client: TestClient, instante: list[datetime]
+) -> None:
+    """Revisao da T4, M2: na borda o cliente troca de grafia. O 1o pedido vai
+    em `-03:00`, o reenvio no MESMO instante em `Z`: e o mesmo pedido (F13),
+    e o corpo e o mesmo."""
+    criada = _criar(client)
+    caminho = f"/api/missions/{criada['id']}/reschedule"
+    primeira = client.post(caminho, json=_corpo("op-a3"))
+    assert primeira.status_code == 200, primeira.text
+    instante[0] = AGORA + timedelta(minutes=3)
+    segunda = client.post(
+        caminho,
+        json=_corpo("op-a3", new_deadline=NOVO.isoformat().replace("+00:00", "Z")),
+    )
+    assert segunda.status_code == 200, segunda.text
+    assert segunda.json() == primeira.json()
+    assert len(primeira.json()["reschedules"]) == 1
 
 
 @pytest.mark.parametrize(

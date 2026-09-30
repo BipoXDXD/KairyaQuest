@@ -12,6 +12,7 @@ from focusquest.modules.missions.domain import (
     ProblemaDoNovoPrazo,
     TipoDeOperacao,
     TransicaoIlegalError,
+    prazo_em_utc,
     problema_do_novo_prazo,
     validar_reagendamento,
     validar_transicao,
@@ -94,3 +95,26 @@ def test_iniciar_so_de_pendente() -> None:
 def test_prazo_com_fuso_recusa_sem_fuso_e_irrepresentavel(valor: str) -> None:
     with pytest.raises(ValidationError):
         TypeAdapter(PrazoComFuso).validate_python(valor)
+
+
+def test_prazo_em_utc_normaliza_o_instante() -> None:
+    """O mesmo instante, so que em UTC: a grafia muda, o instante nao."""
+    em_sp = datetime(2026, 10, 1, 10, 0, tzinfo=SAO_PAULO)
+    normalizado = prazo_em_utc(em_sp)
+    assert normalizado == em_sp
+    assert normalizado.tzinfo is UTC
+
+
+def test_prazo_em_utc_recusa_instante_sem_fuso() -> None:
+    """Sem fuso, `astimezone` assumiria o fuso da MAQUINA em silencio (revisao
+    da T4, I1): 10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z num container
+    em UTC."""
+    with pytest.raises(ValueError, match="sem fuso"):
+        prazo_em_utc(datetime(2026, 10, 1, 10, 0))
+
+
+def test_prazo_em_utc_recusa_instante_fora_da_faixa() -> None:
+    """A data local cabe no `datetime`, o instante em UTC nao: o
+    `OverflowError` cru vira o mesmo `ValueError` da borda."""
+    with pytest.raises(ValueError, match="fora da faixa"):
+        prazo_em_utc(datetime(9999, 12, 31, 23, 59, 59, tzinfo=SAO_PAULO))

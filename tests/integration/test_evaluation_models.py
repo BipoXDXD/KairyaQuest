@@ -262,15 +262,27 @@ def _checks(session: Session, tabela: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize(
-    "tabela", ["mission_evidence", "mission_evaluations", "xp_entries"]
+    "tabela",
+    [
+        "mission_evidence",
+        "mission_evaluations",
+        "xp_entries",
+        # Incremento F: os CHECKs de `reason`, `origin` e `kind` DERIVAM dos
+        # enums no modelo, e a 0006 tem copias congeladas. Um membro novo no
+        # enum sem migracao descreveria um CHECK que o banco nao tem.
+        "mission_operations",
+        "mission_reschedules",
+    ],
 )
 def test_o_modelo_descreve_os_mesmos_checks_que_a_migracao(
     session: Session, tabela: str
 ) -> None:
     """O PostgreSQL descreve a tabela do modelo e a da migracao, e as duas
-    descricoes tem de bater (mesmo espelho de `test_tutoring_models.py`)."""
+    descricoes tem de bater (mesmo espelho de `test_tutoring_models.py`).
+    `mission_operations` entra tambem como alvo: o historico de prazos tem FK
+    para ela."""
     metadados = MetaData()
-    for alvo in ("users", "missions"):
+    for alvo in ("users", "missions", "mission_operations"):
         Mission.metadata.tables[alvo].to_metadata(metadados)
     espelho = Mission.metadata.tables[tabela].to_metadata(
         metadados, name=f"espelho_{tabela}"

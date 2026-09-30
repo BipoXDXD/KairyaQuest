@@ -186,6 +186,36 @@ def test_diaria_futura_com_chave_gasta_responde_como_inexistente(
         _iniciar(session, _diaria(session, QUARTA + timedelta(days=1)), "op-gasta-d")
 
 
+def test_diaria_iniciada_que_passa_do_dia_fica_em_andamento_sem_saida(
+    session: Session,
+) -> None:
+    """DOCUMENTA o comportamento atual, nao o aprova (revisao do backend do F,
+    I1; pendencia 115, para o dono decidir).
+
+    A diaria de quarta e iniciada as 23:50 (SP) e a conclusao chega as 00:10
+    de quinta. A disponibilidade da diaria so olha "concluida?" e o dia: ela
+    ja e `perdida`, e concluir e `missao_expirada`. Como F5 proibe voltar a
+    `pendente`, a missao fica `em_andamento` para sempre, sem duracao real.
+    Se o dono decidir "permitir concluir a missao iniciada dentro do prazo",
+    este teste muda JUNTO com a regra -- e a mudanca dele e o incremento.
+    """
+    _plano(session)
+    diaria = _diaria(session, QUARTA)
+    quarta_23h50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+    quinta_00h10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+
+    _iniciar(session, diaria, "op-d-noite", agora=quarta_23h50)
+    with pytest.raises(MissaoExpiradaError):
+        concluir_missao(
+            session, ESTUDANTE, diaria.id, "op-d-madrugada", clock=relogio(quinta_00h10)
+        )
+
+    assert diaria.state is MissionState.EM_ANDAMENTO
+    assert diaria.started_at == quarta_23h50
+    assert diaria.completed_at is None
+    assert _operacoes(session, diaria.id, "complete") == 0
+
+
 def test_concluir_depois_de_iniciar_tem_duracao_real(session: Session) -> None:
     missao = _avulsa(session)
     _iniciar(session, missao, "op-i8")
