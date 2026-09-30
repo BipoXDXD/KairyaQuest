@@ -5229,7 +5229,7 @@ ledger; nenhum é bug esquecido.
     map para ficar velho, e nenhum chamador passa sessão. Não corrigido nem
     testado por isso; vira risco se `_completar` passar a receber uma sessão
     já usada.
-183. **Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+183. ~~**Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
     body vai para o titulo do cartao"** (`frontend/src/features/missions/
     MissionList.test.tsx`). Visto reprovar **uma** vez, no `make check` do
     hook de um commit do lote g-back (2026-09-29, worktree `f-e2e`), com o
@@ -5240,7 +5240,11 @@ ledger; nenhum é bug esquecido.
     renderização — sob a carga do gate (pytest, Vitest e E2E de vários
     worktrees ao mesmo tempo) a ordem pode inverter; um `waitFor` na asserção
     resolveria se a suspeita estiver certa. Não corrigido aqui: é frontend,
-    fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.
+    fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.~~
+    **Resolvida em 2026-09-30 pela 195** (lote f-prop, `048a9ad`): a
+    suspeita estava certa, a falha foi reproduzida sob carga (4/90) e os dois
+    testes de foco passaram a esperar o próprio foco com `waitFor` (0/60
+    depois). A 178 é a mesma família e fica resolvida pela mesma correção.
 184. **A instrução da missão entra crua no contexto da Tifa.** Pendência
     anterior ao lote, apontada na revisão do lote g-back (m2). As linhas das
     pendentes e da conclusão tardia (`tutoring/context.py`) interpolam
@@ -5717,7 +5721,7 @@ ledger; nenhum é bug esquecido.
      2026-09-30:** com o teto em 2048 (metade dos 4096 que motivaram esta
      pendência), o estouro dos 60 s fica **menos provável, não descartado**:
      o thinking adaptativo também gasta tempo, e nada disso foi medido.
-178. **Dois testes de foco do `MissionList.test.tsx` reprovaram uma vez sob
+178. ~~**Dois testes de foco do `MissionList.test.tsx` reprovaram uma vez sob
      carga** (lote g-tifa, correções da revisão). Num `make check` (EXIT 2), com
      outros worktrees rodando o gate na mesma máquina, reprovaram
      "depois de concluir, o foco nao se perde para o body" e "depois de
@@ -5727,7 +5731,12 @@ ledger; nenhum é bug esquecido.
      passou duas vezes (91/91), e o `make check` seguinte passou inteiro.
      Suspeita não medida: o foco é movido numa tarefa assíncrona que perde a
      corrida quando a máquina está sobrecarregada. Nada foi ignorado nem
-     afrouxado; falta achar a causa.
+     afrouxado; falta achar a causa.~~
+     **Resolvida em 2026-09-30 pela 195 (integração dos lotes G):** são os
+     mesmos dois testes que a 195 corrigiu ("depois de iniciar..." e "depois
+     de concluir..."), e a causa medida lá é a desta suspeita — o foco vai
+     para o título num `useEffect` passivo, e a asserção corria antes dele.
+     Os dois esperam o foco com `waitFor` desde `048a9ad`.
 
 **Criadas pela pendência 174 (fallback da recusa, 2026-09-30)**
 
@@ -5849,6 +5858,25 @@ ledger; nenhum é bug esquecido.
      Os casos de "o foco não é roubado" não foram tocados: eles reprovam com
      a guarda `document.activeElement === document.body` removida (3/3 sem
      carga), e a corrida deles, se houver, dá falso verde, não falso vermelho.
+
+**Criadas pela integração dos lotes G (2026-09-30)**
+
+205. ~~**`test_sequence_de_users_avanca_apos_a_migracao` dependia da ordem dos
+     testes.** Registrada no relatório da 174, sem pendência: com
+     `test_tutoring_models.py` rodando antes de `test_migrations.py`, o teste
+     reprovava com `assert 3 == 2`; na ordem normal da suíte passava.~~
+     **Resolvida em 2026-09-30 (integração dos lotes G):** o comportamento
+     estava certo; a expectativa é que estava errada. O `banco_migrado` é
+     de sessão, e a sequence não volta no rollback: qualquer teste anterior
+     que inseriu um usuário e reverteu já consumiu valores dela, então "o
+     próximo id é 2" só valia se ninguém tivesse inserido antes. O teste
+     passou a afirmar o que a docstring sempre quis dizer: o maior id
+     gravado é o 1 semeado, e o id entregue vem depois dele, sem colidir.
+     **Medido:** a ordem `test_tutoring_models.py test_migrations.py`, que
+     reprovava (`3 == 2`, reproduzido nesta sessão), passa, e o arquivo
+     sozinho também. **Mutação:** tirar o `setval` da `0001` faz o teste
+     reprovar com `UniqueViolation` em `users_pkey` (restaurado por `cp`,
+     conferido com `cmp`).
 
 ## Próximo incremento
 
