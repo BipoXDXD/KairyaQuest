@@ -13,6 +13,7 @@ um de cada vez, e o segundo le o que o primeiro commitou.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from focusquest.core.clock import Clock
@@ -78,7 +79,7 @@ def abrir_tentativa(
     ler_missao(session, missao, agora)
     if missao.evidence is None:
         raise SemEvidenciaError(f"missao {mission_id} nao tem evidencia para avaliar")
-    avaliacao = missao.evaluation
+    avaliacao = _avaliacao_relida(session, missao.id)
     if avaliacao is not None and avaliacao.state is EstadoDaAvaliacao.CONCLUIDA:
         return avaliacao
     if avaliacao is not None and avaliacao.state is EstadoDaAvaliacao.AVALIANDO:
@@ -176,18 +177,16 @@ def _corrente(
     conferiu os dois, e o que muda entre as duas transacoes e so a avaliacao.
 
     `populate_existing` com a trava, como em `buscar_para_escrever`: sem ele, a
-    missao (e a avaliacao dela) ja no identity map desta sessao voltaria com o
-    que era antes da trava, e o resultado atrasado gravaria `concluida` sobre a
-    tentativa que outra conexao encerrou (provado por
-    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`; a
-    avaliacao relida vem junto, medido).
+    missao ja no identity map desta sessao voltaria com o que era antes da
+    trava. A avaliacao e relida a parte (`_avaliacao_relida`): o
+    `populate_existing` da missao nao a alcanca.
     """
     missao = session.get(
         Mission, tentativa.mission_id, with_for_update=True, populate_existing=True
     )
     if missao is None:
         raise MissaoNaoEncontradaError(f"missao {tentativa.mission_id} nao existe")
-    avaliacao = missao.evaluation
+    avaliacao = _avaliacao_relida(session, missao.id)
     if (
         avaliacao is None
         or avaliacao.attempt != tentativa.attempt
@@ -195,6 +194,25 @@ def _corrente(
     ):
         return missao, None
     return missao, avaliacao
+
+
+def _avaliacao_relida(session: Session, mission_id: int) -> MissionEvaluation | None:
+    """A avaliacao da missao lida do banco AGORA, depois da trava da missao.
+
+    `missao.evaluation` nao basta, mesmo com a missao relida por
+    `populate_existing`: ele so esquece o atributo, e a carga preguicosa
+    seguinte NAO propaga a opcao. Se a avaliacao antiga ainda estiver no
+    identity map (alguem guardou a referencia), ela volta com o estado de
+    antes da trava. Aqui a consulta leva `populate_existing` ela mesma, e
+    a instancia que ja estava na sessao e atualizada no lugar (provado por
+    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava` e
+    `test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao`).
+    """
+    return session.scalars(
+        select(MissionEvaluation)
+        .where(MissionEvaluation.mission_id == mission_id)
+        .execution_options(populate_existing=True)
+    ).one_or_none()
 
 
 def _encerrar_com_falha(

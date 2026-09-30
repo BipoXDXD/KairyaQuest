@@ -112,7 +112,8 @@ def test_o_reagendamento_e_so_das_pendentes_e_a_tardia_do_ciclo_se_conclui() -> 
     """Pendencia 117: com a secao de conclusao tardia no contexto, "a lista do
     contexto" ficou ambigua. A persona nomeia a lista do reagendamento pelo
     titulo que `context.py` escreve, e diz o que fazer com a tardia: lembrar
-    que ainda da para concluir, sem propor reagendar (F da spec)."""
+    que ainda da para concluir, sem propor reagendar (o prazo delas e derivado
+    do ciclo e nao se reagenda)."""
     reagendar = PERSONA[PERSONA.index("Reagendar:") : PERSONA.index("Sempre,")]
     assert 'da lista "Missões pendentes" do contexto' in reagendar
     assert "A diária e a missão especial do ciclo nunca são reagendadas" in reagendar

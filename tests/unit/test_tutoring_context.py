@@ -430,7 +430,9 @@ def test_a_especial_concluida_depois_da_janela_nao_entra() -> None:
 
 
 def test_a_tardia_entra_no_contexto_com_o_limite_e_sem_reagendamento() -> None:
-    """O limite e a meia-noite SEGUINTE ao prazo (F25), em UTC como o "Agora".
+    """O limite e a meia-noite SEGUINTE ao prazo (F25), em UTC como o "Agora"
+    e tambem na hora de Sao Paulo: e uma meia-noite de la, e "ontem" e o dia
+    civil de la -- so em UTC, a Tifa diria "ate as 3h".
     Sem `#id`: o `#` e o que a `reschedule_mission` recebe, e a diaria nao e
     reagendavel -- a linha diz isso com todas as letras."""
     ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL)
@@ -443,7 +445,8 @@ def test_a_tardia_entra_no_contexto_com_o_limite_e_sem_reagendamento() -> None:
         "- diária de ontem: Resolver 5 exercicios de laco (em andamento desde "
         f"{(PRAZO_DE_ONTEM - timedelta(minutes=10)).isoformat()}; pode ser "
         "concluída antes de "
-        f"{LIMITE_DE_ONTEM.isoformat()})"
+        f"{LIMITE_DE_ONTEM.isoformat()}, que é 2026-10-01T00:00:00-03:00 em "
+        "São Paulo)"
     ) in sistema.splitlines()
     assert "#41" not in sistema
 

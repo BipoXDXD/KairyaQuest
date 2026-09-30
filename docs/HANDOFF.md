@@ -4731,8 +4731,10 @@ ledger; nenhum é bug esquecido.
     conclusão tardia (iniciadas a tempo; a pessoa ainda pode concluí-las, mas
     elas não podem ser reagendadas):", com uma linha por missão —
     `- diária de ontem: <instrução> (em andamento desde <início>; pode ser
-    concluída antes de <limite>)`, o limite em UTC como o "Agora" e com "antes
-    de" porque o intervalo é semiaberto. **Decisões:** (a) **sem `#id`** nessas
+    concluída antes de <limite em UTC>, que é <limite em SP> em São Paulo)`.
+    O limite vai em UTC, como o "Agora", e também na hora de São Paulo (m1 da
+    revisão do lote): ele é uma meia-noite de lá, e só em UTC a Tifa diria
+    "até as 3h". "Antes de" porque o intervalo é semiaberto. **Decisões:** (a) **sem `#id`** nessas
     linhas: o `#` é o que a `reschedule_mission` recebe (I2 da revisão da T7),
     e diária e especial não são reagendáveis; a Tifa não precisa do id para
     nada, porque não há ferramenta de concluir. (b) A **concluída com atraso
@@ -4750,9 +4752,16 @@ ledger; nenhum é bug esquecido.
     (teste da m4 intacto). Testes: 9 unitários em
     `tests/unit/test_tutoring_context.py`, 1 em
     `tests/unit/test_tutoring_persona.py` e 2 de integração em
-    `tests/integration/test_tutoring_service.py` (o turno de quinta 00:10
-    lembra a diária de quarta iniciada às 23:50, com limite sexta 00:00 SP, e
-    sem `#id`; o turno de quarta 23:55 não tem a seção). O comportamento do
+    `tests/integration/test_tutoring_service.py`. Os testes de integração eram
+    2 e, depois da revisão do lote, são 5:
+    - o turno de quinta 00:10 lembra a diária de quarta iniciada às 23:50, com
+      limite sexta 00:00 SP e sem `#id`;
+    - a diária de hoje iniciada não é tardia;
+    - a de ontem concluída com atraso não entra;
+    - a de ontem aparece dentro do limite e some fora dele;
+    - o ciclo é lido no mesmo instante do turno. Esse teste usa um relógio que
+      anda a cada chamada, e o turno cai no último microssegundo antes do
+      limite: trocar `lambda: agora` por `clock` o reprova. O comportamento do
     modelo com o texto novo não foi medido (pendência 180).
 180. **O contexto e a persona mudaram (pendência 117) sem medição contra a API
     real.** A seção de conclusão tardia e o item novo do "Reagendar" são
@@ -4784,8 +4793,23 @@ ledger; nenhum é bug esquecido.
     tentativa retomada (sem `error_code`) nada barraria
     (`test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
     `test_evaluation_concorrencia.py`). Correção: `populate_existing=True`
-    junto com a trava nos dois. No `_corrente`, o `populate_existing` da missão
-    também traz a avaliação relida (o teste passa só com ele, medido).
+    junto com a trava nos dois. **Correção da revisão do lote (I1):** a
+    primeira versão dizia que o `populate_existing` da missão "também traz a
+    avaliação relida". Isso era falso. Ele só esquece o atributo
+    `missao.evaluation`, e a carga preguiçosa seguinte não propaga a opção. O
+    teste passava porque ninguém guardava a avaliação: o identity map (que usa
+    referências fracas) a soltava, e a carga criava um objeto novo. Com
+    `velha = missao.evaluation` guardada antes da trava, o RED voltou nos dois
+    lugares. Em `_corrente`, a gravação de `concluida` sobre `falhou` foi barrada
+    só pelo CHECK. Em `abrir_tentativa`, que tinha a mesma dependência por
+    `buscar_para_escrever`, a resposta foi `AvaliacaoEmAndamentoError` para uma
+    `avaliando` que o banco não tinha mais. Agora as duas funções releem a
+    avaliação com `_avaliacao_relida`: um `select(MissionEvaluation)` com
+    `execution_options(populate_existing=True)`, que atualiza no lugar a
+    instância já carregada na sessão. Os testes guardam a referência até o fim
+    e conferem a própria instância velha:
+    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava` e
+    `test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao`.
 182. **`tutoring/service.py::_completar` trava a resposta sem
     `populate_existing`.** Mesmo padrão da 181, mas numa sessão própria da
     `fabrica` em que a trava é a primeira leitura: não há objeto no identity
@@ -4804,6 +4828,23 @@ ledger; nenhum é bug esquecido.
     worktrees ao mesmo tempo) a ordem pode inverter; um `waitFor` na asserção
     resolveria se a suspeita estiver certa. Não corrigido aqui: é frontend,
     fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.
+184. **A instrução da missão entra crua no contexto da Tifa.** Pendência
+    anterior ao lote, apontada na revisão do lote g-back (m2). As linhas das
+    pendentes e da conclusão tardia (`tutoring/context.py`) interpolam
+    `instructions` sem normalizar quebras de linha. Os esquemas só exigem
+    `min_length=1` (`cycle_schemas.py`, `schemas.py`). Uma instrução com
+    `\n## ...` forja um cabeçalho ou uma linha a mais dentro do "Contexto
+    desta conversa", que vem DEPOIS do bloco anti-injeção da persona no
+    `sistema`. Saídas possíveis: normalizar `\n` e `\r` ao montar o contexto
+    (o texto gravado fica intacto), ou recusar quebra de linha no esquema da
+    missão. Não medido contra o modelo real.
+185. **O chat passa a depender de o ciclo ser legível.** Registrada a partir
+    do m5 da revisão do lote g-back, aceita como está. Desde a pendência 117,
+    `preparar_turno` chama `ler_ciclo`. Um dado de ciclo que o esquema proíbe
+    faria todo turno da conversa responder 500, e não só o `GET /api/cycle`.
+    Os casos são `RuntimeError` de CHECK divergente e `NoResultFound` do
+    `.one()` da especial. Não há proteção porque o CHECK e as FKs já impedem
+    esse dado.
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa

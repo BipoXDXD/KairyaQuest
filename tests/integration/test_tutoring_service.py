@@ -21,7 +21,7 @@ from focusquest.modules.missions.cycle_service import (
 )
 from focusquest.modules.missions.domain import MissionType
 from focusquest.modules.missions.models import Mission
-from focusquest.modules.missions.service import iniciar_missao
+from focusquest.modules.missions.service import concluir_missao, iniciar_missao
 from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.tutoring.domain import (
     CodigoDoStream,
@@ -657,39 +657,55 @@ def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
 _SEGUNDA = date(2026, 9, 21)
 _QUARTA = _SEGUNDA + timedelta(days=2)
 _QUARTA_23H50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+_TERCA = _SEGUNDA + timedelta(days=1)
+_TERCA_23H50 = datetime(2026, 9, 23, 2, 50, tzinfo=UTC)
+_QUARTA_00H10 = datetime(2026, 9, 23, 3, 10, tzinfo=UTC)
+_QUARTA_MEIO_DIA = datetime(2026, 9, 23, 15, 0, tzinfo=UTC)
 _QUINTA_00H10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
 _SEXTA_00H00 = datetime(2026, 9, 25, 3, 0, tzinfo=UTC)
 
 
-def _diaria_de_quarta_iniciada_a_tempo(sessao: Session) -> Mission:
-    criar_plano(
-        sessao,
-        user_id=ESTUDANTE,
-        semana=_SEGUNDA,
-        diarias=[NovaDiaria(f"Diaria {i}", "c", 2, 30) for i in range(7)],
-        especial=NovaEspecial("Especial", "c", 60),
-        clock=lambda: datetime(2026, 9, 21, 15, tzinfo=UTC),
-    )
-    quarta = sessao.scalars(
+def _diaria_iniciada(sessao: Session, dia: date, inicio: datetime) -> Mission:
+    """O plano da semana (criado uma vez por teste) e a diaria de `dia`
+    iniciada em `inicio`."""
+    if sessao.scalar(select(Mission.id).where(Mission.day == dia)) is None:
+        criar_plano(
+            sessao,
+            user_id=ESTUDANTE,
+            semana=_SEGUNDA,
+            diarias=[NovaDiaria(f"Diaria {i}", "c", 2, 30) for i in range(7)],
+            especial=NovaEspecial("Especial", "c", 60),
+            clock=lambda: datetime(2026, 9, 21, 15, tzinfo=UTC),
+        )
+    diaria = sessao.scalars(
         select(Mission).where(
             Mission.user_id == ESTUDANTE,
             Mission.mission_type == MissionType.DIARIA,
-            Mission.day == _QUARTA,
+            Mission.day == dia,
         )
     ).one()
     return iniciar_missao(
-        sessao, ESTUDANTE, quarta.id, "op-tardia-i", clock=lambda: _QUARTA_23H50
+        sessao, ESTUDANTE, diaria.id, f"op-tardia-i-{dia}", clock=lambda: inicio
     )
 
 
-def _sistema_do_turno(sessao: Session, tutoria: Tutoria, agora: datetime) -> str:
+def _diaria_de_quarta_iniciada_a_tempo(sessao: Session) -> Mission:
+    return _diaria_iniciada(sessao, _QUARTA, _QUARTA_23H50)
+
+
+def _sistema_do_turno(
+    sessao: Session,
+    tutoria: Tutoria,
+    agora: datetime,
+    relogio: Callable[[], datetime] | None = None,
+) -> str:
     preparo = preparar_turno(
         sessao,
         user_id=ESTUDANTE,
         client_message_id=f"tardia-{agora.isoformat()}",
         conteudo="oi",
         tutoria=tutoria,
-        clock=lambda: agora,
+        clock=relogio or (lambda: agora),
     )
     return _para_gerar(preparo).turno.sistema
 
@@ -707,12 +723,13 @@ def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(
     assert (
         f"- diária de ontem: Diaria 2 (em andamento desde "
         f"{_QUARTA_23H50.isoformat()}; pode ser concluída antes de "
-        f"{_SEXTA_00H00.isoformat()})"
+        f"{_SEXTA_00H00.isoformat()}, que é 2026-09-25T00:00:00-03:00 em "
+        "São Paulo)"
     ) in sistema.splitlines()
     assert f"#{quarta.id}" not in sistema
 
 
-def test_o_turno_de_quarta_nao_tem_conclusao_tardia(
+def test_a_diaria_de_hoje_iniciada_nao_e_tardia(
     session: Session, tutoria: Tutoria
 ) -> None:
     """Antes da meia-noite a diaria de quarta e a de HOJE, nao a de ontem."""
@@ -723,3 +740,56 @@ def test_o_turno_de_quarta_nao_tem_conclusao_tardia(
     # O titulo da secao, e nao so "conclusao tardia": a persona tambem fala
     # dela.
     assert "Missões do ciclo em conclusão tardia" not in sistema
+
+
+def test_a_diaria_de_ontem_concluida_com_atraso_nao_entra_no_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """A diaria de terca iniciada as 23:50 e concluida as 00:10 de quarta: ao
+    meio-dia de quarta ela ainda e a `diaria_de_ontem` do `ler_ciclo` (o
+    cartao da recompensa fica ate o limite), mas nao ha o que lembrar."""
+    terca = _diaria_iniciada(session, _TERCA, _TERCA_23H50)
+    concluir_missao(
+        session, ESTUDANTE, terca.id, "op-tardia-c", clock=lambda: _QUARTA_00H10
+    )
+
+    sistema = _sistema_do_turno(session, tutoria, _QUARTA_MEIO_DIA)
+
+    assert "Missões do ciclo em conclusão tardia" not in sistema
+
+
+def test_a_diaria_de_ontem_fora_do_limite_nao_entra_no_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """A diaria de terca iniciada as 23:50 e nunca concluida: dentro do limite
+    (quarta, 23:55) ela entra; na quinta 00:10 o limite (quinta 00:00) passou,
+    ela ja nao e de ontem, e o turno nao a lembra."""
+    _diaria_iniciada(session, _TERCA, _TERCA_23H50)
+
+    dentro = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+    fora = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+
+    assert "- diária de ontem: Diaria 1 (" in dentro
+    assert "Missões do ciclo em conclusão tardia" not in fora
+
+
+def test_o_ciclo_e_lido_no_mesmo_instante_do_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """O comentario do `preparar_turno`: o turno le a hora UMA vez. Com um
+    relogio que anda a cada chamada, o instante do turno e o ultimo microssegundo
+    antes do limite da diaria de quarta, e a chamada seguinte ja cai depois
+    dele -- ler o ciclo com o relogio, e nao com o `agora`, perderia a
+    diaria."""
+    _diaria_de_quarta_iniciada_a_tempo(session)
+    instantes = iter([_SEXTA_00H00 - timedelta(microseconds=1)])
+    depois = _SEXTA_00H00 + timedelta(minutes=1)
+
+    sistema = _sistema_do_turno(
+        session,
+        tutoria,
+        _SEXTA_00H00 - timedelta(microseconds=1),
+        relogio=lambda: next(instantes, depois),
+    )
+
+    assert "- diária de ontem: Diaria 2 (" in sistema

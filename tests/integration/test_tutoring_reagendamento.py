@@ -1080,9 +1080,9 @@ def test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava(
 def test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava(
     banco_migrado: Engine, registro: Registro
 ) -> None:
-    """O mesmo furo do M3 (teste acima), agora na ACAO (candidata da revisao da
-    T7): `_buscar_acao` travava com `FOR UPDATE` sem `populate_existing`, e uma
-    acao que ja estava no identity map voltava com o estado de ANTES da
+    """O mesmo cuidado do teste acima, agora na ACAO: `session.get(...,
+    with_for_update=True)` sem `populate_existing` nao sobrescreve uma acao
+    que ja estava no identity map, que voltaria com o estado de ANTES da
     trava. Hoje nenhum caminho de producao carrega a acao antes (a rota abre
     sessao nova e `_buscar_acao` e a primeira leitura), entao o teste a carrega
     de proposito: outra conexao a recusa e commita, e a confirmacao tem de ver

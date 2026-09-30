@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from focusquest.modules.missions.cycle_domain import (
+    FUSO_DO_CICLO,
     Availability,
     limite_da_conclusao_tardia,
 )
@@ -113,23 +114,25 @@ def _contexto(
 
 
 def _linha_da_tardia(lida: MissaoLida) -> str:
-    """Sem `#id` de proposito: o `#` e o que a `reschedule_mission` recebe
-    (I2 da revisao da T7), e a diaria e a especial nao sao reagendaveis (F
-    da spec). O limite vai em UTC, como o "Agora"; e semiaberto, dai o
-    "antes de"."""
+    """Sem `#id` de proposito: o `#` nomeia a missao que a
+    `reschedule_mission` recebe, e a diaria e a especial tem prazo derivado
+    do ciclo, que nao se reagenda (`PrazoDerivadoError`). O limite vai em
+    UTC, como o "Agora", e tambem na hora de Sao Paulo: ele e uma meia-noite
+    de la, e "ontem" e o dia civil de la. E semiaberto, dai o "antes de"."""
     missao = lida.missao
     nome = (
         "diária de ontem"
         if missao.mission_type is MissionType.DIARIA
         else "missão especial"
     )
-    limite = limite_da_conclusao_tardia(lida.deadline).astimezone(UTC)
+    limite = limite_da_conclusao_tardia(lida.deadline)
     # So a iniciada a tempo chega aqui (`com_inicio_a_tempo`).
     assert missao.started_at is not None
     return (
         f"- {nome}: {missao.instructions} (em andamento desde "
         f"{missao.started_at.isoformat()}; "
-        f"pode ser concluída antes de {limite.isoformat()})"
+        f"pode ser concluída antes de {limite.astimezone(UTC).isoformat()}, "
+        f"que é {limite.astimezone(FUSO_DO_CICLO).isoformat()} em São Paulo)"
     )
 
 

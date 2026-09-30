@@ -422,41 +422,55 @@ def test_a_resposta_atrasada_e_a_retomada_disputam_a_segunda_transacao(
     assert (avaliacao.verdict, avaliacao.feedback) == (Veredito.ATENDE, "de A")
 
 
-def test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava(
-    banco_migrado: Engine, missao_com_evidencia: int
-) -> None:
-    """Candidata da revisao da T7: `_corrente` travava a missao com `FOR
-    UPDATE` sem `populate_existing`. Com a missao E a avaliacao ja no identity
-    map, a transacao 2 decidia sobre a `avaliando` de ANTES da trava. Hoje
-    nenhum caminho de producao carrega as duas antes (`avaliar_missao` abre
-    sessao nova), entao o teste as carrega de proposito: outra conexao encerra
-    a tentativa como `falhou` e commita, e o resultado atrasado tem de ser
-    tentativa superada (`None`) -- e nao gravar `concluida` por cima da
-    falha."""
-    with Session(bind=banco_migrado, expire_on_commit=False) as abertura:
+def _tentativa_1_aberta(engine: Engine, mission_id: int) -> Tentativa:
+    with Session(bind=engine, expire_on_commit=False) as abertura:
         aberta = abrir_tentativa(
             abertura,
             ESTUDANTE,
-            missao_com_evidencia,
+            mission_id,
             clock=lambda: AGORA,
             modelo="claude-opus-5",
             limite_do_orfao=timedelta(seconds=90),
         )
         abertura.commit()
     assert isinstance(aberta, Tentativa)
+    return aberta
+
+
+def _falhar_em_outra_conexao(engine: Engine, aberta: Tentativa) -> None:
+    with Session(bind=engine) as outra:
+        assert registrar_falha(
+            outra, aberta, falha=FalhaDaAvaliacao.TEMPO_ESGOTADO, clock=lambda: AGORA
+        )
+        outra.commit()
+
+
+def _avaliacao_velha(sessao: Session, mission_id: int) -> MissionEvaluation:
+    """A missao e a avaliacao carregadas nesta sessao ANTES da trava, com uma
+    referencia forte a avaliacao: sem ela, o identity map (referencias
+    fracas) a soltaria e a carga seguinte criaria um objeto novo, e o teste
+    passaria sem provar releitura nenhuma."""
+    missao = sessao.get(Mission, mission_id)
+    assert missao is not None and missao.evaluation is not None
+    velha = missao.evaluation
+    assert velha.state is EstadoDaAvaliacao.AVALIANDO
+    return velha
+
+
+def test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava(
+    banco_migrado: Engine, missao_com_evidencia: int
+) -> None:
+    """`_corrente` decide sobre a avaliacao lida DEPOIS da trava da missao.
+    Hoje nenhum caminho de producao carrega a avaliacao antes
+    (`avaliar_missao` abre sessao nova), entao o teste a carrega de proposito
+    e guarda a referencia: outra conexao encerra a tentativa como `falhou` e
+    commita, e o resultado atrasado tem de ser tentativa superada (`None`) --
+    e nao gravar `concluida` por cima da falha."""
+    aberta = _tentativa_1_aberta(banco_migrado, missao_com_evidencia)
 
     with Session(bind=banco_migrado) as atrasada:
-        missao = atrasada.get(Mission, missao_com_evidencia)
-        assert missao is not None and missao.evaluation is not None
-        assert missao.evaluation.state is EstadoDaAvaliacao.AVALIANDO
-        with Session(bind=banco_migrado) as outra:
-            assert registrar_falha(
-                outra,
-                aberta,
-                falha=FalhaDaAvaliacao.TEMPO_ESGOTADO,
-                clock=lambda: AGORA,
-            )
-            outra.commit()
+        velha = _avaliacao_velha(atrasada, missao_com_evidencia)
+        _falhar_em_outra_conexao(banco_migrado, aberta)
         gravada = registrar_resultado(
             atrasada,
             aberta,
@@ -465,6 +479,8 @@ def test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava(
             clock=lambda: AGORA,
         )
         assert gravada is None
+        # A MESMA instancia foi atualizada pela releitura.
+        assert velha.state is EstadoDaAvaliacao.FALHOU
         atrasada.commit()
 
     with Session(bind=banco_migrado) as leitura:
@@ -475,3 +491,30 @@ def test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava(
         ).one()
         assert avaliacao.state is EstadoDaAvaliacao.FALHOU
         assert avaliacao.error_code is FalhaDaAvaliacao.TEMPO_ESGOTADO
+
+
+def test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao(
+    banco_migrado: Engine, missao_com_evidencia: int
+) -> None:
+    """O mesmo em `abrir_tentativa`: com a `avaliando` velha na sessao e a
+    tentativa ja encerrada por outra conexao, abrir de novo e a tentativa 2 --
+    e nao `AvaliacaoEmAndamentoError` por uma `avaliando` que o banco nao tem
+    mais."""
+    aberta = _tentativa_1_aberta(banco_migrado, missao_com_evidencia)
+
+    with Session(bind=banco_migrado) as sessao:
+        velha = _avaliacao_velha(sessao, missao_com_evidencia)
+        _falhar_em_outra_conexao(banco_migrado, aberta)
+        nova = abrir_tentativa(
+            sessao,
+            ESTUDANTE,
+            missao_com_evidencia,
+            clock=lambda: AGORA,
+            modelo="claude-opus-5",
+            limite_do_orfao=timedelta(seconds=90),
+        )
+        assert isinstance(nova, Tentativa)
+        assert nova.attempt == 2
+        assert velha.state is EstadoDaAvaliacao.AVALIANDO
+        assert velha.attempt == 2
+        sessao.commit()
