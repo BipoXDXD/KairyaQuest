@@ -3229,7 +3229,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | `gh pr checks 3` e `gh run list` (lidos por mim em 2026-09-29) | PR #3 `MERGED` (`05da900`). `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` em `pass` nas duas execuções sobre `f3b7d9a` (`push` e `pull_request`); a execução do `push` na `main`, em `05da900`, `success`. O job `check-api` rodou com o rótulo `ubuntu-24.04` (pendências 99 e 130). |
 | `git diff --quiet 05da900 -- pyproject.toml uv.lock frontend/package.json frontend/package-lock.json` (Task 12, árvore de `9e4f191`) | Saída de status **0**, nada impresso: o F não acrescentou dependência. Contra `580f6cc` o mesmo diff não é vazio (`pyproject.toml`, 11 linhas, e `uv.lock`, 6), por causa do PR #3. |
 | `make check` **completo, rodado por mim (Task 12)**, sobre a árvore de `9e4f191` com esta documentação por cima (`docs/HANDOFF.md`, `docs/ARCHITECTURE.md`, `docs/QUALITY.md`), 2026-09-29, com o PostgreSQL de pé | Aprovado, **EXIT 0**. Frontend: **50 arquivos, 846 testes**, cobertura de 100% nos quatro eixos (1089/1089 instruções, 842/842 ramificações, 320/320 funções, 1062/1062 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1093 passed** em 2m28s, cobertura total de 100,00% (1969 instruções, 344 ramificações). **E2E: 21 passed** (18,6 s). Gitleaks: `no leaks found`. |
-| Datas fixas do `tracking.spec.ts` (pendência 168) | **Não rodado no futuro:** medido só por leitura. Os prazos `2027-01-10T13:00Z` e `2027-02-01T21:00Z` deixam de estar no futuro nesses instantes; o gate reprova a partir do primeiro. |
+| Datas fixas do `tracking.spec.ts` (pendência 168) | **Corrigido na rodada de correção da revisão final do F** (prazos calculados a partir do relógio; ver a pendência 168). Antes: **não rodado no futuro**, medido só por leitura: os prazos `2027-01-10T13:00Z` e `2027-02-01T21:00Z` deixavam de estar no futuro nesses instantes, e o gate reprovava a partir do primeiro. |
+| `make check` **completo, rodado por mim (rodada de correção da revisão final do F)**, sobre a árvore final (`762b4e7`, `aad0587`, `398fff0`, `c1b630c` e `b2316a8` sobre `3871209`, com esta documentação por cima), 2026-09-29 | Aprovado, EXIT 0, 2m58s. Vitest 50 arquivos/849 testes, 100% nos quatro eixos (1088/1088 instruções, 842/842 ramificações, 320/320 funções, 1061/1061 linhas); `uv lock --check` (59 pacotes), Ruff sem achados, 137 arquivos formatados, mypy em 132 arquivos; pytest **1093 passed**, 100%; **E2E 21 passed** (19,6 s); Gitleaks `no leaks found`. Cada um dos cinco commits de código da rodada passou pelo hook `pre-commit` (`gate completo (make check)... Passed`). |
 
 ## Ambiente verificado
 
@@ -4946,6 +4947,17 @@ ledger; nenhum é bug esquecido.
     medição completa), `REVISAO = "0005"` em `test_evaluation_migration.py` (é a
     revisão do Alembic, não da revisão de código), e o verbo "medido" solto,
     que descreve um fato observado e não cita revisão.
+
+    **Reintroduzidas pelo F e removidas de novo (rodada de correção da revisão
+    final do F):** o Incremento F trouxe de volta 53 linhas com citações
+    (`revisao da T4, I1`, `M3`, `M8`–`M11`, `Task 5`, `Review Focus N`, `m1`/`m2`/
+    `m5`, `Minor N`, `Revisao da F25, m3`) em comentários, docstrings e títulos de
+    teste de 23 arquivos (`src/`, `tests/`, `frontend/src`). Reescritas para dizer
+    o motivo, sem mudar comportamento. Ficaram, como antes, os ids de decisão com
+    tabela neste documento (`F14`, `F25`, `C13`, `P1`, `P3`/`P4` "do D") e os ids
+    de caso do plano (`R1`–`R13`). O critério de conferência é
+    `git diff 05da900...HEAD` filtrado pelas etiquetas (`I1`, `M3`, `m5`, `T4`,
+    `Task N`, `Review Focus`, `revisao`, `achado`).
 108. **O cartão avaliado do E2E aparece nas telas das specs seguintes e entra no
     axe delas** (Task 8). O banco do E2E é compartilhado e não é limpo entre specs
     (`reiniciar()` limpa só o falso); as outras specs se protegem por delta e por id,
@@ -5209,10 +5221,12 @@ ledger; nenhum é bug esquecido.
     (`RescheduleHistory.test.tsx`, o caso de `undefined`; e os do `reward`
     ausente), no dia em que não houver mais deploy defasado a tolerar.
 163. **Minors da Task 10 sem efeito no produto, adiados** (revisão e relatório da
-    Task 10). (a) O rótulo de espera "Aguardando a conclusão em andamento…"
+    Task 10). ~~(a) O rótulo de espera "Aguardando a conclusão em andamento…"
     (`reloadWaiting.ts`, fixado por testes existentes) aparece também quando quem
     está em voo é um Iniciar ou um Reagendar; o texto neutro seria "o pedido em
-    andamento". (b) Os botões de recarga não dizem de qual missão são. (c) O foco,
+    andamento".~~ **(a) Resolvida na rodada de correção da revisão final do F:** o
+    botão e a região viva dizem "Aguardando o pedido em andamento…" (e "… para
+    atualizar o quadro."), com teste do Iniciar e do Reagendar em voo. (b) Os botões de recarga não dizem de qual missão são. (c) O foco,
     depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
     (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
     sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
@@ -5267,24 +5281,30 @@ ledger; nenhum é bug esquecido.
     `test_acompanhamento_concorrencia.py`: nunca um elo gravado depois da conclusão,
     e, se os dois vencem, a conclusão viu o prazo novo. Liga-se à pendência 160 (a
     detecção de corrida depende do escalonador).
-168. **O E2E do F tem prazos fixos que vencem, e o gate reprova sozinho a partir
+168. ~~**O E2E do F tem prazos fixos que vencem, e o gate reprova sozinho a partir
     de 2027-01-10** (revisão final do F, I2). O `check-e2e` roda com o relógio real
     da API (`system_now`, pendência 116), e dois cenários de
     `frontend/tests/e2e/tracking.spec.ts` dependem de um prazo **no futuro**: o
     reagendamento pela tela para `2027-01-10T10:00` (`13:00Z`) e a proposta da Tifa
     para `2027-02-01T21:00:00Z`. Depois de cada instante, `problema_do_novo_prazo`
     devolve `NO_PASSADO` (`422 prazo_expirado`) e o cenário reprova — no `make
-    check`, no `pre-push` e no job do CI, sem nenhuma mudança de código. A primeira
-    quebra é em **2027-01-10 às 13:00 UTC**. Correção prevista: montar os prazos a
-    partir de `Date.now()` (por exemplo, +30 e +60 dias), com o campo
-    `datetime-local` e as expressões regulares derivados deles, como o `naTela` do
-    próprio arquivo; **fica para uma rodada de correção posterior a esta
-    documentação** (quem a fizer risca esta pendência). O revisor apontou também
-    `tutoring.spec.ts:209` (`2027-04-01T12:00:00Z`): conferido nesta sessão, essa
-    linha só **cria** a missão pela API do cenário "Tifa fora do ar", e a criação
-    aceita prazo no passado (não há janela de negócio, decisão de produto em
-    aberto), então não vi como ela reprovaria por data — não medido; a mesma cautela
-    vale para os prazos fixos de `headquarters.spec.ts` (criação e leitura da tela).
+    check`, no `pre-push` e no job do CI, sem nenhuma mudança de código.~~
+    **Resolvida na rodada de correção da revisão final do F:** os três cenários do
+    `tracking.spec.ts` montam todos os prazos com `daquiADias(n)`, a partir do
+    relógio do teste (hora cheia, +10/+30 dias no cenário 2, +20/+40 no 3, +45 no
+    1), e derivam o valor do `datetime-local` e as expressões regulares do próprio
+    instante (`paraDatetimeLocal`, `trechoDaTela`, `naTela`), então a data não
+    vence. Mutação: com o prazo novo no passado (`Date.now() - dias * ...`), o
+    cenário 2 reprova (`check-e2e`: 1 falhou, 19 passaram, o 3 não rodou por causa
+    do `serial`). **`tutoring.spec.ts:209` e os prazos de `headquarters.spec.ts`
+    conferidos e deixados:** só **criam** missões pela API (o `POST /api/missions`
+    aceita prazo no passado: `MissionCreate.deadline` não tem janela de negócio,
+    `schemas.py`), as leem na tela e, no `headquarters.spec.ts`, concluem uma
+    avulsa (`concluir_missao` não olha o prazo da avulsa); nenhuma asserção depende
+    de o prazo ser futuro, e nenhuma delas reagenda. Lidas no código, e o `check-e2e` passou (21
+    cenários) com o relógio real de hoje, o que não prova o futuro: quem introduzir
+    um reagendamento ou uma conclusão que dependa do prazo nessas specs precisa
+    usar prazo relativo também.
 
 **Criadas pelo lote back (2026-09-29)**
 

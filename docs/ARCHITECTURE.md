@@ -1409,8 +1409,9 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   reload remonta os cartões, e a chave de uma tentativa com resultado
   desconhecido tem de sobreviver a isso. O mesmo registro conta as conclusões
   em voo, e "Atualizar o quadro" pedido com uma delas em voo **espera** — o
-  botão fica desabilitado em "Aguardando a conclusão em andamento…" e o quadro
-  recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
+  botão fica desabilitado em "Aguardando o pedido em andamento…" (o texto diz
+  "pedido" porque, desde o F, um Iniciar ou um Reagendar em voo também contam)
+  e o quadro recarrega uma vez, sozinho, quando o último termina. Tudo é estado local do
   React; nada disso sai da feature.
 
   **Desde o Incremento F** o cartão também **inicia** e **reagenda** (Tasks 8
@@ -1459,7 +1460,9 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   título, e um `<h3>` aninhado quebraria a hierarquia de cabeçalhos.
   `reloadLabel?: string` (padrão `"Atualizar o quadro"`, repassado a
   `CompletionControls`) troca o rótulo do botão de recuperação — os dois
-  cartões do ciclo usam `"Atualizar a missão de hoje"`. O parágrafo da
+  cartões do ciclo usam `"Atualizar a missão de hoje"` (a diária de hoje),
+  `"Atualizar a diária de ontem"` e `"Atualizar a missão especial"`, cada um
+  com o rótulo do próprio cartão. O parágrafo da
   sequência (`data-testid="cycle-streak"`) ganhou `role="status"`: é uma
   região viva **desde o primeiro render** (o mesmo padrão do painel da
   Tifa, acima), para que uma mudança de sequência ao concluir uma missão
