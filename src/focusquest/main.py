@@ -25,7 +25,9 @@ from focusquest.core.errors import (
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
     PlanoExistenteError,
+    PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoInalteradoError,
     ProvedorNaoConfiguradoError,
     SemanaDistanteError,
     SemanaEncerradaError,
@@ -83,6 +85,8 @@ class CodigoDeErro(StrEnum):
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
+    PRAZO_DERIVADO = "prazo_derivado"
+    PRAZO_INALTERADO = "prazo_inalterado"
     MISSAO_EXPIRADA = "missao_expirada"
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
@@ -221,11 +225,25 @@ def _acao_nao_encontrada(request: Request, exc: AcaoNaoEncontradaError) -> JSONR
 
 @app.exception_handler(PrazoExpiradoError)
 def _prazo_expirado(request: Request, exc: PrazoExpiradoError) -> JSONResponse:
-    """422: o pedido e valido, mas o conteudo da proposta (o prazo) nao pode
-    mais ser executado. A falha ja foi gravada na acao."""
+    """422: o pedido e valido, mas o prazo nao esta mais no futuro. Na
+    confirmacao de uma proposta a falha ja foi gravada na acao."""
     return _erro(
         status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PRAZO_EXPIRADO
     )
+
+
+@app.exception_handler(PrazoDerivadoError)
+def _prazo_derivado(request: Request, exc: PrazoDerivadoError) -> JSONResponse:
+    """409: o tipo da missao recusa (o prazo vem do ciclo), nao a forma do
+    pedido."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PRAZO_DERIVADO)
+
+
+@app.exception_handler(PrazoInalteradoError)
+def _prazo_inalterado(request: Request, exc: PrazoInalteradoError) -> JSONResponse:
+    """409: o estado atual da missao recusa (o prazo ja e esse), nao a forma do
+    pedido."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PRAZO_INALTERADO)
 
 
 @app.exception_handler(MissaoExpiradaError)

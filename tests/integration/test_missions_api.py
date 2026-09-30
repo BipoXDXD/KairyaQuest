@@ -558,10 +558,9 @@ def test_duracao_real_no_corpo_vem_dos_instantes(
 ) -> None:
     """O outro lado do campo computado: com inicio E fim, ha duracao.
 
-    Nao existe caso de uso de INICIAR missao no incremento 1a, entao o
-    `started_at` e escrito direto na tabela -- e o unico jeito de alcancar
-    este ramo hoje. Sem este teste, o `else` de `actual_duration_minutes` ficaria
-    descoberto e a cobertura de ramificacoes reprovaria.
+    Aqui o `started_at` e escrito direto na tabela, para isolar o campo
+    computado do resto. A duracao real pelo caminho de verdade (iniciar pela
+    API e concluir depois) e provada em `test_iniciar_missao.py`.
     """
     criada = _criar(client)
     missao = session.get(Mission, criada["id"])
