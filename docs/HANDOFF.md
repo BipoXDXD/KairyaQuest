@@ -11,12 +11,18 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 ## Revisão-base
 
 **Incremento F — acompanhar a execução: iniciar e reagendar missões.** Branch
-`feat/incremento-f`, aberta a partir de `580f6cc` (a `main`: o merge do PR #2,
-o Incremento E). Spec em
+`feat/incremento-f` (no worktree, `wt/f-tutor`), aberta a partir de `580f6cc` (a
+`main`: o merge do PR #2, o Incremento E) e **atualizada com a `main` em
+`05da900`** (o merge do PR #3, os lotes de pendências) pelo merge `634a219`: a
+**revisão-base do que o F mudou é `05da900`** (as dependências, por exemplo, se
+comparam com ela). Spec em
 `docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
 (decisões F1–F24, e a emenda F25 da pendência 115), aprovada por delegação do dono em 2026-09-29 ("tome todas
 as decisões por mim"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`.
-**Estado de publicação: não publicado.**
+**Estado de publicação: não publicado** quando este registro foi escrito —
+só commits locais em `wt/f-tutor` (ponta `9e4f191` antes do commit desta
+documentação), sem push, PR nem merge do F; o estado atual está em
+`gh pr list`.
 
 **Incremento E — entrega com evidência e avaliação.** Branch
 `feat/incremento-e`, aberta a partir de `fe37820` (a branch
@@ -936,6 +942,118 @@ incremento (`79fa4e5`, ver "Resultados").
   não como bug a corrigir agora.
 - **Sem infraestrutura de arquivo.** Upload, abrir o link e executar código do
   estudante ficaram de fora de propósito (E3; pendência 92).
+
+### Incremento F — decisões F1–F25 (da spec) e RF1–RF14 (da execução)
+
+Resumidas da spec (a spec é a fonte; o texto integral dos motivos e das
+alternativas recusadas está nela)
+(`docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`),
+desenhada pelo agente com **delegação expressa do dono** ("tome todas as
+decisões por mim", 2026-09-29; o dono estava ausente e o controlador da sessão
+escolheu o tema). O plano é `docs/superpowers/plans/2026-09-29-incremento-f.md`.
+As decisões são escolhas do agente, com o motivo; o dono pode revogar qualquer
+uma, e as que só ele pode tomar estão em "Para o dono decidir" na spec.
+
+**F1–F25 (spec):**
+
+| # | Decisão | Motivo (resumo) |
+|---|---|---|
+| F1 | Iniciar é `POST /api/missions/{id}/start`, corpo `{"operation_id"}`, `200` com o `MissionRead`; só `pendente → em_andamento`; `started_at` é o relógio lido **depois** da trava | A transição já existia em `_TRANSICOES`; a mesma ordem da conclusão. Recusado: `PATCH` com `state` e iniciar "implícito" ao abrir o cartão (gravaria início sem intenção) |
+| F2 | Idempotência do início pelo `operation_id`, `mission_operations.kind = 'start'`, na mesma UNIQUE da conclusão | O contrato que a conclusão já cumpre. Chave nova em missão já iniciada ou concluída: `409 transicao_ilegal`; chave gasta em outra coisa: `409 operacao_reutilizada` |
+| F3 | Iniciar vale para os três tipos, pela disponibilidade derivada (diária no dia, especial na janela) | A diária é a missão que se faz hoje; a regra do dia e a ocultação são as da conclusão (`NAO_CONCLUIVEIS`, `ler_missao`) |
+| F4 | Concluir continua permitido direto de `pendente`; a duração real, nesse caso, fica `null` | O A, o D e o E dependem de concluir a um clique; `null` é "ninguém mediu", não "zero minuto" |
+| F5 | `em_andamento` não volta a `pendente` e não há pausa; duração real = `completed_at − started_at`, relógio de parede | Voltar apagaria o `started_at`; pausar pede a entidade "sessão" do README §8, que o F não cria (pendência 111) |
+| F6 | Reagendar é `POST /api/missions/{id}/reschedule`, corpo `{"operation_id", "new_deadline", "reason"}` | Um verbo de domínio carrega o motivo e grava o histórico; `missions.deadline` continua o prazo corrente. Recusado: `PATCH` genérico do `deadline` |
+| F7 | Só a avulsa se reagenda; diária e especial → `409 prazo_derivado` | O prazo delas é derivado do ciclo (C10), sem coluna para mudar; mover a diária é replanejar a semana (pendência 113) |
+| F8 | Reagendar vale em `pendente` e `em_andamento`, sem mudar estado nem `started_at`; em `concluida` → `409 transicao_ilegal` | "Estou sem tempo" acontece no meio da execução; estado e prazo são eixos separados (README §8) |
+| F9 | O novo prazo: com fuso, representável em UTC, **estritamente no futuro** (`422 prazo_expirado`) e **diferente do atual** (`409 prazo_inalterado`); antecipar é permitido; sem teto de horizonte | Prazo passado é registro de atraso, não compromisso; o mesmo `code` de "prazo no passado" nos dois caminhos; "mesmo prazo" sujaria o histórico |
+| F10 | O motivo é obrigatório e fechado em três valores: `dificuldade`, `falta_de_tempo`, `mudanca_de_prioridade`; sem texto livre | A distinção literal do README §5; um enum a máquina distingue, texto livre seria mais um dado não confiável no prompt |
+| F11 | Sem limite de reagendamentos; o número fica visível para a pessoa e para a Tifa | Um limite seria punição (README §5 proíbe "perda destrutiva"); pendência 110 e "Para o dono decidir" |
+| F12 | O histórico é a tabela `mission_reschedules`, só de inserção, com `previous_deadline` gravado; `MissionRead.reschedules` em ordem de gravação | "Preserve histórico de replanejamento" (§8); cada linha legível sozinha e prova, no teste de concorrência, que não houve atualização perdida |
+| F13 | Reenvio com a mesma chave e o mesmo `(new_deadline, reason)` → o mesmo `200`; a mesma chave com outro conteúdo → `409 operacao_reutilizada` | O mesmo mecanismo das outras escritas; comparar instantes com fuso compara o instante, não a grafia. Recusada: chave natural `(missão, novo prazo)` |
+| F14 | Iniciar e reagendar travam a missão (`FOR UPDATE`) **antes** de ler relógio, estado e prazo; dois reagendamentos simultâneos viram dois elos encadeados; a ordem global das travas é **ação → missão → avaliação → usuário** | O ponto de serialização da conclusão; declarar a ordem impede a espera circular entre confirmação, reagendamento, conclusão e avaliação |
+| F15 | A Tifa ganha `reschedule_mission`, ferramenta de **proposta**: vira uma `TutorAction` `kind = 'reschedule_mission'` em `proposta`, e a confirmação executa pelo **mesmo** `reagendar_missao`, com `origin = 'tifa'` | README §6: "mudanças significativas exigem confirmação"; um caminho de execução e um histórico, marcado pela origem |
+| F16 | Pré-condição na hora da proposta (existe, é do usuário, é avulsa, não concluída), senão a resposta é gravada `falhou`/`proposta_invalida`; o `payload` guarda também um **retrato** do backend (`instructions`, `previous_deadline`) | README §6 manda validar pré-condições; o cartão mostra os dois prazos sem a feature `tutoring` importar `missions`. Custo aceito: o retrato pode estar velho na confirmação (pendência 114) |
+| F17 | Na confirmação, tudo é revalidado pelo `reagendar_missao`, com todas as recusas antes da primeira escrita; falha → ação gravada `falhou` (`prazo_expirado` → `422`, `reagendamento_invalido` → `409`), commit, e só então o erro | O desenho do `prazo_expirado` (1b-1) e da avaliação (E13); um `code` só para "a missão mudou", porque `transicao_ilegal` na confirmação já significa "proposta já decidida" |
+| F18 | O provedor diz qual ferramenta foi chamada (`Proposta(nome, entrada)`); o adaptador oferece as duas ferramentas, com uma chamada por resposta e sem `strict` | Com duas ferramentas, a entrada sozinha não diz o que o modelo pediu; uma proposta por resposta preserva o cartão único por mensagem |
+| F19 | Contexto e persona: cada pendente traz o estado, o início e "reagendada N vez(es), último motivo"; ações antigas entram como texto **por tipo**; a persona propõe reagendar só com o motivo conversado, oferece ajuda antes de adiar por "dificuldade" e nunca culpa pela contagem | O `get_study_context` do README §6 sem ferramenta nova de leitura |
+| F20 | Na tela: Iniciar, "Iniciada em", o disclosure Reagendar prazo e o histórico; as chaves de iniciar e reagendar moram no registro do quadro **por missão e por tipo**; o rascunho do reagendamento mora no cartão | Pelo motivo da pendência 35 (a recarga remonta os cartões); por tipo porque a UNIQUE é por chave. Custo: o rascunho não sobrevive à recarga (pendência 112) |
+| F21 | A hora civil de São Paulo vira instante no cliente (`saoPauloCivilToIso` e a inversa, com `Intl` e `America/Sao_Paulo`, **sem deslocamento fixo**); campo `datetime-local` rotulado "horário de Brasília" | O navegador pode estar em outro fuso, e São Paulo já teve horário de verão; o backend recusa `deadline` sem fuso |
+| F22 | O cartão da proposta de reagendamento é um componente próprio (`RescheduleProposalCard`), escolhido pelo `kind`; `DecisionControls` extraído e compartilhado | Os dois cartões mostram coisas diferentes e compartilham só os controles de decisão |
+| F23 | Migração `0006`: `mission_reschedules`, `ck_mission_operations_kind`, `reschedule_mission` no `ck_tutor_actions_kind`, `ck_missions_em_andamento_iniciada`, `ck_missions_inicio_antes_da_conclusao`; o `downgrade` falha alto com histórico ou ação de reagendar gravados | Cada regra nova com uma restrição nomeada (README §8); o downgrade que apaga histórico em silêncio é o que a `0005` já recusa |
+| F24 | Nenhuma dependência nova, nenhum serviço novo, nenhuma mudança na progressão | Reagendar não é perda de progresso e iniciar não é conquista (README §5) |
+| F25 | **Emenda (execução):** a missão `em_andamento` com `started_at` antes do prazo pode ser concluída até o fim do dia seguinte ao prazo, com XP normal, e conta para a sequência do dia dela; `GET /api/cycle` ganha `late_daily` | Pendência 115: sem isso, a diária iniciada às 23:50 ficava presa em `em_andamento` sem saída. Ajusta F3 e F5; texto completo na pendência 115 |
+
+**Suposições da spec** (não ditas pelo dono): o usuário continua único (A2);
+"reagendar" é mudar o **prazo**, não a estimativa; a diária e a especial ficam
+fora do reagendamento porque o prazo delas é do ciclo.
+
+### Incremento F — decisões tomadas durante a execução (RF1–RF14)
+
+Do ledger da sessão autônoma de 2026-09-29 (`.superpowers/sdd/2026-09-29-sessao-autonoma/`,
+fora do controle de versão) e dos relatórios e revisões de cada tarefa, com o
+motivo e o custo.
+
+| # | Decisão | Motivo e custo |
+|---|---|---|
+| RF1 | **Trilhos em worktrees paralelos** (vários agentes ao mesmo tempo, a pedido do dono): dados e serviços (Tasks 0–5, `f-spec`), tutoria (Tasks 6–7, `f-tutor`), frontend (Tasks 8 e 10, `f-front`), cartão da proposta (Task 9, `f-prop`), E2E (Task 11, `f-e2e`) e a chamada real (`f-api`); integração por merge, cada um rodando o gate completo pelo hook. Commits locais autorizados por delegação; push, PR e merge não constavam dela | Um implementador por worktree, cada um com banco de teste e portas do E2E próprios (`scripts/novo-worktree.sh`). Custo: conflitos de integração resolvidos pelo controlador (o `HANDOFF`, `tutoring/service.py`, `ProposalCard.tsx`, `useCompletionRegistry.ts`, `deadline.ts`) |
+| RF2 | **`reagendar_missao` normaliza o prazo para UTC na entrada** — o desvio de um defeito do plano: sem isso, a 1ª resposta serializava o offset do cliente (`-03:00`) e o reenvio, lido do banco, saía `Z`, e o "mesmo corpo" (F13) não era o mesmo. A primeira versão (`astimezone(UTC)`) aceitava prazo **sem fuso** com o fuso da máquina e estourava `OverflowError` fora da faixa (RED `DID NOT RAISE`); `99044d4` a trocou por `prazo_em_utc` (domínio), que recusa os dois **antes** de normalizar e é usada também pela borda | O desvio saiu do teste, não do código. Custo: `_instante_representavel` passou a chamar a mesma função, com a mensagem inalterada |
+| RF3 | **`buscar_para_escrever` relê a linha travada com `populate_existing`** (alerta M3 da revisão da Task 4, feito na Task 7) | Sem ele, um objeto já no identity map da sessão não é sobrescrito pela linha lida depois da espera, e a decisão sai do estado de antes. Vale para iniciar, reagendar e concluir. Toca `missions/service.py`, que a Task 5 também editou (conflito trivial) |
+| RF4 | **`_exigir_elo_da_tifa`**, guarda que o plano não pedia: se a chave da confirmação já era de um reagendamento **idêntico feito pela tela**, `reagendar_missao` o trataria como reenvio, e a ação sairia `executada` sem elo da Tifa; agora é `409 operacao_reutilizada` | A simetria contrária (a tela aceitando como reenvio a chave de uma confirmação da Tifa) continua aberta, e não duplica nada (pendência 164) |
+| RF5 | **O prazo da proposta só aceita texto ISO 8601 com fuso** (I1 da revisão da Task 7): número e texto de dígitos (`"1790000000"`, `"20261005"`) são recusados por um `BeforeValidator` que converte com `datetime.fromisoformat` | O Pydantic lê texto de dígitos como tempo Unix UTC, um instante que o modelo não quis dizer; o docstring já afirmava o contrário. O `MissionCreate.deadline` e o `new_deadline` da tela têm a mesma leniência (pendência 164) |
+| RF6 | **`#N` só significa id de missão** no contexto da Tifa (I2 da revisão da Task 7, decisão do controlador): a ação passou de `#3` para "ação 12" | `#3` era o id da **ação** na criação e o da **missão** no reagendamento, e a ferramenta pede "pelo número #id". **Um teste existente mudou** de expectativa (`test_acoes_antigas_entram_como_texto_com_o_estado_real`), com a justificativa no docstring |
+| RF7 | **A regra anti-injeção da persona fecha o texto** num bloco final ("Sempre, em qualquer assunto e com qualquer ferramenta:"), depois de "Missões:" e "Reagendar:" (m4 da revisão da Task 7) | Vale para as duas ferramentas; um teste de posição a prende |
+| RF8 | **A pendência 115 foi resolvida dentro do F** (emenda F25), por decisão do controlador com a autorização do dono: missão iniciada dentro do prazo conclui até o fim do dia seguinte; a sequência conta o dia da missão | Detalhes e alternativas descartadas na pendência 115 e na tabela de emendas da spec. **Um teste mudou por ser a mudança principal:** o documental `test_diaria_iniciada_que_passa_do_dia_fica_em_andamento_sem_saida` (`59901df`) virou `test_diaria_iniciada_no_dia_e_concluida_depois_da_meia_noite` |
+| RF9 | **Quem escolhe o cartão pelo `kind` é o `ProposalCard`**, e não o painel (Task 9): o `Harness` de `ProposalCard.test.tsx`, que não podia mudar, tipa a ação como `ActionRead`, que virou a união `CreateMissionAction \| RescheduleMissionAction`. **`kind` desconhecido:** o `switch` tem tipo de retorno declarado e `default` com `never` (um `kind` novo reprova o `tsc`, medido); em tempo de execução, um valor fora do tipo cai no texto neutro "Proposta que esta versão não sabe mostrar.", sem botão e sem mostrar o `kind` cru | O resto da conversa continua. O texto neutro é decisão de texto de interface do agente; custo na pendência 161 |
+| RF10 | **Decisões da Task 10:** (M1, do controlador) depois de falha `retry`, os campos seguem editáveis; sem mudança, "Tentar de novo" reenvia o mesmo rascunho com a mesma chave; com mudança, a chave é liberada antes do envio; `useRescheduleMission` devolve `lastRescheduled` (o último sucesso), para o segundo reagendamento em voo ou recusado não devolver o cartão ao prazo listado (I1 da revisão); **um envio de cada vez no cartão** (Iniciar, Reagendar e Concluir se desabilitam entre si); `RescheduleHistory` **tolera `reschedules` ausente** | O tipo `Mission` não foi afrouxado, mas sem a tolerância **13 cenários E2E existentes reprovaram** contra o backend anterior ao F (medido); mesmo desenho do `reward` ausente do D (pendência 162). Um envio de cada vez evita ordens de chegada que a tela não controla |
+| RF11 | **Testes existentes que mudaram no F**, todos por justificativa e não para acomodar comportamento errado: `test_anthropic_provider.py` (`Proposta(ENTRADA)` → `Proposta("create_mission", ENTRADA)`, duas ocorrências, e `test_a_requisicao_leva_o_que_a_spec_manda` passou a esperar duas ferramentas: F18, Task 6); `test_tutoring_acoes.py::_confirmar` (só a anotação de retorno, exigida pelo mypy); o teste da RF6; o da RF8; `test_missions_listagem_consultas.py` (3 → 4 consultas, o histórico, pendência 96); as fixtures de teste do frontend ganharam `reschedules: []` (sete arquivos, e o `App.test.tsx`, e o `MissionCard.difficulty.test.tsx` do PR #3), sem mudar nenhuma asserção. `ProposalCard.test.tsx` ficou **byte a byte igual** | A mudança de cada um é a mudança principal da tarefa em que aconteceu |
+| RF12 | **O merge da `main` (PR #3) no F** (`634a219`) trouxe dois conflitos **semânticos**, sem marcador: (1) o N+1 de volta na listagem (`MissionRead` lê `missao.reschedules`, `lazy="select"`; o RED foi `11 == 3` para 8 missões), corrigido com `selectinload(Mission.reschedules)` e `CONSULTAS_DA_LISTAGEM` de 3 para 4; (2) a proposta de reagendamento **cortada por `max_tokens`** — teste novo `test_a_proposta_cortada_por_max_tokens_nao_vira_acao` (a guarda da main já valia para a `Proposta` inteira, então o RED foi por mutação) | Os conflitos textuais (`anthropic_provider.py`, `tutoring/service.py`, `ProposalCard.tsx`, `useCompletionRegistry.ts`) mantiveram os dois lados. Custo: o caso de 1 missão dá 4 consultas com ou sem o `selectinload` novo, por coincidência aritmética, e só o de 8 o prova |
+| RF13 | **A camada 3 chama o adaptador de produção** (`ProvedorAnthropic`), com um `Espiao` no transporte e `max_retries=0`, e não remonta a requisição à mão como o `camada3.py` — duas chamadas reais, autorizadas pelo dono, com a chave do Keychain só para o processo | Mede o que a tela de fato envia, e a conta das chamadas pagas fica exata. Detalhes em `docs/QUALITY.md` §9 e nas pendências 91 e 109 |
+| RF14 | **Um teste intermitente pré-existente foi corrigido** (`9a02c50`, `f1a03b8`): `MissionList.test.tsx` e `CycleSection.test.tsx` faziam `findByTestId` de uma região que **já existia**, e a asserção do texto "Missão concluída." corria contra a resposta do POST; agora esperam o texto final | Medido: com o POST atrasado 80 ms a versão antiga reprovava e a nova passa. Reprovou uma vez o `make check` da Task 9 sob carga |
+
+### Dependências e infraestrutura que entraram no F
+
+O `AGENTS.md` §4 exige motivo escrito para cada biblioteca, endpoint e
+serviço. **Nenhuma dependência nova**: conferido,
+`git diff 05da900 -- pyproject.toml uv.lock frontend/package.json
+frontend/package-lock.json` vazio (0 linhas, comando com saída de status 0 e
+nada impresso, medido nesta sessão na ponta `9e4f191`, com a `main` do PR #3
+já dentro). Contra `580f6cc` o mesmo diff **não** é vazio — `pyproject.toml`
+(11 linhas) e `uv.lock` (6) —, mas essa mudança é do PR #3 (os lotes de
+pendências, `main` em `05da900`), não do F. O `Espiao` da camada 3 usa o
+`httpx2` que o SDK já traz e que o adaptador já importava; nada em `src/`.
+
+- **Os dois endpoints** (decisões F1 e F6): `POST /api/missions/{id}/start` e
+  `POST /api/missions/{id}/reschedule`. Uma rota por ação, com o `code` de cada
+  falha sem ambiguidade; o `PATCH` genérico de `state` ou de `deadline` foi
+  recusado porque deixaria o cliente pedir qualquer estado e perderia o motivo e o
+  histórico que o README §8 manda preservar. Contrato completo em
+  `docs/ARCHITECTURE.md` §3 ("O contrato HTTP do acompanhamento").
+- **A ferramenta `reschedule_mission`** (F15 e F18). README §5 e §6:
+  "propor... reagendar tarefas", "o modelo solicita; o backend autoriza e
+  executa", "mudanças significativas exigem confirmação". Nada muda até a
+  pessoa confirmar, e a execução passa pelo mesmo serviço do botão. Sem
+  biblioteca nova: reaproveita o SDK `anthropic` já encapsulado no adaptador.
+- **Nenhum serviço de infraestrutura novo.** Tudo roda no mesmo processo FastAPI,
+  sobre o mesmo PostgreSQL, com uma migração a mais
+  (`0006_acompanhamento.py`): a tabela `mission_reschedules`, o `CHECK` de
+  `mission_operations.kind`, `reschedule_mission` em `ck_tutor_actions_kind` e os
+  dois `CHECK` de `missions`. **Sem *backfill*:** nenhuma missão existente ganha
+  início nem histórico, e nenhum `CHECK` de "pendente sem início" foi criado
+  (o teste `test_duracao_real_no_corpo_vem_dos_instantes` grava `started_at` numa
+  pendente).
+- **Ordem de implantação da migração `0006`, registrada para quando este
+  incremento for publicado (o mesmo aviso do D e do E):** parar a API, migrar,
+  subir a API de novo. O código **anterior** ao F grava `kind` que o `CHECK` novo
+  aceita, mas não conhece `reschedule_mission` na leitura da conversa (uma ação
+  desse tipo já gravada apareceria ao modelo como "Proposta de missão"). E o
+  `downgrade` da `0006` **falha alto** de propósito se existir linha em
+  `mission_reschedules` ou ação `reschedule_mission` (apagaria o histórico, ou o
+  `CHECK` antigo a recusaria), então uma volta atrás depois do primeiro
+  reagendamento exige decisão humana sobre os dados. Os testes de downgrade da
+  `0005` continuam descendo pela cadeia (`_anterior_a_0005`) e ficaram verdes sem
+  mudança. Não medido: dois processos com versões diferentes para reproduzir o
+  aviso do código anterior.
 
 ### Incrementos anteriores
 
@@ -2775,6 +2893,176 @@ revisão de comentários. Os números medidos no fim estão em "Resultados".
   revisão que ficaram fora da lista literal do M12 (pendência 107). **Ruling:** as
   citações da **spec** ficam nos comentários, porque a spec está no repositório.
 
+## Alterações do Incremento F
+
+Plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`; spec em
+`docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`.
+Base `580f6cc` (a `main` do PR #2), atualizada com a `main` em `05da900` (PR #3).
+Cada commit de tarefa passou pelo hook (`make check` completo, sem
+`--no-verify`), e cada mutação abaixo foi vista **reprovando** e desfeita por `cp`,
+segundo os relatórios das tarefas (`.superpowers/sdd/2026-09-29-sessao-autonoma/`,
+fora do controle de versão). Só documentação mudou nesta Task 12. Os números
+medidos no fim estão em "Resultados".
+
+**Backend**
+
+- **Task 0** (`84e9ef4`; a spec e o plano vieram em `5b81d2a`) — a
+  revisão-base do F neste arquivo.
+- **Task 1** (`6e135f0`) — o domínio puro do início e do reagendamento, em
+  `missions/domain.py`: `MotivoDoReagendamento`, `OrigemDoReagendamento`,
+  `ProblemaDoNovoPrazo`, `TipoDeOperacao` (o `kind` de `mission_operations`),
+  `problema_do_novo_prazo` (`NO_PASSADO` vem antes de `INALTERADO`) e
+  `validar_reagendamento` (`TransicaoIlegalError` para
+  `concluida`). Testes em `tests/unit/test_acompanhamento_domain.py`. RED:
+  `ImportError`. Mutações (as três do plano, todas reprovaram): `novo < agora`;
+  a ordem dos dois `if` trocada; `validar_reagendamento` sem o `if`. O hook
+  reprovou a primeira tentativa por um E501 do Ruff numa linha do teste do plano.
+- **Task 2** (`2c77e29`) — a migração `0006_acompanhamento.py`, o modelo
+  `MissionReschedule`, com os dois `TypeDecorator` de motivo e origem, e
+  `reschedule_mission` em `TipoDeAcao`.
+  Testes: `test_acompanhamento_migration.py` (ida e volta, cada restrição nova
+  dizendo não por `INSERT` cru, o downgrade que falha alto). RED: `ImportError`.
+  Mutações: sem `'start'` na lista congelada; sem a guarda do histórico no
+  downgrade; sem a guarda da ação de reagendar; sem `order_by` do relacionamento.
+  **Desvios do plano:** o teste do downgrade com ação `reschedule_mission`
+  gravada, que o plano deixava "por analogia", foi escrito; e o
+  `test_o_historico_sai_em_ordem_de_gravacao` do plano **não pegava** a mutação
+  do `order_by` (ids crescentes coincidem com a ordem física), então foi
+  reescrito com ids em ordem decrescente (30, 20, 10) e passou a reprová-la.
+- **Task 3** (`f750eea`) — `iniciar_missao` e a rota `POST .../start`, idempotente
+  pelo `operation_id` (`_exigir_mesma_operacao` ganhou o `kind`; `_gravar_operacao`
+  e `_operacao_gravada` extraídos e usados também pela conclusão). Testes:
+  `test_iniciar_missao.py`. RED: `ImportError`. Mutações: sem o `kind` na
+  conferência; sem a regra do dia; `ler_missao` depois do reenvio (reprova o caso
+  de ocultação). Acrescentado, como o Step 7 mandava:
+  `test_diaria_futura_com_chave_gasta_responde_como_inexistente` (404, não 409).
+- **Task 4** (`c829965`) — `reagendar_missao`, o histórico `mission_reschedules` e
+  a rota `POST .../reschedule`, com `PrazoDerivadoError`, `PrazoInalteradoError` e
+  os handlers. Testes: `test_reagendar_missao.py`. RED: `ImportError`. Mutações
+  (todas reprovaram): só `new_deadline` no reenvio; gravar a operação antes das
+  recusas (variante isolada no ramo do prazo passado); `previous_deadline` =
+  novo prazo; sem a guarda do tipo; sem a normalização para UTC. **Desvio:** o
+  defeito do plano da RF2 (a normalização entrou aqui e foi corrigida na Task 5).
+- **Task 5** (`0f1aadb`) — `tests/integration/test_acompanhamento_concorrencia.py`,
+  14 testes contra o PostgreSQL real, com `threading.Barrier` e sem `sleep`: dois
+  inícios; o mesmo início em paralelo (corpo idêntico); início × conclusão; dois
+  reagendamentos (dois elos encadeados); o mesmo reagendamento em paralelo;
+  reagendamento × conclusão; a mesma chave em duas missões (mais a variante
+  determinística 7b, REPEATABLE READ, do caminho da UNIQUE); a trava e o relógio
+  lido depois dela (`FOR KEY SHARE NOWAIT`, e o instante gravado contra o commit
+  que liberou a trava). Nenhum defeito de produção. As taxas de detecção abaixo de
+  100% estão na pendência 160. **Acréscimos do controlador:** `57c2468` (espelho
+  modelo × migração cobre `mission_operations` e `mission_reschedules`, I2 da
+  revisão; quatro mutações) e `99044d4` (`prazo_em_utc`: I1, M1 e M2 da revisão da
+  Task 4; RF2). E `59901df`, o teste **documental** da diária iniciada que passa do
+  dia (I1 da revisão), depois substituído pela F25.
+- **Task 6** (`4bacb52`) — o provedor: `Proposta(nome, entrada)`,
+  `RescheduleProposal`, `esquema_do_reagendamento` e o `responder` com as duas
+  ferramentas. Testes: dois novos no adaptador e
+  `test_tutoring_proposta_de_reagendamento.py`. Dois testes existentes mudaram
+  (RF11). RED: `ImportError` e `TypeError`. Mutações: `Proposta("create_mission", ...)`
+  fixo (reprova `test_o_reagendamento_vira_proposta_com_o_nome`); sem
+  `extra="forbid"`.
+- **Task 7** (`2df4186`, correções `ae01ba9`) — a Tifa propõe e a confirmação
+  executa: `transmitir` valida pelo nome; `_completar` confere a pré-condição na
+  transação da resposta; `confirmar_acao` despacha pelo `kind`,
+  `_confirmar_reagendamento`, `_gravar_falha`, `ReagendamentoInvalido`,
+  `ResultadoDaConfirmacao`; `context.py` (a linha da pendente, `ROTULO_DO_MOTIVO`,
+  o texto por tipo); o bloco "Reagendar" da persona; `RescheduleProposal` estrito.
+  Testes: `test_tutoring_reagendamento.py` (proposta, confirmação, API,
+  concorrência e a mesma confirmação em paralelo). Mutações M1–M14 do relatório
+  (sem pré-condição; commit depois do erro; `origin` errado; sem
+  `populate_existing`; sem `_exigir_elo_da_tifa`; nome desconhecido caindo em
+  `MissionCreate` — sobreviveu na 1ª vez e o teste foi reforçado —; `StrictInt`
+  frouxo; `_resultado_anterior` sem o ramo; quatro do contexto; campo extra no
+  retrato). **M4 (a ordem das travas) não é observável por teste** — nenhum caminho
+  trava a missão antes de uma ação —, está declarada no docstring de
+  `confirmar_acao`. **Rodada de correções `ae01ba9`** (revisão: aprovada com I1 e
+  I2): RF5 (prazo em texto de dígitos), RF6 (`#` só para missão), RF7 (bloco final
+  da persona) e o teste de concorrência `test_duas_acoes_iguais_com_a_mesma_chave_em_paralelo_uma_vence`
+  (RED por mutação).
+- **F25 / pendência 115** (`d7f6695`, `16780a0`; correções `34ec045`, `835ce30`) —
+  `cycle_domain.py` (`limite_da_conclusao_tardia`, `com_inicio_a_tempo`,
+  `na_conclusao_tardia`), `cycle_service.py` (a diária de ontem), o campo
+  `late_daily` do `GET /api/cycle` e a seção do Quartel-General. RED em domínio,
+  serviço, API e frontend; treze mutações no backend e duas no frontend, todas
+  reprovaram. Revisão: aprovada com I1 (faltava o teste do marco aberto pela
+  conclusão tardia), corrigido em `34ec045` com o limite da especial, o reenvio
+  depois do limite e três dias de horário de verão (achado: a meia-noite de
+  04/11/2018 cai no buraco do horário de verão, e um instante nesse buraco nunca
+  é `==` a outro de fuso diferente, PEP 495; o `<`, única comparação da regra,
+  funciona, e o teste compara em UTC).
+
+**Frontend**
+
+- **Task 8** (`e16579c`) — o contrato (`RescheduleReason`, `Reschedule`,
+  `Mission.reschedules`, `RESCHEDULE_REASON_LABELS`), `saoPauloCivilToIso` e
+  `isoToSaoPauloCivil` em `shared/lib/deadline.ts` (duas passadas pelo
+  deslocamento e prova da volta), `startFailure.ts`, `rescheduleFailure.ts`
+  (mapas exaustivos com `Object.hasOwn`), as chaves de ação no
+  `useCompletionRegistry`, `useStartMission` e `useRescheduleMission`. RED em
+  cada bloco. Mutações: as de fuso (deslocamento fixo, sem a prova da volta, uma
+  passada só, `h24`, sem `timeZone`), as dos mapas, as do registro e as dos dois
+  hooks (cerca de 30). Decisão de borda: a hora repetida do fim do horário de
+  verão (16/02/2019) vale a primeira ocorrência. Revisão: aprovada, cinco *minors*.
+- **Task 9** (`537636f`; minors `7dafddb`) — `RescheduleProposalCard`,
+  `DecisionControls` (com `BoardLink`), a união `ActionRead`, `describeActionFailure`
+  com o `kind` **obrigatório**, `ActionRecovery` com `invalidated`. Testes novos
+  em `RescheduleProposalCard.test.tsx`, `actionFailure.test.ts`,
+  `useDecideAction.test.tsx` e `TutorPanel.test.tsx` (duas ações numa mensagem;
+  `kind` desconhecido). RED: 5 testes reprovando e o módulo sem existir. Mutações:
+  o "Prazo atual" mostrando o proposto; `reagendamento_invalido` com `retry`; o
+  `DecisionControls` sem `disabled={busy}`; sem o `case` no `switch` (o `tsc`
+  reprova, `TS2322`); `RECORDED_FAILURE.invalidated = null`. RF9. Revisão:
+  aprovada; a acessibilidade da falha gravada (a pendência de "falha não
+  anunciada") ficou fora desta lista de pendências por estar sendo resolvida por
+  outro agente.
+- **Task 10** (`1d29df5`; `9a02c50` e `f1a03b8` os intermitentes; `bea4abb` as
+  correções) — o cartão: `StartControls` no `MissionCard`, `RescheduleForm`,
+  `RescheduleHistory`, `rescheduleDraft.ts`, as regiões vivas
+  `mission-start-status` e `mission-reschedule-status`, o foco ao título depois de
+  iniciar; a `CycleSection` repassa o registro. RED: 24 testes reprovando. Mutações
+  a–n do relatório (disclosure na diária, histórico sem o motivo, cartão mostrando
+  a listada, formulário limpo na falha, chave não liberada quando o rascunho muda,
+  foco, Iniciar na perdida ou expirada, hora inexistente liberada, e a de
+  `RescheduleHistory` sem a guarda de `undefined`, que derruba **13 cenários
+  E2E**). **A primeira revisão reprovou** (I1: o segundo reagendamento devolvia o
+  cartão ao prazo original; I2: o M1 só com a data mudada não tinha teste); as
+  correções `f1a03b8` e `bea4abb` trouxeram `lastRescheduled` e os testes, sete
+  mutações R1–R7, e a re-revisão aprovou. RF10.
+- **Task 11** (`7f5fddd`) — `frontend/tests/e2e/tracking.spec.ts`, três cenários
+  em série: iniciar e concluir com a duração real (o texto de "Iniciada em" vem
+  do `started_at` da API, calculado por um `Intl.DateTimeFormat` do próprio spec,
+  para não conferir o formatador com ele mesmo); reagendar pela tela e conferir o
+  histórico depois de recarregar; a proposta de reagendamento da Tifa confirmada
+  pelo falso, com **uma** chamada ao modelo com as duas ferramentas e sem uma
+  segunda missão criada. Axe nos três. Nenhum cenário depende do dia civil
+  (pendência 54). Mutações (cada uma por `make check-e2e`): o início não
+  persistido; o Iniciar sem o POST; `saoPauloCivilToIso` com `-02:00` fixo; a
+  confirmação ignorando o `kind` (a API responde 500); o cartão sem recarregar o
+  quadro.
+
+**Integração e revisões**
+
+- **Merges** (cada um com o hook `pre-merge-commit` verde): `613992c` (trilho A no
+  trilho da tutoria), `304f5df` (a Task 9 no frontend), `532879f` (a Task 5 e o
+  prazo sem fuso), `aadbef5` (o frontend inteiro com o backend completo),
+  `c70bd00` (o E2E), `634a219` (a `main`, RF12), `f495f96` (a camada 3) e
+  `9e4f191` (a F25, com conflitos em `deadline.ts`, `CycleSection`,
+  `test_cycle_service` e neste arquivo, mantidos os dois lados).
+- **Revisões** (leitura, por tarefa): Tasks 0–3 e 6 aprovadas com ressalvas (I1: a
+  diária iniciada presa → pendência 115; I2: o espelho modelo × migração → Task
+  5); Task 4 aprovada com I1 (a normalização antes da guarda de fuso, corrigida na
+  Task 5); Task 7 aprovada com I1 e I2 (corrigidos em `ae01ba9`); Tasks 8 e 9
+  aprovadas; Task 10 reprovada e depois aprovada (acima); F25 aprovada com I1
+  (corrigido).
+- **Chamadas reais** (`bf9eb47`, `4401e81`, `3e593ac`) — duas, autorizadas pelo
+  dono, com o `claude-opus-5` e a chave do Keychain só para o processo, pelo
+  adaptador de produção: a **avaliação** (pendência 91, aprovada e resolvida) e a
+  **conversa com duas ferramentas** (pendência 109, aprovada sobre `aadbef5` e
+  **repetida sobre o código final**, aprovada; resolvida). Resultado nas
+  pendências e em "Resultados".
+
 ## Comandos
 
 Os alvos do Makefile estão descritos em `docs/QUALITY.md` §1. Os novos neste
@@ -2859,6 +3147,18 @@ O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
 no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
 
+**Desde o Incremento F** não há alvo novo no Makefile: o E2E ganhou o
+`tracking.spec.ts` (21 cenários, `make check-e2e`), e a camada 3 ganhou os dois
+scripts acima. Para conferir que o F não acrescentou dependência, comparando com
+a `main` do PR #3 (vazio = nenhuma; medido, ver "Resultados"):
+
+```bash
+git diff --quiet 05da900 -- pyproject.toml uv.lock frontend/package.json frontend/package-lock.json; echo $?
+```
+
+**Ordem de implantação da migração `0006`** (parar a API, migrar, subir a API de
+novo): ver "Dependências e infraestrutura que entraram no F".
+
 ## Resultados
 
 Cada linha registra a revisão em que foi medida; as medições são de sessões
@@ -2919,9 +3219,17 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` completo, rodado por mim (o agente da Task 9) sobre `79fa4e5` (o código final do incremento; árvore limpa, em `wt/e-docs`), 2026-09-28, com o PostgreSQL de pé | Aprovado, EXIT 0, **2m25,9s de relógio** (`time`: 66,5 s de usuário e 12,5 s de sistema). Frontend: **41 arquivos, 614 testes**, cobertura de 100% nos quatro eixos (867/867 instruções, 646/646 ramificações, 267/267 funções, 842/842 linhas); `eslint` sem avisos. `uv lock --check` aprovado. Ruff sem achados, 118 arquivos já formatados. mypy sem problemas em 113 arquivos. Backend: **810 testes** passando em 1m55s, 1 aviso (a `DeprecationWarning` do `anyio.abc.BlockingPortal` no Starlette, já conhecida), cobertura total de **100%** (1629 instruções e 264 ramificações, nenhuma descoberta). E2E: **18 cenários** aprovados em Chromium (14,3 s de Playwright), os 17 de antes e o da avaliação. Gitleaks: 11,24 MB varridos, **sem achados**. |
 | `git diff fe37820 -- pyproject.toml uv.lock frontend/package.json frontend/package-lock.json`, sobre a mesma árvore | **Vazio, 0 linhas** (medido por mim): o Incremento E não acrescentou nenhuma dependência. |
 | Chamada real 1 (pendência 91), `python -m integration.camada3_da_avaliacao`, 2026-09-29, sobre `aadbef5`, modelo `claude-opus-5` | **Aprovado.** Uma chamada, sem erro HTTP: o modelo chamou `record_evaluation` (sem bloco de texto), a entrada passou no `EvaluationOutput` (veredito `atende`); sequência gravada em `referencia_da_avaliacao_real.json`. |
-| Chamada real 2 (pendência 109), `python -m integration.camada3_do_reagendamento`, mesma árvore e modelo | **Aprovado.** Uma chamada: `reschedule_mission`, `mission_id` 7, `falta_de_tempo`, `2026-10-02T18:00:00-03:00`, aceito pelo `RescheduleProposal`; sequência igual à da referência da conversa, que não foi regravada. Falta repetir sobre `ae01ba9` (pendência 109). |
+| Chamada real 2 (pendência 109), `python -m integration.camada3_do_reagendamento`, mesma árvore e modelo | **Aprovado.** Uma chamada: `reschedule_mission`, `mission_id` 7, `falta_de_tempo`, `2026-10-02T18:00:00-03:00`, aceito pelo `RescheduleProposal`; sequência igual à da referência da conversa, que não foi regravada. **Repetida sobre o código final** (`f495f96`, com as correções `ae01ba9`): aprovada, mesma entrada e mesma sequência (pendência 109, resolvida). |
 | `make check` pelo hook do commit `bf9eb47` (worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
 | `make check` rodado por mim sobre `bf9eb47` mais esta documentação (worktree `f-api`) | Aprovado, EXIT 0, 2m47,8s de relógio. Frontend: 48 arquivos, 833 testes, 100% nos quatro eixos (1076/1076 instruções, 826/826 ramificações, 317/317 funções, 1049/1049 linhas). `uv lock --check` aprovado. Ruff sem achados, 132 arquivos já formatados. mypy sem problemas em 127 arquivos. Backend: **993 passed**, 1 aviso (a `DeprecationWarning` já conhecida), cobertura total de 100% (1883 instruções, 320 ramificações). E2E: 18 passed. Gitleaks: `no leaks found`. |
+| `make check`, **relatório da Task 5** (árvore de `59901df`), 2026-09-29 | Aprovado, EXIT 0, 2:31 (números do relatório da tarefa, não repetidos aqui). Vitest 41 arquivos/614 testes, 100% nos quatro eixos (867/867, 646/646, 267/267, 842/842); Ruff ok, 124 arquivos formatados; mypy 119 arquivos; pytest **911 passed**, 100,00% (1770 instruções, 290 ramificações); E2E 18 passed; Gitleaks sem achados. |
+| `make check`, **relatório da Task 7** (árvore de `ae01ba9`) | Aprovado, EXIT 0 (relatório da tarefa). Vitest 48 arquivos/833 testes; mypy 121 arquivos; pytest **983 passed**, 100,00%; E2E 18 passed; Gitleaks sem achados. |
+| `make check`, **relatório da Task 11** (árvore de `7f5fddd`) | Aprovado, EXIT 0 (relatório da tarefa). Vitest 48 arquivos/833 testes, 100% (1076/1076, 826/826, 317/317, 1049/1049); mypy 121 arquivos; pytest **977 passed**, 100%; **E2E 21 passed** (15,7 s), com os três de `tracking.spec.ts`; Gitleaks sem achados. `make check-e2e` rodado duas vezes seguidas na tarefa, 21 passed nas duas. |
+| `make check`, **relatório do merge da `main`** (árvore de `634a219`) | Aprovado, EXIT 0, 2m48s (relatório da tarefa). Vitest 50 arquivos/839 testes, 100% (1082/1082, 830/830, 317/317, 1055/1055); `uv lock --check` 59 pacotes; mypy 126 arquivos; pytest **1038 passed**, 100,00% (1942 instruções, 334 ramificações); E2E 21 passed; Gitleaks sem achados. |
+| `gh pr checks 3` e `gh run list` (lidos por mim em 2026-09-29) | PR #3 `MERGED` (`05da900`). `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` em `pass` nas duas execuções sobre `f3b7d9a` (`push` e `pull_request`); a execução do `push` na `main`, em `05da900`, `success`. O job `check-api` rodou com o rótulo `ubuntu-24.04` (pendências 99 e 130). |
+| `git diff --quiet 05da900 -- pyproject.toml uv.lock frontend/package.json frontend/package-lock.json` (Task 12, árvore de `9e4f191`) | Saída de status **0**, nada impresso: o F não acrescentou dependência. Contra `580f6cc` o mesmo diff não é vazio (`pyproject.toml`, 11 linhas, e `uv.lock`, 6), por causa do PR #3. |
+| `make check` **completo, rodado por mim (Task 12)**, sobre a árvore de `9e4f191` com esta documentação por cima (`docs/HANDOFF.md`, `docs/ARCHITECTURE.md`, `docs/QUALITY.md`), 2026-09-29, com o PostgreSQL de pé | Aprovado, **EXIT 0**. Frontend: **50 arquivos, 846 testes**, cobertura de 100% nos quatro eixos (1089/1089 instruções, 842/842 ramificações, 320/320 funções, 1062/1062 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1093 passed** em 2m28s, cobertura total de 100,00% (1969 instruções, 344 ramificações). **E2E: 21 passed** (18,6 s). Gitleaks: `no leaks found`. |
+| Datas fixas do `tracking.spec.ts` (pendência 168) | **Não rodado no futuro:** medido só por leitura. Os prazos `2027-01-10T13:00Z` e `2027-02-01T21:00Z` deixam de estar no futuro nesses instantes; o gate reprova a partir do primeiro. |
 
 ## Ambiente verificado
 
@@ -3040,9 +3348,18 @@ ninguém mexer.
    runtime. Um cliente gerado do schema só a descobre ao receber o 422.
    Anotar `pattern` foi recusado porque boa parte dos geradores de cliente
    não o honra sobre `date-time`.
-3. **Não existe endpoint de iniciar missão.** `em_andamento` e `started_at`
+3. ~~**Não existe endpoint de iniciar missão.** `em_andamento` e `started_at`
    existem no modelo e no domínio, mas as rotas não os alcançam, e
-   `actual_duration_minutes` sai sempre `null` pela API.
+   `actual_duration_minutes` sai sempre `null` pela API.~~ **Resolvida em
+   2026-09-29 (Incremento F):** `POST /api/missions/{id}/start` (F1 a F5) leva a
+   missão de `pendente` a `em_andamento`, com `started_at` lido do relógio
+   depois da trava, idempotente pelo `operation_id` (`mission_operations.kind =
+   'start'`). A duração real sai preenchida ao concluir uma missão iniciada — o
+   E2E confere que o `mission-actual-duration` da tela é o
+   `actual_duration_minutes` da API. Concluir direto de `pendente`, sem iniciar,
+   continua permitido (F4) e deixa a duração `null`; não há pausa (pendência
+   111); e a missão iniciada dentro do prazo conclui até o fim do dia seguinte
+   (F25, pendência 115).
 4. **A trava da linha é adquirida antes da checagem de dono.**
    `concluir_missao` faz `SELECT ... FOR UPDATE` e só depois compara o
    `user_id`. Com usuário único é inofensivo; com autenticação, um pedido
@@ -3549,6 +3866,11 @@ que não tinham chegado aqui)
     outros três só aparecem em `POST /api/plans`, que o B ainda não tem
     formulário nenhum (não há tela de criar plano no B; a spec não
     pede uma, e o C encontra pronto o `GET /api/plans/current`).
+    **Cresceu no Incremento F:** os três `code` novos (`prazo_derivado`,
+    `prazo_inalterado`, `reagendamento_invalido`) e os de iniciar e reagendar
+    ganharam mapas exaustivos à mão (`startFailure.ts`, `rescheduleFailure.ts`,
+    `actionFailure.ts`), e os rótulos de motivo existem em três lugares
+    (pendência 161).
 33. **`crypto.randomUUID` só existe em contexto seguro** (HTTPS, `localhost`,
     `127.0.0.1`). O servidor de desenvolvimento (`localhost`) e o do E2E
     (`127.0.0.1`) são contextos seguros; o E2E prova o segundo, e o
@@ -3764,6 +4086,12 @@ que não tinham chegado aqui)
     obrigatório, uma validação mais estrita) transformaria uma proposta já
     gravada — válida quando nasceu — num 500 na hora de confirmar, em vez de
     continuar aceita com as regras de quando foi criada.
+    **Vale também para o `payload` do reagendamento (Incremento F):**
+    `_confirmar_reagendamento` tira o retrato (`CAMPOS_DO_RETRATO`) e revalida os
+    três campos do modelo com `RescheduleProposal`; um endurecimento desse schema
+    (a recusa de texto de dígitos da RF5, por exemplo) transformaria uma proposta
+    já gravada e válida no dia num `ValidationError` sem tratamento, um `500` na
+    hora de confirmar.
 48. ~~**A árvore de testes em `docs/ARCHITECTURE.md` não lista
     `tests/integration/test_install_gitleaks.py` nem
     `tests/integration/test_push_env.py`.** Os dois arquivos existem e rodam;
@@ -3846,6 +4174,11 @@ que não tinham chegado aqui)
     (por exemplo, incluir o resumo do `GET /api/cycle` no contexto do
     turno) é trabalho do incremento que implementar `propose_plan` — fora
     do escopo do B, que não muda `tutoring/`.
+    **Atualizada no F (continua aberta):** a Tifa passou a ver, de cada avulsa
+    pendente, o estado (pendente, ou em andamento desde quando) e o histórico de
+    reagendamentos (a contagem e o último motivo); o **ciclo** (as diárias, a
+    especial, `late_daily`) continua fora do contexto, e ela também não sabe da
+    conclusão tardia (pendência 117).
 56. **A rota de concluir relê a missão com `clock()` chamado de novo depois
     do commit** (`cycle_router.py`, achado registrado no ledger da Task 5,
     minor deferido): `concluir_missao` grava a conclusão com um relógio,
@@ -4478,9 +4811,15 @@ ledger; nenhum é bug esquecido.
     banco de teste" de `check-api` e `check-e2e` (`quality.yml`). **Não
     dependem da imagem:** o serviço `postgres:18.6-alpine` (container), o
     binário do Gitleaks (`linux_x64`, conferido por hash), `setup-node` e
-    `setup-uv` (baixam o que pedem). **Estado: não executado no CI** — a
-    mudança de runner só se prova quando o PR rodar o workflow; localmente,
-    o que foi verificado é que o YAML carrega e que o `make check` aprova.
+    `setup-uv` (baixam o que pedem). **Estado: provada verde no CI do PR #3**
+    (mesclado em `05da900`). `gh pr checks 3` (lido em 2026-09-29) traz
+    `check-api`, `check-e2e`, `check-secrets`, `check-web` e `quality-gate` em
+    `pass` nas **duas** execuções (a do `push` e a do `pull_request`, ambas
+    sobre `f3b7d9a`); o job `check-api` rodou com o rótulo `ubuntu-24.04` (lido
+    em `gh api repos/BipoXDXD/FocusQuest/actions/jobs/<id>`); e a execução do
+    `push` na `main`, em `05da900`, também terminou `success` (`gh run list`).
+    Antes da mesclagem, o que tinha sido verificado era só que o YAML carrega e
+    que o `make check` aprova.
     **Custo aceito:** a imagem deixa de receber as atualizações do
     `ubuntu-latest`, e uma imagem fixada acaba sendo aposentada pelo GitHub
     (data não consultada nesta sessão) — por isso a data de revisão abaixo.
@@ -4659,6 +4998,52 @@ ledger; nenhum é bug esquecido.
      uma amostra só; o circuito pela tela (o cartão de reagendamento, a
      confirmação e o prazo novo no Quartel-General); e um pedido ambíguo, sem
      o `#id`.
+110. **Sem limite de reagendamentos por missão** (decisão F11; do dono, "Para o
+    dono decidir" da spec). Uma missão pode ser reagendada quantas vezes a pessoa
+    quiser, e o número aparece no cartão ("Reagendada N vezes") e no contexto da
+    Tifa ("reagendada N vez(es); último motivo"). Foi de propósito: um teto seria
+    punição (README §5 proíbe "perda destrutiva" e manda "ser firme sem
+    humilhar"), e o histórico à vista já dá à cobrança do Incremento G o dado sem
+    bloquear ninguém. O custo: nada impede reagendar para sempre, e a Tifa só
+    pode falar disso, não segurar. Se o dono quiser um teto: um `409` novo no
+    `reagendar_missao` e um texto por `code` no `rescheduleFailure.ts`.
+111. **Sem pausa nem sessões: a duração real conta o tempo parado** (decisão F5).
+    `actual_duration_minutes` é `completed_at − started_at`, relógio de parede,
+    em minutos truncados: quem inicia a missão, larga e volta no dia seguinte
+    tem uma duração de um dia. `em_andamento` só vai para `concluida`, sem
+    volta a `pendente` (apagaria o `started_at`) e sem `paused_at` (mentiria na
+    segunda pausa). Medir de verdade pede a entidade "sessão" do README §8, com
+    início e fim próprios.
+112. **O rascunho do reagendamento não sobrevive à recarga do quadro** (decisão
+    F20). O novo prazo e o motivo escolhidos moram no cartão (`RescheduleForm`,
+    `rescheduleDraft.ts`); "Atualizar o quadro" remonta os cartões e os perde
+    (custo: dois cliques). Só a **chave de operação** mora no registro
+    (`useCompletionRegistry`), e por isso ela sobrevive. Consequência medida na
+    revisão da Task 10: depois de uma recarga com a chave de reagendar retida (uma
+    falha `retry` anterior), a regra de liberar a chave quando o rascunho muda
+    não vale (o "último rascunho enviado" some com o cartão); um conteúdo
+    diferente recebe `409 operacao_reutilizada` **uma vez**, e o envio seguinte
+    usa chave nova — seguro, com um clique a mais. E há **duas fontes** de "o
+    último rascunho enviado" (`sent` no formulário e `lastSentReschedule` no
+    cartão), que divergem depois de fechar e reabrir o disclosure; também seguro,
+    porque a mesma chave só vai com o mesmo conteúdo. Resolver pede o rascunho
+    no registro, como a evidência (E17).
+113. **Diária e especial não se reagendam** (decisão F7). `409 prazo_derivado`:
+    o prazo delas é derivado do ciclo (C10), nunca gravado — o fim do dia da
+    diária, a janela da especial —, então não há coluna para mudar, e mover a
+    regra do dia de uma missão quebraria a sequência (B) e a trilha (C). Quem está
+    sem tempo para a diária de hoje não tem saída pelo F (a F25 só cobre a diária
+    já **iniciada** a tempo). Replanejar a semana é trabalho do `propose_plan`,
+    que continua adiado (pendências 55 e 59).
+114. **O retrato da proposta de reagendamento pode estar velho na hora de
+    confirmar** (decisão F16). O cartão mostra o "Prazo atual" gravado no
+    `payload` quando a Tifa propôs (`previous_deadline`), e não o de agora. A
+    confirmação revalida tudo (F17): se a missão foi concluída ou já está com o
+    prazo proposto, a ação é gravada `falhou`/`reagendamento_invalido`. Mas se o
+    prazo foi mudado **para outro valor** entre a proposta e a confirmação, a
+    confirmação executa, e o histórico grava o `previous_deadline` real (o que a
+    trava da missão lê) — que **difere** do "de X" que o cartão mostrou. O
+    histórico é o que vale; o cartão registra o que a pessoa viu quando decidiu.
 115. ~~**Missão do ciclo iniciada no dia e concluída depois dele fica
     `em_andamento` para sempre.** Uma diária iniciada às 23:50 (SP) e concluída
     às 00:10 do dia seguinte já era `perdida`: a conclusão respondia `409
@@ -4719,9 +5104,10 @@ ledger; nenhum é bug esquecido.
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
     subir a versão de propósito, num PR que rode o gate inteiro na imagem
     nova (o ponto de atrito provável é o apt do `playwright install
-    --with-deps`). A mudança de `ubuntu-latest` para `ubuntu-24.04` **não foi
-    executada no CI** ainda: fica provada, ou não, no primeiro PR que rodar o
-    workflow.
+    --with-deps`). A mudança de `ubuntu-latest` para `ubuntu-24.04` foi
+    **provada verde no CI do PR #3** (mesclado em `05da900`; ver a pendência 99).
+    **Esta pendência continua aberta:** a fixação não se atualiza sozinha, e a
+    revisão de 2026-12-01 segue de pé.
 131. **As configurações de `.run/` nunca foram abertas no PyCharm** (lote de
     infraestrutura, 2026-09-29; pendência 17). Os testes só garantem o que se
     lê nos arquivos. Falta, na IDE: abrir o projeto, ver as cinco
@@ -4761,6 +5147,144 @@ ledger; nenhum é bug esquecido.
     (pendência 12): por esse caminho, uma chave `FOCUSQUEST_*` desconhecida
     no `.env` é descartada em silêncio em vez de reprovar. Se ninguém mexer:
     nada muda para quem trabalha da raiz.
+
+**Criadas pelo Incremento F (Task 12, 2026-09-29)**
+
+160. **Os testes de corrida do F detectam o "relógio lido antes da trava" em
+    0 de 6 (início) e 1 de 6 (reagendamento); só os testes de mecanismo o
+    provam** (Task 5). Medido com seis rodadas do arquivo inteiro
+    (`tests/integration/test_acompanhamento_concorrencia.py`) por mutação, com
+    backup e restauro por `cp`: tirar `travar=True` de `iniciar_missao` ou de
+    `reagendar_missao` reprovou **6 de 6**; ler `agora = clock()` **antes** da
+    trava reprovou 6/6 **pelos testes de mecanismo** (a sonda `FOR KEY SHARE
+    NOWAIT`, com o relógio lido uma vez, e `started_at`/`rescheduled_at` contra o
+    instante em que a trava foi liberada, com a thread dada como parada por
+    `pg_stat_activity.wait_event_type = 'Lock'`), mas os **cenários de corrida**
+    pegaram **0 de 6** nos três do início e **1 de 6** no reagendamento
+    (`test_dois_reagendamentos_viram_dois_elos`, só pela ordem dos
+    `rescheduled_at`); nos demais, 0 de 6. E os 6/6 dos cenários de corrida para
+    "sem trava" são desta máquina, desta carga, seis amostras: o entrelaçamento é
+    do escalonador e não é garantido em outra. Registrado porque o plano manda
+    registrar toda taxa abaixo de 100% (a pendência 44 registrava que o 1b-1 não
+    tinha nenhuma). Também: `test_mesma_chave_de_reagendamento_em_missoes_diferentes`
+    **não garante** que o caminho da UNIQUE foi percorrido (se as threads não se
+    cruzam, a consulta de idempotência já recusa), e por isso existe a variante
+    determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
+    os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
+    a única garantia determinística dele.
+161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
+    liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
+    **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
+    `tutoring/context.py` (o que o modelo lê), `RESCHEDULE_REASON_LABELS` em
+    `frontend/src/shared/types/mission.ts` (o cartão e o formulário) e uma
+    **cópia local** em `frontend/src/features/tutoring/types.ts` (o cartão da
+    proposta), com o comentário de espelho da 32. O comentário do código justifica a
+    cópia da tutoria (o cartão só precisa do texto, e a lista é curta), e a Task 9
+    correu em paralelo à Task 8, que criou a versão de `shared/` (relatório da
+    Task 9); depois do merge, a `tutoring` poderia importar de `shared/` (ela já
+    importa `formatDeadline` e `MAX_DIFFICULTY` de lá) e a cópia sairia. Um motivo novo no backend exige
+    escrever o rótulo nos três lugares: o `tsc` pega os dois do frontend
+    (`Record` exaustivo sobre o tipo), mas **não** o desencontro entre frontend e
+    backend. (b) **`kind` de ação desconhecido**: uma API mais nova que a tela
+    entrega um `kind` que o `ActionRead` não lista; o `ProposalCard` mostra o
+    texto neutro "Proposta que esta versão não sabe mostrar." (`tutor-proposal-unknown`),
+    sem botão e sem o `kind` cru, e a conversa continua. Esse texto é decisão do
+    agente (a spec não o fixava, "lacuna conhecida" do plano), e a pessoa fica sem
+    saída para aquela proposta (nem confirmar, nem recusar) até a tela ser
+    atualizada. Se o dono preferir outro texto ou um "Recusar" mesmo assim,
+    é uma linha e um teste em `ProposalCard.tsx`.
+162. **A tolerância a `reschedules` (e a `reward`) ausentes no frontend deve ser
+    removida no futuro** (Task 10, RF10). `RescheduleHistory` aceita
+    `reschedules: Reschedule[] | undefined` e devolve `null` para `undefined`
+    (`RescheduleHistory.tsx`, o docstring explica), e o tipo `reward?: Reward |
+    null` (`shared/types/reward.ts` e `features/missions/types.ts`) é o mesmo
+    desenho do `reward` ausente do D (Ruling R6, `shared/types/reward.ts`): o `postJson` não valida a
+    resposta em tempo de execução, e uma API anterior ao F devolve a missão sem a
+    chave. Sem a guarda, ler `.length` de `undefined` derrubaria o quadro inteiro
+    — medido: **13 cenários E2E** reprovaram contra o backend anterior ao F. O
+    tipo `Mission` continua dizendo que `reschedules` sempre vem, então a
+    tolerância é só deste leitor, e um código de produção só existe para um
+    cenário (frontend novo, backend velho) que **não acontece** enquanto os dois
+    saírem juntos. Remover as duas junto, com os testes que as provam
+    (`RescheduleHistory.test.tsx`, o caso de `undefined`; e os do `reward`
+    ausente), no dia em que não houver mais deploy defasado a tolerar.
+163. **Minors da Task 10 sem efeito no produto, adiados** (revisão e relatório da
+    Task 10). (a) O rótulo de espera "Aguardando a conclusão em andamento…"
+    (`reloadWaiting.ts`, fixado por testes existentes) aparece também quando quem
+    está em voo é um Iniciar ou um Reagendar; o texto neutro seria "o pedido em
+    andamento". (b) Os botões de recarga não dizem de qual missão são. (c) O foco,
+    depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
+    (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
+    sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
+    impacto hoje, porque a tela só cria prazos em minutos. (e) O rótulo do Iniciar
+    depois de **remontar** o cartão com a chave retida diz "Iniciar", e não
+    "Tentar de novo": o registro não expõe "chave de ação retida"; o envio usa a
+    mesma chave (testado).
+164. **Arestas da confirmação da Tifa e do prazo em texto, adiadas** (revisão da
+    Task 7). (a) **A tela aceita como "reenvio" a chave de uma confirmação da
+    Tifa:** `POST /api/missions/{id}/reschedule` com a chave K de uma confirmação
+    já feita, a mesma missão, o mesmo prazo e o mesmo motivo devolve `200` com o
+    elo `origin = tifa`, como se fosse da tela (`reagendar_missao` não confere a
+    origem no reenvio; medido nesta sessão que o serviço só grava `origem` na
+    inserção). Não duplica nada e exige um cliente que reuse chave; a assimetria
+    contrária foi fechada pela RF4. (b) **`_resultado_anterior` de um reagendamento
+    executado devolve a missão de agora**, não a que aquela confirmação produziu: se
+    a missão foi reagendada de novo pela tela depois, o reenvio da confirmação
+    responde com o prazo novo. É o mesmo desenho da criação e da conclusão; a
+    **ação** (o que importa) sai igual. (c) **`"1790000000"` passa como
+    `deadline`** de `MissionCreate` e como `new_deadline` do
+    `POST /reschedule`: o `AwareDatetime` do Pydantic lê texto de dígitos como
+    tempo Unix UTC (medido nesta sessão validando o `MissionCreate` em Python,
+    não pela rota). A proposta da Tifa recusa (RF5); a API pública não. Um cliente
+    que mandasse epoch em texto criaria um prazo que ninguém quis dizer.
+165. **O banco não amarra o elo do histórico à operação certa** (revisão final
+    do F, m3). `mission_reschedules.operation_id` tem uma FK simples para
+    `mission_operations.operation_id` (`alembic/versions/0006_acompanhamento.py`,
+    `MissionReschedule` em `missions/models.py`). Nada no banco garante que essa
+    operação é `kind = 'reschedule'` nem que é da mesma `mission_id` do elo: quem
+    garante, hoje, é `reagendar_missao`, que grava a operação e o elo na mesma
+    transação, com a missão travada. `mission_operations` já tem `mission_id` e
+    `kind`, então fechar no banco é possível — uma FK composta `(operation_id,
+    mission_id)` sobre uma `UNIQUE` correspondente, e o `kind` fixado no elo —, ao
+    custo de uma migração nova e de espelho no modelo. Sem efeito hoje: só o
+    serviço escreve, e a spec (seção "Modelo de dados") já declara essa garantia,
+    junto com "só avulsa não concluída", como do serviço.
+166. **`reschedules` é carregado sob demanda em `GET /api/plans/current` e em
+    `GET /api/cycle`** (revisão final do F, m4). O `MissionRead` lê
+    `missao.reschedules` (`lazy="select"`), e o `selectinload` do merge (pendência
+    96) cobre só a listagem: a trilha da semana (8 missões) e o ciclo (até 3) pagam
+    **uma consulta a mais por missão**, sempre vazia para diária e especial. É o
+    mesmo N+1 que `evidence` e `evaluation` já tinham ali, e o custo é pequeno e
+    fixo. Resolver: `selectinload` nas consultas de `cycle_service.py`, com um teste
+    de contagem de consultas como o de `test_missions_listagem_consultas.py`.
+167. **Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
+    tela** (revisão final do F, m6). Há confirmação × reagendamento direto,
+    reagendamento × conclusão e a mesma confirmação em paralelo, mas não uma
+    confirmação de reagendamento junto com a conclusão da mesma missão. A ordem das
+    travas (ação → missão → usuário, este último com `KEY SHARE` pela conclusão) está
+    certa na leitura e nenhum caminho trava na ordem inversa (F14), mas falta a
+    prova por conexões reais, no padrão do cenário "reagendamento × conclusão" de
+    `test_acompanhamento_concorrencia.py`: nunca um elo gravado depois da conclusão,
+    e, se os dois vencem, a conclusão viu o prazo novo. Liga-se à pendência 160 (a
+    detecção de corrida depende do escalonador).
+168. **O E2E do F tem prazos fixos que vencem, e o gate reprova sozinho a partir
+    de 2027-01-10** (revisão final do F, I2). O `check-e2e` roda com o relógio real
+    da API (`system_now`, pendência 116), e dois cenários de
+    `frontend/tests/e2e/tracking.spec.ts` dependem de um prazo **no futuro**: o
+    reagendamento pela tela para `2027-01-10T10:00` (`13:00Z`) e a proposta da Tifa
+    para `2027-02-01T21:00:00Z`. Depois de cada instante, `problema_do_novo_prazo`
+    devolve `NO_PASSADO` (`422 prazo_expirado`) e o cenário reprova — no `make
+    check`, no `pre-push` e no job do CI, sem nenhuma mudança de código. A primeira
+    quebra é em **2027-01-10 às 13:00 UTC**. Correção prevista: montar os prazos a
+    partir de `Date.now()` (por exemplo, +30 e +60 dias), com o campo
+    `datetime-local` e as expressões regulares derivados deles, como o `naTela` do
+    próprio arquivo; **fica para uma rodada de correção posterior a esta
+    documentação** (quem a fizer risca esta pendência). O revisor apontou também
+    `tutoring.spec.ts:209` (`2027-04-01T12:00:00Z`): conferido nesta sessão, essa
+    linha só **cria** a missão pela API do cenário "Tifa fora do ar", e a criação
+    aceita prazo no passado (não há janela de negócio, decisão de produto em
+    aberto), então não vi como ela reprovaria por data — não medido; a mesma cautela
+    vale para os prazos fixos de `headquarters.spec.ts` (criação e leitura da tela).
 
 **Criadas pelo lote back (2026-09-29)**
 
@@ -4856,24 +5380,30 @@ B → C**. O desenho de A, B e C está em
   pendência 3 (iniciar missão) continua aberta.
 
 - **F — acompanhar a execução: iniciar e reagendar missões**, o incremento
-  depois do E. **Desenhado, não implementado.** Tema escolhido pelo controlador
-  da sessão autônoma de 2026-09-29, com o dono ausente; **o desenho foi
-  aprovado por delegação do dono** (2026-09-29, "tome todas as decisões por
-  mim"), e o dono pode revogar qualquer decisão. Spec em
+  depois do E. **Implementado** em `feat/incremento-f` (worktree `wt/f-tutor`;
+  base `580f6cc`, atualizada com a `main` em `05da900`; ponta `9e4f191` antes do
+  commit desta documentação). **Estado de publicação: não publicado** quando
+  isto foi escrito (ver "Revisão-base"). Tema escolhido pelo controlador da
+  sessão autônoma de 2026-09-29, com o dono ausente; **o desenho foi aprovado por
+  delegação do dono** ("tome todas as decisões por mim"), e o dono pode revogar
+  qualquer decisão. Spec em
   `docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
-  (decisões F1–F24, recorte, contratos, migração `0006`, "Para o dono
-  decidir"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`
-  (Tasks 0–12, com dependências, paralelismo em até quatro worktrees e a
-  classe simples/complexa de cada tarefa). **Recorte:** fecha a pendência 3
-  (`POST /api/missions/{id}/start`), cria o reagendamento com motivo
-  (`POST /api/missions/{id}/reschedule`; dificuldade, falta de tempo ou
+  (decisões F1–F24 e a emenda F25); plano em
+  `docs/superpowers/plans/2026-09-29-incremento-f.md` (Tasks 0–12). **Entregue:**
+  fecha a pendência 3 (`POST /api/missions/{id}/start`); o reagendamento com
+  motivo (`POST /api/missions/{id}/reschedule`; dificuldade, falta de tempo ou
   mudança de prioridade) e o histórico de replanejamento (`mission_reschedules`,
-  README §8), e dá à Tifa a ferramenta de proposta `reschedule_mission`, que só
-  executa depois da confirmação. **Fora:** cobranças com preferências de
-  intensidade, frequência, horários e pausa (ficam para o **G**), dividir
-  missão, `propose_plan` e reagendar diária ou especial. As pendências novas
-  que o F vai criar estão reservadas como 109–114 na spec e só entram na lista
-  de "Abertas" quando o código existir (Task 12 do plano).
+  README §8); a ferramenta de proposta `reschedule_mission` da Tifa, que só
+  executa depois da confirmação; e a F25 (pendência 115: a missão iniciada a
+  tempo conclui até o fim do dia seguinte). Decisões e rulings em "Decisões
+  tomadas", alterações em "Alterações do Incremento F", medições em
+  "Resultados". **Fora:** cobranças com preferências de intensidade, frequência,
+  horários e pausa (ficam para o **G**), dividir missão, `propose_plan` e
+  reagendar diária ou especial. **O que segue aberto no F:** o limite de
+  reagendamentos, do dono (110), a pausa (111), o rascunho perdido na recarga
+  (112), a diária e a especial fora do reagendamento (113), o retrato que
+  envelhece (114), o E2E da conclusão tardia (116), a Tifa que não sabe dela
+  (117) e as pendências 160 a 168.
 
 **O que o C encontrou pronto do B, no início:**
 
