@@ -1005,7 +1005,8 @@ A camada 3 existe desde a Task 8 do 1b-2. As camadas 1 e 2 provam que o falso
   thinking do falso também.
 - **O que ela não prova.** Que a API não mude amanhã: a referência é uma
   fotografia datada, de um modelo e de uma versão do SDK, e de **uma**
-  resposta (texto e proposta). Regravar é só pelo dono, com o comando da
+  resposta (texto e proposta; em 2026-09-29, a conversa com duas ferramentas
+  repetiu a mesma sequência, seção abaixo). Regravar é só pelo dono, com o comando da
   seção "Comandos" do `docs/HANDOFF.md`, nunca no gate — o CI nunca chama a
   Anthropic.
 
@@ -1092,24 +1093,50 @@ das camadas 1 e 2 serve a avaliação como serve a conversa.
   `provedor_indisponivel`, sem log da causa (pendência 100 do
   `docs/HANDOFF.md`).
 
-### Camada 3 da avaliação: não existe, é pendência
+### Camada 3 da avaliação e da conversa com duas ferramentas (2026-09-29)
 
-A referência da camada 3 (`tests/integration/referencia_da_api_real.json`)
-guarda **uma** resposta real, de **texto e proposta** da conversa. As camadas 1 e
-2 provam que o adaptador de `avaliar` fala com o SDK fixado e que o serviço trata
-cada saída; **nenhuma prova o que só a API real responde**, e o `strict` **nem é
-validado pelo falso** (ele não simula a checagem do esquema). Não medido:
-(a) que o `claude-opus-5`, que manda um bloco de thinking sem que a requisição o
-peça (seção acima), **chama** `record_evaluation` com `tool_choice: auto` e a
-instrução do sistema, em vez de responder em texto (que vira `avaliacao_invalida`);
-(b) que a API aceita o esquema `strict` da rubrica (`additionalProperties: false`,
-sem `minLength`/`maxLength`); (c) o formato real da sequência de eventos da
-avaliação. A escolha do `auto` (EM3) vem da referência oficial da API, **não de
-uma chamada real**. É a pendência 91 do `docs/HANDOFF.md`: uma chamada real de
-avaliação, **pelo dono**, com a chave do Keychain só para o processo da API,
-gravando a sequência de tipos de evento — o mesmo roteiro da pendência 42. Se a
-API recusar o esquema, o erro sai como `502 provedor_indisponivel` **gravado**,
-nunca como bônus. Como a camada 3 da conversa, **o CI nunca chama a Anthropic**.
+Gravadas numa sessão autônoma, com a chamada real autorizada pelo dono e feita
+pelo agente (pendências 91 e 109 do `docs/HANDOFF.md`). Diferente do
+`camada3.py`, que remonta a requisição a mão com `messages.create`, os dois
+scripts novos chamam o **adaptador de produção**:
+
+- **`tests/integration/espiao.py`.** `Espiao` é um transporte do cliente HTTP
+  que entrega o corpo ao SDK e guarda uma cópia; `linhas()` decodifica a cópia
+  pelo `content-encoding` (o transporte vê o corpo antes da descompressão).
+  `provedor_espionado` monta o `ProvedorAnthropic` de produção e troca, por
+  `with_options`, só o cliente HTTP e as tentativas (`max_retries=0`, para a
+  conta das chamadas pagas ser exata). Fica em `tests/`: não é modo de captura
+  em `src/` nem proxy no `anthropic_base_url` (decisão D8). Provado por
+  `tests/integration/test_espiao.py`; **visto reprovando** por mutação: a
+  cópia sem decodificar (o caso gzip reprova) e `max_retries=2` (um 500 vira
+  três requisições).
+- **Avaliação** (`camada3_da_avaliacao.py`): uma `Tentativa` fixa, o
+  `montar_turno_da_avaliacao` e o `avaliar` com a `FERRAMENTA_DA_AVALIACAO`
+  real. Medido com o `claude-opus-5`: o modelo **chamou** `record_evaluation`
+  com `tool_choice` auto, sem bloco de texto; a API **aceitou** o esquema
+  `strict`; o thinking veio sem ser pedido e não atrapalhou. A referência,
+  `tests/integration/referencia_da_avaliacao_real.json`, é thinking (com
+  `ping`), `tool_use`, `message_delta`, `message_stop`.
+  `tests/integration/test_camada3_da_avaliacao.py` compara o falso (roteiro só
+  com a ferramenta) com ela, confere que a captura pede a ferramenta estrita
+  de produção e que o script recusa gravar fora da API real; **vistos
+  reprovando** por mutação: a guarda do endereço removida e o esquema da
+  ferramenta trocado.
+- **Conversa com duas ferramentas** (`camada3_do_reagendamento.py`): o
+  `montar_turno` com uma avulsa pendente e o pedido de adiá-la, pelo
+  `responder` de produção (`create_mission` e `reschedule_mission`). Medido:
+  o modelo chamou `reschedule_mission` com uma entrada que o
+  `RescheduleProposal` aceitou, e a sequência foi a **mesma** da referência
+  da conversa — que por isso **não foi regravada** (o script só regrava se a
+  sequência mudar). `tests/integration/test_camada3_do_reagendamento.py`
+  compara o falso roteirizado com `reschedule_mission` com essa referência;
+  **vistos reprovando** por mutação: a guarda do endereço, a conferência do
+  nome da ferramenta e a do id da missão.
+- **O que elas não provam.** Uma amostra de cada: o modelo pode deixar de
+  chamar a ferramenta às vezes (na avaliação, `avaliacao_invalida`,
+  repetível). Só o veredito `atende` foi pedido à API real, e nenhuma das duas
+  passou pela tela. **O CI nunca chama a Anthropic:** os três scripts só rodam
+  à mão.
 
 ### O falso como processo (E2E)
 
@@ -1155,7 +1182,8 @@ forçado (M3a) e sem `strict` (M3b); `text-slate-700` no rótulo (o axe acusa
 `color-contrast`); e, no lote ME, a frase do sistema sem `record_evaluation` e a
 chamada extra ao modelo antes de `avaliar`. **O que ele não prova:** o `strict` e o
 `auto` são afirmados no **pedido**, contra o falso; que a API real os aceita e
-que o modelo chama a ferramenta é a pendência 91 (camada 3).
+que o modelo chama a ferramenta foi medido fora do E2E, numa chamada real
+(seção "Camada 3 da avaliação...", pendência 91).
 
 ### A guarda de `tests/conftest.py`: nenhum teste alcança a Anthropic
 

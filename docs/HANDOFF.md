@@ -2829,6 +2829,21 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 Ele imprime só a lista de tipos de evento e grava o mesmo no arquivo, sem
 texto, sem ids e sem a chave. Nunca crie esse arquivo à mão.
 
+Desde 2026-09-29 há mais dois scripts, do mesmo jeito (chave do Keychain só
+para o processo, endereço padrão, recusam gravar fora de `api.anthropic.com`),
+que chamam o adaptador **de produção** (`ProvedorAnthropic`) com o `Espiao` no
+transporte e `max_retries=0` — uma chamada paga cada:
+
+```bash
+# Camada 3 da avaliação (pendência 91): grava referencia_da_avaliacao_real.json
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  PYTHONPATH=tests uv run python -m integration.camada3_da_avaliacao
+# Conversa com duas ferramentas (pendência 109): regrava referencia_da_api_real.json
+# SÓ se a sequência mudar
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  PYTHONPATH=tests uv run python -m integration.camada3_do_reagendamento
+```
+
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
 no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
@@ -3996,7 +4011,7 @@ ledger; nenhum é bug esquecido.
     porque nenhuma missão tem hoje um critério assim; inventar um seria fingir
     verificação. Precisa de missões com critério executável, e a execução de
     código do estudante exige isolamento (README §6 proíbe na API).
-91. **A camada 3 da avaliação não foi gravada, e a chamada real da avaliação
+91. ~~**A camada 3 da avaliação não foi gravada, e a chamada real da avaliação
     nunca aconteceu.** A referência da camada 3
     (`tests/integration/referencia_da_api_real.json`) cobre **uma** resposta
     real de **texto e proposta** da conversa. A avaliação **não** força a
@@ -4027,7 +4042,40 @@ ledger; nenhum é bug esquecido.
     e grave, sem o conteúdo do texto, a sequência de tipos de evento para a
     referência da camada 3 da avaliação. **O CI nunca chama a Anthropic.** O
     `docs/QUALITY.md` §9 diz o que as camadas 1 e 2 provam e o que esta não
-    prova.
+    prova.~~
+    **Resolvida em 2026-09-29 (sessão autônoma, worktree `f-api`):** por
+    uma chamada real autorizada pelo dono nesta sessão ("Faça as chamadas
+    reais à API da Anthropic"), feita pelo agente, e não pela tela. O script
+    que faltava é `tests/integration/camada3_da_avaliacao.py`: monta uma
+    `Tentativa` fixa (uma entrega que atende ao critério), chama o
+    `ProvedorAnthropic.avaliar` **de produção** com a `FERRAMENTA_DA_AVALIACAO`
+    real e o turno do `montar_turno_da_avaliacao`, e lê o corpo cru pelo
+    `Espiao` (`tests/integration/espiao.py`), um transporte do cliente HTTP
+    que copia o stream enquanto o SDK o lê — nada em `src/`, nenhum proxy, e
+    o `anthropic_base_url` padrão (decisão D8). A única diferença em relação a
+    produção é `max_retries=0`, para a conta das chamadas ser exata (provado
+    por `test_o_provedor_espionado_nao_tenta_de_novo`). A chave veio do
+    Keychain (`focusquest-anthropic`) direto para o ambiente do processo, numa
+    linha só; modelo `claude-opus-5` (o padrão do `Settings`, aceito pela API,
+    sem override). **Uma** chamada. Medido: (a) o modelo **chamou**
+    `record_evaluation` com `tool_choice: auto` e a instrução do sistema —
+    sem bloco de texto nenhum —, `avaliar` devolveu a entrada (só devolve com
+    `stop_reason` `tool_use`) e ela passou no `EvaluationOutput`, veredito
+    `atende`; (b) a API **aceitou** o esquema `strict` da rubrica: a resposta
+    veio em stream, sem 400; (c) o `claude-opus-5` mandou o bloco de
+    **thinking** sem a requisição pedir, e ele não atrapalhou: a sequência foi
+    `message_start`, thinking (com `ping` no meio, `thinking_delta`,
+    `signature_delta`), `tool_use` (`input_json_delta`), `message_delta`,
+    `message_stop`. A sequência está em
+    `tests/integration/referencia_da_avaliacao_real.json` (data UTC
+    `2026-09-30`: a chamada foi na noite de 29/09 em Brasília), e
+    `tests/integration/test_camada3_da_avaliacao.py` compara o falso com ela.
+    **O que continua não medido:** uma amostra só (o modelo pode deixar de
+    chamar a ferramenta às vezes — vira `avaliacao_invalida`, repetível), uma
+    entrega que **atende** (os vereditos `parcial` e `nao_atende` não foram
+    pedidos à API real), e o circuito pela tela (`POST
+    /api/missions/{id}/evaluation` com bônus creditado) não foi exercitado
+    com a API real.
 92. **Evidência sem upload** (decisão E3). Só texto (1 a 4000 pontos de código)
     e um link `http(s)` de até 2000; o backend **nunca abre o link**, e o
     sistema da avaliação diz à Tifa que o link não foi aberto (e o JSON do
@@ -4181,6 +4229,40 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+109. ~~**A conversa com duas ferramentas não foi medida contra a API real; a
+     referência da camada 3 é de uma ferramenta só** (spec do F, "Pendências
+     que o F cria"; decisão F18).~~
+     **Resolvida em 2026-09-29 (sessão autônoma, worktree `f-api`):** por uma
+     chamada real autorizada pelo dono nesta sessão, feita pelo agente com o
+     script `tests/integration/camada3_do_reagendamento.py`, a chave do
+     Keychain só para o processo, o `anthropic_base_url` padrão e o modelo
+     `claude-opus-5` (padrão do `Settings`). **Uma** chamada, pelo
+     `ProvedorAnthropic.responder` **de produção** (as duas ferramentas,
+     `create_mission` e `reschedule_mission`, sem `strict`, `tool_choice`
+     auto com `disable_parallel_tool_use`), com o `Espiao` no transporte e
+     `max_retries=0`. O turno sai do `montar_turno` com **uma** avulsa
+     pendente (transiente, `#7`, prazo em 24 h) e o pedido "Estou sem tempo
+     essa semana. Adie a missão #7 para sexta, às 18h no horário de
+     Brasília." Medido — **aprovado**: o modelo chamou `reschedule_mission`
+     (e não `create_mission`) com `mission_id` 7, `reason` `falta_de_tempo` e
+     `new_deadline` `2026-10-02T18:00:00-03:00` (a sexta certa, com fuso), e
+     a entrada passou no `RescheduleProposal`; a API aceitou o esquema das
+     duas ferramentas (stream, sem 400). A sequência de tipos foi a **mesma**
+     da referência da conversa (thinking, texto, `tool_use`), sem o `ping`;
+     por isso `tests/integration/referencia_da_api_real.json` **não foi
+     regravado** (o script só regrava se a sequência mudar), e
+     `tests/integration/test_camada3_do_reagendamento.py` compara o falso,
+     roteirizado com `reschedule_mission`, com ela. **O que continua não
+     medido:** uma amostra só; o circuito pela tela (o cartão de
+     reagendamento, a confirmação e o prazo novo no Quartel-General) não foi
+     exercitado com a API real; e o pedido era explícito (a missão pelo
+     número) — um pedido ambíguo, sem o `#id`, não foi medido. **Dependência
+     registrada:** a medição usou o formato do contexto desta árvore
+     (`aadbef5`: a linha `- #7: ...` do `_linha_da_pendente` e a validação do
+     prazo do `RescheduleProposal`); se a correção da Task 7 em andamento no
+     worktree `f-tutor` mudar o formato do id no contexto ou a validação ISO
+     do prazo, esta medição vale para o formato antigo e deve ser refeita com
+     o mesmo script.
 
 ## Próximo incremento
 
