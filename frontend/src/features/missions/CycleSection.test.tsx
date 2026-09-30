@@ -149,7 +149,12 @@ describe('CycleSection', () => {
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
 
-    const statusDepois = await screen.findByTestId('mission-completion-status')
+    // Espera o TEXTO final, e nao o elemento: a regiao ja estava na tela antes
+    // do clique, entao `findByTestId` a achava na hora e a assercao podia rodar
+    // antes de a resposta chegar (intermitente sob carga; mesmo conserto do
+    // MissionList.test.tsx).
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
     expect(statusDepois).toBe(statusAntes)
     expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
       'Missão concluída.',
