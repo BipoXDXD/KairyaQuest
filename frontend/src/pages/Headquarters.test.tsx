@@ -443,7 +443,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     await screen.findByTestId('proposal-created')
     expect(requestsTo(fetchMock, MISSIONS)).toHaveLength(1)
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
-      'Aguardando a conclusão em andamento para atualizar o quadro.',
+      'Aguardando o pedido em andamento para atualizar o quadro.',
     )
 
     await act(async () => {

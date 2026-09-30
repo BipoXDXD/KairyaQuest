@@ -617,8 +617,8 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
   const K2 = '00000000-0000-4000-8000-000000000002'
   const K3 = '00000000-0000-4000-8000-000000000003'
 
-  const ESPERA_BOTAO = 'Aguardando a conclusão em andamento…'
-  const ESPERA_ANUNCIO = 'Aguardando a conclusão em andamento para atualizar o quadro.'
+  const ESPERA_BOTAO = 'Aguardando o pedido em andamento…'
+  const ESPERA_ANUNCIO = 'Aguardando o pedido em andamento para atualizar o quadro.'
 
   type Reply = () => Promise<Response>
 
@@ -946,7 +946,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     // `finally` que chama `settled()` tambem nao -- o contador do registro
     // ficava em 1 para sempre, e o cartao de A ficava preso em "Concluindo...".
     // Medido com um teste temporario, sobre a ordem antiga:
-    // {gets: 1, reload: "Aguardando a conclusão em andamento…",
+    // {gets: 1, reload: "Aguardando o pedido em andamento…",
     //  A: "Concluindo… a missão: A"}.
     vi.spyOn(crypto, 'randomUUID')
       .mockReset()
@@ -1027,7 +1027,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
     // Um GET so: a recarga pedida de fora esperou o POST em voo.
     expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
-      'Aguardando a conclusão em andamento para atualizar o quadro.',
+      'Aguardando o pedido em andamento para atualizar o quadro.',
     )
 
     await act(async () => {
@@ -1412,7 +1412,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     fireEvent.click(await within(card(7)).findByTestId('evaluation-reload'))
     const recarga = within(card(7)).getByTestId('evaluation-reload')
     expect(recarga).toBeDisabled()
-    expect(recarga).toHaveTextContent('Aguardando a conclusão em andamento…')
+    expect(recarga).toHaveTextContent('Aguardando o pedido em andamento…')
 
     await act(async () => {
       terminar(Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }))
@@ -2287,7 +2287,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
     })
   })
 
-  describe('a recarga espera o Iniciar', () => {
+  describe('a recarga espera o Iniciar e o Reagendar', () => {
     it('com o Iniciar de A em voo, "Atualizar o quadro" espera e recarrega quando ele termina', async () => {
       const postA = deferred()
       const fetchMock = routeFetch({
@@ -2305,11 +2305,52 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       fireEvent.click(atualizar)
 
       expect(atualizar).toBeDisabled()
-      expect(atualizar).toHaveTextContent('Aguardando a conclusão em andamento…')
+      expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
+        'Aguardando o pedido em andamento para atualizar o quadro.',
+      )
       expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
 
       await act(async () => {
         postA.resolve(Response.json(iniciada))
+        await postA.promise
+      })
+
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+    })
+
+    it('com o Reagendar de A em voo, a espera nao fala em conclusao e a recarga sai quando ele termina', async () => {
+      const postA = deferred()
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [reagendada, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/reschedule': () => postA.promise,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      const atualizar = await within(card(8)).findByTestId('mission-start-reload')
+
+      fireEvent.click(atualizar)
+
+      expect(atualizar).toBeDisabled()
+      expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(atualizar).not.toHaveTextContent('conclusão')
+      expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
+        'Aguardando o pedido em andamento para atualizar o quadro.',
+      )
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
+
+      await act(async () => {
+        postA.resolve(Response.json(reagendada))
         await postA.promise
       })
 

@@ -374,7 +374,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
 
     const espera = await screen.findByTestId('evaluation-reload')
     expect(espera).toBeDisabled()
-    expect(espera).toHaveTextContent('Aguardando a conclusão em andamento…')
+    expect(espera).toHaveTextContent('Aguardando o pedido em andamento…')
     expect(espera).not.toHaveTextContent('Atualizar o quadro')
     fireEvent.click(espera)
     expect(onReload).not.toHaveBeenCalled()
