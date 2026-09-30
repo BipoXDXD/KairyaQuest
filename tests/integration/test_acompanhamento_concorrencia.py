@@ -12,9 +12,8 @@ arquivos.
 (`test_dois_*`, `test_*_junto_com_*`, `test_mesma_chave_*`) descrevem o
 CONTRATO: o que o cliente ve quando dois pedidos se cruzam. Eles so pegam a
 falta do `FOR UPDATE` quando as duas transacoes de fato se entrelacam, e quem
-decide isso e o escalonador -- a taxa de deteccao medida esta no relatorio da
-Task 5 e e menor que 100% em alguns deles. O MECANISMO e provado sem depender
-de timing por tres testes:
+decide isso e o escalonador -- a taxa de deteccao medida e menor que 100% em
+alguns deles. O MECANISMO e provado sem depender de timing por tres testes:
 
 - `test_*_trava_a_linha_da_missao`: segura a linha em `FOR KEY SHARE` e
   pergunta ao PostgreSQL se o servico esbarra nela (so `FOR UPDATE` esbarra;
@@ -68,7 +67,7 @@ LIMITE_DE_TRAVA = "2s"
 
 # O novo prazo e mandado com offset de Brasilia de proposito: o reenvio
 # paralelo compara o CORPO serializado, e e com um offset diferente de UTC que
-# a normalizacao de `reagendar_missao` (achado da Task 4) faz diferenca.
+# a normalizacao de `reagendar_missao` faz diferenca.
 SAO_PAULO = timezone(timedelta(hours=-3))
 FALTA_DE_TEMPO = MotivoDoReagendamento.FALTA_DE_TEMPO
 
@@ -340,7 +339,7 @@ def test_inicio_junto_com_conclusao_termina_concluida_e_coerente(
 def test_dois_reagendamentos_com_chaves_diferentes_viram_dois_elos(
     banco_migrado: Engine, missao_commitada: int
 ) -> None:
-    """Review Focus 1 (F14): duas abas reagendando juntas. Dois elos
+    """F14: duas abas reagendando juntas. Dois elos
     ENCADEADOS -- o `previous_deadline` do segundo e o `new_deadline` do
     primeiro -- e o prazo final e o do ultimo a commitar. Sem a trava, as
     duas leriam o mesmo prazo antigo e o segundo elo mentiria sobre de onde

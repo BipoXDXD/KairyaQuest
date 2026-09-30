@@ -106,8 +106,8 @@ def test_prazo_em_utc_normaliza_o_instante() -> None:
 
 
 def test_prazo_em_utc_recusa_instante_sem_fuso() -> None:
-    """Sem fuso, `astimezone` assumiria o fuso da MAQUINA em silencio (revisao
-    da T4, I1): 10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z num container
+    """Sem fuso, `astimezone` assumiria o fuso da MAQUINA em silencio:
+    10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z num container
     em UTC."""
     with pytest.raises(ValueError, match="sem fuso"):
         prazo_em_utc(datetime(2026, 10, 1, 10, 0))

@@ -341,7 +341,7 @@ def reagendar_missao(
     nao seria o mesmo. Normalizar aqui vale para a tela e para a Tifa.
     `prazo_em_utc` recusa, com `ValueError` e antes de tudo, o instante sem fuso
     e o que nao cabe em UTC: `astimezone` sozinho aceitaria o primeiro com o
-    fuso da maquina (revisao da T4, I1).
+    fuso da maquina.
     """
     novo_prazo = prazo_em_utc(novo_prazo)
     missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
@@ -463,7 +463,7 @@ def buscar_para_escrever(
     Com a trava, `populate_existing` tambem: o `SELECT ... FOR UPDATE` sai de
     qualquer jeito, mas, sem ele, uma missao que ja estava no identity map
     desta sessao NAO e sobrescrita pela linha lida -- a decisao seria tomada
-    sobre o prazo e o estado de ANTES da espera (M3 da revisao da T4; provado
+    sobre o prazo e o estado de ANTES da espera (provado
     por `test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava`).
     """
     missao = session.get(

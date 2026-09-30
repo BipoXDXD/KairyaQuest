@@ -283,8 +283,8 @@ def test_cada_recusa_vem_antes_de_qualquer_escrita(
 def test_prazo_que_nao_e_instante_utc_e_recusado_sem_escrita(
     session: Session, prazo: datetime, mensagem: str
 ) -> None:
-    """Revisao da T4, I1: a borda (`PrazoComFuso`) ja recusa os dois, mas o
-    servico tambem e chamado pela Tifa (T7). Recusado ANTES de normalizar e
+    """A borda (`PrazoComFuso`) ja recusa os dois, mas o
+    servico tambem e chamado pela Tifa. Recusado ANTES de normalizar e
     de qualquer escrita, com `ValueError` -- nunca aceito com o fuso da
     maquina, nunca `OverflowError` cru."""
     missao = _avulsa(session)
@@ -300,7 +300,7 @@ def test_reenvio_depois_de_outro_reagendamento_devolve_a_missao_como_esta(
     session: Session,
 ) -> None:
     """F13: o reenvio compara com a linha GRAVADA da operacao, nao com o prazo
-    corrente, e devolve a missao como esta agora (revisao da T4, M1). `op-a`
+    corrente, e devolve a missao como esta agora. `op-a`
     leva ao prazo A, `op-b` ao B; o reenvio de `op-a` e o mesmo pedido de
     antes, responde com o prazo B e nao grava um terceiro elo."""
     missao = _avulsa(session)
@@ -389,7 +389,7 @@ def test_api_reenvio_e_o_mesmo_corpo(
 def test_api_reenvio_em_outro_fuso_e_o_mesmo_corpo(
     client: TestClient, instante: list[datetime]
 ) -> None:
-    """Revisao da T4, M2: na borda o cliente troca de grafia. O 1o pedido vai
+    """Na borda o cliente troca de grafia. O 1o pedido vai
     em `-03:00`, o reenvio no MESMO instante em `Z`: e o mesmo pedido (F13),
     e o corpo e o mesmo."""
     criada = _criar(client)

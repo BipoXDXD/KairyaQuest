@@ -136,9 +136,9 @@ def test_acoes_antigas_entram_como_texto_com_o_estado_real() -> None:
     """Sem `tool_result`, um `tool_use` antigo deixaria o historico mal
     formado; como texto, o modelo sabe o que foi confirmado ou recusado.
 
-    Expectativa mudada na correcao da T7 (I2 da revisao): o id da ACAO saiu do
-    `#`, que agora so nomeia MISSAO -- o mesmo `#` que a lista de pendentes e a
-    `reschedule_mission` usam. A executada diz qual missao criou."""
+    O id da ACAO nao usa `#`, que so nomeia MISSAO -- o mesmo `#` que a
+    lista de pendentes e a `reschedule_mission` usam. A executada diz qual
+    missao criou."""
     acao = TutorAction(
         id=12,
         kind=TipoDeAcao.CRIAR_MISSAO,
@@ -163,7 +163,7 @@ def test_acoes_antigas_entram_como_texto_com_o_estado_real() -> None:
 
 
 def test_a_proposta_de_criacao_nao_decidida_nao_usa_cerquilha() -> None:
-    """So ids de MISSAO usam `#` (I2): a acao 3 que criou a missao 7 nao
+    """So ids de MISSAO usam `#`: a acao 3 que criou a missao 7 nao
     pode aparecer como "#3", ou o modelo reagendaria a missao #3."""
     acao = TutorAction(
         id=3,

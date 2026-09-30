@@ -136,7 +136,7 @@ function CycleLoaded({
           <h3 className="mb-2 text-base font-semibold text-emerald-200">
             Missão especial — bônus da sequência
           </h3>
-          {/* F25 (m2 da revisao): depois do fim da janela, o prazo impresso no
+          {/* F25: depois do fim da janela, o prazo impresso no
               cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
           {specialReason !== null && (
             <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">

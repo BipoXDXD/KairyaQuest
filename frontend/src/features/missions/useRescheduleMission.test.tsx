@@ -390,7 +390,7 @@ describe('useRescheduleMission', () => {
     })
   })
 
-  it('lastRescheduled guarda o ultimo SUCESSO, e ele sobrevive ao envio seguinte e a falha dele (I1)', async () => {
+  it('lastRescheduled guarda o ultimo SUCESSO, e ele sobrevive ao envio seguinte e a falha dele', async () => {
     const segunda = { ...reagendada, deadline: '2026-10-09T21:00:00Z' }
     routeFetch({
       [ROTA]: (_, call) => {

@@ -26,7 +26,7 @@ def test_a_persona_nomeia_a_ferramenta_de_proposta_pelo_mesmo_valor_do_dominio()
 
 
 def test_a_regra_anti_injecao_vale_para_tudo() -> None:
-    """m4 da revisao da T7: a regra fecha a persona, num bloco proprio depois
+    """A regra fecha a persona, num bloco proprio depois
     de todos os outros, e nao como item solto de um deles."""
     geral = "Sempre, em qualquer assunto e com qualquer ferramenta:"
     assert geral in PERSONA

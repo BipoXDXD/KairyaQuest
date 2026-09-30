@@ -1773,7 +1773,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(within(card(8)).queryByTestId('mission-started-at')).not.toBeInTheDocument()
     })
 
-    it('sem botao nem aviso (em andamento), o bloco do Iniciar nao reserva espaco: so a regiao vazia (Minor 8)', async () => {
+    it('sem botao nem aviso (em andamento), o bloco do Iniciar nao reserva espaco: so a regiao vazia', async () => {
       routeFetch({
         'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }]),
       })
@@ -2044,7 +2044,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       })
     })
 
-    it('falha "retry" e a pessoa muda o motivo: o envio sai com chave NOVA, sem 409 evitavel (M1)', async () => {
+    it('falha "retry" e a pessoa muda o motivo: o envio sai com chave NOVA, sem 409 evitavel', async () => {
       const fetchMock = routeFetch({
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/reschedule': (_, call) =>
@@ -2067,7 +2067,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       ])
     })
 
-    it('falha "retry" e a pessoa muda SO a data: o envio sai com chave NOVA (I2)', async () => {
+    it('falha "retry" e a pessoa muda SO a data: o envio sai com chave NOVA', async () => {
       const fetchMock = routeFetch({
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/reschedule': (_, call) =>
@@ -2092,7 +2092,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       ])
     })
 
-    it('com o Iniciar em voo, o formulario de reagendar fica travado (Minor 1)', async () => {
+    it('com o Iniciar em voo, o formulario de reagendar fica travado', async () => {
       routeFetch({
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/start': () => new Promise<Response>(() => undefined),
@@ -2108,7 +2108,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
     })
 
-    it('com o Concluir em voo, o formulario de reagendar fica travado (Minor 1)', async () => {
+    it('com o Concluir em voo, o formulario de reagendar fica travado', async () => {
       routeFetch({
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
@@ -2123,7 +2123,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
     })
 
-    describe('um SEGUNDO reagendamento no mesmo cartao (I1)', () => {
+    describe('um SEGUNDO reagendamento no mesmo cartao', () => {
       /** Primeiro reagendamento com sucesso e o segundo aberto com outra data. */
       async function segundoReagendamento(segundo: Parameters<typeof routeFetch>[0][string]) {
         const fetchMock = routeFetch({
@@ -2287,7 +2287,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
     })
   })
 
-  describe('a recarga espera o Iniciar (Review Focus 5)', () => {
+  describe('a recarga espera o Iniciar', () => {
     it('com o Iniciar de A em voo, "Atualizar o quadro" espera e recarrega quando ele termina', async () => {
       const postA = deferred()
       const fetchMock = routeFetch({

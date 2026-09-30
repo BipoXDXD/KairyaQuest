@@ -489,7 +489,7 @@ def test_a_entrada_de_criacao_na_ferramenta_de_reagendar_nao_vira_criacao(
     falso: ServidorAnthropicFalso,
     registro: Registro,
 ) -> None:
-    """M9 da revisao da T6: antes da T7 a entrada era validada como
+    """Antes, a entrada era validada como
     `MissionCreate` sem olhar o nome -- uma chamada de `reschedule_mission`
     com corpo de criacao viraria uma acao `create_mission`."""
     resposta_id, eventos = _turno(
@@ -1036,7 +1036,7 @@ def test_confirmacao_e_reagendamento_direto_juntos_encadeiam(
 def test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava(
     banco_migrado: Engine, registro: Registro
 ) -> None:
-    """M3 da revisao da T4: `session.get(..., with_for_update=True)` emite o
+    """`session.get(..., with_for_update=True)` emite o
     `SELECT ... FOR UPDATE`, mas, sem `populate_existing`, NAO sobrescreve um
     objeto que ja esta no identity map. A confirmacao carrega a missao antes?
     Hoje nao; este teste a carrega de proposito, deixa outra conexao
@@ -1105,7 +1105,7 @@ def test_chave_gravada_por_outra_acao_depois_da_consulta_vira_reuso(
 def test_duas_acoes_iguais_com_a_mesma_chave_em_paralelo_uma_vence(
     banco_migrado: Engine, registro: Registro
 ) -> None:
-    """m5 da revisao da T7: duas acoes DIFERENTES com a mesma proposta (mesma
+    """Duas acoes DIFERENTES com a mesma proposta (mesma
     missao, prazo e motivo), confirmadas juntas com a MESMA chave. As travas
     de acao nao se cruzam; a segunda espera a trava da missao, o
     `reagendar_missao` a le como reenvio (mesma chave, mesmo conteudo) e a

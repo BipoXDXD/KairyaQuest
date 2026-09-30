@@ -72,7 +72,7 @@ function blockedReason(draft: RescheduleDraft): string | null {
  *   editaveis; sem mudar nada, o botao diz "Tentar de novo" e reenvia o MESMO
  *   rascunho (a chave retida so vale para o mesmo conteudo, F13). Mudou o
  *   rascunho, o botao volta a "Salvar novo prazo" -- e o cartao troca a chave
- *   antes de enviar (M1 da revisao da Task 8).
+ *   antes de enviar.
  * - **Foco**: o botao de salvar sai do documento no sucesso; o foco que caiu
  *   no `body` volta ao botao do disclosure. Foco que ja foi para outro lugar
  *   nao se rouba.

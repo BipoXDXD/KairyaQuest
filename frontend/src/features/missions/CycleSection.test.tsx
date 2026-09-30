@@ -291,7 +291,7 @@ describe('CycleSection', () => {
     })
   })
 
-  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida (m1)', async () => {
+  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida', async () => {
     const concluidaComAtraso: Mission = {
       ...diariaDeOntem,
       state: 'concluida',
@@ -309,7 +309,7 @@ describe('CycleSection', () => {
     expect(secao).not.toHaveTextContent('ainda pode ser concluída')
   })
 
-  it('a especial em conclusao tardia ganha o motivo a vista (m2)', async () => {
+  it('a especial em conclusao tardia ganha o motivo a vista', async () => {
     const especialTardia: Mission = {
       ...especial,
       state: 'em_andamento',
@@ -328,7 +328,7 @@ describe('CycleSection', () => {
     expect(within(secao).getByTestId('mission-complete')).toBeInTheDocument()
   })
 
-  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo (m2)', async () => {
+  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo', async () => {
     const especialConcluidaTarde: Mission = {
       ...especial,
       state: 'concluida',

@@ -129,7 +129,7 @@ def test_chave_nova_depois_de_iniciada_ou_concluida_e_transicao_ilegal(
 def test_a_chave_da_conclusao_nao_serve_para_iniciar_e_vice_versa(
     session: Session,
 ) -> None:
-    """Review Focus 2: a UNIQUE e sobre a chave sozinha, e o tipo e conferido."""
+    """A UNIQUE e sobre a chave sozinha, e o tipo e conferido."""
     concluida = _avulsa(session)
     concluir_missao(
         session, ESTUDANTE, concluida.id, "op-gasta-c", clock=relogio(AGORA)

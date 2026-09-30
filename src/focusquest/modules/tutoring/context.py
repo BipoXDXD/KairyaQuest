@@ -127,7 +127,7 @@ def _texto_da_acao(acao: TutorAction) -> str:
             f"para {acao.payload.get('new_deadline')} ({rotulo}) "
             f"-- {acao.state.value}]"
         )
-    # So ids de MISSAO levam `#` (I2 da revisao da T7): e o `#` da lista de
+    # So ids de MISSAO levam `#`: e o `#` da lista de
     # pendentes e o que a `reschedule_mission` recebe. O id da acao com `#`
     # faria "a missao que voce criou" virar o `mission_id` errado.
     criada = (

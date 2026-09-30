@@ -404,7 +404,7 @@ export function MissionCard({
     // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
     // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
     // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
-    // evitavel (M1 da revisao da Task 8). Sem mudanca, a mesma chave reenvia.
+    // evitavel. Sem mudanca, a mesma chave reenvia.
     const previous = lastSentReschedule.current
     if (
       reschedule.status === 'failed' &&
