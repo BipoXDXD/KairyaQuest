@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { formatCivilDate } from '../../shared/lib/civilDate'
-import { DAYS_PER_MILESTONE } from '../../shared/types/mission'
+import { saoPauloCivilDate } from '../../shared/lib/deadline'
+import { DAYS_PER_MILESTONE, type Mission } from '../../shared/types/mission'
 import { MissionCard } from './MissionCard'
 import type { Cycle } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
@@ -10,6 +11,31 @@ import { useCycle, type CycleState } from './useCycle'
 /** "1 dia seguido" / "3 dias seguidos". */
 function streakLabel(days: number): string {
   return days === 1 ? '1 dia seguido' : `${String(days)} dias seguidos`
+}
+
+/**
+ * F25: o motivo da diaria de ontem na tela. Depois de concluida com atraso ela
+ * continua no ciclo ate o fim de hoje (o `refresh` nao tira o cartao), e o
+ * texto de "ainda pode ser concluida" seria falso.
+ */
+function lateDailyReason(mission: Mission): string {
+  return mission.state === 'concluida'
+    ? 'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.'
+    : 'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.'
+}
+
+/**
+ * F25: a especial esta em conclusao tardia quando o prazo dela (a meia-noite
+ * que fecha a janela) ja abriu o dia de hoje -- o backend so a mantem no ciclo,
+ * depois disso, se ela foi iniciada na janela. `null` dentro da janela.
+ */
+function lateSpecialReason(special: Mission, today: string): string | null {
+  if (saoPauloCivilDate(special.deadline) > today) {
+    return null
+  }
+  return special.state === 'concluida'
+    ? 'Concluída depois do fim da janela — você começou a tempo.'
+    : 'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.'
 }
 
 /** "falta 1 dia" / "faltam 4 dias". */
@@ -47,6 +73,8 @@ function CycleLoaded({
   refreshFailed: boolean
   card: CardProps
 }) {
+  const specialReason =
+    cycle.special === null ? null : lateSpecialReason(cycle.special, cycle.today)
   return (
     <div className="flex flex-col gap-3">
       <p data-testid="cycle-today" className="text-sm text-slate-400">
@@ -68,6 +96,28 @@ function CycleLoaded({
           <MissionCard key={cycle.mission.id} mission={cycle.mission} {...card} />
         </ul>
       )}
+      {/* F25: a diaria de ontem iniciada a tempo. Fica numa secao propria, com
+          o motivo a vista: o prazo impresso no cartao ja passou, e sem o texto
+          o Concluir pareceria um erro. */}
+      {cycle.late_daily !== null && (
+        <div data-testid="cycle-late-daily">
+          <h3 className="mb-1 text-base font-semibold text-amber-200">
+            Diária de ontem — iniciada a tempo
+          </h3>
+          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-slate-300">
+            {lateDailyReason(cycle.late_daily)}
+          </p>
+          <ul role="list" className="flex flex-col gap-3">
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
+            <MissionCard
+              key={cycle.late_daily.id}
+              mission={cycle.late_daily}
+              {...card}
+              titleLevel={4}
+            />
+          </ul>
+        </div>
+      )}
       {/* `role="status"` desde o primeiro render do estado carregado -- um
           leitor de tela so anuncia mudanca numa regiao viva que ja estava no
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
@@ -86,6 +136,13 @@ function CycleLoaded({
           <h3 className="mb-2 text-base font-semibold text-emerald-200">
             Missão especial — bônus da sequência
           </h3>
+          {/* F25 (m2 da revisao): depois do fim da janela, o prazo impresso no
+              cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
+          {specialReason !== null && (
+            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">
+              {specialReason}
+            </p>
+          )}
           <ul role="list" className="flex flex-col gap-3">
             {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
             <MissionCard key={cycle.special.id} mission={cycle.special} {...card} titleLevel={4} />

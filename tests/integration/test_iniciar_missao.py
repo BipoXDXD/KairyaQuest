@@ -22,11 +22,14 @@ from focusquest.modules.missions.cycle_service import (
     NovaDiaria,
     NovaEspecial,
     criar_plano,
+    ler_ciclo,
 )
 from focusquest.modules.missions.domain import (
     MissionState,
     MissionType,
     TransicaoIlegalError,
+    duracao_real,
+    xp_da_missao,
 )
 from focusquest.modules.missions.models import Mission, MissionOperation, User
 from focusquest.modules.missions.service import (
@@ -34,6 +37,7 @@ from focusquest.modules.missions.service import (
     criar_missao,
     iniciar_missao,
 )
+from focusquest.modules.progression.models import XpEntry
 
 ESTUDANTE = 1
 OUTRO = 2
@@ -186,34 +190,91 @@ def test_diaria_futura_com_chave_gasta_responde_como_inexistente(
         _iniciar(session, _diaria(session, QUARTA + timedelta(days=1)), "op-gasta-d")
 
 
-def test_diaria_iniciada_que_passa_do_dia_fica_em_andamento_sem_saida(
+QUARTA_23H50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+QUINTA_00H10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+SEXTA_00H00 = datetime(2026, 9, 25, 3, 0, tzinfo=UTC)  # limite da conclusao tardia
+
+
+def test_diaria_iniciada_no_dia_e_concluida_depois_da_meia_noite(
     session: Session,
 ) -> None:
-    """DOCUMENTA o comportamento atual, nao o aprova (revisao do backend do F,
-    I1; pendencia 115, para o dono decidir).
-
-    A diaria de quarta e iniciada as 23:50 (SP) e a conclusao chega as 00:10
-    de quinta. A disponibilidade da diaria so olha "concluida?" e o dia: ela
-    ja e `perdida`, e concluir e `missao_expirada`. Como F5 proibe voltar a
-    `pendente`, a missao fica `em_andamento` para sempre, sem duracao real.
-    Se o dono decidir "permitir concluir a missao iniciada dentro do prazo",
-    este teste muda JUNTO com a regra -- e a mudanca dele e o incremento.
+    """F25 (pendencia 115, resolvida). Este teste DOCUMENTAVA o defeito: a
+    diaria de quarta iniciada as 23:50 (SP) e concluida as 00:10 de quinta
+    virava `perdida`, a conclusao dava `missao_expirada`, e a missao ficava
+    `em_andamento` para sempre, sem duracao real. A regra mudou (a pessoa
+    comecou a tempo; prender a missao e a perda destrutiva que o README s5
+    proibe), e a mudanca DESTE teste e o incremento: agora a conclusao grava
+    normalmente, com duracao real, o XP normal da diaria e o dia contando
+    para a sequencia -- a diaria pertence ao dia dela, e a sequencia ja e
+    derivada do dia da missao.
     """
     _plano(session)
     diaria = _diaria(session, QUARTA)
-    quarta_23h50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
-    quinta_00h10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
 
-    _iniciar(session, diaria, "op-d-noite", agora=quarta_23h50)
+    _iniciar(session, diaria, "op-d-noite", agora=QUARTA_23H50)
+    antes = ler_ciclo(session, ESTUDANTE, clock=relogio(QUINTA_00H10))
+    concluir_missao(
+        session, ESTUDANTE, diaria.id, "op-d-madrugada", clock=relogio(QUINTA_00H10)
+    )
+    depois = ler_ciclo(session, ESTUDANTE, clock=relogio(QUINTA_00H10))
+
+    assert diaria.state is MissionState.CONCLUIDA
+    assert diaria.started_at == QUARTA_23H50
+    assert diaria.completed_at == QUINTA_00H10
+    assert duracao_real(diaria.started_at, diaria.completed_at) == timedelta(minutes=20)
+    assert _operacoes(session, diaria.id, "complete") == 1
+    assert session.scalars(
+        select(XpEntry.amount).where(XpEntry.mission_id == diaria.id)
+    ).all() == [xp_da_missao(MissionType.DIARIA, 2)]
+    # O dia de quarta conta: antes da conclusao a sequencia estava quebrada
+    # (quarta sem conclusao), depois ela conta quarta.
+    assert (antes.sequencia, depois.sequencia) == (0, 1)
+
+
+def test_a_conclusao_tardia_vai_ate_o_fim_do_dia_seguinte(session: Session) -> None:
+    """F25: o limite e sexta 00:00 para a diaria de quarta. No ultimo instante
+    de quinta, conclui; no limite, e `missao_expirada`, como antes."""
+    _plano(session)
+    no_limite = _diaria(session, QUARTA)
+    _iniciar(session, no_limite, "op-lim-i", agora=QUARTA_23H50)
     with pytest.raises(MissaoExpiradaError):
         concluir_missao(
-            session, ESTUDANTE, diaria.id, "op-d-madrugada", clock=relogio(quinta_00h10)
+            session, ESTUDANTE, no_limite.id, "op-lim-c", clock=relogio(SEXTA_00H00)
         )
+    assert no_limite.state is MissionState.EM_ANDAMENTO
 
-    assert diaria.state is MissionState.EM_ANDAMENTO
-    assert diaria.started_at == quarta_23h50
-    assert diaria.completed_at is None
-    assert _operacoes(session, diaria.id, "complete") == 0
+    concluida = concluir_missao(
+        session,
+        ESTUDANTE,
+        no_limite.id,
+        "op-lim-c2",
+        clock=relogio(SEXTA_00H00 - timedelta(microseconds=1)),
+    )
+    assert concluida.state is MissionState.CONCLUIDA
+
+
+def test_diaria_pendente_depois_do_dia_continua_expirada(session: Session) -> None:
+    """F25 so vale para quem comecou: a pendente de ontem nao se conclui."""
+    _plano(session)
+    pendente = _diaria(session, QUARTA)
+    with pytest.raises(MissaoExpiradaError):
+        concluir_missao(
+            session, ESTUDANTE, pendente.id, "op-pend", clock=relogio(QUINTA_00H10)
+        )
+    assert pendente.state is MissionState.PENDENTE
+
+
+def test_diaria_em_andamento_depois_do_dia_nao_inicia_de_novo(
+    session: Session,
+) -> None:
+    """Disponivel pela F25 so para concluir: iniciar de novo e transicao
+    ilegal (ja esta em andamento), e o `started_at` nao muda."""
+    _plano(session)
+    diaria = _diaria(session, QUARTA)
+    _iniciar(session, diaria, "op-re-1", agora=QUARTA_23H50)
+    with pytest.raises(TransicaoIlegalError):
+        _iniciar(session, diaria, "op-re-2", agora=QUINTA_00H10)
+    assert diaria.started_at == QUARTA_23H50
 
 
 def test_concluir_depois_de_iniciar_tem_duracao_real(session: Session) -> None:

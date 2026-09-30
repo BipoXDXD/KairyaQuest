@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatDeadline, isoToSaoPauloCivil, saoPauloCivilToIso } from './deadline'
+import {
+  formatDeadline,
+  isoToSaoPauloCivil,
+  saoPauloCivilDate,
+  saoPauloCivilToIso,
+} from './deadline'
 
 describe('formatDeadline', () => {
   it('apresenta em America/Sao_Paulo, e nao no fuso de quem le', () => {
@@ -134,5 +139,13 @@ describe('ida e volta entre o instante e a hora civil de Sao Paulo', () => {
     const civil = isoToSaoPauloCivil(iso)
 
     expect(saoPauloCivilToIso(civil)).toBe(iso)
+  })
+})
+
+describe('saoPauloCivilDate', () => {
+  it('da a data civil de Sao Paulo do instante, e nao a de UTC nem a do processo', () => {
+    // 02:59:59 UTC de 29/09 ainda e 28/09 em SP; 03:00 UTC ja e 29/09.
+    expect(saoPauloCivilDate('2026-09-29T02:59:59Z')).toBe('2026-09-28')
+    expect(saoPauloCivilDate('2026-09-29T00:00:00-03:00')).toBe('2026-09-29')
   })
 })

@@ -14,7 +14,7 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 `feat/incremento-f`, aberta a partir de `580f6cc` (a `main`: o merge do PR #2,
 o Incremento E). Spec em
 `docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
-(decisões F1–F24), aprovada por delegação do dono em 2026-09-29 ("tome todas
+(decisões F1–F24, e a emenda F25 da pendência 115), aprovada por delegação do dono em 2026-09-29 ("tome todas
 as decisões por mim"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`.
 **Estado de publicação: não publicado.**
 
@@ -4659,6 +4659,61 @@ ledger; nenhum é bug esquecido.
      uma amostra só; o circuito pela tela (o cartão de reagendamento, a
      confirmação e o prazo novo no Quartel-General); e um pedido ambíguo, sem
      o `#id`.
+115. ~~**Missão do ciclo iniciada no dia e concluída depois dele fica
+    `em_andamento` para sempre.** Uma diária iniciada às 23:50 (SP) e concluída
+    às 00:10 do dia seguinte já era `perdida`: a conclusão respondia `409
+    missao_expirada`, e a F5 proíbe voltar a `pendente`. O mesmo valia para a
+    especial iniciada na janela e concluída depois dela.~~ **Resolvida em
+    2026-09-29 (Incremento F, emenda F25 da spec):** a missão `em_andamento` com
+    `started_at` antes do prazo pode ser concluída até o fim do dia seguinte ao
+    prazo (a diária de quarta, até quinta 23:59:59; a especial, até o fim do dia
+    seguinte ao fim da janela). A conclusão grava normalmente, com duração real,
+    o XP normal da missão e as conquistas. **A sequência conta o dia da
+    missão:** ela já é derivada da conclusão de cada dia (`carregar_historico`),
+    então o cálculo não mudou — contar foi a opção mais honesta (a diária foi
+    começada no dia dela) e a mais simples (não contar exigiria um segundo
+    critério de "concluída" só para a sequência). O limite existe para que uma
+    missão iniciada há semanas não reescreva sequência e marcos do passado;
+    "fim do dia seguinte" cobre a virada da noite, repete o desenho da janela da
+    especial (C8) e garante que a diária que abre um marco com atraso ainda
+    encontra a janela da especial aberta. A pendente depois do prazo continua
+    `409 missao_expirada`. **Contrato:** `GET /api/cycle` ganha `late_daily`
+    (`MissionRead | null`, aditivo) — sem ele, a diária de ontem sumiria do
+    Quartel-General na primeira recarga depois da meia-noite e o Concluir ficaria
+    inalcançável; o `special` continua mostrando a especial nesse período. O
+    Quartel-General mostra a diária de ontem numa seção própria ("Diária de
+    ontem — iniciada a tempo"), e na trilha o dia dela aparece `disponivel`
+    enquanto der para concluir. **Efeito declarado:** entre a meia-noite e a
+    conclusão tardia, a sequência exibida não conta ontem, e volta a contar
+    quando ele é concluído. O teste documental
+    `test_diaria_iniciada_que_passa_do_dia_fica_em_andamento_sem_saida`
+    (`59901df`) foi substituído por
+    `test_diaria_iniciada_no_dia_e_concluida_depois_da_meia_noite`, que fixa a
+    regra nova — a mudança desse teste é a mudança principal do incremento.
+    Nenhuma dependência nova.
+    **Correções da revisão (aprovada com ressalvas):** teste de integração do
+    marco aberto pela conclusão tardia (domingo anterior + seg–sex + sábado
+    iniciado às 23:50 e concluído no domingo: sem especial antes, especial
+    `disponivel` com prazo 28/09 00:00 depois, e ela conclui às 23:59 de
+    domingo); especial depois do limite → `409 missao_expirada`; reenvio da
+    conclusão tardia depois do limite → o mesmo sucesso; o limite em três dias
+    de horário de verão de 2018/2019 (um deles com 25 h). No Quartel-General, a
+    diária de ontem concluída com atraso troca o texto de "ainda pode ser
+    concluída" pelo de concluída, e a especial em conclusão tardia ganha o mesmo
+    motivo à vista (`saoPauloCivilDate`, em `shared/lib/deadline.ts`, compara o
+    dia civil do prazo com `today`).
+116. **Sem E2E da conclusão tardia (F25).** Iniciar às 23:50 e concluir depois
+    da meia-noite é provado por serviço, API e componente
+    (`test_iniciar_missao.py`, `test_cycle_service.py`, `test_cycle_api.py`,
+    `CycleSection.test.tsx`), mas nenhum cenário do Playwright atravessa a
+    meia-noite: o E2E usa o relógio real da API (`core/clock.py`, `system_now`), e simular a virada exigiria
+    um relógio controlável no ambiente do E2E, que não existe hoje.
+117. **A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
+    (`tutoring/service.py`, via `listar_missoes`) só traz avulsas não
+    concluídas, então não há texto errado no contexto; mas a
+    Tifa não vai lembrar a pessoa de que a diária de ontem, iniciada a tempo,
+    ainda pode ser concluída hoje. Liga-se à pendência 55 (a Tifa continua sem
+    ver o ciclo).
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa

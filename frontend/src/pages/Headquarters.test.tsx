@@ -28,6 +28,7 @@ function stubPage() {
         streak: 0,
         days_to_milestone: 7,
         special: null,
+        late_daily: null,
       }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -202,6 +203,7 @@ describe('Headquarters', () => {
           streak: 0,
           days_to_milestone: 7,
           special: null,
+          late_daily: null,
         }),
       'GET /api/missions': () => Response.json([avulsa]),
       'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -288,6 +290,7 @@ describe('Headquarters', () => {
                 streak: 0,
                 days_to_milestone: 7,
                 special: null,
+                late_daily: null,
               }
             : {
                 today: '2026-09-23',
@@ -295,6 +298,7 @@ describe('Headquarters', () => {
                 streak: 1,
                 days_to_milestone: 6,
                 special: null,
+                late_daily: null,
               },
         ),
       'GET /api/missions': () => Response.json([]),

@@ -25,6 +25,11 @@ export interface Cycle {
   streak: number
   days_to_milestone: number
   special: Mission | null
+  /**
+   * F25: a diaria de ONTEM, iniciada no dia dela, que ainda pode ser concluida
+   * ate o fim de hoje (e, concluida com atraso, continua aqui ate la).
+   */
+  late_daily: Mission | null
 }
 
 /**
