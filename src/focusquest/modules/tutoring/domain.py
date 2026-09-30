@@ -64,6 +64,12 @@ class CodigoDoStream(StrEnum):
 # API confere que os dois nao divergem.
 PRAZO_EXPIRADO = "prazo_expirado"
 
+# O `error_code` de uma proposta de reagendamento que nao vale mais na hora de
+# confirmar: a missao sumiu, foi concluida, ja tem aquele prazo ou tem prazo
+# derivado (F17). Mesmo valor do `code` do 409
+# (`CodigoDeErro.REAGENDAMENTO_INVALIDO`); um teste de API confere.
+REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
+
 
 _TRANSICOES_DA_ACAO: dict[EstadoDaAcao, frozenset[EstadoDaAcao]] = {
     EstadoDaAcao.PROPOSTA: frozenset(

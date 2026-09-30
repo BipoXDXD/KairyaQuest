@@ -3,7 +3,14 @@
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StringConstraints,
+)
 
 from focusquest.modules.missions.domain import MotivoDoReagendamento
 from focusquest.modules.missions.schemas import (
@@ -29,18 +36,41 @@ TAMANHO_MAXIMO_DA_PERGUNTA = 4000
 CAMPOS_DO_RETRATO = ("instructions", "previous_deadline")
 
 
+def _prazo_em_texto(valor: object) -> object:
+    """Recusa o prazo em numero: o Pydantic leria `1790000000` como um instante
+    UTC que o modelo nao quis dizer (M10 da revisao da T6). O `datetime` passa:
+    e o que o proprio backend monta."""
+    if not isinstance(valor, str | datetime):
+        raise ValueError("o prazo precisa ser um texto ISO 8601 com fuso")
+    return valor
+
+
 class RescheduleProposal(BaseModel):
     """A entrada de `reschedule_mission`, como o modelo a manda.
 
     O retrato (`CAMPOS_DO_RETRATO`) e escrito pelo backend, nunca pelo modelo
     (F16) -- por isso `extra='forbid'`: um campo a mais e proposta invalida.
+
+    Sem coercao (M10 da revisao da T6): `mission_id: true` viraria a missao #1
+    e `"12"` ou `12.0` viraria 12 -- o cartao mostraria uma missao que o
+    modelo nao escolheu. `StrictInt` recusa os tres; o prazo so em texto.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    mission_id: int = Field(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)
-    new_deadline: PrazoComFuso
+    mission_id: StrictInt = Field(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)
+    new_deadline: Annotated[PrazoComFuso, BeforeValidator(_prazo_em_texto)]
     reason: MotivoDoReagendamento
+
+
+class RetratoDoReagendamento(BaseModel):
+    """O retrato que o backend grava ao lado da entrada do modelo (F16): o que
+    a missao era quando a Tifa propos. E o que o cartao mostra ("de ... para
+    ..."), sem a feature `tutoring` do frontend importar `missions`. Os campos
+    sao exatamente `CAMPOS_DO_RETRATO` (um teste confere)."""
+
+    instructions: str
+    previous_deadline: datetime
 
 
 class MessageCreate(BaseModel):

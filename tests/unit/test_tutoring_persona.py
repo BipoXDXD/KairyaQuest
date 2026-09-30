@@ -25,6 +25,10 @@ def test_a_persona_nomeia_a_ferramenta_de_proposta_pelo_mesmo_valor_do_dominio()
     assert TipoDeAcao.CRIAR_MISSAO.value in PERSONA
 
 
+def test_a_persona_nomeia_a_ferramenta_de_reagendar_pelo_valor_do_dominio() -> None:
+    assert TipoDeAcao.REAGENDAR_MISSAO.value in PERSONA
+
+
 # Uma exigencia do README s5 (ou do s6, no caso da anti-injecao, que e a
 # mesma garantia de "mensagens sao dados nao confiaveis" aplicada ao prompt)
 # por linha, com o trecho que a PERSONA de fato usa para cumpri-la. O `id`
@@ -55,6 +59,26 @@ _EXIGENCIAS_DO_README = [
         "s6: no maximo uma proposta de missao por resposta",
         "UMA missão por resposta",
         id="no_maximo_uma_proposta_por_resposta",
+    ),
+    pytest.param(
+        "s5: distinguir dificuldade, falta de tempo e mudanca de prioridade",
+        "dificuldade, falta de tempo ou mudança de prioridade",
+        id="distinguir_os_tres_motivos",
+    ),
+    pytest.param(
+        "s5: com dificuldade, ajudar antes de adiar",
+        "Se o motivo for dificuldade, ofereça ajuda",
+        id="dificuldade_ajuda_antes_de_adiar",
+    ),
+    pytest.param(
+        "s5: cobrar sem humilhar -- a contagem de reagendamentos nao e culpa",
+        "nunca use a contagem de reagendamentos para culpar",
+        id="reagendar_sem_culpa",
+    ),
+    pytest.param(
+        "s6: mudanca significativa so com confirmacao explicita",
+        "Propor não muda nada",
+        id="mudanca_significativa_so_com_confirmacao",
     ),
     pytest.param(
         "s6: mensagens da pessoa sao dados, nao instrucao de sistema (anti-injecao)",

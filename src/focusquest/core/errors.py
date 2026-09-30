@@ -124,3 +124,9 @@ class PrazoInalteradoError(DomainError):
 class PrazoDerivadoError(DomainError):
     """A diaria e a especial tem prazo DERIVADO do ciclo (C10), sem coluna para
     mudar: nao se reagendam (F7)."""
+
+
+class ReagendamentoInvalidoError(DomainError):
+    """A proposta de reagendamento nao vale mais: a missao sumiu, foi concluida
+    ou ja tem aquele prazo (F17). A acao foi GRAVADA como `falhou` antes deste
+    erro subir -- a rota commita e so entao levanta."""

@@ -444,8 +444,16 @@ def buscar_para_escrever(
     frente sobre a versao nova da linha, sem erro nenhum. O resultado sao
     duas conclusoes e dois registros de operacao. `FOR UPDATE` move a espera
     para a LEITURA, que e onde a decisao e tomada.
+
+    Com a trava, `populate_existing` tambem: o `SELECT ... FOR UPDATE` sai de
+    qualquer jeito, mas, sem ele, uma missao que ja estava no identity map
+    desta sessao NAO e sobrescrita pela linha lida -- a decisao seria tomada
+    sobre o prazo e o estado de ANTES da espera (M3 da revisao da T4; provado
+    por `test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava`).
     """
-    missao = session.get(Mission, mission_id, with_for_update=travar)
+    missao = session.get(
+        Mission, mission_id, with_for_update=travar, populate_existing=travar
+    )
     if missao is None:
         raise MissaoNaoEncontradaError(f"missao {mission_id} nao existe")
     if missao.user_id != user_id:

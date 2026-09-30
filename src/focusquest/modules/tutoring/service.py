@@ -15,7 +15,7 @@ Nenhuma funcao daqui conhece HTTP, e nenhuma conhece o SDK.
 
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from pydantic import ValidationError
 from sqlalchemy import select, update
@@ -26,16 +26,31 @@ from focusquest.core.clock import Clock
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     MensagemEmAndamentoError,
+    MissaoNaoEncontradaError,
+    NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
+    PrazoDerivadoError,
+    PrazoExpiradoError,
+    PrazoInalteradoError,
 )
-from focusquest.modules.missions.domain import MissionState
-from focusquest.modules.missions.models import Mission, User
+from focusquest.modules.missions.domain import (
+    MissionState,
+    OrigemDoReagendamento,
+    TransicaoIlegalError,
+)
+from focusquest.modules.missions.models import Mission, MissionReschedule, User
 from focusquest.modules.missions.schemas import MissionCreate
-from focusquest.modules.missions.service import criar_missao, listar_missoes
+from focusquest.modules.missions.service import (
+    criar_missao,
+    listar_missoes,
+    missao_reagendavel,
+    reagendar_missao,
+)
 from focusquest.modules.progression.service import ler_progresso
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
+    REAGENDAMENTO_INVALIDO,
     CodigoDoStream,
     EstadoDaAcao,
     Papel,
@@ -52,6 +67,11 @@ from focusquest.modules.tutoring.provider import (
     ProvedorIndisponivelError,
     TempoEsgotadoError,
     Turno,
+)
+from focusquest.modules.tutoring.schemas import (
+    CAMPOS_DO_RETRATO,
+    RescheduleProposal,
+    RetratoDoReagendamento,
 )
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
@@ -114,6 +134,29 @@ class RespostaFalhou:
 
 
 EventoDoTurno = PerguntaGravada | Trecho | RespostaConcluida | RespostaFalhou
+
+# A entrada validada de uma proposta: o tipo diz qual ferramenta foi (F18).
+DadosDaProposta = MissionCreate | RescheduleProposal
+
+# O esquema de cada ferramenta de proposta, pelo NOME que o modelo chamou
+# (F18). Nome fora daqui e `proposta_invalida`: com duas ferramentas, a
+# entrada sozinha nao diz o que o modelo pediu, e validar pelo formato faria
+# uma `reschedule_mission` com corpo de criacao virar uma criacao.
+_ESQUEMA_DA_FERRAMENTA: dict[str, type[DadosDaProposta]] = {
+    TipoDeAcao.CRIAR_MISSAO: MissionCreate,
+    TipoDeAcao.REAGENDAR_MISSAO: RescheduleProposal,
+}
+
+
+@dataclass(frozen=True)
+class _Recolhida:
+    """`_completar` achou a resposta ja recolhida como orfa: nada gravado."""
+
+
+@dataclass(frozen=True)
+class _PreCondicaoRecusada:
+    """`_completar` gravou a resposta `falhou`/`proposta_invalida`: a missao
+    da proposta de reagendamento nao pode ser reagendada (F16)."""
 
 
 def preparar_turno(
@@ -226,7 +269,7 @@ def transmitir(
         return
 
     partes: list[str] = []
-    proposta: dict[str, object] | None = None
+    proposta: Proposta | None = None
     terminou = False
     codigo: CodigoDoStream | None = None
     try:
@@ -239,7 +282,7 @@ def transmitir(
                     partes.append(evento.texto)
                     yield Trecho(evento.texto)
                 elif isinstance(evento, Proposta):
-                    proposta = evento.entrada
+                    proposta = evento
                 else:
                     terminou = True
                 # Limite TOTAL, pelo relogio injetavel (medicao M5).
@@ -258,14 +301,13 @@ def transmitir(
         raise
 
     texto = "".join(partes)
-    dados: MissionCreate | None = None
+    dados: DadosDaProposta | None = None
     if codigo is None and not terminou:
         # O corte que o SDK nao denuncia (medicao M3).
         codigo = CodigoDoStream.PROVEDOR_INDISPONIVEL
     if codigo is None and proposta is not None:
-        try:
-            dados = MissionCreate.model_validate(proposta)
-        except ValidationError:
+        dados = _validar_proposta(proposta)
+        if dados is None:
             codigo = CodigoDoStream.PROPOSTA_INVALIDA
 
     if codigo is not None:
@@ -273,12 +315,27 @@ def transmitir(
         yield RespostaFalhou(codigo)
         return
 
-    concluida = _completar(fabrica, preparo.resposta_id, texto, dados, clock())
-    if concluida is None:
+    desfecho = _completar(fabrica, preparo.resposta_id, texto, dados, clock())
+    if isinstance(desfecho, _Recolhida):
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
         yield RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
         return
-    yield RespostaConcluida(concluida)
+    if isinstance(desfecho, _PreCondicaoRecusada):
+        # Gravada `falhou` pelo `_completar`, ja commitada.
+        yield RespostaFalhou(CodigoDoStream.PROPOSTA_INVALIDA)
+        return
+    yield RespostaConcluida(desfecho)
+
+
+def _validar_proposta(proposta: Proposta) -> DadosDaProposta | None:
+    """A entrada validada pelo esquema da ferramenta chamada, ou `None`."""
+    esquema = _ESQUEMA_DA_FERRAMENTA.get(proposta.nome)
+    if esquema is None:
+        return None
+    try:
+        return esquema.model_validate(proposta.entrada)
+    except ValidationError:
+        return None
 
 
 # O nome da restricao unica do identificador de confirmacao: e por ele que o
@@ -300,6 +357,30 @@ class PrazoExpirado:
     acao: TutorAction
 
 
+@dataclass(frozen=True)
+class ReagendamentoInvalido:
+    """A missao nao aceita mais o reagendamento proposto (F17). A acao foi
+    GRAVADA como `falhou`: o chamador commita e so depois traduz em 409."""
+
+    acao: TutorAction
+
+
+ResultadoDaConfirmacao = Executada | PrazoExpirado | ReagendamentoInvalido
+
+# O que o `reagendar_missao` recusa porque a MISSAO mudou depois da proposta
+# (F17): sumiu, e de outro, foi concluida, ja tem aquele prazo ou tem prazo
+# derivado. Todos viram `reagendamento_invalido`: a tela oferece a mesma
+# saida (pedir outra proposta). `PrazoExpiradoError` tem destino proprio, e
+# `OperacaoReutilizadaError` sobe sem gravar nada.
+_MISSAO_MUDOU = (
+    MissaoNaoEncontradaError,
+    NaoPertenceAoUsuarioError,
+    TransicaoIlegalError,
+    PrazoInalteradoError,
+    PrazoDerivadoError,
+)
+
+
 def confirmar_acao(
     session: Session,
     user_id: int,
@@ -307,13 +388,17 @@ def confirmar_acao(
     operation_id: str,
     *,
     clock: Clock,
-) -> Executada | PrazoExpirado:
-    """Confirma a proposta: cria a missao e executa a acao, na mesma transacao.
+) -> ResultadoDaConfirmacao:
+    """Confirma a proposta e a executa, na mesma transacao.
 
     Mesma ordem da conclusao da missao: TRAVA primeiro, hora e idempotencia
     depois. O reenvio do mesmo `operation_id` devolve o resultado de antes; um
     `operation_id` gasto em outra acao e chave gasta; uma acao ja decidida,
-    com chave nova, e transicao ilegal.
+    com chave nova, e transicao ilegal. So entao o `kind` decide o que
+    executar.
+
+    A ordem das travas e acao -> missao (F14): a acao aqui, a missao dentro do
+    `reagendar_missao`. Nenhum caminho trava a missao antes de uma acao.
     """
     acao = _buscar_acao(session, user_id, action_id)
     agora = clock()
@@ -329,17 +414,16 @@ def confirmar_acao(
         raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id))
 
     validar_transicao_da_acao(acao.state, EstadoDaAcao.EXECUTADA)
-    dados = MissionCreate.model_validate(acao.payload)
     try:
+        if acao.kind is TipoDeAcao.REAGENDAR_MISSAO:
+            return _confirmar_reagendamento(session, user_id, acao, operation_id, clock)
+        dados = MissionCreate.model_validate(acao.payload)
         if dados.deadline <= agora:
             # `operation_id` e `decided_at` entram JUNTO com o `state`, nunca
             # antes: gravar os dois com a acao ainda `proposta` violaria o
             # CHECK `ck_tutor_actions_decisao_datada` no flush interno do
             # `criar_missao`, que roda antes de `acao.state` mudar.
-            acao.state = EstadoDaAcao.FALHOU
-            acao.error_code = PRAZO_EXPIRADO
-            acao.operation_id = operation_id
-            acao.decided_at = agora
+            _gravar_falha(acao, PRAZO_EXPIRADO, operation_id, agora)
             session.flush()
             return PrazoExpirado(acao)
         missao = criar_missao(
@@ -358,11 +442,96 @@ def confirmar_acao(
         session.flush()
     except IntegrityError as erro:
         # A janela que a trava NAO fecha: duas acoes diferentes com a mesma
-        # chave nao disputam trava nenhuma. Quem recusa e a UNIQUE.
+        # chave nao disputam trava nenhuma. Quem recusa e a UNIQUE -- nos dois
+        # tipos de acao, inclusive no `flush` da falha gravada.
         if UNICIDADE_DA_CONFIRMACAO not in str(erro.orig):
             raise
         raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id)) from erro
     return Executada(acao, missao)
+
+
+def _confirmar_reagendamento(
+    session: Session,
+    user_id: int,
+    acao: TutorAction,
+    operation_id: str,
+    clock: Clock,
+) -> ResultadoDaConfirmacao:
+    """Executa a proposta de reagendamento pelo MESMO `reagendar_missao` da
+    tela, com `origin = tifa` e a chave da confirmacao (F15, F17).
+
+    Revalida so os tres campos do modelo; o retrato (`CAMPOS_DO_RETRATO`) e o
+    que a pessoa viu, e nao decide nada -- o `previous_deadline` do historico
+    e o prazo que a trava da missao le. O `payload` vem do banco, gravado ja
+    validado; a revalidacao e a mesma cautela da criacao (pendencia 47).
+
+    Toda recusa do `reagendar_missao` vem antes da primeira escrita dele, e e
+    isso que deixa gravar a falha na acao aqui, na mesma transacao. O
+    `IntegrityError` da UNIQUE da chave (tambem no `flush` da falha) e
+    traduzido pelo `try` do `confirmar_acao`, que envolve esta chamada.
+    """
+    entrada = {
+        campo: valor
+        for campo, valor in acao.payload.items()
+        if campo not in CAMPOS_DO_RETRATO
+    }
+    dados = RescheduleProposal.model_validate(entrada)
+    try:
+        missao = reagendar_missao(
+            session,
+            user_id,
+            dados.mission_id,
+            operation_id,
+            novo_prazo=dados.new_deadline,
+            motivo=dados.reason,
+            origem=OrigemDoReagendamento.TIFA,
+            clock=clock,
+        )
+    except PrazoExpiradoError:
+        _gravar_falha(acao, PRAZO_EXPIRADO, operation_id, clock())
+        session.flush()
+        return PrazoExpirado(acao)
+    except _MISSAO_MUDOU:
+        _gravar_falha(acao, REAGENDAMENTO_INVALIDO, operation_id, clock())
+        session.flush()
+        return ReagendamentoInvalido(acao)
+    _exigir_elo_da_tifa(session, operation_id)
+    acao.state = EstadoDaAcao.EXECUTADA
+    acao.mission_id = missao.id
+    acao.operation_id = operation_id
+    acao.decided_at = clock()
+    session.flush()
+    return Executada(acao, missao)
+
+
+def _exigir_elo_da_tifa(session: Session, operation_id: str) -> None:
+    """O elo desta chave tem de ser da Tifa.
+
+    O `reagendar_missao` trata a mesma chave, na mesma missao, com o mesmo
+    prazo e o mesmo motivo como REENVIO, e devolve a missao sem gravar. Se a
+    chave foi gasta pela TELA, a acao se diria executada por um reagendamento
+    que a pessoa fez sozinha (`origin = usuario`): e chave gasta. Uma chave
+    gasta por outra confirmacao da Tifa ja foi recusada antes (ou o sera pela
+    UNIQUE de `tutor_actions`).
+    """
+    origem = session.scalar(
+        select(MissionReschedule.origin).where(
+            MissionReschedule.operation_id == operation_id
+        )
+    )
+    if origem is not OrigemDoReagendamento.TIFA:
+        raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id))
+
+
+def _gravar_falha(
+    acao: TutorAction, codigo: str, operation_id: str, agora: datetime
+) -> None:
+    """`falhou` com o codigo, a chave e o instante JUNTOS (o CHECK
+    `ck_tutor_actions_decisao_datada` recusa a chave numa acao `proposta`)."""
+    acao.state = EstadoDaAcao.FALHOU
+    acao.error_code = codigo
+    acao.operation_id = operation_id
+    acao.decided_at = agora
 
 
 def rejeitar_acao(
@@ -450,22 +619,42 @@ def _completar(
     fabrica: Callable[[], Session],
     resposta_id: int,
     texto: str,
-    dados: MissionCreate | None,
+    dados: DadosDaProposta | None,
     agora: datetime,
-) -> TutorMessage | None:
+) -> TutorMessage | _Recolhida | _PreCondicaoRecusada:
     """Grava a resposta completa e a acao proposta, na MESMA transacao.
 
     A trava na linha evita a corrida com o recolhimento de orfaos: se a linha
     ja nao esta `gerando`, ela foi recolhida, e nada e gravado.
+
+    A proposta de reagendamento confere a pre-condicao aqui, com a resposta
+    travada (F16): a missao existe, e do usuario, e avulsa e nao esta
+    concluida. Se nao, a resposta vai a `falhou`/`proposta_invalida` com o
+    texto, e nenhuma acao nasce.
     """
     with fabrica() as session:
         resposta = session.get(TutorMessage, resposta_id, with_for_update=True)
         assert resposta is not None
         if resposta.status is not StatusDaMensagem.GERANDO:
-            return None
-        resposta.status = StatusDaMensagem.COMPLETA
+            return _Recolhida()
         resposta.content = texto
-        if dados is not None:
+        if isinstance(dados, RescheduleProposal):
+            payload = _payload_do_reagendamento(session, resposta.user_id, dados)
+            if payload is None:
+                resposta.status = StatusDaMensagem.FALHOU
+                resposta.error_code = CodigoDoStream.PROPOSTA_INVALIDA
+                session.commit()
+                return _PreCondicaoRecusada()
+            session.add(
+                TutorAction(
+                    message_id=resposta.id,
+                    kind=TipoDeAcao.REAGENDAR_MISSAO,
+                    payload=payload,
+                    state=EstadoDaAcao.PROPOSTA,
+                    created_at=agora,
+                )
+            )
+        elif dados is not None:
             session.add(
                 TutorAction(
                     message_id=resposta.id,
@@ -475,9 +664,34 @@ def _completar(
                     created_at=agora,
                 )
             )
+        resposta.status = StatusDaMensagem.COMPLETA
         session.commit()
         session.refresh(resposta)
         return resposta
+
+
+def _payload_do_reagendamento(
+    session: Session, user_id: int, dados: RescheduleProposal
+) -> dict[str, object] | None:
+    """A entrada do modelo, com o prazo em UTC, mais o retrato escrito pelo
+    backend (`CAMPOS_DO_RETRATO`, F16) -- ou `None` se a missao nao pode ser
+    reagendada. O modelo nunca escolhe o retrato: `extra='forbid'` recusou
+    qualquer campo a mais antes daqui.
+
+    O prazo vai em UTC pelo mesmo motivo do `reagendar_missao`: o cartao e a
+    confirmacao leem o MESMO instante na mesma grafia (`Z`), qualquer que
+    seja o offset que o modelo escreveu.
+    """
+    alvo = missao_reagendavel(session, user_id, dados.mission_id)
+    if alvo is None:
+        return None
+    normalizada = dados.model_copy(
+        update={"new_deadline": dados.new_deadline.astimezone(UTC)}
+    )
+    retrato = RetratoDoReagendamento(
+        instructions=alvo.instructions, previous_deadline=alvo.deadline
+    )
+    return normalizada.model_dump(mode="json") | retrato.model_dump(mode="json")
 
 
 def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
@@ -494,15 +708,16 @@ def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
     return acao
 
 
-def _resultado_anterior(
-    session: Session, acao: TutorAction
-) -> Executada | PrazoExpirado:
+def _resultado_anterior(session: Session, acao: TutorAction) -> ResultadoDaConfirmacao:
     """O que a confirmacao com esta chave produziu da primeira vez. So
-    `executada` e `falhou` (prazo) gravam `operation_id`."""
+    `executada` e `falhou` (prazo expirado ou reagendamento invalido) gravam
+    `operation_id`."""
     if acao.state is EstadoDaAcao.EXECUTADA:
         missao = session.get(Mission, acao.mission_id)
         assert missao is not None
         return Executada(acao, missao)
+    if acao.error_code == REAGENDAMENTO_INVALIDO:
+        return ReagendamentoInvalido(acao)
     return PrazoExpirado(acao)
 
 

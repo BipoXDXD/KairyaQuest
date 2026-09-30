@@ -42,7 +42,8 @@ DESCRICAO_DA_FERRAMENTA = (
 )
 
 DESCRICAO_DO_REAGENDAMENTO = (
-    "Propõe mudar o prazo de UMA missão pendente da lista do contexto. NÃO muda "
+    "Propõe mudar o prazo de UMA missão avulsa ainda não concluída da lista do "
+    "contexto (pelo número #id dela). NÃO muda "
     "nada: a pessoa vê a proposta num cartão e decide se confirma ou recusa. "
     "Use só depois de conversar o motivo, e no máximo uma proposta por resposta. "
     "O novo prazo (new_deadline) é um instante ISO 8601 com fuso horário, no futuro."

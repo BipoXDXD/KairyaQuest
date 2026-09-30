@@ -29,6 +29,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoInalteradoError,
     ProvedorNaoConfiguradoError,
+    ReagendamentoInvalidoError,
     SemanaDistanteError,
     SemanaEncerradaError,
     SemEvidenciaError,
@@ -87,6 +88,7 @@ class CodigoDeErro(StrEnum):
     PRAZO_EXPIRADO = "prazo_expirado"
     PRAZO_DERIVADO = "prazo_derivado"
     PRAZO_INALTERADO = "prazo_inalterado"
+    REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
     MISSAO_EXPIRADA = "missao_expirada"
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
@@ -244,6 +246,17 @@ def _prazo_inalterado(request: Request, exc: PrazoInalteradoError) -> JSONRespon
     """409: o estado atual da missao recusa (o prazo ja e esse), nao a forma do
     pedido."""
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PRAZO_INALTERADO)
+
+
+@app.exception_handler(ReagendamentoInvalidoError)
+def _reagendamento_invalido(
+    request: Request, exc: ReagendamentoInvalidoError
+) -> JSONResponse:
+    """409: a missao mudou depois da proposta (F17). A falha ja foi gravada na
+    acao; a saida da tela e pedir outra proposta."""
+    return _erro(
+        status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.REAGENDAMENTO_INVALIDO
+    )
 
 
 @app.exception_handler(MissaoExpiradaError)

@@ -29,6 +29,7 @@ from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.service import (
     Executada,
     PrazoExpirado,
+    ResultadoDaConfirmacao,
     confirmar_acao,
     rejeitar_acao,
 )
@@ -90,7 +91,7 @@ def _proposta(
     return acao
 
 
-def _confirmar(session: Session, acao_id: int, op: str) -> Executada | PrazoExpirado:
+def _confirmar(session: Session, acao_id: int, op: str) -> ResultadoDaConfirmacao:
     return confirmar_acao(session, ESTUDANTE, acao_id, op, clock=lambda: AGORA)
 
 
