@@ -1772,6 +1772,17 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(within(card(8)).queryByTestId('mission-started-at')).not.toBeInTheDocument()
     })
 
+    it('sem botao nem aviso (em andamento), o bloco do Iniciar nao reserva espaco: so a regiao vazia (Minor 8)', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }]),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const vazio = within(card(12)).getByTestId('mission-start-status').parentElement
+      expect(vazio).not.toHaveClass('mt-3')
+      expect(within(card(7)).getByTestId('mission-start-status').parentElement).toHaveClass('mt-3')
+    })
+
     it('durante uma conclusao em voo, o Iniciar fica desabilitado', async () => {
       routeFetch({
         'GET /api/missions': () => Response.json([pendente]),
@@ -2053,6 +2064,122 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
         { operation_id: K2, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'dificuldade' },
       ])
+    })
+
+    it('falha "retry" e a pessoa muda SO a data: o envio sai com chave NOVA (I2)', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      fireEvent.change(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)'), {
+        target: { value: '2026-10-06T18:00' },
+      })
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      const corpos = requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)
+      expect(corpos).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
+        { operation_id: K2, new_deadline: '2026-10-06T21:00:00.000Z', reason: 'falta_de_tempo' },
+      ])
+    })
+
+    it('com o Iniciar em voo, o formulario de reagendar fica travado (Minor 1)', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => new Promise<Response>(() => undefined),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeEnabled()
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      expect(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')).toBeDisabled()
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+    })
+
+    it('com o Concluir em voo, o formulario de reagendar fica travado (Minor 1)', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+      expect(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')).toBeDisabled()
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+    })
+
+    describe('um SEGUNDO reagendamento no mesmo cartao (I1)', () => {
+      /** Primeiro reagendamento com sucesso e o segundo aberto com outra data. */
+      async function segundoReagendamento(segundo: Parameters<typeof routeFetch>[0][string]) {
+        const fetchMock = routeFetch({
+          'GET /api/missions': () => Response.json([pendente]),
+          'POST /api/missions/7/reschedule': (init, call) =>
+            call === 1 ? Response.json(reagendada) : segundo(init, call),
+        })
+        render(<MissionList />)
+        await screen.findByTestId('missions-list')
+        preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+        fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+        await within(card(7)).findByText('Prazo reagendado.')
+        preencherReagendamento(7, '2026-09-01T08:00', 'Dificuldade')
+        fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+        return fetchMock
+      }
+
+      /** O cartao continua no resultado do PRIMEIRO, com o disclosure aberto. */
+      function continuaNoPrimeiro() {
+        const alvo = within(card(7))
+        expect(alvo.getByTestId('mission-deadline')).toHaveAttribute(
+          'dateTime',
+          reagendada.deadline,
+        )
+        expect(alvo.getByTestId('mission-reschedule-count')).toHaveTextContent('Reagendada 1 vez')
+        expect(alvo.getByRole('button', { name: 'Reagendar prazo' })).toHaveAttribute(
+          'aria-expanded',
+          'true',
+        )
+        expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toHaveValue(
+          '2026-09-01T08:00',
+        )
+      }
+
+      it('em voo: o prazo e o historico do primeiro ficam, e o formulario continua aberto', async () => {
+        await segundoReagendamento(() => new Promise<Response>(() => undefined))
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+      })
+
+      it('falha "edit": o prazo do primeiro fica, e a mensagem aparece com o que foi digitado', async () => {
+        await segundoReagendamento(() => conflito('prazo_expirado', 422))
+        expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
+          'O novo prazo precisa estar no futuro.',
+        )
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByLabelText('Dificuldade')).toBeChecked()
+      })
+
+      it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
+        await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
+        expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
+          'Não foi possível confirmar o reagendamento.',
+        )
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')
+      })
     })
 
     it('falha "refresh": o formulario sai, a mensagem fica e "Atualizar o quadro" recarrega', async () => {

@@ -389,4 +389,43 @@ describe('useRescheduleMission', () => {
       expect(reload).toHaveBeenCalledTimes(1)
     })
   })
+
+  it('lastRescheduled guarda o ultimo SUCESSO, e ele sobrevive ao envio seguinte e a falha dele (I1)', async () => {
+    const segunda = { ...reagendada, deadline: '2026-10-09T21:00:00Z' }
+    routeFetch({
+      [ROTA]: (_, call) => {
+        if (call === 1) return Response.json(reagendada)
+        if (call === 2) return Promise.reject(new TypeError('Failed to fetch'))
+        return Response.json(segunda)
+      },
+    })
+    const { result } = renderReschedule()
+    expect(result.current.lastRescheduled).toBeNull()
+
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('rescheduled')
+    })
+    expect(result.current.lastRescheduled).toEqual(reagendada)
+
+    act(() => {
+      result.current.reschedule({ civil: '2026-10-09T18:00', reason: 'dificuldade' })
+    })
+    expect(result.current.state.status).toBe('submitting')
+    expect(result.current.lastRescheduled).toEqual(reagendada)
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('failed')
+    })
+    expect(result.current.lastRescheduled).toEqual(reagendada)
+
+    act(() => {
+      result.current.reschedule({ civil: '2026-10-09T18:00', reason: 'dificuldade' })
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('rescheduled')
+    })
+    expect(result.current.lastRescheduled).toEqual(segunda)
+  })
 })

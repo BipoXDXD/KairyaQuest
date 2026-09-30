@@ -234,6 +234,26 @@ describe('RescheduleForm', () => {
     expect(salvar()).toHaveTextContent('Salvar novo prazo')
   })
 
+  it('falha "retry" e a pessoa muda SO a data: o botao volta a "Salvar novo prazo" (I2)', () => {
+    const { rerender, onSubmit } = renderForm()
+    abrir()
+    fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })
+    fireEvent.click(screen.getByLabelText('Falta de tempo'))
+    fireEvent.click(salvar())
+    rerender({ failure: falhaRetry })
+    expect(salvar()).toHaveTextContent('Tentar de novo')
+
+    fireEvent.change(campo(), { target: { value: '2026-10-06T18:00' } })
+
+    expect(salvar()).toHaveTextContent('Salvar novo prazo')
+    expect(screen.queryByTestId('reschedule-retry-notice')).not.toBeInTheDocument()
+    fireEvent.click(salvar())
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      civil: '2026-10-06T18:00',
+      reason: 'falta_de_tempo',
+    })
+  })
+
   it('falha "retry-with-new-operation": "Tentar de novo", mas os campos continuam editaveis', () => {
     const { rerender } = renderForm()
     abrir()

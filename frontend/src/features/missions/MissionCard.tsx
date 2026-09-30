@@ -230,10 +230,13 @@ function rescheduleStatusText(reschedule: RescheduleState): string {
  * DEPOIS do reagendamento volta com o historico, e o reagendamento guardado
  * (anterior) tem `started_at` nulo. Decidir pelo conteudo que o servidor
  * devolveu dispensa guardar a ordem dos cliques.
+ *
+ * `rescheduled` e o ultimo reagendamento que DEU CERTO (`lastRescheduled` do
+ * hook), e nao o estado da tentativa corrente: com um segundo reagendamento em
+ * voo ou recusado, o cartao continua no resultado do primeiro.
  */
-function latestFromActions(start: StartState, reschedule: RescheduleState): Mission | null {
+function latestFromActions(start: StartState, rescheduled: Mission | null): Mission | null {
   const started = start.status === 'started' ? start.mission : null
-  const rescheduled = reschedule.status === 'rescheduled' ? reschedule.mission : null
   if (rescheduled !== null && (started === null || rescheduled.started_at !== null)) {
     return rescheduled
   }
@@ -308,8 +311,11 @@ function StartControls({
   const startable =
     (mission.state === 'pendente' && mission.availability === 'disponivel') ||
     start.status === 'submitting'
+  // Sem botao, sem aviso e sem anuncio (a missao ja veio em andamento), o
+  // bloco e so a regiao viva vazia: sem a margem, que viraria folga sem nada.
+  const shown = startable || start.status !== 'idle'
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-3">
+    <div className={`${shown ? 'mt-3 ' : ''}flex flex-wrap items-center gap-3`}>
       {failure?.recovery === 'refresh' ? (
         <RefreshNotice
           message={failure.message}
@@ -386,10 +392,11 @@ export function MissionCard({
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
   const { state: start, start: startMission } = useStartMission(listed.id, registry)
-  const { state: reschedule, reschedule: rescheduleMission } = useRescheduleMission(
-    listed.id,
-    registry,
-  )
+  const {
+    state: reschedule,
+    reschedule: rescheduleMission,
+    lastRescheduled,
+  } = useRescheduleMission(listed.id, registry)
   // O ultimo rascunho de reagendamento enviado. Ref, e nao estado: so e lido no
   // clique, e mudar nao deve renderizar nada.
   const lastSentReschedule = useRef<RescheduleDraft | null>(null)
@@ -434,7 +441,7 @@ export function MissionCard({
   const mission =
     completion.status === 'completed'
       ? completion.mission
-      : (latestFromActions(start, reschedule) ?? listed)
+      : (latestFromActions(start, lastRescheduled) ?? listed)
   // Um envio de cada vez no cartao: com o Iniciar em voo, um Concluir chegaria
   // ao servidor numa ordem que a tela nao controla (e vice-versa).
   const completing = completion.status === 'submitting'

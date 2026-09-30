@@ -28,6 +28,14 @@ export interface UseRescheduleMissionResult {
    * ja o barra no botao. Com um envio em voo, nao faz nada.
    */
   reschedule: (draft: RescheduleDraft) => void
+  /**
+   * A missao do ultimo reagendamento que DEU CERTO, ou `null`. O `state`
+   * descreve a tentativa corrente e deixa de ser `rescheduled` assim que um
+   * segundo envio sai; sem isto, o cartao voltava ao prazo listado (e sumia
+   * com o historico) durante o voo ou a falha do segundo reagendamento (I1 da
+   * revisao da Task 10).
+   */
+  lastRescheduled: Mission | null
 }
 
 /**
@@ -55,6 +63,7 @@ export function useRescheduleMission(
   registry: CompletionRegistry,
 ): UseRescheduleMissionResult {
   const [state, setState] = useState<RescheduleState>({ status: 'idle' })
+  const [lastRescheduled, setLastRescheduled] = useState<Mission | null>(null)
   // Ref, e nao o `state`: dois cliques no mesmo tick leriam o mesmo `idle`.
   const inFlight = useRef(false)
 
@@ -81,6 +90,7 @@ export function useRescheduleMission(
         .then((mission) => {
           registry.releaseActionKey(missionId, 'reschedule')
           setState({ status: 'rescheduled', mission })
+          setLastRescheduled(mission)
         })
         .catch((error: unknown) => {
           const failure = describeRescheduleFailure(error)
@@ -97,5 +107,5 @@ export function useRescheduleMission(
     [missionId, registry],
   )
 
-  return { state, reschedule }
+  return { state, reschedule, lastRescheduled }
 }
