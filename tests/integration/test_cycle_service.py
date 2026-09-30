@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from focusquest.core.errors import (
+    MissaoExpiradaError,
     MissaoNaoEncontradaError,
     PlanoExistenteError,
     SemanaDistanteError,
@@ -25,7 +26,7 @@ from focusquest.modules.missions.cycle_service import (
     ler_plano_atual,
 )
 from focusquest.modules.missions.domain import MissionState, MissionType
-from focusquest.modules.missions.models import Mission, WeeklyPlan
+from focusquest.modules.missions.models import Mission, MissionOperation, WeeklyPlan
 from focusquest.modules.missions.service import (
     concluir_missao,
     criar_missao,
@@ -503,3 +504,100 @@ def test_a_especial_iniciada_na_janela_e_nao_concluida_some_no_limite(
         clock=relogio(_as(segunda_seguinte + timedelta(days=1), 24, 0)),
     )
     assert no_limite.especial is None
+
+
+def test_a_diaria_concluida_com_atraso_abre_o_marco_e_a_especial_dele(
+    session: Session,
+) -> None:
+    """Revisao da F25, I1: o marco que nasce da conclusao tardia. O domingo
+    20/09 (plano da semana anterior, criado nele) e seg-sex concluidos no dia
+    somam 6; o sabado 26 e iniciado as 23:50 e concluido no domingo. Antes da
+    conclusao tardia nao ha marco; depois, o marco e o sabado, a janela da
+    especial vai ate 28/09 00:00 (SP) -- que e o limite da diaria de sabado --
+    e a especial conclui no domingo as 23:59."""
+    domingo_anterior = SEGUNDA - timedelta(days=1)
+    _criar(session, semana=SEGUNDA - UMA_SEMANA, agora=ao_meio_dia(domingo_anterior))
+    _concluir_no_dia(session, domingo_anterior)
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    for i in range(5):
+        _concluir_no_dia(session, SEGUNDA + timedelta(days=i))
+    sabado = SEGUNDA + timedelta(days=5)
+    domingo = SEGUNDA + timedelta(days=6)
+    _iniciar_as(session, _diaria_do_dia(session, sabado), _as(sabado, 23, 50))
+
+    antes = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(domingo, 10)))
+    assert antes.especial is None
+
+    concluir_missao(
+        session,
+        ESTUDANTE,
+        _diaria_do_dia(session, sabado).id,
+        "op-sabado-tardio",
+        clock=relogio(_as(domingo, 10)),
+    )
+    depois = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(domingo, 10)))
+    assert depois.especial is not None
+    assert depois.especial.availability is Availability.DISPONIVEL
+    assert depois.especial.deadline == fim_do_dia(domingo)
+    assert depois.especial.deadline == datetime(2026, 9, 28, 3, tzinfo=UTC)
+
+    especial = concluir_missao(
+        session,
+        ESTUDANTE,
+        depois.especial.missao.id,
+        "op-especial-do-marco-tardio",
+        clock=relogio(_as(domingo, 23, 59)),
+    )
+    assert especial.state is MissionState.CONCLUIDA
+    assert especial.mission_type is MissionType.ESPECIAL
+
+
+def test_a_especial_iniciada_na_janela_nao_conclui_depois_do_limite(
+    session: Session,
+) -> None:
+    """Revisao da F25, m3(a): no limite (quarta 00:00 para o marco no domingo)
+    a conclusao da especial iniciada na janela e `missao_expirada`."""
+    _semana_inteira(session)
+    especial = session.scalars(
+        select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+    ).one()
+    segunda_seguinte = SEGUNDA + UMA_SEMANA
+    _iniciar_as(session, especial, _as(segunda_seguinte, 23, 50))
+    with pytest.raises(MissaoExpiradaError):
+        concluir_missao(
+            session,
+            ESTUDANTE,
+            especial.id,
+            "op-e-depois",
+            clock=relogio(_as(segunda_seguinte + timedelta(days=1), 24, 0)),
+        )
+    assert especial.state is MissionState.EM_ANDAMENTO
+
+
+def test_reenvio_da_conclusao_tardia_depois_do_limite_devolve_o_mesmo_sucesso(
+    session: Session,
+) -> None:
+    """Revisao da F25, m3(b): a conclusao tardia reenviada depois do limite
+    devolve a mesma missao concluida, sem erro e sem segunda conclusao."""
+    _criar(session)
+    quarta = _diaria_do_dia(session, QUARTA)
+    _iniciar_as(session, quarta, _as(QUARTA, 23, 50))
+    primeira = concluir_missao(
+        session, ESTUDANTE, quarta.id, "op-tardia-r", clock=relogio(_as(QUINTA, 0, 10))
+    )
+    reenvio = concluir_missao(
+        session,
+        ESTUDANTE,
+        quarta.id,
+        "op-tardia-r",
+        clock=relogio(_as(QUINTA + timedelta(days=3), 12)),
+    )
+    assert reenvio.id == primeira.id
+    assert reenvio.state is MissionState.CONCLUIDA
+    assert reenvio.completed_at == _as(QUINTA, 0, 10)
+    operacoes = session.scalar(
+        select(func.count())
+        .select_from(MissionOperation)
+        .where(MissionOperation.mission_id == quarta.id)
+    )
+    assert operacoes == 2  # o inicio e UMA conclusao

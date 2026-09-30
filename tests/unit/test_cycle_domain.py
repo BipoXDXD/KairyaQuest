@@ -367,6 +367,34 @@ def test_na_conclusao_tardia(
     )
 
 
+@pytest.mark.parametrize(
+    ("dia", "limite_utc", "horas_reais"),
+    [
+        # Em pleno horario de verao (SP em -02:00): meia-noite de 12/12 = 02:00 UTC.
+        (date(2018, 12, 10), datetime(2018, 12, 12, 2, tzinfo=UTC), 24),
+        # Fim do horario de verao na virada de 16 para 17/02/2019: o dia seguinte
+        # ao prazo tem 25 h, e o limite e a meia-noite CIVIL (03:00 UTC), nao
+        # 24 h corridas.
+        (date(2019, 2, 15), datetime(2019, 2, 17, 3, tzinfo=UTC), 25),
+        # Inicio do horario de verao em 04/11/2018: a meia-noite de 04/11 nao
+        # existiu (00:00 pulou para 01:00 -02:00); o dia comeca as 03:00 UTC.
+        (date(2018, 11, 2), datetime(2018, 11, 4, 3, tzinfo=UTC), 24),
+    ],
+)
+def test_o_limite_da_conclusao_tardia_no_horario_de_verao(
+    dia: date, limite_utc: datetime, horas_reais: int
+) -> None:
+    prazo = fim_do_dia(dia)
+    limite = limite_da_conclusao_tardia(prazo)
+    # Em UTC: a meia-noite de 04/11/2018 cai no buraco do horario de verao, e
+    # um instante no buraco nunca e `==` a outro de fuso diferente (PEP 495),
+    # embora `<` -- a unica comparacao que a regra faz -- funcione.
+    assert limite.astimezone(UTC) == limite_utc
+    assert limite.astimezone(UTC) - prazo.astimezone(UTC) == timedelta(
+        hours=horas_reais
+    )
+
+
 # --- XP da especial ----------------------------------------------------------
 
 
