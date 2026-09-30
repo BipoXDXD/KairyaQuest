@@ -7,13 +7,21 @@ INSTANTE de cada evento.
 
 import threading
 from collections.abc import Callable, Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import MensagemEmAndamentoError, OperacaoReutilizadaError
+from focusquest.modules.missions.cycle_service import (
+    NovaDiaria,
+    NovaEspecial,
+    criar_plano,
+)
+from focusquest.modules.missions.domain import MissionType
+from focusquest.modules.missions.models import Mission
+from focusquest.modules.missions.service import iniciar_missao
 from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.tutoring.domain import (
     CodigoDoStream,
@@ -640,3 +648,78 @@ def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
     assert isinstance(final, RespostaConcluida)
     assert final.mensagem.status is StatusDaMensagem.COMPLETA
     assert len(falso.recebidas) == 2
+
+
+# --- Conclusao tardia do ciclo no contexto (F25, pendencia 117) -------------
+
+# Semana de 21/09/2026. A diaria de quarta (23/09) iniciada as 23:50 de SP;
+# a conversa acontece quinta 00:10 de SP, depois do prazo dela.
+_SEGUNDA = date(2026, 9, 21)
+_QUARTA = _SEGUNDA + timedelta(days=2)
+_QUARTA_23H50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+_QUINTA_00H10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+_SEXTA_00H00 = datetime(2026, 9, 25, 3, 0, tzinfo=UTC)
+
+
+def _diaria_de_quarta_iniciada_a_tempo(sessao: Session) -> Mission:
+    criar_plano(
+        sessao,
+        user_id=ESTUDANTE,
+        semana=_SEGUNDA,
+        diarias=[NovaDiaria(f"Diaria {i}", "c", 2, 30) for i in range(7)],
+        especial=NovaEspecial("Especial", "c", 60),
+        clock=lambda: datetime(2026, 9, 21, 15, tzinfo=UTC),
+    )
+    quarta = sessao.scalars(
+        select(Mission).where(
+            Mission.user_id == ESTUDANTE,
+            Mission.mission_type == MissionType.DIARIA,
+            Mission.day == _QUARTA,
+        )
+    ).one()
+    return iniciar_missao(
+        sessao, ESTUDANTE, quarta.id, "op-tardia-i", clock=lambda: _QUARTA_23H50
+    )
+
+
+def _sistema_do_turno(sessao: Session, tutoria: Tutoria, agora: datetime) -> str:
+    preparo = preparar_turno(
+        sessao,
+        user_id=ESTUDANTE,
+        client_message_id=f"tardia-{agora.isoformat()}",
+        conteudo="oi",
+        tutoria=tutoria,
+        clock=lambda: agora,
+    )
+    return _para_gerar(preparo).turno.sistema
+
+
+def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """Pendencia 117: o contexto le o ciclo (`ler_ciclo`) com o MESMO instante
+    do turno e leva a diaria de ontem, com o limite, fora da lista de
+    pendentes (a do reagendamento)."""
+    quarta = _diaria_de_quarta_iniciada_a_tempo(session)
+
+    sistema = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+
+    assert (
+        f"- diária de ontem: Diaria 2 (em andamento desde "
+        f"{_QUARTA_23H50.isoformat()}; pode ser concluída antes de "
+        f"{_SEXTA_00H00.isoformat()})"
+    ) in sistema.splitlines()
+    assert f"#{quarta.id}" not in sistema
+
+
+def test_o_turno_de_quarta_nao_tem_conclusao_tardia(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """Antes da meia-noite a diaria de quarta e a de HOJE, nao a de ontem."""
+    _diaria_de_quarta_iniciada_a_tempo(session)
+
+    sistema = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+
+    # O titulo da secao, e nao so "conclusao tardia": a persona tambem fala
+    # dela.
+    assert "Missões do ciclo em conclusão tardia" not in sistema

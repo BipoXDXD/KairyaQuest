@@ -33,6 +33,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoInalteradoError,
 )
+from focusquest.modules.missions.cycle_service import ler_ciclo
 from focusquest.modules.missions.domain import (
     MissionState,
     OrigemDoReagendamento,
@@ -47,7 +48,7 @@ from focusquest.modules.missions.service import (
     reagendar_missao,
 )
 from focusquest.modules.progression.service import ler_progresso
-from focusquest.modules.tutoring.context import montar_turno
+from focusquest.modules.tutoring.context import montar_turno, tardias_do_ciclo
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
     REAGENDAMENTO_INVALIDO,
@@ -239,6 +240,12 @@ def preparar_turno(
         ],
         progresso=ler_progresso(session, user_id),
         historico=_historico(session, user_id, tutoria.historico),
+        # O ciclo lido no MESMO instante do turno (pendencia 117): a
+        # conclusao tardia depende do relogio, e um segundo `clock()` poderia
+        # cair do outro lado de uma meia-noite.
+        tardias=tardias_do_ciclo(
+            ler_ciclo(session, user_id, clock=lambda: agora), agora
+        ),
     )
     return ParaGerar(pergunta=pergunta, resposta_id=resposta.id, turno=turno)
 

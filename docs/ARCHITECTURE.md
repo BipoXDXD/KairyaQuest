@@ -259,7 +259,7 @@ FocusQuest/
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12)
 │       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
-│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
+│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; as missões do ciclo em conclusão tardia (tardias_do_ciclo, sobre o ler_ciclo; pendência 117), sem #id; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
 │       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar; a Tutoria ganhou o campo `modelo` (E)
 │       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
@@ -909,7 +909,10 @@ especial vale `3 × xp_para_dificuldade(5) = 660` (C9).
 não vazar a diária ainda não revelada nem a trilha da semana para quem só
 lista missões soltas. Isso também é o motivo da pendência nova sobre a Tifa
 não ver o ciclo no contexto (`docs/HANDOFF.md`, pendência 55): o contexto da
-tutoria é montado com `listar_missoes`.
+tutoria é montado com `listar_missoes`. Desde a pendência 117, o
+`preparar_turno` também lê o ciclo (`ler_ciclo`), mas só para a conclusão
+tardia (a diária de ontem e a especial vencidas que ainda se concluem); o
+resto do ciclo continua fora do contexto (pendência 55).
 
 **A ocultação: 404 idêntico ao de missão inexistente (C11).** Tudo que
 ainda não foi revelado — um dia futuro da semana, uma semana seguinte já

@@ -3846,6 +3846,12 @@ que não tinham chegado aqui)
     (por exemplo, incluir o resumo do `GET /api/cycle` no contexto do
     turno) é trabalho do incremento que implementar `propose_plan` — fora
     do escopo do B, que não muda `tutoring/`.
+    **Parcialmente atendida em 2026-09-29 (pendência 117, lote g-back):**
+    `preparar_turno` já lê o ciclo (`ler_ciclo`), mas o contexto só usa dele
+    a conclusão tardia — a diária de ontem e a especial vencidas que ainda se
+    concluem. **Continua aberto:** a diária de hoje, a sequência, os dias
+    para o marco, a especial dentro da janela e a existência (ou falta) de
+    plano da semana — a Tifa segue sem ver nada disso.
 56. **A rota de concluir relê a missão com `clock()` chamado de novo depois
     do commit** (`cycle_router.py`, achado registrado no ledger da Task 5,
     minor deferido): `concluir_missao` grava a conclusão com um relógio,
@@ -4708,12 +4714,53 @@ ledger; nenhum é bug esquecido.
     `CycleSection.test.tsx`), mas nenhum cenário do Playwright atravessa a
     meia-noite: o E2E usa o relógio real da API (`core/clock.py`, `system_now`), e simular a virada exigiria
     um relógio controlável no ambiente do E2E, que não existe hoje.
-117. **A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
+117. ~~**A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
     (`tutoring/service.py`, via `listar_missoes`) só traz avulsas não
     concluídas, então não há texto errado no contexto; mas a
     Tifa não vai lembrar a pessoa de que a diária de ontem, iniciada a tempo,
     ainda pode ser concluída hoje. Liga-se à pendência 55 (a Tifa continua sem
-    ver o ciclo).
+    ver o ciclo).~~ **Resolvida em 2026-09-29 (lote g-back, branch
+    `wt/f-e2e`):** `preparar_turno` lê o ciclo (`ler_ciclo`) com o MESMO
+    instante do turno — um segundo `clock()` poderia cair do outro lado da
+    meia-noite — e `tardias_do_ciclo` (`tutoring/context.py`) escolhe a diária
+    de ontem e a especial que passaram do prazo e ainda estão `disponivel`
+    (a conclusão tardia da `com_inicio_a_tempo`), nessa ordem. O contexto
+    ganha, entre as pendentes e o progresso, a seção "Missões do ciclo em
+    conclusão tardia (iniciadas a tempo; a pessoa ainda pode concluí-las, mas
+    elas não podem ser reagendadas):", com uma linha por missão —
+    `- diária de ontem: <instrução> (em andamento desde <início>; pode ser
+    concluída antes de <limite>)`, o limite em UTC como o "Agora" e com "antes
+    de" porque o intervalo é semiaberto. **Decisões:** (a) **sem `#id`** nessas
+    linhas: o `#` é o que a `reschedule_mission` recebe (I2 da revisão da T7),
+    e diária e especial não são reagendáveis; a Tifa não precisa do id para
+    nada, porque não há ferramenta de concluir. (b) A **concluída com atraso
+    fica fora**: `ler_ciclo` a mantém até o limite para o cartão do
+    Quartel-General, mas para a Tifa não há o que lembrar. (c) A **especial
+    ainda na janela fica fora**: é o ciclo de hoje, escopo da pendência 55.
+    (d) A seção **some** quando não há tardia, em vez de dizer "nenhuma": é
+    exceção, e uma linha a mais em todo turno seria ruído. (e) A persona
+    (bloco "Reagendar") passou a nomear a lista do reagendamento pelo título
+    ("da lista \"Missões pendentes\" do contexto", antes "da lista do
+    contexto", ambíguo com a seção nova) e ganhou o item "A diária e a missão
+    especial do ciclo nunca são reagendadas. Se o contexto trouxer uma delas
+    em conclusão tardia, lembre que ainda dá para concluí-la até o limite
+    indicado, no Quartel-General." — o bloco anti-injeção continua o último
+    (teste da m4 intacto). Testes: 9 unitários em
+    `tests/unit/test_tutoring_context.py`, 1 em
+    `tests/unit/test_tutoring_persona.py` e 2 de integração em
+    `tests/integration/test_tutoring_service.py` (o turno de quinta 00:10
+    lembra a diária de quarta iniciada às 23:50, com limite sexta 00:00 SP, e
+    sem `#id`; o turno de quarta 23:55 não tem a seção). O comportamento do
+    modelo com o texto novo não foi medido (pendência 180).
+180. **O contexto e a persona mudaram (pendência 117) sem medição contra a API
+    real.** A seção de conclusão tardia e o item novo do "Reagendar" são
+    provados só pelo texto montado (unitários e integração com o falso);
+    ninguém mediu se o modelo de fato lembra a diária de ontem, se deixa de
+    propor `reschedule_mission` para ela, nem se a mudança de
+    "da lista do contexto" para "da lista \"Missões pendentes\" do contexto"
+    altera a sequência da referência da conversa
+    (`tests/integration/referencia_da_api_real.json`, não regravada). Medir
+    exige chamada paga, que este lote não fez por instrução.
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
