@@ -1,16 +1,24 @@
 """A montagem do turno: o que o modelo recebe, e em que forma."""
 
-from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
+from datetime import UTC, date, datetime, timedelta
 
+from focusquest.modules.missions.cycle_domain import Availability, fim_do_dia
+from focusquest.modules.missions.cycle_service import CicloLido, MissaoLida
 from focusquest.modules.missions.domain import (
     MissionState,
+    MissionType,
     MotivoDoReagendamento,
     OrigemDoReagendamento,
 )
 from focusquest.modules.missions.models import Mission, MissionReschedule
 from focusquest.modules.progression.domain import CATALOGO, Codigo, FaixaDoNivel
 from focusquest.modules.progression.service import ConquistaNoPainel, Progresso
-from focusquest.modules.tutoring.context import ROTULO_DO_MOTIVO, montar_turno
+from focusquest.modules.tutoring.context import (
+    ROTULO_DO_MOTIVO,
+    montar_turno,
+    tardias_do_ciclo,
+)
 from focusquest.modules.tutoring.domain import (
     EstadoDaAcao,
     Papel,
@@ -323,4 +331,148 @@ def test_a_proposta_de_reagendamento_entra_como_texto_proprio() -> None:
     assert turno.mensagens[1].texto == (
         "Vamos mover.\n\n[Proposta de reagendamento da missão #12 para "
         "2026-10-05T21:00:00Z (falta de tempo) -- executada]"
+    )
+
+
+# --- Conclusao tardia do ciclo (F25, pendencia 117) -------------------------
+
+# Quinta 30/09/2026, meio-dia em Sao Paulo. A diaria de ontem (quarta) venceu a
+# meia-noite que abriu hoje, e a conclusao tardia vai ate a meia-noite que
+# abre sexta.
+HOJE_SP = date(2026, 9, 30)
+MEIO_DIA_SP = datetime(2026, 9, 30, 15, 0, tzinfo=UTC)
+PRAZO_DE_ONTEM = fim_do_dia(HOJE_SP - timedelta(days=1))
+LIMITE_DE_ONTEM = datetime(2026, 10, 1, 3, 0, tzinfo=UTC)  # sexta 00:00 SP
+
+
+def _do_ciclo(
+    tipo: MissionType,
+    prazo: datetime,
+    disponibilidade: Availability,
+    *,
+    id_: int = 41,
+    instrucao: str = "Resolver 5 exercicios de laco",
+) -> MissaoLida:
+    missao = Mission(
+        id=id_,
+        mission_type=tipo,
+        instructions=instrucao,
+        completion_criterion="c",
+        difficulty=2,
+        estimated_minutes=30,
+        state=MissionState.EM_ANDAMENTO,
+        started_at=prazo - timedelta(minutes=10),
+    )
+    return MissaoLida(missao, prazo, disponibilidade)
+
+
+def _ciclo(
+    *,
+    ontem: MissaoLida | None = None,
+    especial: MissaoLida | None = None,
+) -> CicloLido:
+    return CicloLido(
+        hoje=HOJE_SP,
+        missao=None,
+        sequencia=0,
+        dias_para_o_marco=7,
+        especial=especial,
+        diaria_de_ontem=ontem,
+    )
+
+
+def _sistema_com(tardias: Sequence[MissaoLida]) -> str:
+    return montar_turno(
+        persona="P",
+        agora=MEIO_DIA_SP,
+        pendentes=[],
+        progresso=SEM_PROGRESSO,
+        historico=[],
+        tardias=tardias,
+    ).sistema
+
+
+def test_a_diaria_de_ontem_iniciada_a_tempo_entra_como_tardia() -> None:
+    ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL)
+    assert tardias_do_ciclo(_ciclo(ontem=ontem), MEIO_DIA_SP) == (ontem,)
+
+
+def test_a_diaria_de_ontem_ja_concluida_com_atraso_nao_entra() -> None:
+    """`ler_ciclo` a mantem ate o limite para o Quartel-General (o cartao da
+    recompensa); para a Tifa ela nao e mais nada a lembrar."""
+    ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.CONCLUIDA)
+    assert tardias_do_ciclo(_ciclo(ontem=ontem), MEIO_DIA_SP) == ()
+
+
+def test_a_especial_na_janela_nao_e_tardia() -> None:
+    """A especial ainda no prazo e o ciclo de hoje, nao conclusao tardia: fica
+    com a pendencia 55, fora deste recorte."""
+    na_janela = _do_ciclo(
+        MissionType.ESPECIAL, MEIO_DIA_SP + timedelta(hours=1), Availability.DISPONIVEL
+    )
+    assert tardias_do_ciclo(_ciclo(especial=na_janela), MEIO_DIA_SP) == ()
+
+
+def test_a_especial_depois_da_janela_iniciada_a_tempo_e_tardia() -> None:
+    especial = _do_ciclo(MissionType.ESPECIAL, PRAZO_DE_ONTEM, Availability.DISPONIVEL)
+    ontem = _do_ciclo(
+        MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL, id_=40
+    )
+    assert tardias_do_ciclo(_ciclo(ontem=ontem, especial=especial), MEIO_DIA_SP) == (
+        ontem,
+        especial,
+    )
+
+
+def test_a_especial_concluida_depois_da_janela_nao_entra() -> None:
+    especial = _do_ciclo(MissionType.ESPECIAL, PRAZO_DE_ONTEM, Availability.CONCLUIDA)
+    assert tardias_do_ciclo(_ciclo(especial=especial), MEIO_DIA_SP) == ()
+
+
+def test_a_tardia_entra_no_contexto_com_o_limite_e_sem_reagendamento() -> None:
+    """O limite e a meia-noite SEGUINTE ao prazo (F25), em UTC como o "Agora"
+    e tambem na hora de Sao Paulo: e uma meia-noite de la, e "ontem" e o dia
+    civil de la -- so em UTC, a Tifa diria "ate as 3h".
+    Sem `#id`: o `#` e o que a `reschedule_mission` recebe, e a diaria nao e
+    reagendavel -- a linha diz isso com todas as letras."""
+    ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL)
+    sistema = _sistema_com([ontem])
+    assert (
+        "Missões do ciclo em conclusão tardia (iniciadas a tempo; a pessoa ainda "
+        "pode concluí-las, mas elas não podem ser reagendadas):"
+    ) in sistema
+    assert (
+        "- diária de ontem: Resolver 5 exercicios de laco (em andamento desde "
+        f"{(PRAZO_DE_ONTEM - timedelta(minutes=10)).isoformat()}; pode ser "
+        "concluída antes de "
+        f"{LIMITE_DE_ONTEM.isoformat()}, que é 2026-10-01T00:00:00-03:00 em "
+        "São Paulo)"
+    ) in sistema.splitlines()
+    assert "#41" not in sistema
+
+
+def test_a_especial_tardia_diz_que_e_a_especial() -> None:
+    especial = _do_ciclo(
+        MissionType.ESPECIAL,
+        PRAZO_DE_ONTEM,
+        Availability.DISPONIVEL,
+        instrucao="Projeto da semana",
+    )
+    linhas = _sistema_com([especial]).splitlines()
+    assert any(
+        linha.startswith("- missão especial: Projeto da semana (") for linha in linhas
+    )
+
+
+def test_sem_tardias_o_contexto_nao_ganha_a_secao() -> None:
+    assert "conclusão tardia" not in _sistema_com([])
+
+
+def test_a_secao_tardia_fica_depois_das_pendentes_e_antes_do_progresso() -> None:
+    ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL)
+    sistema = _sistema_com([ontem])
+    assert (
+        sistema.index("Missões pendentes:")
+        < sistema.index("Missões do ciclo em conclusão tardia")
+        < sistema.index("Progresso do estudante")
     )

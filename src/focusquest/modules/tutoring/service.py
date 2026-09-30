@@ -33,6 +33,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoInalteradoError,
 )
+from focusquest.modules.missions.cycle_service import ler_ciclo
 from focusquest.modules.missions.domain import (
     MissionState,
     OrigemDoReagendamento,
@@ -47,7 +48,7 @@ from focusquest.modules.missions.service import (
     reagendar_missao,
 )
 from focusquest.modules.progression.service import ler_progresso
-from focusquest.modules.tutoring.context import montar_turno
+from focusquest.modules.tutoring.context import montar_turno, tardias_do_ciclo
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
     REAGENDAMENTO_INVALIDO,
@@ -241,6 +242,12 @@ def preparar_turno(
         ],
         progresso=ler_progresso(session, user_id),
         historico=_historico(session, user_id, tutoria.historico),
+        # O ciclo lido no MESMO instante do turno (pendencia 117): a
+        # conclusao tardia depende do relogio, e um segundo `clock()` poderia
+        # cair do outro lado de uma meia-noite.
+        tardias=tardias_do_ciclo(
+            ler_ciclo(session, user_id, clock=lambda: agora), agora
+        ),
     )
     return ParaGerar(pergunta=pergunta, resposta_id=resposta.id, turno=turno)
 
@@ -769,8 +776,18 @@ def _payload_do_reagendamento(
 
 
 def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
-    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`."""
-    acao = session.get(TutorAction, action_id, with_for_update=True)
+    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`.
+
+    `populate_existing` junto com a trava, pelo motivo de
+    `buscar_para_escrever`: sem ele, uma acao que ja estava no identity map
+    desta sessao NAO e sobrescrita pela linha travada, e a decisao seria
+    tomada sobre o estado de antes da espera -- uma proposta recusada por
+    outra conexao seria executada (provado por
+    `test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`).
+    """
+    acao = session.get(
+        TutorAction, action_id, with_for_update=True, populate_existing=True
+    )
     if acao is None:
         raise AcaoNaoEncontradaError(f"acao {action_id} nao existe")
     mensagem = session.get(TutorMessage, acao.message_id)

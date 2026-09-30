@@ -106,3 +106,15 @@ def test_a_persona_cumpre_as_exigencias_do_readme(exigencia: str, trecho: str) -
         f"a persona deixou de cumprir a exigencia do README ({exigencia}); "
         f"o trecho esperado ({trecho!r}) nao esta mais no texto"
     )
+
+
+def test_o_reagendamento_e_so_das_pendentes_e_a_tardia_do_ciclo_se_conclui() -> None:
+    """Pendencia 117: com a secao de conclusao tardia no contexto, "a lista do
+    contexto" ficou ambigua. A persona nomeia a lista do reagendamento pelo
+    titulo que `context.py` escreve, e diz o que fazer com a tardia: lembrar
+    que ainda da para concluir, sem propor reagendar (o prazo delas e derivado
+    do ciclo e nao se reagenda)."""
+    reagendar = PERSONA[PERSONA.index("Reagendar:") : PERSONA.index("Sempre,")]
+    assert 'da lista "Missões pendentes" do contexto' in reagendar
+    assert "A diária e a missão especial do ciclo nunca são reagendadas" in reagendar
+    assert "lembre que ainda dá para concluí-la" in reagendar

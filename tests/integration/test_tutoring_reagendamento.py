@@ -69,6 +69,7 @@ from focusquest.modules.tutoring.service import (
     Tutoria,
     confirmar_acao,
     preparar_turno,
+    rejeitar_acao,
     transmitir,
 )
 from integration.provedor_falso import (
@@ -1074,6 +1075,34 @@ def test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava(
         prazo_da_tela,
         NOVO_PRAZO,
     )
+
+
+def test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava(
+    banco_migrado: Engine, registro: Registro
+) -> None:
+    """O mesmo cuidado do teste acima, agora na ACAO: `session.get(...,
+    with_for_update=True)` sem `populate_existing` nao sobrescreve uma acao
+    que ja estava no identity map, que voltaria com o estado de ANTES da
+    trava. Hoje nenhum caminho de producao carrega a acao antes (a rota abre
+    sessao nova e `_buscar_acao` e a primeira leitura), entao o teste a carrega
+    de proposito: outra conexao a recusa e commita, e a confirmacao tem de ver
+    `recusada` -- e nao executar o reagendamento de uma proposta recusada,
+    sobrescrevendo a recusa."""
+    mission_id, acao_id = _proposta_commitada(banco_migrado, registro, "acao-relida")
+    with Session(bind=banco_migrado) as confirmacao:
+        velha = confirmacao.get(TutorAction, acao_id)
+        assert velha is not None and velha.state is EstadoDaAcao.PROPOSTA
+        with Session(bind=banco_migrado) as tela:
+            rejeitar_acao(tela, ESTUDANTE, acao_id, clock=relogio(AGORA))
+            tela.commit()
+        with pytest.raises(TransicaoIlegalError, match="recusada"):
+            confirmar_acao(
+                confirmacao, ESTUDANTE, acao_id, "op-acao-relida", clock=relogio(AGORA)
+            )
+    assert _historico_de(banco_migrado, mission_id) == []
+    with Session(bind=banco_migrado) as leitura:
+        acao = leitura.get(TutorAction, acao_id)
+        assert acao is not None and acao.state is EstadoDaAcao.RECUSADA
 
 
 def test_chave_gravada_por_outra_acao_depois_da_consulta_vira_reuso(

@@ -3242,6 +3242,9 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` pelo hook do commit `dd50e85` (pendência 174, código; worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
 | Chamada real 3 (pendência 174), `python -m integration.camada3_do_fallback`, 2026-09-30, sobre `dd50e85`, modelo `claude-opus-5`, SDK 1.7.0 | **Aprovado.** Uma chamada, com a autorização do dono: a API aceitou `fallbacks="default"` e o beta `server-side-fallback-2026-07-01` (duas ferramentas, `disable_parallel_tool_use`, sem `thinking`); stream até o `message_stop`, parada `terminou`, substituto nulo, proposta `create_mission`, sequência igual à da referência da conversa. Models API: `allowed_fallback_models: ["claude-opus-4-8"]`. Gravado em `referencia_do_fallback_real.json`. |
 | `make check` rodado por mim sobre `dd50e85` mais a documentação e a referência da camada 3 (worktree `f-api`) | Aprovado, EXIT 0, 193 s de relógio. Frontend: **51 arquivos, 862 testes**, 100% nos quatro eixos (1102/1102 instruções, 860/860 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 141 arquivos já formatados. mypy sem problemas em 136 arquivos. Backend: **1165 passed**, cobertura total de 100% (2008 instruções, 354 ramificações). E2E: **25 passed** (o cenário (h) novo). Gitleaks: `no leaks found`. |
+| `make check` pelo hook dos commits `84cc453` (pendência 117) e `f38db69` (pendência 181), lote g-back (worktree `f-e2e`) | Aprovado nos dois (`gate completo (make check)....Passed`). Uma tentativa anterior do commit da 181 reprovou num teste de frontend fora do lote, intermitente (pendência 183); o mesmo arquivo passou 5 de 5 sozinho e o gate passou na tentativa seguinte, sem mudança no teste. |
+| `make check` rodado por mim sobre `f38db69` (worktree `f-e2e`) | Aprovado, EXIT 0, 188 s de relógio. Frontend: 50 arquivos, 846 testes, 100% nos quatro eixos (1089/1089 instruções, 842/842 ramificações, 320/320 funções, 1062/1062 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. pytest: 1107 testes, cobertura total de 100% (1984 instruções, 346 ramificações). E2E: 21 cenários aprovados. Gitleaks sem achados. |
+| `make check` pelo hook de `63754ef` (correções da revisão do lote g-back) e rodado por mim sobre ele (worktree `f-e2e`) | Aprovado nos dois. O meu: EXIT 0, 359 s de relógio. Frontend: 50 arquivos, 846 testes, 100% nos quatro eixos (1089/1089, 842/842, 320/320, 1062/1062). Ruff: 137 arquivos já formatados. mypy sem problemas em 132 arquivos. pytest: 1111 testes, cobertura de 100% (1987 instruções, 346 ramificações). E2E: 21 cenários. Gitleaks sem achados. |
 
 ## Ambiente verificado
 
@@ -4191,6 +4194,12 @@ que não tinham chegado aqui)
     reagendamentos (a contagem e o último motivo); o **ciclo** (as diárias, a
     especial, `late_daily`) continua fora do contexto, e ela também não sabe da
     conclusão tardia (pendência 117).
+    **Parcialmente atendida em 2026-09-29 (pendência 117, lote g-back):**
+    `preparar_turno` já lê o ciclo (`ler_ciclo`), mas o contexto só usa dele
+    a conclusão tardia — a diária de ontem e a especial vencidas que ainda se
+    concluem. **Continua aberto:** a diária de hoje, a sequência, os dias
+    para o marco, a especial dentro da janela e a existência (ou falta) de
+    plano da semana — a Tifa segue sem ver nada disso.
 56. **A rota de concluir relê a missão com `clock()` chamado de novo depois
     do commit** (`cycle_router.py`, achado registrado no ledger da Task 5,
     minor deferido): `concluir_missao` grava a conclusão com um relógio,
@@ -5116,12 +5125,135 @@ ledger; nenhum é bug esquecido.
     `CycleSection.test.tsx`), mas nenhum cenário do Playwright atravessa a
     meia-noite: o E2E usa o relógio real da API (`core/clock.py`, `system_now`), e simular a virada exigiria
     um relógio controlável no ambiente do E2E, que não existe hoje.
-117. **A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
+117. ~~**A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
     (`tutoring/service.py`, via `listar_missoes`) só traz avulsas não
     concluídas, então não há texto errado no contexto; mas a
     Tifa não vai lembrar a pessoa de que a diária de ontem, iniciada a tempo,
     ainda pode ser concluída hoje. Liga-se à pendência 55 (a Tifa continua sem
-    ver o ciclo).
+    ver o ciclo).~~ **Resolvida em 2026-09-29 (lote g-back, branch
+    `wt/f-e2e`):** `preparar_turno` lê o ciclo (`ler_ciclo`) com o MESMO
+    instante do turno — um segundo `clock()` poderia cair do outro lado da
+    meia-noite — e `tardias_do_ciclo` (`tutoring/context.py`) escolhe a diária
+    de ontem e a especial que passaram do prazo e ainda estão `disponivel`
+    (a conclusão tardia da `com_inicio_a_tempo`), nessa ordem. O contexto
+    ganha, entre as pendentes e o progresso, a seção "Missões do ciclo em
+    conclusão tardia (iniciadas a tempo; a pessoa ainda pode concluí-las, mas
+    elas não podem ser reagendadas):", com uma linha por missão —
+    `- diária de ontem: <instrução> (em andamento desde <início>; pode ser
+    concluída antes de <limite em UTC>, que é <limite em SP> em São Paulo)`.
+    O limite vai em UTC, como o "Agora", e também na hora de São Paulo (m1 da
+    revisão do lote): ele é uma meia-noite de lá, e só em UTC a Tifa diria
+    "até as 3h". "Antes de" porque o intervalo é semiaberto. **Decisões:** (a) **sem `#id`** nessas
+    linhas: o `#` é o que a `reschedule_mission` recebe (I2 da revisão da T7),
+    e diária e especial não são reagendáveis; a Tifa não precisa do id para
+    nada, porque não há ferramenta de concluir. (b) A **concluída com atraso
+    fica fora**: `ler_ciclo` a mantém até o limite para o cartão do
+    Quartel-General, mas para a Tifa não há o que lembrar. (c) A **especial
+    ainda na janela fica fora**: é o ciclo de hoje, escopo da pendência 55.
+    (d) A seção **some** quando não há tardia, em vez de dizer "nenhuma": é
+    exceção, e uma linha a mais em todo turno seria ruído. (e) A persona
+    (bloco "Reagendar") passou a nomear a lista do reagendamento pelo título
+    ("da lista \"Missões pendentes\" do contexto", antes "da lista do
+    contexto", ambíguo com a seção nova) e ganhou o item "A diária e a missão
+    especial do ciclo nunca são reagendadas. Se o contexto trouxer uma delas
+    em conclusão tardia, lembre que ainda dá para concluí-la até o limite
+    indicado, no Quartel-General." — o bloco anti-injeção continua o último
+    (teste da m4 intacto). Testes: 9 unitários em
+    `tests/unit/test_tutoring_context.py`, 1 em
+    `tests/unit/test_tutoring_persona.py` e 2 de integração em
+    `tests/integration/test_tutoring_service.py`. Os testes de integração eram
+    2 e, depois da revisão do lote, são 5:
+    - o turno de quinta 00:10 lembra a diária de quarta iniciada às 23:50, com
+      limite sexta 00:00 SP e sem `#id`;
+    - a diária de hoje iniciada não é tardia;
+    - a de ontem concluída com atraso não entra;
+    - a de ontem aparece dentro do limite e some fora dele;
+    - o ciclo é lido no mesmo instante do turno. Esse teste usa um relógio que
+      anda a cada chamada, e o turno cai no último microssegundo antes do
+      limite: trocar `lambda: agora` por `clock` o reprova. O comportamento do
+    modelo com o texto novo não foi medido (pendência 180).
+180. **O contexto e a persona mudaram (pendência 117) sem medição contra a API
+    real.** A seção de conclusão tardia e o item novo do "Reagendar" são
+    provados só pelo texto montado (unitários e integração com o falso);
+    ninguém mediu se o modelo de fato lembra a diária de ontem, se deixa de
+    propor `reschedule_mission` para ela, nem se a mudança de
+    "da lista do contexto" para "da lista \"Missões pendentes\" do contexto"
+    altera a sequência da referência da conversa
+    (`tests/integration/referencia_da_api_real.json`, não regravada). Medir
+    exige chamada paga, que este lote não fez por instrução.
+181. ~~**`_buscar_acao` e `evaluation_records._corrente` travavam sem
+    `populate_existing`** (candidata da revisão da T7).~~ **Resolvida em
+    2026-09-29 (lote g-back, branch `wt/f-e2e`).** O risco é real para as
+    funções, embora nenhum caminho de produção o alcance hoje: a rota de
+    confirmar/recusar abre sessão nova e `_buscar_acao` é a primeira leitura
+    dela; a transação 2 de `avaliar_missao` também abre sessão nova e
+    `_corrente` é a primeira leitura. Mas `session.get(...,
+    with_for_update=True)` emite o `SELECT ... FOR UPDATE` e, sem
+    `populate_existing`, **não** sobrescreve um objeto já no identity map — o
+    mesmo M3 da T4 que `buscar_para_escrever` já corrigia. Medido com o objeto
+    carregado de propósito antes (RED visto nos dois): (a) a ação recusada por
+    outra conexão foi **executada** — `confirmar_acao` não levantou
+    `TransicaoIlegalError` e reagendou a missão por cima da recusa
+    (`test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_tutoring_reagendamento.py`); (b) o resultado atrasado da avaliação
+    tentou gravar `concluida` sobre a tentativa que outra conexão encerrou como
+    `falhou` — só o CHECK `ck_mission_evaluations_falha_com_codigo` barrou, com
+    `IntegrityError` (500), porque o `error_code` já estava gravado; numa
+    tentativa retomada (sem `error_code`) nada barraria
+    (`test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_evaluation_concorrencia.py`). Correção: `populate_existing=True`
+    junto com a trava nos dois. **Correção da revisão do lote (I1):** a
+    primeira versão dizia que o `populate_existing` da missão "também traz a
+    avaliação relida". Isso era falso. Ele só esquece o atributo
+    `missao.evaluation`, e a carga preguiçosa seguinte não propaga a opção. O
+    teste passava porque ninguém guardava a avaliação: o identity map (que usa
+    referências fracas) a soltava, e a carga criava um objeto novo. Com
+    `velha = missao.evaluation` guardada antes da trava, o RED voltou nos dois
+    lugares. Em `_corrente`, a gravação de `concluida` sobre `falhou` foi barrada
+    só pelo CHECK. Em `abrir_tentativa`, que tinha a mesma dependência por
+    `buscar_para_escrever`, a resposta foi `AvaliacaoEmAndamentoError` para uma
+    `avaliando` que o banco não tinha mais. Agora as duas funções releem a
+    avaliação com `_avaliacao_relida`: um `select(MissionEvaluation)` com
+    `execution_options(populate_existing=True)`, que atualiza no lugar a
+    instância já carregada na sessão. Os testes guardam a referência até o fim
+    e conferem a própria instância velha:
+    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava` e
+    `test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao`.
+182. **`tutoring/service.py::_completar` trava a resposta sem
+    `populate_existing`.** Mesmo padrão da 181, mas numa sessão própria da
+    `fabrica` em que a trava é a primeira leitura: não há objeto no identity
+    map para ficar velho, e nenhum chamador passa sessão. Não corrigido nem
+    testado por isso; vira risco se `_completar` passar a receber uma sessão
+    já usada.
+183. **Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+    body vai para o titulo do cartao"** (`frontend/src/features/missions/
+    MissionList.test.tsx`). Visto reprovar **uma** vez, no `make check` do
+    hook de um commit do lote g-back (2026-09-29, worktree `f-e2e`), com o
+    `document.activeElement` ainda no `body`; o mesmo arquivo passou 5 de 5
+    rodado sozinho logo depois (91/91), e o gate inteiro passou nos outros
+    commits do lote. Suspeita, não medida: a asserção do foco vem logo depois
+    do `findByText('Missão iniciada.')`, e o foco é movido depois dessa
+    renderização — sob a carga do gate (pytest, Vitest e E2E de vários
+    worktrees ao mesmo tempo) a ordem pode inverter; um `waitFor` na asserção
+    resolveria se a suspeita estiver certa. Não corrigido aqui: é frontend,
+    fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.
+184. **A instrução da missão entra crua no contexto da Tifa.** Pendência
+    anterior ao lote, apontada na revisão do lote g-back (m2). As linhas das
+    pendentes e da conclusão tardia (`tutoring/context.py`) interpolam
+    `instructions` sem normalizar quebras de linha. Os esquemas só exigem
+    `min_length=1` (`cycle_schemas.py`, `schemas.py`). Uma instrução com
+    `\n## ...` forja um cabeçalho ou uma linha a mais dentro do "Contexto
+    desta conversa", que vem DEPOIS do bloco anti-injeção da persona no
+    `sistema`. Saídas possíveis: normalizar `\n` e `\r` ao montar o contexto
+    (o texto gravado fica intacto), ou recusar quebra de linha no esquema da
+    missão. Não medido contra o modelo real.
+185. **O chat passa a depender de o ciclo ser legível.** Registrada a partir
+    do m5 da revisão do lote g-back, aceita como está. Desde a pendência 117,
+    `preparar_turno` chama `ler_ciclo`. Um dado de ciclo que o esquema proíbe
+    faria todo turno da conversa responder 500, e não só o `GET /api/cycle`.
+    Os casos são `RuntimeError` de CHECK divergente e `NoResultFound` do
+    `.one()` da especial. Não há proteção porque o CHECK e as FKs já impedem
+    esse dado.
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
