@@ -900,6 +900,9 @@ def _em_paralelo(tarefas: list[Callable[[Session], str]], engine: Engine) -> lis
             except TransicaoIlegalError:
                 sessao.rollback()
                 resultados[indice] = "bloqueada"
+            except OperacaoReutilizadaError:
+                sessao.rollback()
+                resultados[indice] = "reutilizada"
 
     threads = [
         threading.Thread(target=rodar, args=(i, t)) for i, t in enumerate(tarefas)
@@ -1058,3 +1061,32 @@ def test_chave_gravada_por_outra_acao_depois_da_consulta_vira_reuso(
             )
         sessao.rollback()
     assert _historico_de(banco_migrado, mission_id) == []
+
+
+def test_duas_acoes_iguais_com_a_mesma_chave_em_paralelo_uma_vence(
+    banco_migrado: Engine, registro: Registro
+) -> None:
+    """m5 da revisao da T7: duas acoes DIFERENTES com a mesma proposta (mesma
+    missao, prazo e motivo), confirmadas juntas com a MESMA chave. As travas
+    de acao nao se cruzam; a segunda espera a trava da missao, o
+    `reagendar_missao` a le como reenvio (mesma chave, mesmo conteudo) e a
+    guarda do elo passa (`tifa`). Quem recusa e a UNIQUE de `tutor_actions`
+    no `flush` da acao -- e o rollback leva tudo. Um elo so."""
+    mission_id, primeira = _proposta_commitada(banco_migrado, registro, "gemea-1")
+    with Session(bind=banco_migrado, expire_on_commit=False) as sessao:
+        segunda = _proposta(sessao, mission_id, cid=registro.cid("gemea-2")).id
+        sessao.commit()
+    resultados = _em_paralelo(
+        [_confirmacao(primeira, "op-gemea"), _confirmacao(segunda, "op-gemea")],
+        banco_migrado,
+    )
+    assert sorted(resultados) == ["executada", "reutilizada"]
+    assert len(_historico_de(banco_migrado, mission_id)) == 1
+    with Session(bind=banco_migrado) as sessao:
+        estados = sorted(
+            (a.state.value, a.operation_id)
+            for a in sessao.scalars(
+                select(TutorAction).where(TutorAction.id.in_([primeira, segunda]))
+            )
+        )
+    assert estados == [("executada", "op-gemea"), ("proposta", None)]

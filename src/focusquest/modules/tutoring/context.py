@@ -8,7 +8,7 @@ from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.domain import MissionState, MotivoDoReagendamento
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.progression.service import Progresso
-from focusquest.modules.tutoring.domain import Papel, TipoDeAcao
+from focusquest.modules.tutoring.domain import EstadoDaAcao, Papel, TipoDeAcao
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 
@@ -127,9 +127,17 @@ def _texto_da_acao(acao: TutorAction) -> str:
             f"para {acao.payload.get('new_deadline')} ({rotulo}) "
             f"-- {acao.state.value}]"
         )
+    # So ids de MISSAO levam `#` (I2 da revisao da T7): e o `#` da lista de
+    # pendentes e o que a `reschedule_mission` recebe. O id da acao com `#`
+    # faria "a missao que voce criou" virar o `mission_id` errado.
+    criada = (
+        f" -> missão #{acao.mission_id}"
+        if acao.state is EstadoDaAcao.EXECUTADA and acao.mission_id is not None
+        else ""
+    )
     return (
-        f"[Proposta de missao #{acao.id}: {acao.payload.get('instructions', '')} "
-        f"-- {acao.state.value}]"
+        f"[Proposta de missão (ação {acao.id}): "
+        f"{acao.payload.get('instructions', '')} -- {acao.state.value}{criada}]"
     )
 
 

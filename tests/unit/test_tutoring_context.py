@@ -134,12 +134,17 @@ def test_mensagem_sem_texto_nem_acao_e_descartada() -> None:
 
 def test_acoes_antigas_entram_como_texto_com_o_estado_real() -> None:
     """Sem `tool_result`, um `tool_use` antigo deixaria o historico mal
-    formado; como texto, o modelo sabe o que foi confirmado ou recusado."""
+    formado; como texto, o modelo sabe o que foi confirmado ou recusado.
+
+    Expectativa mudada na correcao da T7 (I2 da revisao): o id da ACAO saiu do
+    `#`, que agora so nomeia MISSAO -- o mesmo `#` que a lista de pendentes e a
+    `reschedule_mission` usam. A executada diz qual missao criou."""
     acao = TutorAction(
         id=12,
         kind=TipoDeAcao.CRIAR_MISSAO,
         payload={"instructions": "Revisar funcoes"},
         state=EstadoDaAcao.EXECUTADA,
+        mission_id=7,
     )
     turno = montar_turno(
         persona="P",
@@ -152,8 +157,30 @@ def test_acoes_antigas_entram_como_texto_com_o_estado_real() -> None:
         ],
     )
     assert turno.mensagens[1].texto == (
-        "Toma!\n\n[Proposta de missao #12: Revisar funcoes -- executada]"
+        "Toma!\n\n[Proposta de missão (ação 12): Revisar funcoes -- executada "
+        "-> missão #7]"
     )
+
+
+def test_a_proposta_de_criacao_nao_decidida_nao_usa_cerquilha() -> None:
+    """So ids de MISSAO usam `#` (I2): a acao 3 que criou a missao 7 nao
+    pode aparecer como "#3", ou o modelo reagendaria a missao #3."""
+    acao = TutorAction(
+        id=3,
+        kind=TipoDeAcao.CRIAR_MISSAO,
+        payload={"instructions": "Ler cap. 3"},
+        state=EstadoDaAcao.RECUSADA,
+    )
+    turno = montar_turno(
+        persona="P",
+        agora=AGORA,
+        pendentes=[],
+        progresso=SEM_PROGRESSO,
+        historico=[_msg(Papel.USUARIO, "oi"), _msg(Papel.TUTORA, "Toma!", [acao])],
+    )
+    texto = turno.mensagens[1].texto
+    assert texto == "Toma!\n\n[Proposta de missão (ação 3): Ler cap. 3 -- recusada]"
+    assert "#" not in texto
 
 
 def test_o_contexto_traz_a_linha_de_progresso() -> None:

@@ -37,12 +37,22 @@ CAMPOS_DO_RETRATO = ("instructions", "previous_deadline")
 
 
 def _prazo_em_texto(valor: object) -> object:
-    """Recusa o prazo em numero: o Pydantic leria `1790000000` como um instante
-    UTC que o modelo nao quis dizer (M10 da revisao da T6). O `datetime` passa:
-    e o que o proprio backend monta."""
-    if not isinstance(valor, str | datetime):
+    """Aceita so texto ISO 8601 (ou o `datetime` que o proprio backend monta).
+
+    No modo lax o Pydantic le como tempo Unix tanto o NUMERO `1790000000`
+    (M10 da revisao da T6) quanto o TEXTO `"1790000000"` ou `"20261005"` (I1
+    da revisao da T7): um instante UTC que o modelo nao quis dizer. Por isso o
+    texto e convertido AQUI, por `datetime.fromisoformat`, e o Pydantic recebe
+    um `datetime` pronto -- a leitura lax de texto nunca roda. Sem fuso, quem
+    recusa depois e o `AwareDatetime`."""
+    if isinstance(valor, datetime):
+        return valor
+    if not isinstance(valor, str):
         raise ValueError("o prazo precisa ser um texto ISO 8601 com fuso")
-    return valor
+    try:
+        return datetime.fromisoformat(valor)
+    except ValueError as exc:
+        raise ValueError("o prazo precisa ser um texto ISO 8601 com fuso") from exc
 
 
 class RescheduleProposal(BaseModel):

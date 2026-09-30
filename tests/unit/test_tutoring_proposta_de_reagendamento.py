@@ -47,6 +47,12 @@ def test_a_entrada_valida() -> None:
         {"new_deadline": 1790000000},
         {"new_deadline": 1790000000.5},
         {"new_deadline": True},
+        # O mesmo numero em TEXTO (I1 da revisao da T7): no modo lax o
+        # Pydantic le texto so de digitos como tempo Unix.
+        {"new_deadline": "1790000000"},
+        {"new_deadline": "1790000000.5"},
+        # Data ISO "basica" valida, mas sem hora nem fuso: nao e instante.
+        {"new_deadline": "20261005"},
     ],
 )
 def test_a_entrada_invalida(ajuste: dict[str, Any]) -> None:
