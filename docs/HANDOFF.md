@@ -4616,9 +4616,19 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
-109. **A conversa com duas ferramentas não foi medida contra a API real; a
+109. ~~**A conversa com duas ferramentas não foi medida contra a API real; a
      referência da camada 3 é de uma ferramenta só** (spec do F, "Pendências
-     que o F cria"; decisão F18). **Medida em 2026-09-29 (sessão autônoma,
+     que o F cria"; decisão F18).~~
+     **Resolvida na sessão de 2026-09-29:** repetida pelo controlador sobre o
+     código final do F (`f495f96`, com as correções da Task 7 — persona com
+     bloco final contra injeção, `#` só para id de missão, prazo só em ISO 8601
+     com fuso), com o mesmo script, a chave do Keychain só para o processo e o
+     modelo `claude-opus-5`: o modelo chamou `reschedule_mission` com
+     `mission_id` 7, `reason` `falta_de_tempo` e `new_deadline`
+     `2026-10-02T18:00:00-03:00`; o script respondeu "aprovado; a sequencia e a
+     da referencia gravada". Uma chamada paga. A medição anterior, abaixo, fica
+     como histórico.
+     **Medida em 2026-09-29 (sessão autônoma,
      worktree `f-api`) sobre `aadbef5` — aprovado —, mas falta repetir sobre as
      correções da revisão da Task 7 (`ae01ba9`, worktree `f-tutor`),** que
      mudam o que a chamada lê: segundo o controlador, a persona ganhou um bloco
