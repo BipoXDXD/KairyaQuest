@@ -2853,6 +2853,10 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 # SÓ se a sequência mudar
 FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
   PYTHONPATH=tests uv run python -m integration.camada3_do_reagendamento
+# Fallback da recusa (pendências 174 e 200): a API aceita fallbacks="default" e
+# o beta? Grava referencia_do_fallback_real.json; não provoca recusa
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  PYTHONPATH=tests uv run python -m integration.camada3_do_fallback
 ```
 
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
@@ -2926,6 +2930,9 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check-e2e` sob mutação, mesma árvore | O anúncio da cortada trocado por "terminou" (`announceAnswer`) reprova o (f); o serviço sem descartar o texto da recusa reprova o (g). Restaurados por `cp`. |
 | `make check` rodado por mim sobre as correções da revisão do g-tifa (por cima de `b035500`, worktree `f-api`), primeira vez | **Reprovou**, EXIT 2, no `check-web`: 2 testes de foco do `MissionList.test.tsx` (pendência 178); 859 dos 861 passaram. O arquivo isolado passou duas vezes (91/91). |
 | `make check` rodado por mim sobre a mesma árvore, em seguida | Aprovado, EXIT 0, 7m16s de relógio (máquina carregada). Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 858/858 ramificações, 325/325 funções, 1074/1074 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1113 passed**, cobertura total de 100% (1986 instruções, 346 ramificações). E2E: **24 passed**. Gitleaks: `no leaks found`. |
+| `make check` pelo hook do commit `dd50e85` (pendência 174, código; worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
+| Chamada real 3 (pendência 174), `python -m integration.camada3_do_fallback`, 2026-09-30, sobre `dd50e85`, modelo `claude-opus-5`, SDK 1.7.0 | **Aprovado.** Uma chamada, com a autorização do dono: a API aceitou `fallbacks="default"` e o beta `server-side-fallback-2026-07-01` (duas ferramentas, `disable_parallel_tool_use`, sem `thinking`); stream até o `message_stop`, parada `terminou`, substituto nulo, proposta `create_mission`, sequência igual à da referência da conversa. Models API: `allowed_fallback_models: ["claude-opus-4-8"]`. Gravado em `referencia_do_fallback_real.json`. |
+| `make check` rodado por mim sobre `dd50e85` mais a documentação e a referência da camada 3 (worktree `f-api`) | Aprovado, EXIT 0, 193 s de relógio. Frontend: **51 arquivos, 862 testes**, 100% nos quatro eixos (1102/1102 instruções, 860/860 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 141 arquivos já formatados. mypy sem problemas em 136 arquivos. Backend: **1165 passed**, cobertura total de 100% (2008 instruções, 354 ramificações). E2E: **25 passed** (o cenário (h) novo). Gitleaks: `no leaks found`. |
 
 ## Ambiente verificado
 
@@ -4901,6 +4908,12 @@ ledger; nenhum é bug esquecido.
      mais recente dela for a recusada (correção I1 da revisão, abaixo). Também não se lê o `stop_details` (a categoria da
      recusa): a tela não distingue o classificador de segurança do modelo que
      declinou.
+     **Atenuada pela 174 (2026-09-30):** com o fallback do servidor, a recusa
+     no meio seguida de substituto não some mais — o substituto continua a
+     partir do parcial, e a resposta termina `completa` com a nota do
+     substituto. Continua valendo para a parada final `refusal` (cadeia
+     esgotada, categoria sem substituto, `tool_use` aberto no momento da
+     recusa).
 173. ~~**Repetir a cortada ainda repete o mesmo teto** (lote g-tifa; o fundo da
      pendência 122). A tela agora diz que a resposta ficou longa demais e
      sugere pedir por partes, mas o "Tentar de novo" reenvia a mesma
@@ -4928,11 +4941,61 @@ ledger; nenhum é bug esquecido.
      de novo" da cortada continua repetindo o mesmo teto, agora quatro vezes
      maior; o caso da janela de contexto, que o teto não resolve, é a
      pendência 176, e o do tempo, a 177.
-174. **Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
+174. ~~**Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
      reexecutar a requisição recusada noutro modelo (`fallbacks`, beta, com
      custo e modelo próprios). Não foi ligado: muda o modelo que responde,
      o custo e o contrato com o provedor. Hoje a recusa é final para aquela
-     tentativa.
+     tentativa.~~
+     **Resolvida em 2026-09-30 (branch `wt/f-api`):** a conversa pede o
+     fallback do lado do servidor (`client.beta.messages.stream` com
+     `fallbacks="default"` e o beta `server-side-fallback-2026-07-01`,
+     `BETA_DO_FALLBACK`), **ligado por padrão por decisão do dono** e
+     desligável por `FOCUSQUEST_TUTOR_FALLBACK=false` (`Settings.tutor_fallback`,
+     `.env.example`). O do servidor, e não o `BetaRefusalFallbackMiddleware` do
+     SDK: uma requisição só, o `"default"` só existe no servidor, e a Anthropic
+     mantém a escolha do substituto por categoria de recusa. O adaptador lê o
+     modelo que serviu na entrada `fallback_message` de `usage.iterations`
+     (`Fim.substituto`; o único sinal que cobre a troca antes da saída, no meio
+     e o roteamento fixo, que não tem bloco `fallback`), entrega a proposta só
+     no `message_stop` e descarta a que fechou antes do bloco `fallback` (é do
+     modelo que recusou). O texto parcial de uma recusa no meio **fica**,
+     porque o substituto o continua; o descarte do g-tifa vale só para a parada
+     final `refusal`. A resposta servida pelo substituto grava
+     `tutor_messages.fallback_model` (migração `0007`, com
+     `ck_tutor_messages_fallback_so_da_tutora`; chave `fallback_model` no
+     `MessageRead`, aditiva), e a tela mostra uma nota discreta na bolha
+     ("Respondida por um modelo substituto (…), porque o modelo principal não
+     pôde responder a esta pergunta."). Coluna própria, e não `error_code`
+     (pendência 170): a substituída **e** cortada precisa dos dois. **Testes:**
+     falso em tipos beta com a `Substituicao` (antes da saída, no meio, fixa,
+     `from` no fio por `by_alias`, e o SDK beta montando a troca); adaptador
+     (corpo e cabeçalho, desligado, substituto nos três casos, proposta antes e
+     depois da troca, texto que continua, cadeia esgotada); serviço (completa
+     com o modelo, sem modelo, substituída e cortada, cadeia esgotada,
+     proposta do substituto); API (`done` e histórico); migração e modelo
+     (coluna nula, CHECK pelo nome, downgrade só da coluna, espelho dos CHECK);
+     `get_tutoria` leva o flag até a requisição; controle do falso do E2E
+     (`fallback`, rota `?beta=true`); frontend P37; E2E (h). **Desvios do
+     plano, com motivo:** (1) o falso do E2E respondia só `path ==
+     "/v1/messages"`, e o endpoint beta posta em `/v1/messages?beta=true` — o
+     plano dizia "nada a mudar"; sem a correção, todo o E2E da conversa daria
+     404; (2) o `Espiao` passou a guardar do **pedido** só o corpo e o
+     `anthropic-beta` (nunca os cabeçalhos inteiros, que têm a chave), para a
+     camada 3 provar o que foi mandado; (3) dois testes de
+     `test_acompanhamento_migration.py` fixavam `versao == "0006"` como "o
+     banco ficou como estava", o que só valia com a 0006 na head: passaram a
+     comparar com `get_current_head()`, o mesmo ajuste que o teste da 0005 já
+     recebeu (`1a46e3f`) — a expectativa (nada muda quando o downgrade
+     recusa) é a mesma. **Camada 3 executada em 2026-09-30**, uma chamada,
+     autorizada pelo dono (`camada3_do_fallback.py`): a API **aceitou**
+     `fallbacks="default"` + o beta com as duas ferramentas,
+     `disable_parallel_tool_use` e sem `thinking`, no `claude-opus-5`; stream
+     até o `message_stop`, parada `terminou`, `Fim.substituto` nulo, proposta
+     `create_mission`, e a sequência de tipos **igual** à da referência da
+     conversa (sem bloco `fallback`). O Models API disse
+     `allowed_fallback_models: ["claude-opus-4-8"]` para o `claude-opus-5`.
+     Gravado em `tests/integration/referencia_do_fallback_real.json` (sem
+     texto nem chave). Pendências criadas: 200 a 204.
 175. **Nenhuma chamada real provou `refusal` nem `model_context_window_exceeded`**
      (lote g-tifa). Os dois são provados contra o falso, com o SDK fixado
      (camadas 1 e 2); a camada 3 não os provoca sob demanda, e este lote não
@@ -4945,6 +5008,10 @@ ledger; nenhum é bug esquecido.
      código novo pede entrar no CHECK de `mission_evaluations.error_code`
      (migração `0005` congela os valores), ou seja, migração nova, além do
      mapa da tela da avaliação.
+     **Nem o fallback (pendência 174, 2026-09-30):** nenhuma chamada real
+     mostrou o bloco `fallback`, a `fallback_message` nem a continuação do
+     parcial. A camada 3 da 174 prova só que a API **aceita** o pedido numa
+     resposta normal; o fallback em si é provado só contra o falso.
 176. **A janela de contexto estourada tende a estourar de novo no reenvio**
      (m4 da revisão). O `model_context_window_exceeded` é tratado como o
      `max_tokens` (mesma marca, mesma nota de pedir por partes), mas o
@@ -4972,6 +5039,32 @@ ledger; nenhum é bug esquecido.
      Suspeita não medida: o foco é movido numa tarefa assíncrona que perde a
      corrida quando a máquina está sobrecarregada. Nada foi ignorado nem
      afrouxado; falta achar a causa.
+
+**Criadas pela pendência 174 (fallback da recusa, 2026-09-30)**
+
+200. **O fallback depende de um beta com data fixa** (pendência 174). Se a
+     API recusar `server-side-fallback-2026-07-01` (ou o `fallbacks`), toda
+     pergunta vira `provedor_indisponivel` — o 4xx não é repetido e, pela
+     pendência 100, não tem log da causa. Desligar:
+     `FOCUSQUEST_TUTOR_FALLBACK=false`. A camada 3 de 2026-09-30 mostrou que
+     a API aceita hoje; acompanhar a documentação de "Refusals and fallback" a
+     cada atualização do SDK e repetir `camada3_do_fallback.py`.
+201. **A avaliação não tem fallback** (pendência 174). Uma avaliação recusada
+     segue `avaliacao_invalida`. Ligar lá pede gravar em
+     `mission_evaluations.model` o modelo que serviu, e não o configurado, e
+     provar o `strict` no substituto.
+202. **A emenda do texto no fallback do meio não foi medida** (pendência 174).
+     O app concatena o parcial e a continuação. Espaço duplo ou palavra colada
+     na emenda só aparece numa recusa real; não se normaliza sem medida.
+203. **O fallback pode estourar o limite total** (pendência 174). A tentativa
+     recusada soma à do substituto dentro dos `tutor_timeout_seconds` (60 s),
+     e a resposta pode sair `tempo_esgotado`. Sem medida real de quanto (ver
+     também a 177).
+204. **O custo por tentativa não é gravado** (pendência 174).
+     `usage.iterations` diz o que foi cobrado de cada modelo, e o app só lê a
+     entrada `fallback_message` para saber quem serviu. Contar as respostas
+     substituídas dá (`WHERE fallback_model IS NOT NULL`); o custo, não. A
+     categoria da recusa (`trigger.category`) também não é gravada.
 
 ## Próximo incremento
 

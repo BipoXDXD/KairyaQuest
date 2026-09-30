@@ -1161,6 +1161,50 @@ scripts novos chamam o **adaptador de produção**:
   passou pela tela. **O CI nunca chama a Anthropic:** os três scripts só rodam
   à mão.
 
+### O fallback da recusa nas três camadas (pendência 174, 2026-09-30)
+
+A conversa chama o endpoint **beta** (`client.beta.messages.stream`, com
+`fallbacks="default"` e o beta `server-side-fallback-2026-07-01`), e o falso
+acompanhou:
+
+- **Camada 1.** O roteiro é construído com os tipos de `anthropic.types.beta`
+  (o `content_block_start` estável não aceita o bloco `fallback`, e o uso
+  estável não tem `iterations`), e serializado com `by_alias=True`: sem ele,
+  o bloco sai no fio com `"from_"`, o nome do Python, e não `"from"` — e o SDK
+  o monta sem validar, sem reprovar nada. `Substituicao(modelo, apos_blocos,
+  fixa)` roteiriza a troca antes da saída (o `message_start` já com o
+  substituto e o bloco no índice 0), no meio (entre os blocos) e o roteamento
+  fixo (sem bloco, só a `fallback_message`). O bloco soma
+  `EVENTOS_DA_TROCA` (2) às contagens de corte e espera.
+- **Camada 2.** `test_provedor_falso.py` monta a troca pelo SDK beta
+  (o `model` final é o substituto); `test_anthropic_provider.py` prova o
+  pedido (corpo e cabeçalho, e nada disso com o flag desligado), o
+  `Fim.substituto` nos três casos, a proposta descartada antes da troca e a
+  do substituto valendo, e a cadeia esgotada seguindo `RECUSADA`. **Vistos
+  reprovando** por mutação: data do beta `2026-06-01`, `fallbacks` omitido,
+  flag ignorado, substituto lido de `message.model`, só do bloco (o fixo
+  reprova), só do `message_start` (o meio reprova), a pendente não zerada no
+  bloco, zerada também depois dele, e a substituição tratada como `TERMINOU`.
+- **Camada 3** (`tests/integration/camada3_do_fallback.py`). Não dá para
+  provocar recusa sob demanda sem tentar burlar os classificadores, e isso
+  não se faz: o script prova só que a API **aceita** o pedido, pelo
+  `responder` de produção com o fallback ligado, numa resposta normal. O
+  `Espiao` passou a guardar do pedido só o corpo e o `anthropic-beta` (nunca
+  a chave). **Executada em 2026-09-30, uma chamada autorizada pelo dono,
+  sobre `dd50e85`, `claude-opus-5`, SDK 1.7.0: aprovada.** Stream até o
+  `message_stop`, parada `terminou`, sem substituto, proposta
+  `create_mission`, sequência de tipos **igual** à da referência da conversa;
+  o Models API deu `allowed_fallback_models: ["claude-opus-4-8"]`. Gravada em
+  `tests/integration/referencia_do_fallback_real.json`.
+  `test_camada3_do_fallback.py` prova a captura contra o falso e o veredito;
+  **vistos reprovando** por mutação: a guarda do endereço, `fallback=False` na
+  captura e o veredito sem a conferência do beta. O fallback em si (o bloco no
+  fio real, a continuação do parcial) continua sem prova real (pendência 175).
+- **E2E.** O falso como processo responde também `/v1/messages?beta=true` (o
+  caminho do endpoint beta) e aceita a chave de controle `fallback` (`model`,
+  `after_blocks`, `sticky`); o cenário (h) de `tutoring.spec.ts` mostra o
+  parcial e a continuação, a nota do substituto e o axe limpo.
+
 ### O falso como processo (E2E)
 
 Desde o 1b-2 (Task 6), o E2E do Playwright precisa do falso **fora** do
