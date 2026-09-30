@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
-import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { MAX_DIFFICULTY, MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
@@ -91,7 +91,7 @@ function blockedReason(draft: EvidenceDraft): string | null {
  *   `reloadLabel` no lugar do Concluir. Repetir so daria o mesmo erro;
  *   recarregar mostra o estado de verdade. O rotulo e "Atualizar o quadro" por
  *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
- *   (m5): a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
+ *   a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
  *   ali nao atualiza um "quadro" -- recarrega o ciclo.
  * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
  *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
@@ -377,7 +377,7 @@ export function MissionCard({
    */
   onRewarded?: () => void
   /**
-   * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
+   * O nivel do titulo do cartao. Padrao `3` (`<h3>`), como sempre foi no
    * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
    * especial: sem isso, o `<h3>` do titulo da secao ("Missão especial — bônus
    * da sequência") e o `<h3>` do titulo do cartao colidiam no mesmo nivel,
@@ -385,7 +385,7 @@ export function MissionCard({
    */
   titleLevel?: 3 | 4
   /**
-   * O texto do botao de recuperacao (m5). Padrao "Atualizar o quadro", como
+   * O texto do botao de recuperacao. Padrao "Atualizar o quadro", como
    * sempre foi. Ver o comentario de `CompletionControls` acima.
    */
   reloadLabel?: string
@@ -522,13 +522,11 @@ export function MissionCard({
         </dd>
 
         <dt className="text-slate-400">Dificuldade</dt>
-        {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
-            src/focusquest/modules/missions/schemas.py. Nada amarra os dois
-            automaticamente (isso pediria gerar o tipo a partir do OpenAPI):
-            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. A
-            terceira copia e a do cartao de proposta da Tifa
-            (`features/tutoring/ProposalCard.tsx`). */}
-        <dd data-testid="mission-difficulty">{mission.difficulty} de 5</dd>
+        {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
+            espelha `DIFICULDADE_MAXIMA` do backend a mao. */}
+        <dd data-testid="mission-difficulty">
+          {mission.difficulty} de {MAX_DIFFICULTY}
+        </dd>
 
         <dt className="text-slate-400">Estimativa</dt>
         <dd data-testid="mission-estimated-minutes">{mission.estimated_minutes} min</dd>

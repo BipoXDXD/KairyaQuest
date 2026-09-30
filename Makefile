@@ -27,7 +27,7 @@ bootstrap: ## Instala as dependencias dos dois ecossistemas
 #
 # SEM `--with-deps` de proposito: o installDeps() do Playwright so trata win32
 # e linux, e em darwin ele e no-op (quando nao pede sudo). Quem passa
-# `--with-deps` e o job do CI, que roda em ubuntu-latest -- e la ele tem
+# `--with-deps` e o job do CI, que roda em ubuntu-24.04 -- e la ele tem
 # efeito.
 	cd $(WEB) && npx playwright install chromium
 	uv sync --locked

@@ -76,7 +76,6 @@ FocusQuest/
 │   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-General"/"Campanhas") (C, Task 1)
 │   │   │   ├── SideNav.test.tsx
 │   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
-│   │   ├── assets/                # hero.png, react.svg, vite.svg — nenhum importado hoje (ver abaixo)
 │   │   ├── features/
 │   │   │   ├── campaigns/         # a trilha da semana (C); consome shared/types/mission.ts e shared/lib/civilDate.ts
 │   │   │   │   ├── availability.test.ts
@@ -177,7 +176,6 @@ FocusQuest/
 │   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
 │   │   │   ├── sse.ts             # quadros e corpos SSE falsos, sem rede
 │   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
-│   │   ├── App.css                # não importado por nenhum módulo hoje (ver abaixo)
 │   │   ├── App.test.tsx
 │   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
 │   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx; @keyframes reward-in, usado só sob motion-safe: (D, Task 7)
@@ -221,9 +219,10 @@ FocusQuest/
 │       │   ├── __init__.py
 │       │   ├── base.py            # base declarativa do SQLAlchemy
 │       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
-│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_
+│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_; ConfiguracaoDeLog, o nível de log lido sem exigir banco, que o Settings herda (pendência 13)
 │       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
 │       │   ├── errors.py          # erros de domínio comuns a mais de um módulo; SemEvidenciaError e AvaliacaoEmAndamentoError (E). Sem import de modules/: o teste tests/unit/test_core_sem_modulos.py o exige
+│       │   ├── log.py             # configurar_logging: handler no stderr só se a raiz não tiver um, nível só no logger focusquest (pendência 13)
 │       │   └── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
 │       ├── modules/
 │       │   ├── __init__.py
@@ -319,21 +318,30 @@ FocusQuest/
 │   └── unit/                      # sem banco
 │       ├── __init__.py
 │       ├── test_clock.py
+│       ├── test_comandos_fora_da_raiz.py  # o alembic.ini acha os scripts de qualquer diretório corrente, com -c (pendência 29)
 │       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
 │       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
 │       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
 │       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
 │       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
 │       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
+│       ├── test_log.py            # o nível de log, o handler único, terceiros fora do DEBUG, a configuração padrão do uvicorn aplicada por dictConfig, o desligamento que devolve o estado e nenhum segredo no stderr (pendência 13)
 │       ├── test_missions_domain.py
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
+│       ├── test_run_configs.py    # as configurações de .run/: XML, sem caminho pessoal, não ignoradas, e o que apontam existe (pendência 17)
 │       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
 │       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
 │       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
 │       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
 │       └── test_tutoring_sse.py      # o invólucro `fechando_ao_cancelar`
+├── .run/                          # configurações de execução compartilhadas do PyCharm (README §4); ver "Configurações de execução do PyCharm" em §4
+│   ├── API.run.xml                # uvicorn focusquest.main:app em 127.0.0.1:8000, pelo .venv do projeto
+│   ├── Frontend.run.xml           # npm run dev (frontend/)
+│   ├── Gate.run.xml               # make check, no terminal da IDE
+│   ├── Testes_backend.run.xml     # pytest sobre tests/, pelo .venv do projeto
+│   └── Testes_frontend.run.xml    # npm run test (frontend/)
 ├── .env.example                   # modelo do .env da raiz (banco e a tutoria); a chave da Anthropic fica vazia — a de verdade mora no Keychain (D-a, 1b-2)
 ├── .gitignore
 ├── .gitleaks.toml                 # configuração da varredura de segredos
@@ -356,9 +364,6 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
 
 - **Não existe `Dockerfile`.** A aplicação roda direto da árvore (`uv run`,
   `npm run`); só o PostgreSQL roda em container, pelo `compose.yaml`.
-- **Não existe `.run/`.** O README §4 manda versionar configuração de execução
-  compartilhada, e o `.gitignore` já reserva o caminho (comentando que `.run/`
-  **não** entra nele), mas o diretório ainda não foi criado.
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
@@ -373,12 +378,12 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   (`useRefreshOnReturn.ts`) e `shared/types/` (`mission.ts`) **nasceram no
   Incremento C** — as três eram contrato até então. A feature `campaigns`
   **nasceu no C**, a trilha da semana; `rewards` continua contrato.
-- **Arquivos órfãos, versionados e sem uso.** `frontend/src/App.css` e os três
-  arquivos de `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`)
-  não são importados por nenhum módulo — conferido com `grep` em
-  `frontend/src` e `frontend/index.html`. São restos do scaffold do Vite. A
-  remoção é mudança de código, não deste documento; está registrada como
-  pendência em `docs/HANDOFF.md`.
+- **Não existe `frontend/src/assets/`.** Os restos do scaffold do Vite
+  (`App.css`, `hero.png`, `react.svg`, `vite.svg`) eram versionados e não
+  eram importados por nenhum módulo; foram removidos em 2026-09-29 (pendência
+  24 do `docs/HANDOFF.md`), depois de `grep` em `frontend/` e nos docs sem
+  achar referência. A pasta volta a existir quando o primeiro arquivo
+  importado pelo código precisar dela.
 
 ## 2. Árvore-alvo — contrato, não descrição
 
@@ -595,6 +600,68 @@ A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
 
+### Logging (pendência 13)
+
+Mínimo de propósito, sem dependência nova: `core/log.py` e o `lifespan` de
+`main.py`. O que ele faz, e por quê:
+
+- **Nível por `FOCUSQUEST_LOG_LEVEL`**, padrão `INFO`, aceito em qualquer
+  caixa (`debug` = `DEBUG`); `DEBUG`, `INFO`, `WARNING`, `ERROR` ou
+  `CRITICAL`. Um valor desconhecido derruba a **partida** com
+  `ValidationError` (medido sob o uvicorn: `Application startup failed`).
+  O campo mora em `ConfiguracaoDeLog`, que lê só ele (`extra="ignore"`) e
+  por isso **não exige configuração de banco** — o `/health` continua
+  respondendo sem banco. O `Settings` herda o campo, e continua recusando
+  chave desconhecida do `.env`.
+- **Configurado na partida (`lifespan`), não na importação.** O uvicorn
+  aplica a configuração de log dele antes de importar o app; importar
+  `focusquest.main` num teste não mexe no logging do processo. A saída do
+  `lifespan` desfaz o que a partida fez (o nível do `focusquest` volta ao de
+  antes, e sai o handler que ela pôs na raiz — só esse): um
+  `with TestClient(app)` na suíte não deixa estado para o teste seguinte.
+- **O handler vai na raiz, e só se a raiz não tiver nenhum**
+  (`logging.basicConfig`). O uvicorn, na configuração padrão, põe handler
+  nos loggers `uvicorn*` com `propagate: false` e nenhum na raiz: as linhas
+  dele não passam pelo handler do app, e as do app saem uma vez. Um
+  `--log-config` que configure a raiz, ou os handlers de captura do pytest,
+  são respeitados: nada é empilhado por cima.
+- **O nível vale só para o logger `focusquest`.** A raiz fica em `WARNING`.
+  Pedir `DEBUG` não liga o DEBUG do `httpx`/`httpcore` nem do SDK
+  `anthropic` (que registram as requisições) nem o INFO do
+  `sqlalchemy.engine` (que registra cada SQL) — é por essas torneiras que a
+  chave e a URL do banco vazariam. Os `WARNING` de terceiros continuam
+  saindo, agora no formato do app, em vez do `lastResort` do Python.
+- **Formato:** `%(asctime)s %(levelname)s %(name)s: %(message)s`, texto
+  simples no stderr. Log estruturado (JSON) entra quando houver quem o
+  consuma.
+
+Medido sob o uvicorn real (`uv run uvicorn focusquest.main:app`), nos níveis
+padrão, `DEBUG` e `WARNING`: a linha `INFO focusquest.main: log configurado
+no nivel …` aparece uma vez na partida (e some em `WARNING`); o `INFO` de
+"missão não encontrada" de um `POST /api/missions/999999/complete` aparece
+uma vez; as linhas do uvicorn continuam no formato dele, uma vez cada; a
+senha da URL do banco não aparece no stderr nem no stdout — nem no
+traceback de um 500 com o banco inexistente. `--reload` e `--workers` não
+foram medidos. O `tests/unit/test_log.py` repete as partes automatizáveis
+num subprocesso (a configuração padrão do uvicorn aplicada por
+`dictConfig`, e a partida em `DEBUG` com chave e senha conhecidas).
+
+### Diretório de trabalho (pendência 29)
+
+Os comandos do backend rodam **da raiz do repositório**, por decisão: o
+`Settings` (e o `ConfiguracaoDeLog`) lê o `.env` do diretório **corrente**, e
+o `alembic` acha o `alembic.ini` pelo diretório corrente. O caminho do
+`.env` não é ancorado no pacote porque a suíte isola os testes do `.env`
+real trocando de diretório (`monkeypatch.chdir`), e porque o caminho
+derivado de `__file__` só é a raiz do clone na instalação editável. O
+`Makefile`, o CI e o `scripts/e2e-env.sh` (que faz `cd` para a raiz) já
+rodam dali. De outro diretório, a receita é
+`uv run --project <raiz> --env-file <raiz>/.env …` e, no Alembic,
+`-c <raiz>/alembic.ini` — o `script_location = %(here)s/alembic` do `.ini`
+acha os scripts pelo caminho do arquivo, e
+`tests/unit/test_comandos_fora_da_raiz.py` prende isso. Motivo completo e
+medição em `docs/HANDOFF.md`, pendência 29.
+
 ### O contrato HTTP que existe
 
 > **Fonte de verdade:** `src/focusquest/modules/missions/router.py`,
@@ -606,7 +673,7 @@ concluir missão ou confirmar recompensa por conta própria.
 | `GET /api/missions` | `200` com a lista | Lista as missões **avulsas** do usuário único (desde o Incremento B; ver "O contrato HTTP do ciclo diário", abaixo), em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
-| `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
+| `GET /ready` | `200` ou `503` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; `503` com `{"status": "unavailable", "database": "not_configured"}` quando **falta a `database_url`** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente). Qualquer outro erro do `Settings` — um campo inválido como `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, uma chave desconhecida, a `FOCUSQUEST_TEST_DATABASE_URL` ausente — continua respondendo `500`, com o traceback que nomeia o campo: não é "banco não configurado". Até a pendência 28 este terceiro caso era `500`: a rota dependia de `get_engine`, e o `ValidationError` do `Settings` estourava na resolução da dependência; agora ela depende de `get_engine_se_configurada` (`core/database.py`), que devolve `None` só quando os `errors()` do `ValidationError` trazem a `database_url` como `missing`. As rotas de negócio continuam em `get_engine` e respondem `500` sem configuração. |
 
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` de `core/usuario_unico.py` (desde o E; até
@@ -732,8 +799,10 @@ mesmo padrão dos estados de `missions`
 
 **O stream do `POST /messages`**, eventos SSE nesta ordem: `user_message`
 (a pergunta já gravada, com o `id` do banco) → `delta` zero ou mais vezes
-(`{"text": "…"}`) → um final, só um: `done` (a resposta completa e as ações
-dela, emitido **depois do commit**) ou `error` (`{"code": "…"}`, emitido
+(`{"text": "…"}`) → um final, só um: `done` (a resposta gravada e as ações
+dela, emitido **depois do commit** — `status` `completa`, ou `interrompida`,
+com o texto parcial e sem ação, quando o modelo parou por `stop_reason:
+max_tokens`, pendência 45 do `docs/HANDOFF.md`) ou `error` (`{"code": "…"}`, emitido
 **depois** de a falha estar gravada como `falhou`). Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
@@ -1281,9 +1350,9 @@ recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
   contrato.
 - **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
   globais estão em `src/index.css`.
-- **`src/assets/`** *(existe)* — imagens e SVGs importados pelo código, em
-  oposição a `public/`, servido sem passar pelo bundler. Hoje nenhum dos três
-  arquivos da pasta é importado (§1).
+- **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
+  oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
+  hoje: os arquivos do scaffold foram removidos por órfãos (§1).
 - **`src/test/`** *(existe)* — infraestrutura de teste: `setup.ts` (o modo
   de teste do React), `sse.ts` (quadros SSE falsos), `fetchRoutes.ts`
   (`routeFetch`, um `fetch` falso roteado) e `viewport.ts` (`stubViewport`,
@@ -1357,7 +1426,7 @@ legitimamente pertence a ele — nunca antes.
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
 | Página (composição de features) | `frontend/src/pages/` | existe |
 | Teste ponta a ponta | `frontend/tests/e2e/` | existe |
-| Imagem ou SVG importado pelo código | `frontend/src/assets/` | existe |
+| Imagem ou SVG importado pelo código | `frontend/src/assets/` | contrato (a pasta nasce com o primeiro arquivo) |
 | Arquivo servido cru, sem bundler (favicon) | `frontend/public/` | existe |
 
 ### Backend
@@ -1390,7 +1459,56 @@ legitimamente pertence a ele — nunca antes.
 | Serviço de infraestrutura local (banco) | `compose.yaml` |
 | Variável de configuração do backend | um campo em `src/focusquest/core/config.py` **e** uma linha no `.env.example`. O `Settings` recusa **qualquer** chave do `.env` da raiz que não seja campo dele — com ou sem o prefixo `FOCUSQUEST_` —, então o `.env` da raiz não pode guardar variável de outro consumidor sem declará-la ali |
 | Documentação de arquitetura | este arquivo |
-| Configuração de execução compartilhada do PyCharm | `.run/` (ainda não existe; versionado de propósito) |
+| Configuração de execução compartilhada do PyCharm | `.run/*.run.xml` (existe; versionado de propósito — ver abaixo) |
+
+### Configurações de execução do PyCharm (`.run/`)
+
+O README §4 manda versionar `.run/` sem segredos. Existem cinco arquivos,
+um por coisa que a pessoa executa ou depura pela IDE:
+
+| Configuração | O que executa | Tipo no PyCharm |
+|---|---|---|
+| **API** | `python -m uvicorn focusquest.main:app --host 127.0.0.1 --port 8000`, o mesmo comando do roteiro de desenvolvimento do `docs/HANDOFF.md`; sem `--reload`, que atrapalha a depuração | Python (modo módulo) |
+| **Frontend** | `npm run dev` em `frontend/` (o proxy `/api` do Vite aponta para a porta 8000) | npm |
+| **Testes backend** | `pytest` sobre `tests/` | pytest |
+| **Testes frontend** | `npm run test` em `frontend/` (Vitest, sem cobertura) | npm |
+| **Gate** | `make check`, o mesmo alvo que os hooks e o CI executam | Shell Script, no terminal da IDE |
+
+Decisões, com o motivo de cada uma:
+
+- **O interpretador é o `.venv` do projeto**, por `$PROJECT_DIR$/.venv/bin/python`
+  (`IS_MODULE_SDK` desligado), e não o SDK do módulo. O SDK do módulo é
+  configuração pessoal da IDE e já apontou para o Python do Homebrew
+  (pendência 16); o caminho relativo à raiz vale em qualquer clone e em
+  qualquer worktree, sem caminho absoluto de usuário.
+- **Nada de `sys.path` remendado** (README §4): `ADD_SOURCE_ROOTS` e
+  `ADD_CONTENT_ROOTS` ficam desligados nas duas configurações Python. O pacote
+  `focusquest` é importável porque o `uv sync` o instala em modo editável no
+  `.venv`.
+- **O diretório de trabalho é a raiz** (`$PROJECT_DIR$`): o `Settings` lê o
+  `.env` relativo ao diretório atual (`env_file=".env"`), então a API e os
+  testes precisam partir da raiz para achar o banco.
+- **Sem segredo e sem variável de ambiente própria.** A configuração vem do
+  `.env` (ignorado pelo git) que o `Settings` lê sozinho. A chave da Tifa
+  **não** entra aqui: continua no Keychain, como no roteiro do
+  `docs/HANDOFF.md`; para a API com a Tifa, use o terminal.
+- **O gate é o `make check` sem intermediário**, no terminal da IDE: assim
+  herda o `PATH` do shell da pessoa (`uv`, `node`), que um processo lançado
+  pela interface gráfica do macOS não tem. Não há configuração para
+  `pre-commit`: o hook é do git, não do Makefile (`AGENTS.md` §4).
+- O nome do arquivo é o nome da configuração com espaços trocados por `_`,
+  que é como o PyCharm grava; nomes de uma palavra evitam a conversão.
+
+`tests/unit/test_run_configs.py` guarda o que é verificável sem a IDE: os
+arquivos existem e são XML bem formado, não trazem caminho pessoal nem
+segredo, `.run/` não está no `.gitignore`, e cada script do npm, alvo do
+Makefile, módulo da API e pasta de testes que eles apontam existe. **Não
+prova que o PyCharm os abre e executa** — os arquivos foram escritos no
+formato que o PyCharm grava, mas nunca foram abertos numa IDE (estado "não
+executado", pendência 17 do `docs/HANDOFF.md`). Requisitos: as duas
+configurações de npm exigem o plugin de JavaScript e um Node configurado na
+IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
+(`cd frontend && npm run dev`).
 
 ## 5. Convenções de fronteira
 

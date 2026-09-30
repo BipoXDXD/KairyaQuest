@@ -275,7 +275,7 @@ def test_campo_invalido_na_criacao_devolve_422(
 
     Sem isto, `min_length=1` e `gt=0` eram decoracao: uma restricao declarativa
     do pydantic nao tem LINHA para cobrir, entao 100% de cobertura nao prova
-    nada sobre ela. Medido pelo revisor: removidas as quatro restricoes, a
+    nada sobre ela. Medido: removidas as quatro restricoes, a
     suite inteira continuava verde.
 
     A assercao olha o `loc`, e nao so o status, pela mesma razao do teste de
@@ -305,7 +305,7 @@ def test_prazo_sem_fuso_devolve_422(client: TestClient) -> None:
     UTC; e `expire_on_commit=False` faz o 201 serializar o objeto como ele
     chegou no pedido, sem offset. Em JavaScript essas duas strings sao
     instantes DIFERENTES -- `new Date` le a primeira como hora local e a
-    segunda como UTC --, e a Task 10 consome exatamente este contrato.
+    segunda como UTC --, e o frontend consome exatamente este contrato.
 
     Normalizar naive para UTC tambem resolveria a divergencia, e foi recusado:
     quem envia "10:00" sem dizer onde nao informou um instante, e escolher um
@@ -359,7 +359,7 @@ def test_estimativa_acima_do_int4_devolve_422(client: TestClient, minutos: int) 
     """Acima do teto TECNICO da coluna, recusa na borda.
 
     Sem o `le`, os tres valores chegavam ao INSERT e estouravam a coluna int4
-    -- 500, medido pela revisao final da branch. O teto nao e de negocio
+    -- 500, medido. O teto nao e de negocio
     ("quanto tempo cabe numa missao" e decisao aberta do dono); e so o maior
     numero que a coluna guarda.
     """
@@ -798,7 +798,7 @@ def test_a_requisicao_commita_de_verdade(
 
     E este e tambem o unico teste que EXECUTA `get_session`. Substituir uma
     dependencia nos testes nao a testa; sem este caso, o corpo dela ficaria
-    descoberto (a mesma licao do `get_engine` na Task 4).
+    descoberto (a mesma licao do `get_engine`).
 
     A contagem de conexoes conferidas antes e depois cobre a outra metade do
     contrato da dependencia: uma sessao que nao fechasse deixaria a conexao

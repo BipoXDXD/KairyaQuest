@@ -19,7 +19,7 @@ depends_on: Sequence[str] | None = None
 
 # ---------------------------------------------------------------------------
 # Copias CONGELADAS, NAO import (D8; ver 0001 e 0003): migracao e historico.
-# Elas descrevem a regra de 2026-09-25. O teste de equivalencia (Task 3)
+# Elas descrevem a regra de 2026-09-25. O teste de equivalencia da migracao
 # amarra estas copias a regra viva DAQUELE dia; depois dele, divergir e
 # permitido e nao reescreve o passado.
 # ---------------------------------------------------------------------------

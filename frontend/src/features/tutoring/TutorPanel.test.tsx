@@ -543,6 +543,42 @@ describe('TutorPanel: o envio', () => {
     })
   })
 
+  it('P33 resposta cortada pelo teto de tokens: o done interrompida fica marcado e pode ser reenviado', async () => {
+    // Pendencia 45: o backend grava a resposta cortada por `max_tokens` como
+    // `interrompida` e a entrega no `done`. A tela nao precisa de estado novo:
+    // a marca e o "Tentar de novo" do historico ja cobrem a interrompida.
+    const q1 = question(1, 'Me explica recursao', 'c1')
+    const { fetchMock } = mountPanel({
+      [SEND]: (_init, call) =>
+        call === 1
+          ? streamResponse([
+              sseFrame('user_message', q1),
+              sseFrame('delta', { text: 'Recursao e quando' }),
+              sseFrame('done', answer(2, 1, 'Recursao e quando', 'interrompida')),
+            ])
+          : streamResponse([
+              sseFrame('user_message', q1),
+              sseFrame('done', answer(3, 1, 'Resposta inteira')),
+            ]),
+    })
+
+    await typeAndSend('Me explica recursao')
+
+    const cortada = await waitFor(() => messageWith('Recursao e quando'))
+    expect(within(cortada).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta interrompida',
+    )
+    expect(screen.getByTestId('tutor-history-retry-note')).toHaveTextContent(HISTORY_RETRY_NOTE)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    await waitFor(() => {
+      expect(messageWith('Resposta inteira')).toBeInTheDocument()
+    })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: 'c1', content: 'Me explica recursao' })
+    expect(screen.queryByTestId('tutor-history-retry-note')).not.toBeInTheDocument()
+  })
+
   it('P18 contador: aparece perto do limite, some longe dele, e liga ao campo', async () => {
     mountPanel({})
     await ready()

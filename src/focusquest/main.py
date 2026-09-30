@@ -7,6 +7,8 @@ aceita dar para um bloqueio previsto (README s8: "explique bloqueios").
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Annotated
 
@@ -15,7 +17,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from focusquest.core.database import get_engine
+from focusquest.core.config import ConfiguracaoDeLog
+from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
@@ -34,6 +37,7 @@ from focusquest.core.errors import (
     SemanaEncerradaError,
     SemEvidenciaError,
 )
+from focusquest.core.log import configurar_logging
 from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
 from focusquest.modules.evaluation.router import router as evaluation_router
 from focusquest.modules.missions.cycle_router import router as cycle_router
@@ -44,7 +48,45 @@ from focusquest.modules.tutoring.router import router as tutoring_router
 
 _log = logging.getLogger(__name__)
 
-app = FastAPI(title="FocusQuest")
+
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
+    """Configura o log na partida, e nao na importacao deste modulo, e o
+    devolve como estava no desligamento.
+
+    Na partida porque o uvicorn aplica a configuracao de log DELE antes de
+    importar o app, e a do app vem depois e se soma a dela, sem desfaze-la; e
+    porque importar `focusquest.main` (os testes, o OpenAPI) nao deve mexer no
+    logging do processo de quem importa. Um nivel invalido derruba a partida
+    com `ValidationError`, que e onde um erro de configuracao deve aparecer.
+
+    O `finally` desfaz o que a partida fez -- o nivel do logger `focusquest` e
+    o handler que ela tenha posto na raiz. Sob o uvicorn o processo acaba
+    logo depois; e num processo que sobe o app mais de uma vez (a suite, com
+    `with TestClient(app)`), sem isso o nivel da partida ficaria valendo para
+    o resto do processo.
+
+    A linha registrada diz o nivel, e so ele: nenhum outro campo da
+    configuracao entra no log.
+    """
+    raiz = logging.getLogger()
+    app_logger = logging.getLogger("focusquest")
+    handlers_de_antes = raiz.handlers[:]
+    nivel_de_antes = app_logger.level
+    nivel = ConfiguracaoDeLog().log_level
+    configurar_logging(nivel)
+    _log.info("log configurado no nivel %s", nivel)
+    try:
+        yield
+    finally:
+        for handler in raiz.handlers[:]:
+            if handler not in handlers_de_antes:
+                raiz.removeHandler(handler)
+                handler.close()
+        app_logger.setLevel(nivel_de_antes)
+
+
+app = FastAPI(title="FocusQuest", lifespan=_ciclo_de_vida)
 app.include_router(missions_router)
 app.include_router(cycle_router)
 app.include_router(progression_router)
@@ -327,7 +369,8 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready(
-    engine: Annotated[Engine, Depends(get_engine)], response: Response
+    engine: Annotated[Engine | None, Depends(get_engine_se_configurada)],
+    response: Response,
 ) -> dict[str, str]:
     """Readiness. Abre a `connection` e consulta de verdade: um readiness que
     nao consulta mente sobre estar pronto.
@@ -341,7 +384,14 @@ def ready(
     O corpo e em ingles de proposito. `/ready` e contrato de API, lido por
     orquestrador e por monitoramento; o texto em portugues que a pessoa le
     pertence ao frontend, que traduz o estado.
+
+    Sem configuracao de banco (`engine` None), tambem 503 -- nao pronto --,
+    com `not_configured` no lugar de `unavailable`: o corpo diz se o banco
+    esta fora do ar ou se a implantacao nem sabe onde ele esta (pendencia 28).
     """
+    if engine is None:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "database": "not_configured"}
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

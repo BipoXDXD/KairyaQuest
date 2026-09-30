@@ -16,7 +16,7 @@ function progressBody(xp: number, level = 1, floor = 0, next = 100): Progress {
 
 /**
  * A pagina busca cinco recursos na montagem: ciclo, missoes, status e
- * historico da Tifa, e o progresso (Task 8, incremento D).
+ * historico da Tifa, e o progresso.
  */
 function stubPage() {
   stubViewport('desktop')

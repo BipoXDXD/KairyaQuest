@@ -1,11 +1,10 @@
 """Prova por mutacao do `finally: eventos.close()` de `_em_sse`.
 
-O par de guardas do stream SSE (fix round 1/5 e 2/5 da Task 7) e:
+O par de guardas do stream SSE e:
 
 1. O invoucro `fechando_ao_cancelar`, provado em
    `tests/unit/test_tutoring_sse.py::test_cancelar_o_consumo_fecha_o_gerador`
-   -- a mutacao 2 do brief (apagar o `close()` de dentro dele) o faz
-   reprovar.
+   -- apagar o `close()` de dentro dele o faz reprovar.
 2. O `finally: eventos.close()` de `_em_sse`, provado AQUI.
 
 As duas guardas se cobrem quando testadas juntas contra um cliente real

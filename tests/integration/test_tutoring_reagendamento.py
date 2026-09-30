@@ -15,7 +15,7 @@ Tres blocos, com tres redes de protecao diferentes:
 import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -230,9 +230,12 @@ def _turno(
     registro: Registro,
     chamada: ChamadaDeFerramenta,
     sufixo: str,
+    stop_reason: Literal["end_turn", "tool_use", "max_tokens"] | None = None,
 ) -> tuple[int, list[Any]]:
     """Prepara, commita e transmite um turno cujo modelo chama `chamada`."""
-    falso.roteiro = Roteiro(blocos=(Texto(("Vamos mover.",)), chamada))
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Vamos mover.",)), chamada), stop_reason=stop_reason
+    )
     with fabrica() as sessao:
         preparo = preparar_turno(
             sessao,
@@ -326,6 +329,42 @@ def test_a_proposta_de_em_andamento_tambem_vale(
         "em-andamento",
     )
     assert isinstance(eventos[-1], RespostaConcluida)
+
+
+def test_a_proposta_cortada_por_max_tokens_nao_vira_acao(
+    banco_migrado: Engine,
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    registro: Registro,
+) -> None:
+    """O corte por `max_tokens` descarta QUALQUER proposta, e nao so a de
+    criacao: a entrada de `reschedule_mission` pode ter chegado pela metade.
+    O pior caso de proposito, como no teste da criacao: um bloco completo e
+    valido, com a pre-condicao satisfeita, seguido do corte -- so a guarda do
+    corte impede a acao. A resposta fica `interrompida`, com o texto parcial,
+    e a missao nao muda."""
+    mission_id = _missao_commitada(fabrica, registro)
+    resposta_id, eventos = _turno(
+        fabrica,
+        tutoria,
+        falso,
+        registro,
+        ChamadaDeFerramenta(_entrada(mission_id), nome="reschedule_mission"),
+        "cortada",
+        stop_reason="max_tokens",
+    )
+    final = eventos[-1]
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
+    assert final.mensagem.content == "Vamos mover."
+    assert final.mensagem.actions == []
+    assert _resposta(fabrica, resposta_id).actions == []
+    with fabrica() as sessao:
+        missao = sessao.get(Mission, mission_id)
+        assert missao is not None
+        assert missao.deadline == PRAZO_ATUAL
+    assert _historico_de(banco_migrado, mission_id) == []
 
 
 @pytest.mark.parametrize(

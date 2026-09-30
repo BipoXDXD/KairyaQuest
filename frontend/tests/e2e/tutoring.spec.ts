@@ -157,7 +157,7 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   const inteira = `Resposta inteira, agora sim (e2e ${EXECUCAO}).`
   // O falso fecha a conexao depois do primeiro pedaco, sem `message_stop`:
   // o SDK termina em silencio e o servico grava `falhou` com
-  // `provedor_indisponivel` (medicao M3 do 1b-1).
+  // `provedor_indisponivel` (medido no 1b-1).
   await definirRoteiro({
     blocks: [{ text: [comeco, 'do meio', ' e fim.'] }],
     // 7: o primeiro pedaco depois do thinking (`APOS_O_PRIMEIRO_PEDACO` de

@@ -1,6 +1,6 @@
 """O adaptador de producao, inteiro, contra o servidor falso."""
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -61,6 +61,22 @@ def test_a_ferramenta_vira_proposta_antes_do_fim(falso: ServidorAnthropicFalso) 
 
 
 @pytest.mark.parametrize(
+    ("stop_reason", "cortada"),
+    [("end_turn", False), ("tool_use", False), ("max_tokens", True)],
+)
+def test_o_fim_diz_se_o_teto_de_tokens_cortou_a_resposta(
+    falso: ServidorAnthropicFalso,
+    stop_reason: Literal["end_turn", "tool_use", "max_tokens"],
+    cortada: bool,
+) -> None:
+    """Pendencia 45: o `message_stop` chega igual quando o modelo terminou e
+    quando o SDK bateu em `max_tokens`. Quem distingue e o `stop_reason` do
+    `message_delta`, que o adaptador leva ao `Fim`."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Bora",)),), stop_reason=stop_reason)
+    assert _todos(falso) == [Delta("Bora"), Fim(cortada=cortada)]
+
+
+@pytest.mark.parametrize(
     ("blocos", "esperado"),
     [
         ((Texto(("Bora, ", "estudar!")),), [Delta("Bora, "), Delta("estudar!"), Fim()]),
@@ -110,7 +126,7 @@ def test_a_requisicao_leva_o_que_a_spec_manda(falso: ServidorAnthropicFalso) -> 
     ]
     ferramenta = criar
     esquema = ferramenta["input_schema"]
-    # A docstring de manutencao do MissionCreate nao vai para o modelo (M8).
+    # A docstring de manutencao do MissionCreate nao vai para o modelo.
     assert "description" not in esquema
     assert "title" not in esquema
     assert set(esquema["required"]) == {
@@ -133,7 +149,7 @@ def test_a_chave_e_a_passada_explicitamente(falso: ServidorAnthropicFalso) -> No
 def test_stream_cortado_termina_sem_fim_e_sem_erro(
     falso: ServidorAnthropicFalso,
 ) -> None:
-    """Documenta a medicao M3: o SDK nao denuncia o corte. Quem trata a falta
+    """Documenta que o SDK nao denuncia o corte. Quem trata a falta
     do `Fim` e o servico."""
     # Corta depois do primeiro pedaco ("meio"), antes do segundo.
     falso.roteiro = Roteiro(

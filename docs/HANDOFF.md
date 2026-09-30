@@ -2236,7 +2236,7 @@ código, cada um pelo hook (gate completo):
   dos dois casos da pendência 49.
 - **`e5750ad` — movimento reduzido (README §7).** O esqueleto de
   carregamento da conversa (`TutorConversation.tsx`, a única animação que chega à
-  tela — o `App.css` órfão tem `transition`, mas nenhum módulo o importa) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
+  tela — o `App.css` órfão, depois removido (pendência 24), tinha `transition`, mas nenhum módulo o importava) trocou `animate-pulse` por `motion-safe:animate-pulse`, que o
   Tailwind emite dentro de `@media (prefers-reduced-motion:
   no-preference)` (conferido no CSS do build). Teste novo em
   `TutorPanel.test.tsx`, com mutação.
@@ -2829,6 +2829,17 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 Ele imprime só a lista de tipos de evento e grava o mesmo no arquivo, sem
 texto, sem ids e sem a chave. Nunca crie esse arquivo à mão.
 
+Todos os comandos acima rodam **da raiz do repositório**: o `Settings` lê o
+`.env` do diretório corrente, e o `alembic` acha o `alembic.ini` pelo
+diretório corrente (pendência 29, decisão de manter). Para rodar de outro
+diretório, diga ao `uv` onde estão o projeto e o `.env`, e ao Alembic onde
+está o `.ini` — medido em 2026-09-29, de um diretório fora do clone:
+
+```bash
+uv run --project <raiz> --env-file <raiz>/.env uvicorn focusquest.main:app --host 127.0.0.1 --port 8000
+uv run --project <raiz> --env-file <raiz>/.env alembic -c <raiz>/alembic.ini upgrade head
+```
+
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
 alvo, exporte `API_PROXY_TARGET` no ambiente do processo do Vite — escrita
 no `.env`, ela é ignorada (`docs/ARCHITECTURE.md` §3).
@@ -3090,27 +3101,123 @@ ninguém mexer.
     silêncio. Um erro de digitação numa variável opcional exportada no shell
     ou no CI passaria despercebido (hoje só há um campo opcional,
     `db_port`).
-13. **Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
+13. ~~**Não há configuração de logging.** Nenhum `basicConfig` ou `dictConfig`
     no código. Medido fora do uvicorn: sem handler na raiz, só o `WARNING`
     ou acima chega ao stderr, pelo `lastResort` do Python — o `INFO` de
     "missão não encontrada" não aparece; o `WARNING` de acesso negado,
-    sim. Sob o uvicorn não foi medido.
+    sim. Sob o uvicorn não foi medido.~~
+    **Resolvida na sessão de 2026-09-29 (lote-obs, commit `914b46e`, com as
+    correções da revisão por cima):** `core/log.py`
+    (`configurar_logging`) chamado pelo `lifespan` de `main.py`, sem
+    dependência nova. Nível por `FOCUSQUEST_LOG_LEVEL` (padrão `INFO`,
+    qualquer caixa, valor desconhecido derruba a partida), lido por
+    `ConfiguracaoDeLog` — que não exige banco e que o `Settings` herda, para
+    o campo ser declarado uma vez e o `Settings` continuar recusando chave
+    desconhecida. O handler vai na raiz só se ela não tiver nenhum
+    (`basicConfig`), e o nível vale só para o logger `focusquest`: a raiz
+    fica em `WARNING`, e o DEBUG do `httpx`, do SDK `anthropic` e o INFO do
+    `sqlalchemy.engine` continuam desligados. Medido sob o uvicorn real, nos
+    níveis padrão, `DEBUG` e `WARNING`: a linha da partida e o `INFO` de
+    "missão não encontrada" saem uma vez cada, as do uvicorn também, e a
+    senha da URL do banco não aparece — nem no traceback de um 500. Testes em
+    `tests/unit/test_log.py` (inclusive dois subprocessos: a configuração
+    padrão do uvicorn aplicada por `dictConfig`, e a partida em `DEBUG` com
+    chave e senha conhecidas). O desligamento (a saída do `lifespan`)
+    devolve o nível do `focusquest` e tira o handler que a partida pôs na
+    raiz — sem isso, cada `with TestClient(app)` da suíte deixava o nível da
+    partida valendo para o resto do processo (revisão, M1). Detalhes em
+    `docs/ARCHITECTURE.md`, "Logging". O que ficou: pendência 150.
 14. **A engine é uma global de módulo em `core/database.py`**, não um recurso
     do `lifespan` do app: há uma corrida teórica na criação e nenhum
     `dispose()` no desligamento. Movê-la para o `lifespan` é mudança de
     contrato, não refatoração: a engine passaria a nascer na partida, e o
     `/health` deixaria de responder sem configuração de banco — que é o que
     um teste exige hoje.
-15. **Duas `DeprecationWarning` de dependência** aparecem em toda execução do
+15. ~~**Duas `DeprecationWarning` de dependência** aparecem em toda execução do
     pytest: o `TestClient` do Starlette pedindo outro pacote no lugar do
-    `httpx`, e o alias `anyio.abc.BlockingPortal`. Não são deste código;
-    pedem uma decisão de `filterwarnings` em tarefa própria.
+    `httpx`, e o alias `anyio.abc.BlockingPortal`.~~ **Resolvida em
+    2026-09-29 (lote de infraestrutura, branch `wt/lote-infra`), por
+    correção na origem, sem `filterwarnings` que esconda nada.** Medido antes
+    de mexer (`pytest -W default`, starlette 1.6.0, anyio 4.15.1): **um** aviso,
+    não dois. Que o do `httpx` tenha sumido quando o `httpx2` virou dependência
+    direta na tutoria (`e8a424c`) é **conferido no código e na cronologia**, não
+    medido naquele commit: a pendência é de 2026-09-18, o `e8a424c` de
+    2026-09-19, e o `starlette.testclient` prefere o `httpx2` (lê-se no
+    próprio `testclient.py`: `import httpx2`, com o `httpx` só como fallback
+    que avisa). O que restava era o alias: o `testclient.py` do
+    Starlette 1.6.0 escreve `anyio.abc.BlockingPortal` numa anotação de nível
+    de módulo, e o `anyio` 4.15.1 avisa a cada importação (linha 53 do
+    arquivo). **Correção:** `uv lock --upgrade-package starlette` levou o
+    Starlette de 1.6.0 para **1.7.0** (publicado em 2026-09-23, conforme o
+    `upload-time` do lock), cujo `testclient.py` usa
+    `anyio.from_thread.BlockingPortal`. Só o `uv.lock` mudou (3 linhas: versão,
+    URL e hash do sdist e da roda); nenhuma dependência nova nem pino novo no
+    `pyproject.toml` — o Starlette continua transitivo do FastAPI
+    (`starlette>=0.46.0`). Medido depois: `make check-api` com **827 testes
+    passando e nenhum bloco de avisos**, cobertura de 100%.
+    **Guarda:** duas linhas de `filterwarnings` no `pyproject.toml`, ambas
+    `error:` e por **mensagem exata** (o alias do `BlockingPortal` e o aviso do
+    fallback para o `httpx`), para que os dois voltem como erro de coleta e
+    não como aviso que ninguém lê, caso um `uv lock` regrida o Starlette.
+    Nenhum outro aviso virou erro (medido: um `DeprecationWarning` qualquer
+    continua só aviso). **Prova da guarda:** com o `uv.lock` anterior
+    (Starlette 1.6.0) o `tests/integration/test_evaluation_api.py` reprova na
+    coleta com `DeprecationWarning: The anyio.abc.BlockingPortal alias is
+    deprecated`; com o novo, 15 testes passam. A segunda linha foi provada
+    por um teste descartável que emitiu a mensagem do fallback (virou erro).
+    **Custo/risco.** O Starlette **não é só dependência de teste**: é o
+    framework ASGI que serve todas as rotas da API e o SSE da tutoria
+    (`StreamingResponse` em `modules/tutoring/router.py`), então a troca
+    1.6.0 → 1.7.0 muda código de **runtime**, não só o `TestClient`. O que tem
+    seis dias é a **versão** 1.7.0 (upload de 2026-09-23, conforme o
+    `uv.lock`), não o pacote; o `uv.lock` fixa o hash. **Notas de versão
+    lidas** (`docs/release-notes.md` do sdist do 1.7.0, baixado do PyPI): a
+    1.7.0 acrescenta o `OpenTelemetryMiddleware` (experimental) e outros
+    recursos, exige `anyio>=4.0.0,<5` (o projeto fixa 4.15.1) e traz correções
+    em `BaseHTTPMiddleware`, CORS, `StaticFiles`, `FileResponse`, multipart e
+    WebSocket; a única linha sobre `TestClient`/`anyio` é o conserto do alias
+    (#3498). Uma busca em `src/` não achou uso de nenhum desses componentes
+    (só `StreamingResponse` e o roteamento do FastAPI), mas isso é leitura, não
+    prova de ausência de efeito. **A evidência de que a troca não quebrou a
+    API é o gate completo, rodado por mim depois dela:** 827 testes de backend
+    passando (integração e SSE inclusos), cobertura de 100%, e os 18
+    cenários E2E do Chromium, além dos 614 testes do frontend. **Regressão
+    possível:** o `pyproject.toml` **não pina** o Starlette (os demais pacotes
+    diretos são `==`); quem o fixa é só o `uv.lock`, e o FastAPI 0.141.1 aceita
+    `starlette>=0.46.0` (METADATA), sem teto. Logo o lock só voltaria a uma
+    versão com o alias por um `git revert`/`git checkout` do `uv.lock` ou por
+    um pino futuro em versão antiga; nesse caso o sintoma agora é um erro de
+    coleta, não um aviso. (Um `uv lock` refeito do zero pegaria a versão mais
+    nova, não a antiga.)
 16. **O interpretador do projeto no PyCharm aponta para o Python do
     Homebrew, não para o `.venv`.** `.idea/` é ignorado pelo git e não foi
     alterado às cegas. Efeito: avisos de import não resolvido no editor; o
     gate e os testes não são afetados.
-17. **Não existe `.run/`** com as configurações de execução compartilhadas
-    que o README §4 pede (API, frontend, testes, gate).
+17. ~~**Não existe `.run/`** com as configurações de execução compartilhadas
+    que o README §4 pede (API, frontend, testes, gate).~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`), com uma ressalva de verificação:** existem cinco
+    arquivos em `.run/` (`API`, `Frontend`, `Testes_backend`,
+    `Testes_frontend`, `Gate`), descritos e justificados no
+    `docs/ARCHITECTURE.md` §4 ("Configurações de execução do PyCharm"). Usam
+    `$PROJECT_DIR$/.venv/bin/python`, sem caminho pessoal nem segredo, e o
+    `.gitignore` não ignora `.run/` (conferido por `git check-ignore`). O que
+    é **verificado**: `tests/unit/test_run_configs.py` (XML bem formado, sem
+    caminho pessoal/segredo, não ignorado, e cada script do npm, alvo do
+    Makefile, módulo da API e pasta de testes que apontam existe), visto
+    reprovando antes dos arquivos e reprovando de novo sob seis mutações.
+    **Estado: NÃO EXECUTADO.** Os arquivos foram escritos no formato que o
+    PyCharm grava (`ProjectRunConfigurationManager`), a partir do formato
+    documentado, mas **não foram abertos nem executados no PyCharm**: o
+    agente não tem como conduzir a IDE. Possíveis surpresas a conferir na
+    primeira abertura: o PyCharm resolver `$PROJECT_DIR$` no `SDK_HOME`; o
+    módulo `focusquest` (nome do `.iml`) ter outro nome num clone com a pasta
+    diferente; as duas configurações de npm pedirem o plugin de JavaScript e
+    um Node configurado na IDE (o Node aqui vem do `fnm`, no shell); o
+    `Gate` achar `make`/`uv` no `PATH` do terminal da IDE. Nenhum arquivo do
+    `.idea/` foi tocado. A pendência 16 (interpretador do projeto no
+    PyCharm) **continua aberta**: as configurações não dependem dela, mas o
+    editor segue sem resolver os imports até a IDE apontar para o `.venv`.
 
 **Gate e E2E**
 
@@ -3202,10 +3309,20 @@ ninguém mexer.
 23. **Na sessão de um agente, a tabela de cobertura por arquivo do Vitest sai
     vazia** (`docs/QUALITY.md` §3). Não é evidência de 100%; a evidência é o
     limiar e o resumo.
-24. **Arquivos órfãos no frontend:** `frontend/src/App.css` e
+24. ~~**Arquivos órfãos no frontend:** `frontend/src/App.css` e
     `frontend/src/assets/` (`hero.png`, `react.svg`, `vite.svg`) não são
-    importados por nenhum módulo — restos do scaffold do Vite. Remover é
-    mudança de código, fora do escopo da documentação.
+    importados por nenhum módulo — restos do scaffold do Vite.~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os quatro arquivos foram removidos com `git rm`. Antes,
+    `grep` por `App.css`, `hero.png`, `react.svg`, `vite.svg`, `assets/`,
+    `import.meta.glob`, `.svg`, `.png` e `new URL` em `frontend/` (fora
+    `node_modules`/`dist`/`coverage`), nos docs, no Makefile, nos scripts e no
+    CI não achou nenhum uso: o `index.html` usa `/favicon.svg` (de `public/`),
+    e o `index.css` é o único CSS importado (`main.tsx`). A pasta
+    `frontend/src/assets/` deixou de existir; a `docs/ARCHITECTURE.md` (§1, §5
+    e a tabela "onde cada arquivo mora") passou a tratá-la como contrato. A
+    linha do README §3 (árvore-alvo) não foi tocada: é o contrato. Verificado:
+    `make check` (inclui o build do `check-e2e`) aprovou depois da remoção.
 25. **Dependência do proxy do Vite.** No dia em que o frontend for servido por
     outra coisa que não o Vite, falta CORS ou um proxy reverso.
 
@@ -3275,7 +3392,7 @@ que não tinham chegado aqui)
     fusos. Efeito no contrato: todo instante lido do banco sai com `Z`; o 201
     da criação continua ecoando o prazo com o offset que o cliente mandou
     (`docs/ARCHITECTURE.md`).
-28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
+28. ~~**`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
     `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
     `get_engine` estoura `ValidationError` antes do `try` que traduz a falha
     do banco em 503 (medido). Diferido desde a Task 4, com decisão
@@ -3283,7 +3400,47 @@ que não tinham chegado aqui)
     liveness/readiness foi a parte mais delicada da execução. Se ninguém
     mexer: um orquestrador vê "não pronto" do mesmo jeito; quem ler só o
     status não distingue "banco fora" de "implantação sem configuração". O
-    `docs/ARCHITECTURE.md` descreve os três casos.
+    `docs/ARCHITECTURE.md` descreve os três casos.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(saude): ready responde 503 sem
+    configuracao de banco`).** A correção coube no tamanho pedido e não mexe
+    na pendência 14: `core/database.py` ganhou `get_engine_se_configurada`,
+    que chama o mesmo `get_engine` e devolve `None` quando o `Settings` não
+    tem a `database_url` (ver a correção I1 abaixo); o `/ready` depende dela
+    e responde `503` com `{"status": "unavailable", "database":
+    "not_configured"}` — o corpo separa "sem
+    configuração" de "banco fora" (`unavailable`), já que o status agora é o
+    mesmo nos dois. A engine continua global e preguiçosa, e o `/health`
+    continua sem dependência nenhuma (o teste
+    `test_health_responde_sem_configuracao_de_banco` passa sem mudança). As
+    rotas de negócio continuam em `get_engine` e respondem 500 sem
+    configuração — para elas é defeito de implantação, e trocar isso pediria
+    um `code` novo que o frontend repetiria. Testes em
+    `tests/integration/test_health.py`: o `/ready` sem `.env` e sem as
+    variáveis (RED visto: o `ValidationError` subia pelo `TestClient`) e o
+    ramo configurado de `get_engine_se_configurada` devolvendo a mesma engine
+    de `get_engine`. A fixture `override_engine` passou a substituir as duas
+    dependências (sem isso o `/ready` dos testes com engine quebrada iria ao
+    banco real); nenhuma asserção existente mudou. Mutações: tirar o `except`
+    reprova o teste novo; tirar o `503` do ramo sem configuração reprova; e
+    devolver `unavailable` no lugar de `not_configured` reprova.
+    **Correção da revisão (I1, commit `fix(saude): so a database_url ausente
+    vira not_configured no ready`):** a primeira versão engolia **qualquer**
+    `ValidationError` do `Settings` — `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, chave
+    desconhecida no `.env`, a URL de teste ausente — e respondia 503
+    `not_configured` sem log, apontando o banco quando o erro era outro.
+    Agora `get_engine_se_configurada` só devolve `None` quando os `errors()`
+    contêm a `database_url` com `type` `missing`; qualquer outro erro sobe
+    como antes (500, com o traceback que nomeia o campo). "Contém", e não "é
+    só": sem configuração nenhuma, a URL de teste falta junto, e o banco de
+    fato não está configurado. Teste novo, parametrizado (campo inválido com a
+    URL presente; só a URL de teste ausente), exige que o `ValidationError`
+    suba — RED visto (`DID NOT RAISE`, os dois casos respondiam 503).
+    Mutações: devolver `None` sempre reprova os dois casos novos; `all` no
+    lugar de `any` reprova o caso "nada configurado". A condição `type ==
+    "missing"` é mutação **equivalente** nos testes (tirá-la não reprova
+    nada): `database_url` é `str` e, vinda do ambiente ou do `.env`, só pode
+    faltar (vazia também conta como falta, `env_ignore_empty`); ela fica como
+    documentação da intenção, a pedido da revisão.
 29. **Os comandos dependem de rodar da raiz do repositório.** O `Settings` lê
     o `.env` do diretório **corrente**, e o `alembic.ini` também é achado
     pelo diretório corrente. Medido fora da raiz: a aplicação estoura
@@ -3292,7 +3449,39 @@ que não tinham chegado aqui)
     silenciosa. Diferido porque o `Makefile`, o CI e o `scripts/e2e-env.sh`
     (que faz `cd` para a raiz) já rodam da raiz. Se ninguém mexer: quem
     rodar `uv run uvicorn` ou `alembic` de outro diretório recebe o erro e
-    precisa voltar para a raiz.
+    precisa voltar para a raiz.~~
+    **Resolvida por decisão na sessão de 2026-09-29 (lote-obs, commit
+    `e23cc79`): o comportamento fica, documentado, com a receita para rodar de fora e um
+    teste que a prende.** A correção sugerida — ancorar o `env_file` na raiz
+    calculada a partir do pacote (`Path(__file__).parents[3] / ".env"`) —
+    foi descartada, por três motivos. (1) **Os testes dependem do
+    comportamento atual:** na base `580f6cc` há oito
+    `monkeypatch.chdir(tmp_path)` em três arquivos (`test_config.py` 4,
+    `test_tutoring_api.py` 3, `test_health.py` 1; medido com
+    `git grep -n monkeypatch.chdir 580f6cc -- tests`), um deles no ajudante
+    `_settings_do_arquivo`, usado por boa parte do `test_config.py`. Eles
+    existem para tirar o `.env` real da jogada; com o caminho ancorado,
+    passariam a ler o `.env` do clone, e
+    `test_falha_quando_a_url_do_banco_nao_esta_no_ambiente` deixaria de
+    provar a falha — consertar exigiria reescrever o isolamento da suíte, que
+    não é o objetivo desta pendência. (2) **O caminho derivado do pacote só
+    é a raiz do clone na instalação editável;** num pacote instalado de
+    wheel ele aponta para dentro do `site-packages`, que é exatamente o
+    acoplamento frágil ao caminho do clone que não se quer. (3) **Quem roda
+    de outro lugar já tem saída, e a falha é alta:** `uv run --project
+    <raiz> --env-file <raiz>/.env …` carrega o `.env` no ambiente do
+    processo (o `Settings` lê do ambiente), e o `alembic.ini` já usa
+    `script_location = %(here)s/alembic`, então `-c <raiz>/alembic.ini`
+    basta para o Alembic achar os scripts. Medido de um diretório fora do
+    clone: sem a receita, o `Settings` estoura `Field required` e o
+    `alembic` reprova com `No 'script_location' key found in configuration`;
+    com ela, o `Settings` lê o banco do `.env`, `alembic -c … heads`
+    responde `0005 (head)` e `alembic -c … -x test=true current`, com o
+    `--env-file`, também. A receita está em "Comandos"; o teste novo
+    `tests/unit/test_comandos_fora_da_raiz.py` prende a metade que é deste
+    repositório (o `alembic.ini` achar os scripts pelo caminho dele, de
+    qualquer diretório corrente — com `script_location = alembic` ele
+    reprova). O que ficou: pendência 151.
 30. **`/api/missions/` com barra final responde `307`** para
     `/api/missions` (redirecionamento automático do Starlette; medido). O
     cliente do frontend chama sem a barra, então nada quebra hoje. Diferido
@@ -3318,6 +3507,8 @@ que não tinham chegado aqui)
     a conclusão…"), que é segura mas imprecisa. Os handlers também não
     declaram `responses`, então o `/openapi.json` não publica o corpo de
     erro. Amarrar de verdade pediria gerar os tipos a partir do OpenAPI.
+    Outro espelho à mão, do mesmo tipo: `MAX_DIFFICULTY`
+    (`shared/types/mission.ts`) e o `DIFICULDADE_MAXIMA` do backend (pendência 66).
     **Atualizada no 1b-2 (continua aberta):** desde o 1b-2, são **dois**
     espelhos à mão no frontend: `MissionErrorCode`
     (`features/missions/types.ts`) e, na tutoria, `PreStreamErrorCode`,
@@ -3494,7 +3685,7 @@ que não tinham chegado aqui)
     `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (Task 6, fix
     round 1/5) — discriminaram a mutação em **5 de 5** execuções cada, sem
     nenhuma passagem por acidente. Não há taxa parcial a acompanhar.
-45. **Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
+45. ~~**Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
     `completa`, e não como cortada.** A guarda da medição M3 cobre o corte de
     **transporte** (a conexão cai e a iteração termina em silêncio, sem
     `Fim`); ela não distingue um `Fim` que chega porque o modelo terminou de
@@ -3507,7 +3698,41 @@ que não tinham chegado aqui)
     corte veio antes do `tool_use`. A tela não tem como distinguir: o
     `MessageRead` não carrega o `stop_reason`. Resolver pede mudar o backend
     (gravar o `stop_reason`, ou tratar `max_tokens` como `interrompida`) —
-    fora do escopo do 1b-2, que não muda `src/focusquest/`.
+    fora do escopo do 1b-2, que não muda `src/focusquest/`.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(tutoria): resposta cortada por
+    max_tokens fica interrompida`).** **Decisão:** a resposta cortada pelo
+    teto de tokens é gravada `interrompida`, com o texto parcial, **sem
+    ação**, e chega ao cliente no `done` de sempre. Escolhida por ser a que
+    menos muda contrato: nenhum valor de enum novo (`interrompida` já existe
+    na coluna, no `CHECK` e no `MessageStatus` do frontend), nenhuma coluna
+    nem migração, nenhum `error_code` novo e nenhum evento SSE novo — muda só
+    **qual** `status` o `done` pode carregar. As alternativas custavam mais:
+    gravar o `stop_reason` pede migração, schema e tela; `falhou` com um
+    `error_code` novo pede um código no `CodigoDoStream`, no
+    `StreamErrorCode` e no mapa exaustivo de `messageFailure.ts`, e trataria
+    como falha do provedor algo que é um limite configurado. `interrompida`
+    também é a leitura honesta — "a resposta não chegou inteira" — e reusa o
+    que já existe para esse estado: a tela marca "Resposta interrompida" e oferece o
+    "Tentar de novo" do histórico (`pendingFromHistory`), o reenvio com o
+    mesmo id gera resposta nova (só a `completa` conta como resposta), e o
+    `_historico` do turno seguinte já exclui a `interrompida`, então o texto
+    cortado não volta ao modelo. A proposta é descartada porque a entrada da
+    ferramenta pode ter chegado pela metade. **Frontend:** nenhuma mudança de
+    código; um teste novo (`TutorPanel.test.tsx`, P33) prova o fluxo do
+    `done` `interrompida` (marca, nota de reenvio, reenvio com o mesmo id).
+    **Backend:** `Fim` ganhou `cortada: bool = False`; o adaptador guarda o
+    `stop_reason` do `message_delta` e emite `Fim(cortada=True)` quando é
+    `max_tokens`; `transmitir` grava `interrompida` e zera a proposta; a
+    docstring de `StatusDaMensagem` e o `docs/ARCHITECTURE.md` (o stream do
+    `POST /messages`) passaram a descrever o caso. RED visto: o teste do
+    adaptador reprovou com `TypeError` (o `Fim` sem o campo) e os de serviço
+    com `completa` no lugar de `interrompida`. Mutações: o adaptador emitindo
+    `Fim()` sempre reprova 5 testes; o serviço gravando sempre `completa`
+    reprova 4; sem o descarte da proposta, 2 (a ação nascia de uma entrada
+    cortada); no frontend, a marca de `interrompida` nula reprova o P33 (e
+    P5, P14, P30), e `pendingFromHistory` tratando `interrompida` como
+    resolvida reprova o P33 e o P17. Limitações novas: 120, 121 e 122 (esta
+    da revisão: o reenvio oferecido tende a cortar de novo).
 46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
     o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
     não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
@@ -3635,7 +3860,7 @@ que não tinham chegado aqui)
     meia-noite não dispara nenhum dos dois eventos — o Quartel-General
     oculto (K2) continua mostrando o dia anterior até a aba sair e voltar,
     ou até um recarregamento.
-58. **Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
+58. ~~**Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
     e para a diária PERDIDA na trilha** (triagem da revisão final da branch;
     já estava listado como "minor" diferido da Task 3, promovido a pendência
     aqui). `tests/integration/test_cycle_service.py` cobre a especial
@@ -3653,7 +3878,26 @@ que não tinham chegado aqui)
     que force `ler_missao`/`ler_plano_atual` a produzir os dois estados —
     isso é backend, e o Incremento C, por desenho, não muda
     `src/focusquest/` (Autorrevisão do plano do C, "Pendências do B
-    absorvidas"). Continua aberta.
+    absorvidas").~~ **Resolvida em 2026-09-29 (lote back, commit
+    `test(ciclo): diaria perdida e especial expirada na trilha contra o banco`).**
+    Cinco testes novos em `tests/integration/test_cycle_service.py`, contra o
+    PostgreSQL real e com o relógio injetado: a trilha de `ler_plano_atual`
+    com diárias `perdida` (com a missão e o prazo) ao lado de uma `concluida`;
+    `ler_missao` na diária de ontem devolvendo `perdida` (e não 404); a trilha
+    com a especial `expirada` — ainda com a missão e o prazo do fim do dia
+    seguinte ao marco —, depois de ter estado `disponivel` no último dia da
+    janela; `ler_missao` na especial fora da janela devolvendo `expirada`; e
+    `ler_ciclo` escondendo a especial expirada enquanto a trilha a mostra.
+    Para a trilha da semana **atual** exibir a especial expirada, o marco
+    precisa cair no meio da semana (com ele no domingo, a janela só fecha na
+    terça da semana seguinte, quando a trilha já é outra): o auxiliar
+    `_marco_na_quarta` monta a sequência atravessando duas semanas (quinta a
+    domingo de S-1, com o plano criado na quinta, e segunda a quarta de S).
+    Nenhum defeito encontrado: os testes passaram de primeira, e o RED foi
+    obtido por mutação — `disponibilidade_da_diaria` devolvendo `disponivel`
+    no lugar de `perdida` reprova 3 dos testes novos, e
+    `disponibilidade_da_especial` devolvendo `disponivel` no lugar de
+    `expirada` reprova outros 3.
 
 **Criadas pelo Incremento C**
 
@@ -3715,26 +3959,43 @@ C".
 
 *Abertas — dívida pequena*
 
-62. **A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
+62. ~~**A raiz de `Headquarters.tsx` repete `min-h-screen` e o fundo**
     (`frontend/src/pages/Headquarters.tsx`, a `div` raiz: `min-h-screen
     bg-slate-950 text-slate-100 lg:flex`). Desde a Task 1 o `App.tsx` já
     envolve as duas áreas numa `div` com as mesmas classes; dentro dele, as
     da raiz do QG são redundantes (inofensivas: mesma cor, mesma altura
     mínima). Ficou da aterrissagem da Task 1 para não mexer em layout sem
-    inspeção visual (pendência 61).
+    inspeção visual (pendência 61).~~ **Resolvida no lote do frontend
+    (2026-09-29):** a raiz do QG ficou só com `lg:flex`; quem pinta o fundo e
+    fixa a altura mínima é a `div` do `App.tsx` (Campanhas já dependia só
+    dela). A inspeção visual que a pendência pedia foi feita num Chromium real,
+    à mão (script descartável, sem versão no repositório; Playwright, API simulada, 390x844 e 1280x800, quadro vazio e com 12
+    missões): retângulos de `main`, painel da Tifa e raiz e as capturas de tela
+    **idênticos** antes e depois em três dos quatro cenários. **A única
+    diferença**, no celular com o quadro curto: a altura do documento cai de
+    905px para 844px — o `min-h-screen` duplicado somava a altura da navegação
+    do topo (61px) e criava uma rolagem sem conteúdo. Provado por um teste novo
+    em `App.test.tsx` (só a raiz do `App` tem as classes; reprovou antes da
+    troca e reprova nas duas mutações: classes de volta na página, ou fora do
+    `App`).
 63. **`CampaignTrail.tsx` tem cerca de 370 linhas** (371, medido), com dez
     subcomponentes num arquivo só
     (`frontend/src/features/campaigns/CampaignTrail.tsx`). Candidato a
     decomposição (por exemplo, o dia, o baú e a especial em arquivos
     próprios) quando a trilha crescer; hoje está coberto a 100% e não há
     segundo usuário de nenhum subcomponente.
-64. **Três títulos de teste E2E com acento fora de citação literal**
+64. ~~**Três títulos de teste E2E com acento fora de citação literal**
     (`frontend/tests/e2e/cycle.spec.ts`, os três cenários da Task 6:
     "Campanhas abre pela navegação…", "…Tab ate a navegação, Enter, e o
     foco vai para o título" e "a navegação fica visível no topo, sem
     rolagem horizontal, e não cobre…"). A convenção do arquivo é título sem
     acento, com acento só dentro de citação literal do texto da tela.
-    Cosmético; trocar muda o nome do teste no relatório do Playwright.
+    Cosmético; trocar muda o nome do teste no relatório do Playwright.~~
+    **Resolvida no lote do frontend (2026-09-29):** os três títulos ficaram
+    sem acento ("Campanhas abre pela navegacao…", "…Tab ate a navegacao,
+    Enter, e o foco vai para o titulo", "a navegacao fica visivel no topo…");
+    a citação literal `"Falar com a Tifa"` foi mantida. Verificado:
+    nenhum título de `tests/e2e/*.spec.ts` tem acento fora de aspas.
 65. **Não há teste com três ou mais pedidos concorrentes** em `useCycle` e
     `useCurrentPlan` (`frontend/src/features/missions/useCycle.test.tsx`,
     `frontend/src/features/campaigns/useCurrentPlan.test.tsx`). Os testes
@@ -3742,16 +4003,23 @@ C".
     `useRefreshOnReturn`). O contador de sequência é monotônico e a guarda
     compara com o valor corrente, então o caso de N pedidos se reduz ao de
     dois por construção — mas isso é argumento, não teste.
-66. **`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
+66. ~~**`MAX_DIFFICULTY` existe, mas o "de 5" continua literal em dois
     lugares** (achado m5 da revisão final):
     `frontend/src/shared/types/mission.ts` exporta `MAX_DIFFICULTY = 5`, que
     a trilha usa; `frontend/src/features/missions/MissionCard.tsx` ("de 5"
     no `mission-difficulty`) e `frontend/src/features/tutoring/ProposalCard.tsx`
-    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão. Nada
-    amarra nenhum dos três ao `DIFICULDADE_MAXIMA` do backend. Não foi
-    trocado aqui porque o C não mexe nas features `missions`/`tutoring` por
-    estética; o comentário de `Mission.difficulty` foi corrigido para
-    apontar os dois arquivos certos (antes citava `MissionList.tsx`).
+    ("de 5" no `proposal-difficulty`) ainda escrevem o número à mão.~~
+    **Resolvida no lote do frontend (2026-09-29):** os dois cartões escrevem
+    `de {MAX_DIFFICULTY}` (a `tutoring` importa de `shared/`, o que a regra 1
+    do `docs/ARCHITECTURE.md` §5 permite). Provado por dois arquivos de teste
+    novos (`MissionCard.difficulty.test.tsx` e
+    `ProposalCard.difficulty.test.tsx`) que trocam `MAX_DIFFICULTY` por 7 com
+    `vi.mock` e exigem "3 de 7" e "2 de 7" na tela: reprovaram antes da troca
+    ("Received: 3 de 5") e reprovam de novo se o literal 5 voltar (mutação, uma
+    por cartão). **Continua aberto**, agora como parte da
+    pendência 32: nada amarra o `MAX_DIFFICULTY` ao `DIFICULDADE_MAXIMA` do
+    backend (o espelho é à mão, como o comentário da constante diz), e o
+    remédio é o mesmo — gerar os tipos a partir do OpenAPI.
 
 *Aceitas, sem ação*
 
@@ -3777,7 +4045,15 @@ C".
     desmontar chama `setState` num componente que não existe mais. No
     React 18+ isso é um *no-op* silencioso (o aviso foi removido), e o
     pedido não tem efeito colateral. Aceito; um `AbortController` no
-    `refresh` seria a saída se um dia importar.
+    `refresh` seria a saída se um dia importar. **Reavaliada no lote do
+    frontend (2026-09-29) e mantida como aceita:** não há como provar a guarda com
+    um teste que reprove antes (RED). Depois da desmontagem, o `setState` não
+    renderiza nada, o `result.current` de `renderHook` continua com o último
+    valor e o React 19 não emite aviso algum, então nenhum efeito observável
+    separa o código com guarda do sem guarda (o teste "desmontar no meio nao
+    escreve estado de erro", de `useTutorStatus.test.tsx`, já registra a mesma
+    limitação). Sem RED não há mudança de código; o mesmo vale para
+    `useCurrentPlan.ts`, que tem o desenho idêntico.
 
 *Verificada — registro, não pendência*
 
@@ -3826,7 +4102,7 @@ C".
 
 **Revisão do repositório (2026-09-25)**
 
-77. **`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
+77. ~~**`useMissions.ts` e `useTutorStatus.ts` não têm guarda de sequência
     de pedidos.** Os dois abortam o pedido anterior na limpeza do efeito,
     mas o `.then()` de sucesso não confere nada — nem um `requestId`, como
     `useCycle.ts` e `useCurrentPlan.ts`, nem `controller.signal.aborted`,
@@ -3838,7 +4114,16 @@ C".
     recarga que o Quartel-General pede quando a Tifa cria uma missão
     (`Headquarters.tsx`, `reloadBoard`). Não há teste de "dois pedidos, o
     mais velho responde por último" nos dois hooks. Saída: replicar a guarda
-    de `requestId` (achado M1 da revisão de frontend).
+    de `requestId` (achado M1 da revisão de frontend).~~ **Resolvida no lote
+    do frontend (2026-09-29):** o `.then()` dos dois hooks passou a conferir
+    `controller.signal.aborted`, o mesmo teste que o `.catch()` já fazia — um
+    `requestId` seria redundante, porque cada execução do efeito tem o próprio
+    `AbortController` e a limpeza (o `reload` ou a desmontagem) o aborta. Um
+    teste novo em cada hook (`useMissions.test.tsx`, `useTutorStatus.test.tsx`)
+    usa um `fetch` que ignora o abort e faz a resposta velha chegar por
+    último: reprovou antes da guarda (o estado terminava com "Missao velha" e
+    com `unavailable`) e reprova de novo quando a guarda sai (mutação, uma por
+    hook).
 
 **Incremento D — a progressão (2026-09-25)**
 
@@ -3901,9 +4186,18 @@ C".
     `_contexto`**, não logo depois de "Agora (UTC)" como a prosa do brief
     da Task 5 descrevia. Sem efeito funcional — é só onde a linha aparece
     dentro do texto que vai para o modelo.
-86. **`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
+86. ~~**`ProgressPanel`: o `aria-label` da barra ("Progresso até o nível N")
     repete o sufixo que o `aria-valuetext` já diz** ("N de M XP até o nível
-    N"). Redundante para quem usa leitor de tela, não incorreto.
+    N"). Redundante para quem usa leitor de tela, não incorreto.~~
+    **Resolvida na sessão de 2026-09-29, por decisão do dono ("resolva de forma
+    cirúrgica"):** o `aria-label` fica como a R13 do D o fixou ("Progresso até
+    o nível N", o nome que o teste cobra) e o `aria-valuetext` perde o sufixo:
+    passa a "N de M XP". O leitor de tela ouve o nível uma vez só, no nome, e
+    o valor sem repetição; o texto visível (fora da árvore de acessibilidade)
+    continua "N de M XP até o nível N". A mudança das três expectativas de
+    `aria-valuetext` em `ProgressPanel.test.tsx` é a mudança principal (vistas
+    reprovando antes do código); mutações: voltar o texto completo ao
+    `aria-valuetext` reprova 3 testes, tirar o nível do `aria-label` reprova 1.
 87. ~~**No E2E, a mutação que troca `xp_awarded` por `xp_total` em
     `RewardAnnouncement` só é discriminante se alguma conclusão anterior já
     tiver creditado XP ao usuário.** Em `cycle.spec.ts`, que roda primeiro
@@ -4055,11 +4349,39 @@ ledger; nenhum é bug esquecido.
     `EvaluationPanel` recebe `reloadWaiting` (`reloadWaiting.ts`), e o botão de
     recarga fica desabilitado, com o texto de espera, enquanto a conclusão em voo
     termina.
-96. **N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
+96. ~~**N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
     O `MissionRead` deriva `verification`, `evidence` e `evaluation` dos
     relacionamentos, carregados com `lazy="select"`: cada missão listada custa
     até duas consultas a mais. Aceito enquanto o usuário tem poucas missões
-    (A2); com muitas, trocar por `selectinload` na listagem.
+    (A2); com muitas, trocar por `selectinload` na listagem.~~ **Resolvida em
+    2026-09-29 (lote back, commit `perf(missoes): selectinload de evidencia e
+    avaliacao na listagem`).** `listar_missoes` pede
+    `selectinload(Mission.evidence)` e `selectinload(Mission.evaluation)` na
+    própria consulta; o `lazy="select"` do modelo fica para a leitura de uma
+    missão só. O teste novo
+    `tests/integration/test_missions_listagem_consultas.py` conta, com um
+    ouvinte `before_cursor_execute` na conexão da sessão, as consultas que a
+    rota `listar` dispara depois de `expire_all()`: antes da correção, 8
+    missões custavam **17** consultas (1 + 2 × 8, RED visto); depois, **3**
+    para 1 e para 8 missões. Mutação: tirar qualquer um dos dois
+    `selectinload` volta a 10 consultas e reprova. Um segundo teste confere que
+    o carregamento antecipado não troca a evidência de uma missão pela de
+    outra nem perde a avaliação. Efeito colateral declarado: a montagem do
+    turno da Tifa (`tutoring/service.py`), que também usa `listar_missoes` e
+    não lê evidência nem avaliação, passa a fazer duas consultas pequenas a
+    mais por turno — custo fixo, aceito para manter uma única consulta de
+    listagem.
+    **Ajuste no merge da `main` no Incremento F (2026-09-29):** o F acrescentou
+    `reschedules` (o histórico de prazos) ao `MissionRead`, com
+    `lazy="select"`, e o merge sem conflito textual trouxe o N+1 de volta —
+    o teste de contagem reprovou com **11** consultas para 8 missões (3 + 8).
+    `listar_missoes` passou a pedir também `selectinload(Mission.reschedules)`,
+    e o esperado subiu para **4** (a quarta é exatamente a do histórico, vista
+    na lista de SQL do teste); o `_povoar` do teste agora reagenda as missões
+    pendentes, e o teste de conteúdo confere o histórico de cada uma. Mutação:
+    tirar o `selectinload` novo reprova o caso de 8 missões (11 consultas); o
+    caso de 1 missão dá 4 com ou sem ele, por coincidência aritmética. A
+    montagem do turno da Tifa paga uma terceira consulta pequena fixa.
 97. **Minors das revisões adiados** (ledger e revisões), nenhum com efeito no
     produto: (a) os três `TypeDecorator` de `missions/models.py` são quase
     iguais, e o `cascade` de `Mission.evidence`/`Mission.evaluation` não usa
@@ -4088,15 +4410,30 @@ ledger; nenhum é bug esquecido.
     #4 a #18 citados neste documento e no `docs/ARCHITECTURE.md` são do
     repositório **anterior**, apagado; no recriado eles não existem. Os hashes de commit citados
     continuam valendo no histórico local.
-99. **Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.** O aviso
-    foi **observado** pelo controlador nas anotações do CI da `main` do
-    repositório recriado (2026-09-28). Os jobs de
-    `.github/workflows/quality.yml` usam `runs-on: ubuntu-latest`, então
-    passam a rodar na imagem nova sem mudança no arquivo. Nada foi medido
-    sobre a imagem nova; se algum passo do gate depender da versão do sistema
-    (Node, PostgreSQL, Gitleaks), é o primeiro suspeito depois da data.
-    Fixar `ubuntu-24.04` adia a mudança, ao custo de perder as atualizações
-    da imagem.
+99. ~~**Nota: o `ubuntu-latest` migra para o Ubuntu 26 em 2026-10-19.**~~
+    **Resolvida em 2026-09-29 (lote de infraestrutura, branch
+    `wt/lote-infra`):** os cinco jobs de `.github/workflows/quality.yml`
+    passaram a `runs-on: ubuntu-24.04`, e um bloco de comentário no topo de
+    `jobs:` registra o porquê. O aviso continua sendo o que era: **observado**
+    pelo controlador nas anotações do CI da `main` (2026-09-28), não medido.
+    Conferência feita nesta resolução, por leitura do workflow e dos scripts,
+    do que depende da imagem: (a) o `playwright install --with-deps` (apt
+    do sistema; o Playwright declara suporte por versão do Ubuntu) — é o
+    passo que a troca de imagem mais arriscaria; (b) o curl 8.5.0 que o
+    `scripts/install-gitleaks.sh` assume (`docs/QUALITY.md` §4 já cita
+    `ubuntu-24.04`); (c) `shasum`/`sha256sum`, presentes na imagem; (d) o
+    `psql`, pré-instalado na imagem e usado sem instalação nos passos "Criar o
+    banco de teste" de `check-api` e `check-e2e` (`quality.yml`). **Não
+    dependem da imagem:** o serviço `postgres:18.6-alpine` (container), o
+    binário do Gitleaks (`linux_x64`, conferido por hash), `setup-node` e
+    `setup-uv` (baixam o que pedem). **Estado: não executado no CI** — a
+    mudança de runner só se prova quando o PR rodar o workflow; localmente,
+    o que foi verificado é que o YAML carrega e que o `make check` aprova.
+    **Custo aceito:** a imagem deixa de receber as atualizações do
+    `ubuntu-latest`, e uma imagem fixada acaba sendo aposentada pelo GitHub
+    (data não consultada nesta sessão) — por isso a data de revisão abaixo.
+    **Revisitar em 2026-12-01:** subir para a versão seguinte de propósito,
+    num PR que rode o gate inteiro nela (o comentário no workflow repete a data).
 100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
     log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
     funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
@@ -4155,7 +4492,7 @@ ledger; nenhum é bug esquecido.
     no máximo. Custo, portanto, só de dinheiro e de um `409` na primeira. A
     conversa tem o mesmo problema. Uma correção subiria o corte para além do
     pior caso (ou contaria o tempo pela soma das tentativas do SDK).
-107. **Etiquetas de revisão remanescentes em títulos de teste e em
+~~107. **Etiquetas de revisão remanescentes em títulos de teste e em
     comentários** (revisões dos lotes MF e MB; a revisão de comentários pedia tirar
     a etiqueta e manter o porquê). Restaram, no frontend: `MissionList.test.tsx`
     (o "e M12 que faz..." na linha 517, opaco; os títulos `fix-1:` nas linhas
@@ -4166,12 +4503,58 @@ ledger; nenhum é bug esquecido.
     `useProgress`, `useCurrentPlan`, `useRefreshOnReturn`, `civilDate.test.ts`,
     `Campaigns.test.tsx`, `App.test.tsx`, `CampaignTrail` e `types/reward.ts`
     ("Review Focus 1"), e uma linha de comentário com mais de 100 colunas em
-    `useCompletionRegistry.ts` (reflow incompleto). No backend, rótulos de medição
-    ("M8", "M6 e M7", "(M3)") em `anthropic_provider.py`, além de `tutoring/service.py`,
-    `context.py:98` e `test_tutoring_context.py:113`. E o comentário de
+    `useCompletionRegistry.ts` (reflow incompleto). E o comentário de
     `frontend/src/shared/types/mission.ts` que diz "`EvaluationSummary` da API"
     quando o nome no backend é `EvaluationSummaryRead` (m8 da revisão final). Parte
-    disso vem de incrementos anteriores ao E, e nada tem efeito no produto.
+    disso vem de incrementos anteriores ao E, e nada tem efeito no produto.~~
+    **Resolvida na sessão de 2026-09-29:** o frontend e o backend foram
+    resolvidos em lotes separados e juntados na branch de integração; com os
+    dois, a pendência está inteiramente resolvida. O que ficou de fora de
+    propósito está descrito abaixo, por lado.
+
+    **Frontend (lote do frontend, 2026-09-29; segunda passada depois da revisão
+    do lote):** `MissionList.test.tsx` ("M12", os quatro títulos `fix-1:`,
+    "Task 8" e "Incremento A, Task 6"), `EvaluationPanel.test.tsx` (`describe`
+    "fix-1 da revisão", "(M2)"), `EvidenceForm.test.tsx` ("(M4)"), os comentários
+    de "Task 8, incremento D", "achado ..." e "revisão" em `CycleSection`,
+    `MissionList`, `useCycle`, `useProgress`, `useCurrentPlan`,
+    `useRefreshOnReturn`, `civilDate.test.ts`, `Campaigns.test.tsx`,
+    `App.test.tsx`, `CampaignTrail`, `types/reward.ts` ("Review Focus 1"), o
+    reflow de `useCompletionRegistry.ts` e o comentário de
+    `shared/types/mission.ts` ("`EvaluationSummary` da API", que agora diz
+    `EvaluationSummaryRead`, no backend); o mesmo vale para as etiquetas
+    equivalentes das specs E2E e dos comentários (`Task N`, `Ruling`, `Review
+    Focus`, `achado`, `R12`, `m1` a `m7`, `I1`), reescritas para dizer o motivo
+    sem citar a revisão (incluindo `Campaigns.tsx`, `mission.ts`,
+    `completionFailure.ts`, `CycleSection.tsx`, `MissionCard.tsx` e
+    `civilDate.test.ts`); as etiquetas `I1:` e `m1:` a `m7:` saíram também dos
+    títulos de teste. **Ficaram, de propósito, só os identificadores de caso do
+    plano** nos títulos: `T1` a `T7` (`MissionList.test.tsx`), `D1` a `D9`
+    (`useDecideAction.test.tsx`), `P1` a `P32` (`TutorPanel.test.tsx`), `C1` a
+    `C10` (`ProposalCard.test.tsx`) e `Q1`/`Q2` (`Headquarters.test.tsx`): são a
+    numeração dos casos do plano, e não citam uma revisão. Também ficaram as
+    referências a **decisões numeradas** que têm tabela neste documento (`E17`,
+    `E18`, `EM1`, `D16`, `K2`, `K5`), porque apontam para uma decisão
+    registrada, e não para um achado de revisão.
+
+    **Backend (lote-obs, 2026-09-29):** em `src/`, `tests/`,
+    `alembic/` e `scripts/`, 33 arquivos tiveram só comentários, docstrings e
+    títulos de teste reescritos (nenhum comportamento mudou; nenhuma função de
+    teste foi renomeada). Saíram as citações de revisão — rótulos de medição
+    (`medicao M2`, `M3`, `M4`, `M5`, `M6 e M7`, `M8`, `M9`, `M1`), `Task N` que
+    só cita a tarefa, `Review Focus N`, `fix round N/5`, "mutacao N do brief",
+    "Step N", `m3 da revisao`, `revisao M1`, `R4 corrigida`, "medido pelo
+    revisor", "revisao final da branch", "revisao da Frente 0" — e cada frase
+    passou a dizer o motivo (por exemplo, "o `Fim` não cobre o esgotamento de
+    `tutor_max_tokens`" no lugar de "M3 não cobre"). Também saiu a referência a
+    `task-6-report.md` em `test_tutoring_acoes.py`, arquivo que nem está no
+    repositório. **Ficou de propósito:** ids de decisão e de caso com tabela
+    neste documento ou na spec (`C1`–`C13`, `D8`, `P3`, `P4`, `P6`, `P7`, `F9`,
+    `A4`, `D-a`/`E1`), a "emenda M1" da spec do 1b em `tutoring/sse.py` e
+    `tutoring/router.py` (é o número de uma emenda daquele documento, com a
+    medição completa), `REVISAO = "0005"` em `test_evaluation_migration.py` (é a
+    revisão do Alembic, não da revisão de código), e o verbo "medido" solto,
+    que descreve um fato observado e não cita revisão.
 108. **O cartão avaliado do E2E aparece nas telas das specs seguintes e entra no
     axe delas** (Task 8). O banco do E2E é compartilhado e não é limpo entre specs
     (`reiniciar()` limpa só o falso); as outras specs se protegem por delta e por id,
@@ -4181,6 +4564,82 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
+    2026-09-29; consequência da pendência 99). Os jobs rodam em
+    `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
+    subir a versão de propósito, num PR que rode o gate inteiro na imagem
+    nova (o ponto de atrito provável é o apt do `playwright install
+    --with-deps`). A mudança de `ubuntu-latest` para `ubuntu-24.04` **não foi
+    executada no CI** ainda: fica provada, ou não, no primeiro PR que rodar o
+    workflow.
+131. **As configurações de `.run/` nunca foram abertas no PyCharm** (lote de
+    infraestrutura, 2026-09-29; pendência 17). Os testes só garantem o que se
+    lê nos arquivos. Falta, na IDE: abrir o projeto, ver as cinco
+    configurações aparecerem, executar **API**, **Testes backend** e **Gate**,
+    e **Frontend** / **Testes frontend** com um Node configurado; e conferir se
+    o `$PROJECT_DIR$/.venv/bin/python` é resolvido no `SDK_HOME` e se o módulo
+    `focusquest` existe num clone com outro nome de pasta. Se algo divergir, a
+    correção é no formato dos arquivos e no `tests/unit/test_run_configs.py`.
+    Limitação conhecida: o `Gate.run.xml` fixa `INTERPRETER_PATH=/bin/zsh`, então
+    só serve no macOS do dono (num clone Linux ou Windows, ajustar ou usar o
+    terminal).
+150. **O logging da pendência 13 é mínimo, e o que ele não cobre ficou sem
+    medir ou sem fazer** (sessão de 2026-09-29, lote-obs). (a) Sob o
+    uvicorn, só a configuração padrão foi medida: `--reload`, `--workers`
+    e um `--log-config` que configure a raiz não foram rodados (o último é
+    respeitado por construção — `basicConfig` não faz nada se a raiz já tem
+    handler —, e o teste unitário o prova com um handler na raiz, não com o
+    uvicorn). (b) Texto simples, sem identificador de requisição nem JSON:
+    correlacionar as linhas de uma requisição depende do instante. (c) O
+    log é configurado na partida: uma linha emitida na importação de um
+    módulo cairia no `lastResort` (hoje não há nenhuma). (d) O Alembic
+    continua com a configuração de log do `alembic.ini`, que não lê
+    `FOCUSQUEST_LOG_LEVEL`. (e) A garantia contra vazar segredo é
+    estrutural (o nível não liga o DEBUG de terceiros, e nenhuma linha do app
+    registra configuração) e testada nos caminhos da partida e do `/ready`;
+    uma linha nova de `_log` que interpole a configuração não é pega por
+    teste nenhum — é revisão. Se ninguém mexer: nada quebra; o custo aparece
+    no dia em que houver mais de um processo ou um coletor de log.
+151. **Rodar de fora da raiz continua exigindo a receita da pendência 29**
+    (sessão de 2026-09-29, lote-obs). `uv run uvicorn …` ou `alembic …`
+    sem `--project`/`--env-file`/`-c`, de outro diretório, falham como
+    antes — alto, não em silêncio. A própria suíte também depende da raiz:
+    `alembic_config()` em `tests/integration/conftest.py` abre
+    `Config("alembic.ini")`, relativo; o `Makefile`, o CI e o
+    `scripts/e2e-env.sh` já rodam da raiz. O `--env-file` do `uv` carrega o
+    `.env` no **ambiente**, e o `Settings` só é estrito no arquivo
+    (pendência 12): por esse caminho, uma chave `FOCUSQUEST_*` desconhecida
+    no `.env` é descartada em silêncio em vez de reprovar. Se ninguém mexer:
+    nada muda para quem trabalha da raiz.
+
+**Criadas pelo lote back (2026-09-29)**
+
+120. **Só `max_tokens` conta como corte; os outros `stop_reason` continuam
+     gravando `completa`.** O adaptador de conversa (`responder`) distingue
+     apenas `max_tokens` (pendência 45). `model_context_window_exceeded` —
+     também uma resposta truncada — e `refusal` chegariam como `completa`. O
+     servidor falso só roteiriza `end_turn`, `tool_use` e `max_tokens`, e uma
+     guarda sem teste que a prove não entrou. Resolver: estender o `Literal`
+     do `Roteiro` e tratar a janela de contexto como corte (e decidir o que a
+     recusa deve mostrar).
+121. **A região viva anuncia "Tifa terminou de responder." também para a
+     resposta cortada pelo teto de tokens.** O `done` `interrompida` leva o
+     envio a `idle` com `finished`, e o texto da região viva
+     (`TutorPanel.tsx`) não olha o `status` da resposta. Quem enxerga vê a
+     marca "Resposta interrompida" e a nota de reenvio; quem usa leitor de
+     tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
+     pede o estado `idle` carregar o `status` da resposta (ou a região viva
+     ler a última mensagem) e um texto próprio para o corte.
+122. **O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
+     cortar de novo** (M1 da revisão do lote back). O reenvio manda a mesma
+     pergunta com o mesmo teto (`tutor_max_tokens`, 1024 por padrão), e a
+     nota da tela ("A última pergunta ficou sem resposta completa. Tentar de
+     novo é seguro…") não diz que a resposta ficou longa demais nem sugere
+     perguntar de outro jeito. A proposta que vinha depois do corte some sem
+     aviso (descartada de propósito: a entrada podia estar pela metade).
+     Resolver pede a tela distinguir o corte — o que esbarra na 121: o
+     `MessageRead` não diz **por que** a resposta ficou `interrompida` — e um
+     texto próprio ("a resposta ficou longa demais; tente pedir por partes").
 
 ## Próximo incremento
 

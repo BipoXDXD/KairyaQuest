@@ -197,7 +197,7 @@ def test_concluir_devolve_reward(client: TestClient) -> None:
 
 
 def test_reenvio_devolve_o_mesmo_corpo_com_reward(client: TestClient) -> None:
-    """Review Focus 1: reenvio antigo depois de outras conclusoes.
+    """Reenvio antigo depois de outras conclusoes.
 
     Conclui A (fica no nivel 2), cria e conclui B (nivel 3), e o reenvio de A
     tem de devolver EXATAMENTE o corpo do primeiro envio de A -- inclusive o

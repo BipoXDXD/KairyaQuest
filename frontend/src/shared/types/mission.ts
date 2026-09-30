@@ -10,7 +10,7 @@
  * tipos da mesma resposta para manter em sincronia com o backend.
  *
  * `features/missions/types.ts` NAO reexporta estes nomes: quem precisar deles
- * importa daqui diretamente (R3 do controlador do Incremento C).
+ * importa daqui diretamente (um reexport deixaria dois caminhos para o mesmo tipo).
  *
  * Os nomes dos campos estao em `snake_case` e em ingles porque sao as chaves do
  * payload -- contrato que atravessa a rede.
@@ -43,9 +43,9 @@ export const DAYS_PER_MILESTONE = 7
 /**
  * A dificuldade maxima. Espelha `DIFICULDADE_MAXIMA`, em
  * src/focusquest/modules/missions/schemas.py, a mao. A trilha
- * (`features/campaigns/`) usa esta constante; o cartao de
- * `features/missions/MissionCard.tsx` e o de proposta da tutoria ainda
- * escrevem o "de 5" literal (nao mexidos por este incremento).
+ * (`features/campaigns/`), o cartao de `features/missions/MissionCard.tsx` e o
+ * de proposta da tutoria (`features/tutoring/ProposalCard.tsx`) escrevem o
+ * "de N" a partir desta constante.
  */
 export const MAX_DIFFICULTY = 5
 
@@ -64,7 +64,7 @@ export interface Evidence {
   link: string | null
 }
 
-/** O resumo da avaliacao (`EvaluationSummary` da API). Sem `bonus_xp` (EM1). */
+/** O resumo da avaliacao (`EvaluationSummaryRead`, no backend). Sem `bonus_xp` (EM1). */
 export interface EvaluationSummary {
   state: EvaluationState
   verdict: Verdict | null
@@ -102,9 +102,8 @@ export interface Mission {
   /**
    * De 1 a 5; o teto e imposto pela API. O 5 espelha `DIFICULDADE_MAXIMA`, em
    * src/focusquest/modules/missions/schemas.py, e nada amarra os dois: quem
-   * mudar la tem de mudar aqui (`MAX_DIFFICULTY`) e no "de 5" literal de
-   * `features/missions/MissionCard.tsx` e `features/tutoring/ProposalCard.tsx`
-   * (pendencia do Incremento C em `docs/HANDOFF.md`).
+   * mudar la tem de mudar aqui (`MAX_DIFFICULTY`), que os tres
+   * lugares da tela usam.
    */
   difficulty: number
   estimated_minutes: number

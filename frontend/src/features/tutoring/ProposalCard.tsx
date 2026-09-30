@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
+import { MAX_DIFFICULTY } from '../../shared/types/mission'
 import { failedActionText } from './actionFailure'
 import { BoardLink, DecisionControls } from './DecisionControls'
 import { RescheduleProposalCard } from './RescheduleProposalCard'
@@ -108,13 +109,12 @@ function MissionProposalCard({
       </p>
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-300">
         <dt className="text-slate-400">Dificuldade</dt>
-        {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
-            src/focusquest/modules/missions/schemas.py, a mao (pendencia 32).
-            E a TERCEIRA copia: as outras duas estao em `missions/types.ts` e
-            `missions/MissionList.tsx`. Esta feature nao importa de `missions/`
-            (`docs/ARCHITECTURE.md` §5, regra 1), e o literal nao e regra que
-            justifique subir para `shared/`. */}
-        <dd data-testid="proposal-difficulty">{payload.difficulty} de 5</dd>
+        {/* O teto vem de `MAX_DIFFICULTY`, em `shared/types/mission.ts`: esta
+            feature importa so de `shared/`, nunca de `missions/`
+            (`docs/ARCHITECTURE.md` §5, regra 1). */}
+        <dd data-testid="proposal-difficulty">
+          {payload.difficulty} de {MAX_DIFFICULTY}
+        </dd>
 
         <dt className="text-slate-400">Estimativa</dt>
         <dd data-testid="proposal-estimated-minutes">{payload.estimated_minutes} min</dd>

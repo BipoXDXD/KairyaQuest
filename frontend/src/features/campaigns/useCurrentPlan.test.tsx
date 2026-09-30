@@ -412,7 +412,7 @@ describe('useCurrentPlan', () => {
     })
   })
 
-  // Achado I1 da revisao final (Ruling R12). `refresh()` incrementa a
+  // Falha do `refresh` com a tela ainda em "carregando". `refresh()` incrementa a
   // sequencia, entao a resposta da carga inicial do efeito passa a ser
   // descartada quando chegar -- quem decide o estado e o refresh. Se ele
   // falha com a tela ainda em "carregando", "carregando" vira ERRO (com o

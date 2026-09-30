@@ -76,7 +76,7 @@ def enviar(
 
     Os erros da preparacao (sem chave, 409) saem como JSON comum, antes de
     qualquer byte do stream, e nada foi gravado. A transmissao usa sessoes
-    proprias, nunca a da requisicao (medicao M2).
+    proprias, nunca a da requisicao (a dela fecha antes do `finally` do gerador).
     """
     if tutoria is None:
         raise ProvedorNaoConfiguradoError("a Tifa esta sem provedor configurado")

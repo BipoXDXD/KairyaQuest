@@ -55,7 +55,7 @@ describe('ProgressPanel', () => {
     expect(barra).toHaveAttribute('aria-valuemin', '0')
     expect(barra).toHaveAttribute('aria-valuemax', '500')
     expect(barra).toHaveAttribute('aria-valuenow', '340')
-    expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP até o nível 6')
+    expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP')
     expect(screen.getByTestId('progress-bar-text')).toHaveTextContent('340 de 500 XP até o nível 6')
   })
 
@@ -63,7 +63,7 @@ describe('ProgressPanel', () => {
     serve(progress(1340, 5, 1000, 1500))
     render(<ProgressPanel />)
     const barra = await screen.findByRole('progressbar', { name: 'Progresso até o nível 6' })
-    expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP até o nível 6')
+    expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP')
     const texto = screen.getByTestId('progress-bar-text')
     expect(texto).toHaveTextContent('340 de 500 XP até o nível 6')
     expect(isInaccessible(texto)).toBe(true)
@@ -74,7 +74,7 @@ describe('ProgressPanel', () => {
     render(<ProgressPanel />)
     const barra = await screen.findByRole('progressbar')
     expect(barra).toHaveAttribute('aria-valuenow', '0')
-    expect(barra).toHaveAttribute('aria-valuetext', '0 de 500 XP até o nível 6')
+    expect(barra).toHaveAttribute('aria-valuetext', '0 de 500 XP')
   })
 
   it('saldo grande formatado em pt-BR', async () => {

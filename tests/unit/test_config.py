@@ -32,7 +32,7 @@ def test_falha_quando_a_url_do_banco_nao_esta_no_ambiente(
     monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
     monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     # O Settings le ".env" (caminho relativo) do diretorio de trabalho. Sem
-    # o chdir, o .env real do repositorio (README s4/Step 9) esconderia a
+    # o chdir, o .env real do repositorio (README s4) esconderia a
     # falta de configuracao e o teste pararia de testar o que promete.
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError):
@@ -139,6 +139,18 @@ def test_a_chave_nao_aparece_na_representacao(
     assert "sk-ant-segredo" not in str(settings)
 
 
+def test_o_nivel_de_log_e_campo_declarado_do_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`FOCUSQUEST_LOG_LEVEL` no .env nao pode derrubar o `Settings` com
+    `extra_forbidden`: o campo vem de `ConfiguracaoDeLog`, que o `Settings`
+    herda -- um lugar so onde o nivel e declarado e validado."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, "FOCUSQUEST_LOG_LEVEL=warning\n"
+    )
+    assert settings.log_level == "WARNING"
+
+
 def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Os padroes da spec -- e o endereco da API escrito por extenso.
 
@@ -186,8 +198,8 @@ def test_a_suite_nunca_aponta_para_a_anthropic() -> None:
 def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais
-    (Task 8 do 1b-2). Um `make check` rodado num shell que a exportou herda a
+    """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais.
+    Um `make check` rodado num shell que a exportou herda a
     variavel: o provedor da suite tem de continuar numa porta fechada."""
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-api03-parece-de-verdade")
     settings = Settings()

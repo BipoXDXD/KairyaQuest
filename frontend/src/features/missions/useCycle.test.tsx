@@ -191,7 +191,7 @@ describe('useCycle', () => {
   })
 
   it('o primeiro refresh tem sucesso e o segundo (mais recente) falha depois: o aviso reflete o pedido mais recente', async () => {
-    // Decisao de desenho (correcao da Task 5, achado da revisao): a
+    // Decisao de desenho: a
     // resposta que conta e sempre a do pedido mais RECENTE -- sucesso ou
     // falha, a mesma regra dos dois lados, sem tratar erro como caso
     // especial. Por isso aqui, mesmo o PRIMEIRO tendo sucesso, o resultado
@@ -389,7 +389,7 @@ describe('useCycle', () => {
     })
   })
 
-  // Achado I1 da revisao final (Ruling R12). `refresh()` incrementa a
+  // Falha do `refresh` com a tela ainda em "carregando". `refresh()` incrementa a
   // sequencia, entao a resposta da carga inicial do efeito passa a ser
   // descartada quando chegar -- quem decide o estado e o refresh. Se ele
   // falha com a tela ainda em "carregando", "carregando" vira ERRO (com o

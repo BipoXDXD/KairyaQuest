@@ -146,7 +146,7 @@ def _mensagens(historico: Sequence[TutorMessage]) -> tuple[MensagemDoTurno, ...]
     mensagens sem texto nenhum.
 
     Uma `completa` sem texto e sem acao existe: e o `message_stop` que chega
-    sem nunca emitir um bloco (a guarda M3 cobre o corte de transporte, nao o
+    sem nunca emitir um bloco (a guarda do `Fim` cobre o corte de transporte, nao o
     esgotamento de `tutor_max_tokens` -- pendencia registrada no HANDOFF).
     Deixar essa mensagem virar `MensagemDoTurno` de texto vazio quebraria TODA
     resposta seguinte: a API da Anthropic rejeita mensagem sem conteudo, e a

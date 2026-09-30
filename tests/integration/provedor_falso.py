@@ -108,7 +108,7 @@ class Roteiro:
 
     - `status_http` diferente de 200: responde um erro JSON, sem stream.
     - `cortar_apos_eventos`: fecha a conexao depois de N eventos, sem
-      `message_stop` (o corte que o SDK nao denuncia, medicao M3).
+      `message_stop` (o corte que o SDK nao denuncia).
     - `atrasar_evento`: `(indice, segundos)`, uma demora antes do evento.
     - `atrasar_cabecalhos`: uma demora antes de responder qualquer coisa.
     - `segurar_apos_eventos`: depois de N eventos, espera `liberar` antes de

@@ -99,9 +99,9 @@ export interface UseCompletionRegistryResult {
  * As chaves do Iniciar e do Reagendar (incremento F) moram no mesmo registro,
  * pelo mesmo motivo, num mapa a parte: por missao e por tipo (`actionKeyFor`).
  *
- * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e escritos so dentro de
- * callbacks, e mudar um deles nao deve renderizar nada. O que a tela mostra --
- * se ha espera -- e estado. O pedido pendente tem as duas formas porque
+ * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e
+ * escritos so dentro de callbacks, e mudar um deles nao deve renderizar nada.
+ * O que a tela mostra -- se ha espera -- e estado. O pedido pendente tem as duas formas porque
  * `settled` precisa le-lo na hora, sem esperar o proximo render.
  */
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {

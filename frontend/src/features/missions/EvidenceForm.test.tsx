@@ -124,7 +124,7 @@ describe('EvidenceForm', () => {
     expect(texto.getAttribute('aria-describedby')).toContain(contador.id)
   })
 
-  it('digitando um link invalido, o erro NAO aparece nem e anunciado (M4)', () => {
+  it('digitando um link invalido, o erro NAO aparece nem e anunciado', () => {
     render(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')

@@ -125,6 +125,47 @@ describe('useMissions', () => {
     expect(chamadas).toBe(2)
   })
 
+  it('depois do reload, a resposta do pedido antigo, que chega por ultimo, nao sobrescreve a nova', async () => {
+    // O `fetch` falso IGNORA o abort (o de verdade costuma rejeitar tambem a
+    // leitura do corpo, mas uma resposta ja em processamento pode escapar): a
+    // resposta velha chega DEPOIS da nova, e so a guarda de `signal.aborted`
+    // no sucesso impede que ela grave o estado por cima.
+    const respostas: Array<(response: Response) => void> = []
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          respostas.push(resolve)
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const velha: Mission = { ...missao, id: 1, instructions: 'Missao velha' }
+    const nova: Mission = { ...missao, id: 2, instructions: 'Missao nova' }
+
+    const { result } = renderHook(() => useMissions())
+    await waitFor(() => {
+      expect(respostas).toHaveLength(1)
+    })
+    act(() => {
+      result.current.reload()
+    })
+    await waitFor(() => {
+      expect(respostas).toHaveLength(2)
+    })
+
+    act(() => {
+      respostas[1]?.(Response.json([nova]))
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'loaded', missions: [nova] })
+    })
+    await act(async () => {
+      respostas[0]?.(Response.json([velha]))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(result.current.state).toEqual({ status: 'loaded', missions: [nova] })
+  })
+
   it('reload volta a carregar e refaz o pedido', async () => {
     const fetchMock = vi
       .fn()

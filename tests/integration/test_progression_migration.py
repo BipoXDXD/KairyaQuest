@@ -42,7 +42,7 @@ from .conftest import alembic_config
 
 ESTUDANTE = 1
 
-# O cenario do brief: uma avulsa isolada, um plano da semana com as 7
+# O cenario: uma avulsa isolada, um plano da semana com as 7
 # diarias e a especial, uma avulsa criada pela Tifa (tutor_actions), e uma
 # avulsa pendente que nao pode gerar lancamento.
 SEMANA = date(2026, 9, 14)
@@ -53,7 +53,8 @@ ESPECIAL_CONCLUIDA = datetime(2026, 9, 21, 15, 0, tzinfo=UTC)
 TIFA_PROPOSTA_EM = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 TIFA_CONCLUIDA = datetime(2026, 9, 22, 15, 0, tzinfo=UTC)
 
-# Um dia perdido depois do marco (mutacao 3 do brief, Step 5): sem ele,
+# Um dia perdido depois do marco (a mutacao que troca a maior sequencia
+# pela sequencia ate o marco): sem ele,
 # `_maior_sequencia` e `_sequencia_ate(historico, max(historico))` dariam o
 # mesmo resultado, e a mutacao nao reprovaria nada.
 PROXIMA_SEGUNDA = SEMANA + timedelta(days=14)
@@ -68,8 +69,8 @@ def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
     """Insere o cenario na tabela crua, em 0003 (antes da migracao 0004).
 
     A avulsa da Tifa nasce com id MENOR que o das diarias, embora conclua
-    DEPOIS delas -- e o que torna a mutacao 2 do Step 5 discriminante
-    (ORDER BY id, sem completed_at, daria uma ordem de processamento
+    DEPOIS delas -- e o que torna discriminante a mutacao que ordena so
+    por id (ORDER BY id, sem completed_at, daria uma ordem de processamento
     diferente da ordem cronologica).
     """
     ids: dict[str, Any] = {}
@@ -347,7 +348,7 @@ def test_o_backfill_falha_alto_com_missao_concluida_sem_data(
 
 
 # ---------------------------------------------------------------------------
-# O teste de equivalencia (D8, Task 3): o backfill da migracao bate com o
+# O teste de equivalencia (D8): o backfill da migracao bate com o
 # credito do servico de hoje, no MESMO cenario -- construido duas vezes, cada
 # vez para um usuario PROPRIO (para que os dois nao disputem qual mission
 # unlocked "first_steps" primeiro quando os dois rodam no mesmo backfill
