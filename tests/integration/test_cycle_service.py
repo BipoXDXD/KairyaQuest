@@ -26,7 +26,11 @@ from focusquest.modules.missions.cycle_service import (
 )
 from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission, WeeklyPlan
-from focusquest.modules.missions.service import concluir_missao, criar_missao
+from focusquest.modules.missions.service import (
+    concluir_missao,
+    criar_missao,
+    iniciar_missao,
+)
 
 ESTUDANTE = 1
 SEGUNDA = date(2026, 9, 21)
@@ -363,3 +367,139 @@ def test_ler_especial_revelada_responde_pelo_mesmo_caminho_da_trilha(
     domingo = SEGUNDA + timedelta(days=6)
     lida = ler_missao(session, especial, ao_meio_dia(domingo))
     assert lida.availability is Availability.DISPONIVEL
+
+
+# --- F25: conclusao tardia da missao iniciada a tempo ----------------------
+
+QUARTA = SEGUNDA + timedelta(days=2)
+QUINTA = SEGUNDA + timedelta(days=3)
+
+
+def _as(dia: date, hora: int, minuto: int = 0) -> datetime:
+    """`hora:minuto` em Sao Paulo (UTC-3) no `dia`."""
+    return datetime(dia.year, dia.month, dia.day, tzinfo=UTC) + timedelta(
+        hours=hora + 3, minutes=minuto
+    )
+
+
+def _iniciar_as(session: Session, missao: Mission, agora: datetime) -> None:
+    iniciar_missao(
+        session, ESTUDANTE, missao.id, f"op-i-{missao.id}", clock=relogio(agora)
+    )
+
+
+def test_o_ciclo_mostra_a_diaria_de_ontem_iniciada_a_tempo(session: Session) -> None:
+    _criar(session)
+    quarta = _diaria_do_dia(session, QUARTA)
+    _iniciar_as(session, quarta, _as(QUARTA, 23, 50))
+
+    madrugada = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(QUINTA, 0, 10)))
+    assert madrugada.missao is not None
+    assert madrugada.missao.missao.day == QUINTA
+    assert madrugada.diaria_de_ontem is not None
+    assert madrugada.diaria_de_ontem.missao.id == quarta.id
+    assert madrugada.diaria_de_ontem.availability is Availability.DISPONIVEL
+    assert madrugada.diaria_de_ontem.deadline == fim_do_dia(QUARTA)
+
+    concluir_missao(
+        session, ESTUDANTE, quarta.id, "op-tardia", clock=relogio(_as(QUINTA, 0, 10))
+    )
+    # O refresh que segue a conclusao nao tira o cartao da tela.
+    noite = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(QUINTA, 23, 59)))
+    assert noite.diaria_de_ontem is not None
+    assert noite.diaria_de_ontem.availability is Availability.CONCLUIDA
+    assert noite.sequencia == 1
+
+    # Sexta: "ontem" e quinta, pendente -- nada tardio a mostrar.
+    sexta = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(QUINTA, 24, 0)))
+    assert sexta.diaria_de_ontem is None
+
+
+def test_a_diaria_de_ontem_sem_inicio_ou_feita_a_tempo_nao_aparece(
+    session: Session,
+) -> None:
+    _criar(session)
+    pendente = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(QUINTA, 0, 10)))
+    assert pendente.diaria_de_ontem is None
+
+    _concluir_no_dia(session, QUARTA)
+    a_tempo = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(QUINTA, 0, 10)))
+    assert a_tempo.diaria_de_ontem is None
+
+
+def test_a_diaria_de_ontem_iniciada_a_tempo_perde_o_prazo_no_limite(
+    session: Session,
+) -> None:
+    """Iniciada e nunca concluida: no limite (fim do dia seguinte) volta a ser
+    perdida, na trilha, e some do Quartel-General."""
+    _criar(session)
+    _iniciar_as(session, _diaria_do_dia(session, QUARTA), _as(QUARTA, 23, 50))
+
+    trilha = ler_plano_atual(session, ESTUDANTE, clock=relogio(_as(QUINTA, 23, 59)))
+    assert trilha is not None
+    assert trilha.dias[2].availability is Availability.DISPONIVEL
+
+    depois = ler_plano_atual(session, ESTUDANTE, clock=relogio(_as(QUINTA, 24, 0)))
+    assert depois is not None
+    assert depois.dias[2].availability is Availability.PERDIDA
+
+
+def test_a_diaria_de_domingo_iniciada_a_tempo_aparece_na_segunda(
+    session: Session,
+) -> None:
+    """A virada da semana nao muda nada: "ontem" e o domingo da semana
+    anterior."""
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    domingo = _diaria_do_dia(session, SEGUNDA + timedelta(days=6))
+    _iniciar_as(session, domingo, _as(SEGUNDA + timedelta(days=6), 23, 50))
+    ciclo = ler_ciclo(
+        session, ESTUDANTE, clock=relogio(_as(SEGUNDA + UMA_SEMANA, 0, 10))
+    )
+    assert ciclo.diaria_de_ontem is not None
+    assert ciclo.diaria_de_ontem.missao.id == domingo.id
+
+
+def test_a_especial_iniciada_na_janela_continua_no_ciclo_ate_o_limite(
+    session: Session,
+) -> None:
+    """Marco no domingo 27: a janela fecha terca 29 00:00; iniciada na
+    segunda as 23:50, a especial continua no ciclo ate quarta 30 00:00."""
+    _semana_inteira(session)
+    especial = session.scalars(
+        select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+    ).one()
+    segunda_seguinte = SEGUNDA + UMA_SEMANA
+    terca = segunda_seguinte + timedelta(days=1)
+    _iniciar_as(session, especial, _as(segunda_seguinte, 23, 50))
+
+    na_terca = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(terca, 10)))
+    assert na_terca.especial is not None
+    assert na_terca.especial.availability is Availability.DISPONIVEL
+
+    concluir_missao(
+        session, ESTUDANTE, especial.id, "op-e-tardia", clock=relogio(_as(terca, 10))
+    )
+    assert especial.state is MissionState.CONCLUIDA
+    concluida = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(terca, 23, 59)))
+    assert concluida.especial is not None
+    assert concluida.especial.availability is Availability.CONCLUIDA
+
+    no_limite = ler_ciclo(session, ESTUDANTE, clock=relogio(_as(terca, 24, 0)))
+    assert no_limite.especial is None
+
+
+def test_a_especial_iniciada_na_janela_e_nao_concluida_some_no_limite(
+    session: Session,
+) -> None:
+    _semana_inteira(session)
+    especial = session.scalars(
+        select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+    ).one()
+    segunda_seguinte = SEGUNDA + UMA_SEMANA
+    _iniciar_as(session, especial, _as(segunda_seguinte, 23, 50))
+    no_limite = ler_ciclo(
+        session,
+        ESTUDANTE,
+        clock=relogio(_as(segunda_seguinte + timedelta(days=1), 24, 0)),
+    )
+    assert no_limite.especial is None
