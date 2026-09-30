@@ -202,7 +202,10 @@ def test_resposta_cortada_por_max_tokens_chega_no_done_como_interrompida(
 ) -> None:
     """Pendencia 45, pelo contrato: o `done` traz a mensagem com `status`
     `interrompida` e sem acao. A tela ja marca esse estado ("Resposta
-    interrompida") e oferece "Tentar de novo" pela ultima pergunta."""
+    interrompida") e oferece "Tentar de novo" pela ultima pergunta.
+
+    A ferramenta completa antes do `max_tokens` e o pior caso de proposito
+    (ver `test_proposta_cortada_por_max_tokens_nao_vira_acao`)."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Comeco",)), ChamadaDeFerramenta(PROPOSTA)),
         stop_reason="max_tokens",

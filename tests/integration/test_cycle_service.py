@@ -14,7 +14,11 @@ from focusquest.core.errors import (
     SemanaDistanteError,
     SemanaEncerradaError,
 )
-from focusquest.modules.missions.cycle_domain import Availability, fim_do_dia
+from focusquest.modules.missions.cycle_domain import (
+    Availability,
+    fim_da_janela_da_especial,
+    fim_do_dia,
+)
 from focusquest.modules.missions.cycle_service import (
     NovaDiaria,
     NovaEspecial,
@@ -462,7 +466,7 @@ def test_a_trilha_mostra_a_especial_expirada_depois_da_janela(
     # trilha COM a missao -- expirada nao e bloqueada --, e o prazo e o fim da
     # quinta.
     trilha = ler_plano_atual(
-        session, ESTUDANTE, clock=relogio(datetime(2026, 9, 25, 3, tzinfo=UTC))
+        session, ESTUDANTE, clock=relogio(fim_da_janela_da_especial(marco))
     )
     assert trilha is not None
     assert trilha.especial.availability is Availability.EXPIRADA

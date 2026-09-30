@@ -211,6 +211,9 @@ def transmitir(
 
     O `RespostaConcluida` sai depois do commit, e o `RespostaFalhou` depois de
     a falha estar gravada: o cliente nunca age sobre algo que o banco nao tem.
+    A mensagem do `RespostaConcluida` e `completa` ou, quando o teto de tokens
+    cortou a resposta (`Fim(cortada=True)`, pendencia 45), `interrompida`, com
+    o texto parcial e sem acao.
 
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o

@@ -597,7 +597,13 @@ def test_proposta_cortada_por_max_tokens_nao_vira_acao(
     conversa: Conversa,
 ) -> None:
     """Com o corte, a entrada da ferramenta pode estar pela metade: nenhuma
-    acao nasce dela, mesmo que o que chegou passe no `MissionCreate`."""
+    acao nasce dela, mesmo que o que chegou passe no `MissionCreate`.
+
+    O roteiro -- um bloco de ferramenta COMPLETO seguido de `max_tokens` -- e o
+    pior caso escolhido de proposito, e nao o formato que a API real costuma
+    mandar (nela o corte cai no meio do bloco, e um bloco fechado termina em
+    `tool_use`). Com uma entrada que passa na validacao, so a guarda do corte
+    impede a acao: e exatamente o que um JSON parcial valido faria."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
         stop_reason="max_tokens",

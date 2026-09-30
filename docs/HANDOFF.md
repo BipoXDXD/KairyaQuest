@@ -3552,8 +3552,8 @@ que não tinham chegado aqui)
     `error_code` novo pede um código no `CodigoDoStream`, no
     `StreamErrorCode` e no mapa exaustivo de `messageFailure.ts`, e trataria
     como falha do provedor algo que é um limite configurado. `interrompida`
-    também é a leitura honesta — "a resposta não chegou inteira" — e traz de
-    graça o que se quer: a tela marca "Resposta interrompida" e oferece o
+    também é a leitura honesta — "a resposta não chegou inteira" — e reusa o
+    que já existe para esse estado: a tela marca "Resposta interrompida" e oferece o
     "Tentar de novo" do histórico (`pendingFromHistory`), o reenvio com o
     mesmo id gera resposta nova (só a `completa` conta como resposta), e o
     `_historico` do turno seguinte já exclui a `interrompida`, então o texto
@@ -3572,7 +3572,8 @@ que não tinham chegado aqui)
     reprova 4; sem o descarte da proposta, 2 (a ação nascia de uma entrada
     cortada); no frontend, a marca de `interrompida` nula reprova o P33 (e
     P5, P14, P30), e `pendingFromHistory` tratando `interrompida` como
-    resolvida reprova o P33 e o P17. Limitações novas: 120 e 121.
+    resolvida reprova o P33 e o P17. Limitações novas: 120, 121 e 122 (esta
+    da revisão: o reenvio oferecido tende a cortar de novo).
 46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
     o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
     não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
@@ -4301,6 +4302,16 @@ ledger; nenhum é bug esquecido.
      tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
      pede o estado `idle` carregar o `status` da resposta (ou a região viva
      ler a última mensagem) e um texto próprio para o corte.
+122. **O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
+     cortar de novo** (M1 da revisão do lote back). O reenvio manda a mesma
+     pergunta com o mesmo teto (`tutor_max_tokens`, 1024 por padrão), e a
+     nota da tela ("A última pergunta ficou sem resposta completa. Tentar de
+     novo é seguro…") não diz que a resposta ficou longa demais nem sugere
+     perguntar de outro jeito. A proposta que vinha depois do corte some sem
+     aviso (descartada de propósito: a entrada podia estar pela metade).
+     Resolver pede a tela distinguir o corte — o que esbarra na 121: o
+     `MessageRead` não diz **por que** a resposta ficou `interrompida` — e um
+     texto próprio ("a resposta ficou longa demais; tente pedir por partes").
 
 ## Próximo incremento
 
