@@ -87,6 +87,17 @@ EVENTOS_DO_PENSAMENTO = len(_eventos_do_pensamento())
 APOS_O_PRIMEIRO_PEDACO = EVENTOS_DO_PENSAMENTO + 3
 
 
+# Os motivos de parada que um roteiro pode escolher. `max_tokens` e
+# `model_context_window_exceeded` cortam a resposta; `refusal` e a recusa (os
+# classificadores ou o proprio modelo recusaram), que chega tambem num 200 com
+# `message_stop` (pendencia 120). `stop_sequence` e `pause_turn` ficam de fora:
+# a conversa nao manda `stop_sequences` nem ferramenta de servidor, e sem eles
+# a API nao os emite.
+MotivoDeParada = Literal[
+    "end_turn", "tool_use", "max_tokens", "model_context_window_exceeded", "refusal"
+]
+
+
 @dataclass(frozen=True)
 class Texto:
     """Um bloco de texto, entregue em pedacos (um `text_delta` por pedaco)."""
@@ -120,7 +131,8 @@ class Roteiro:
       (decisao do dono no ponto de parada 3 do 1b-2).
     - `stop_reason`: o motivo de parada do `message_delta`. `None` (padrao)
       deriva do roteiro: `tool_use` com ferramenta, `end_turn` sem ela. Um
-      valor explicito (ex.: `max_tokens`) deixa o teste roteirizar a parada.
+      valor explicito (`max_tokens`, `model_context_window_exceeded`,
+      `refusal`) deixa o teste roteirizar a parada.
     """
 
     blocos: tuple[Texto | ChamadaDeFerramenta, ...] = ()
@@ -130,7 +142,7 @@ class Roteiro:
     atrasar_cabecalhos: float = 0.0
     segurar_apos_eventos: int | None = None
     pensar: bool = True
-    stop_reason: Literal["end_turn", "tool_use", "max_tokens"] | None = None
+    stop_reason: MotivoDeParada | None = None
 
 
 @dataclass(frozen=True)

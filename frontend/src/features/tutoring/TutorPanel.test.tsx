@@ -20,6 +20,11 @@ const GREETING =
   'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
 const HISTORY_RETRY_NOTE =
   'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
+const LONG_NOTE =
+  'A última resposta ficou longa demais e foi cortada. Tente pedir por partes, um tópico de cada vez. Tentar de novo refaz a mesma pergunta e pode cortar outra vez.'
+// Os `error_code` escritos a mao, como o backend os grava (pendencia 32).
+const LONG = 'resposta_longa'
+const REFUSED = 'resposta_recusada'
 
 const question = (id: number, content: string, cmid: string): MessageRead => ({
   id,
@@ -543,18 +548,22 @@ describe('TutorPanel: o envio', () => {
     })
   })
 
-  it('P33 resposta cortada pelo teto de tokens: o done interrompida fica marcado e pode ser reenviado', async () => {
-    // Pendencia 45: o backend grava a resposta cortada por `max_tokens` como
-    // `interrompida` e a entrega no `done`. A tela nao precisa de estado novo:
-    // a marca e o "Tentar de novo" do historico ja cobrem a interrompida.
+  it('P33 resposta cortada por tamanho: marcada, anunciada como cortada, com a nota de pedir por partes', async () => {
+    // Pendencias 45, 121 e 122: o backend grava a resposta cortada pelo teto
+    // de tokens (ou pela janela de contexto) como `interrompida`, com
+    // `error_code` `resposta_longa`, e a entrega no `done`. A regiao viva nao
+    // diz "terminou", e a nota orienta a pedir por partes. Ate o lote g-tifa o
+    // `done` deste teste vinha sem `error_code` e a nota era a geral; o motivo
+    // no contrato e a mudanca principal do incremento.
     const q1 = question(1, 'Me explica recursao', 'c1')
+    const cortada = { ...answer(2, 1, 'Recursao e quando', 'interrompida'), error_code: LONG }
     const { fetchMock } = mountPanel({
       [SEND]: (_init, call) =>
         call === 1
           ? streamResponse([
               sseFrame('user_message', q1),
               sseFrame('delta', { text: 'Recursao e quando' }),
-              sseFrame('done', answer(2, 1, 'Recursao e quando', 'interrompida')),
+              sseFrame('done', cortada),
             ])
           : streamResponse([
               sseFrame('user_message', q1),
@@ -564,11 +573,14 @@ describe('TutorPanel: o envio', () => {
 
     await typeAndSend('Me explica recursao')
 
-    const cortada = await waitFor(() => messageWith('Recursao e quando'))
-    expect(within(cortada).getByTestId('tutor-message-mark')).toHaveTextContent(
+    const bolha = await waitFor(() => messageWith('Recursao e quando'))
+    expect(within(bolha).getByTestId('tutor-message-mark')).toHaveTextContent(
       'Resposta interrompida',
     )
-    expect(screen.getByTestId('tutor-history-retry-note')).toHaveTextContent(HISTORY_RETRY_NOTE)
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent(
+      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+    )
+    expect(screen.getByTestId('tutor-history-retry-note')).toHaveTextContent(LONG_NOTE)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('tutor-retry'))
@@ -577,6 +589,55 @@ describe('TutorPanel: o envio', () => {
     })
     expect(sent(fetchMock, 2)).toEqual({ client_message_id: 'c1', content: 'Me explica recursao' })
     expect(screen.queryByTestId('tutor-history-retry-note')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+  })
+
+  it('P34 depois de recarregar, a cortada por tamanho mostra a nota de pedir por partes', async () => {
+    const q10 = question(10, 'Pergunta longa', 'c10')
+    mountPanel({
+      [HISTORY]: () =>
+        Response.json([q10, { ...answer(11, 10, 'meio', 'interrompida'), error_code: LONG }]),
+    })
+    await ready()
+
+    expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(LONG_NOTE)
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P35 recusa no stream: alerta proprio, sem o parcial, e Tentar de novo', async () => {
+    // Pendencia 120: o texto que veio antes da recusa nao fica na conversa.
+    const q1 = question(1, 'Pergunta recusada', 'c1')
+    const recusada = { ...answer(2, 1, '', 'falhou'), error_code: REFUSED }
+    mountPanel({
+      [HISTORY]: (_init, call) => Response.json(call === 1 ? [] : [q1, recusada]),
+      [SEND]: () =>
+        streamResponse([
+          sseFrame('user_message', q1),
+          sseFrame('delta', { text: 'Comeco recusado' }),
+          sseFrame('error', { code: REFUSED }),
+        ]),
+    })
+
+    await typeAndSend('Pergunta recusada')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    )
+    expect(screen.queryByText('Comeco recusado')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P36 depois de recarregar, a recusada mostra a nota de perguntar de outro jeito', async () => {
+    const q10 = question(10, 'Pergunta recusada', 'c10')
+    mountPanel({
+      [HISTORY]: () =>
+        Response.json([q10, { ...answer(11, 10, '', 'falhou'), error_code: REFUSED }]),
+    })
+    await ready()
+
+    expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(
+      'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    )
   })
 
   it('P18 contador: aparece perto do limite, some longe dele, e liga ao campo', async () => {

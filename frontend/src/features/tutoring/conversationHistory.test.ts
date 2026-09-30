@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendTurn,
+  latestAnswerTo,
   pendingFromHistory,
   replaceAction,
   settleInterrupted,
@@ -151,5 +152,22 @@ describe('pendingFromHistory', () => {
     expect(
       pendingFromHistory([message({ id: 1, role: 'user', client_message_id: null })]),
     ).toBeNull()
+  })
+})
+
+describe('latestAnswerTo', () => {
+  it('a resposta mais recente da pergunta de id dado, entre varias tentativas', () => {
+    const q = message({ id: 1, role: 'user', client_message_id: 'c1' })
+    const primeira = message({ id: 2, role: 'tutor', reply_to_id: 1, status: 'falhou' })
+    const outra = message({ id: 3, role: 'user', client_message_id: 'c3' })
+    const segunda = message({ id: 4, role: 'tutor', reply_to_id: 1, status: 'interrompida' })
+    const daOutra = message({ id: 5, role: 'tutor', reply_to_id: 3 })
+    expect(latestAnswerTo([q, primeira, outra, segunda, daOutra], 'c1')).toBe(segunda)
+  })
+
+  it('sem resposta, ou sem a pergunta, nao ha o que devolver', () => {
+    const q = message({ id: 1, role: 'user', client_message_id: 'c1' })
+    expect(latestAnswerTo([q], 'c1')).toBeUndefined()
+    expect(latestAnswerTo([q], 'outro')).toBeUndefined()
   })
 })

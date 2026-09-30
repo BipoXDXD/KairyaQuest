@@ -18,9 +18,11 @@ class StatusDaMensagem(StrEnum):
     A pergunta nasce `completa`. A resposta nasce `gerando`, gravada ANTES de
     chamar o provedor, e termina em um dos outros tres. `interrompida` e a
     resposta que nao chegou inteira: o cliente sumiu, o processo morreu, a
-    resposta foi recolhida como orfa (nesses tres, resultado desconhecido) ou
-    o teto de tokens a cortou (pendencia 45: o texto parcial fica, a acao
-    nao). `falhou` tem sempre um `error_code`.
+    resposta foi recolhida como orfa (nesses tres, resultado desconhecido, e
+    `error_code` nulo) ou um limite de tamanho a cortou -- o teto de tokens ou
+    a janela de contexto (pendencias 45 e 120: o texto parcial fica, a acao
+    nao, e o `error_code` e `RESPOSTA_LONGA`). `falhou` tem sempre um
+    `error_code`, inclusive a recusa (`resposta_recusada`, sem o texto).
     """
 
     GERANDO = "gerando"
@@ -59,6 +61,19 @@ class CodigoDoStream(StrEnum):
     PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
     TEMPO_ESGOTADO = "tempo_esgotado"
     PROPOSTA_INVALIDA = "proposta_invalida"
+    # A resposta foi recusada (`stop_reason: refusal`, pendencia 120): pelos
+    # classificadores de seguranca do provedor ou pelo proprio modelo. O
+    # texto parcial e descartado.
+    RESPOSTA_RECUSADA = "resposta_recusada"
+
+
+# O `error_code` de uma resposta `interrompida` porque um limite de tamanho a
+# cortou -- o teto de tokens ou a janela de contexto (pendencias 45, 120 e
+# 122). NAO e codigo do evento `error`: a cortada sai no `done`, e o codigo so
+# diz POR QUE ela esta incompleta, para a tela sugerir pedir por partes. As
+# outras `interrompida` (desconexao, orfa) nao tem `error_code`: nelas o
+# resultado e desconhecido.
+RESPOSTA_LONGA = "resposta_longa"
 
 
 # O `error_code` de uma acao cujo prazo passou antes da confirmacao. E o

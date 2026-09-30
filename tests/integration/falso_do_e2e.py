@@ -14,10 +14,11 @@ para ca por `FOCUSQUEST_ANTHROPIC_BASE_URL`, e a guarda de
 import argparse
 import json
 import threading
-from typing import Any
+from typing import Any, cast, get_args
 
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -25,7 +26,9 @@ from integration.provedor_falso import (
     falso_do_tratador,
 )
 
-_OPCOES = frozenset({"blocks", "http_status", "cut_after_events", "hold_after_events"})
+_OPCOES = frozenset(
+    {"blocks", "http_status", "cut_after_events", "hold_after_events", "stop_reason"}
+)
 
 
 # Teto das contagens de eventos: nenhuma resposta do falso chega perto, e um
@@ -54,6 +57,19 @@ def _inteiro(
     ):
         raise ValueError(f"{chave} precisa ser inteiro entre {minimo} e {maximo}")
     return valor
+
+
+def _motivo(dados: dict[str, object]) -> MotivoDeParada | None:
+    """O `stop_reason` escolhido pelo cenario, ou `None` se ausente (o falso
+    deriva a parada do roteiro). So os valores de `MotivoDeParada`: um motivo
+    inventado seria um `stop_reason` que a API nunca manda."""
+    if "stop_reason" not in dados:
+        return None
+    valor = dados["stop_reason"]
+    validos = get_args(MotivoDeParada)
+    if valor not in validos:
+        raise ValueError(f"stop_reason precisa ser um de: {', '.join(validos)}")
+    return cast(MotivoDeParada, valor)
 
 
 def _bloco(dados: object) -> Texto | ChamadaDeFerramenta:
@@ -105,6 +121,7 @@ def roteiro_do_json(dados: object) -> Roteiro:
         status_http=200 if status is None else status,
         cortar_apos_eventos=_inteiro(dados, "cut_after_events", 0, _MAX_EVENTOS),
         segurar_apos_eventos=_inteiro(dados, "hold_after_events", 0, _MAX_EVENTOS),
+        stop_reason=_motivo(dados),
     )
 
 

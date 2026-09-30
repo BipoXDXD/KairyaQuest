@@ -1,4 +1,6 @@
 import { Fragment, useId, type ReactElement, type Ref } from 'react'
+import { unansweredNote } from './answerOutcome'
+import { latestAnswerTo } from './conversationHistory'
 import { UNKNOWN_RESULT } from './messageFailure'
 import type { ActionRead, MessageRead, MessageStatus } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
@@ -9,9 +11,6 @@ export const UNAVAILABLE_TEXT = 'A Tifa está fora do ar: falta configurar o pro
 
 const GREETING =
   'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
-
-const HISTORY_RETRY_NOTE =
-  'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
 
 /**
  * A marca de cada estado de mensagem, EXAUSTIVA sobre o tipo: um estado novo
@@ -197,7 +196,9 @@ function FailureNotice({
   if (send.status === 'idle' && retryTarget !== null && canRetry) {
     return (
       <div className="text-sm text-slate-300">
-        <p data-testid="tutor-history-retry-note">{HISTORY_RETRY_NOTE}</p>
+        <p data-testid="tutor-history-retry-note">
+          {unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId))}
+        </p>
         {retryButton}
       </div>
     )

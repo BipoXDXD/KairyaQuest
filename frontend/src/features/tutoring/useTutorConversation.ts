@@ -31,12 +31,13 @@ export type HistoryState =
  * - `unknown`: nao se sabe se a resposta chegou: o stream acabou sem `done`
  *   nem `error`, ou caiu no meio. Repetir com o mesmo id e seguro.
  *
- * `idle.finished` distingue "nada aconteceu ainda" (`false`, na montagem) de
- * "a Tifa acabou de responder" (`true`, depois de um `done`): e o que deixa a
- * regiao viva do painel anunciar o FIM da resposta (spec, "Escrevendo").
+ * `idle.answer` distingue "nada aconteceu ainda" (`null`, na montagem) de
+ * "a Tifa acabou de responder" (a resposta do `done`): e o que deixa a regiao
+ * viva do painel anunciar o FIM da resposta (spec, "Escrevendo") -- e dizer se
+ * ela chegou inteira ou cortada (pendencia 121).
  */
 export type SendState =
-  | { status: 'idle'; finished: boolean }
+  | { status: 'idle'; answer: MessageRead | null }
   | { status: 'sending'; pending: PendingQuestion }
   | { status: 'writing'; pending: PendingQuestion; question: MessageRead | null; partial: string }
   | {
@@ -153,7 +154,7 @@ function retryTargetOf(send: SendState, history: HistoryState): PendingQuestion 
 export function useTutorConversation(): UseTutorConversationResult {
   const [history, setHistory] = useState<HistoryState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
-  const [send, setSend] = useState<SendState>({ status: 'idle', finished: false })
+  const [send, setSend] = useState<SendState>({ status: 'idle', answer: null })
   const [draft, setDraft] = useState('')
   const lifetime = useRef<AbortController | null>(null)
 
@@ -276,7 +277,7 @@ export function useTutorConversation(): UseTutorConversationResult {
           if (historyStatus.current !== 'loaded') {
             setAttempt((n) => n + 1)
           }
-          setSend({ status: 'idle', finished: true })
+          setSend({ status: 'idle', answer: outcome.answer })
           return
         }
         const { question } = outcome
@@ -287,6 +288,9 @@ export function useTutorConversation(): UseTutorConversationResult {
           placeholderIds.current -= 1
           const placeholderId = placeholderIds.current
           const status = outcome.kind === 'failed' ? 'falhou' : 'interrompida'
+          // A recusa descarta o parcial (pendencia 120), como o backend.
+          const partial =
+            outcome.kind === 'failed' && outcome.failure.discardsPartial ? '' : outcome.partial
           setHistory((current) =>
             current.status === 'loaded'
               ? {
@@ -294,7 +298,7 @@ export function useTutorConversation(): UseTutorConversationResult {
                   messages: settleInterrupted(
                     current.messages,
                     question,
-                    outcome.partial,
+                    partial,
                     status,
                     placeholderId,
                   ),

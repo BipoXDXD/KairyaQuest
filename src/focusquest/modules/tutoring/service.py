@@ -51,6 +51,7 @@ from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
     REAGENDAMENTO_INVALIDO,
+    RESPOSTA_LONGA,
     CodigoDoStream,
     EstadoDaAcao,
     Papel,
@@ -62,6 +63,7 @@ from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.persona import PERSONA
 from focusquest.modules.tutoring.provider import (
     Delta,
+    Parada,
     Proposta,
     Provedor,
     ProvedorIndisponivelError,
@@ -254,9 +256,11 @@ def transmitir(
 
     O `RespostaConcluida` sai depois do commit, e o `RespostaFalhou` depois de
     a falha estar gravada: o cliente nunca age sobre algo que o banco nao tem.
-    A mensagem do `RespostaConcluida` e `completa` ou, quando o teto de tokens
-    cortou a resposta (`Fim(cortada=True)`, pendencia 45), `interrompida`, com
-    o texto parcial e sem acao.
+    A mensagem do `RespostaConcluida` e `completa` ou, quando um limite de
+    tamanho cortou a resposta (`Parada.CORTADA`, pendencias 45 e 120),
+    `interrompida` com `error_code` `resposta_longa`, o texto parcial e sem
+    acao. A recusa (`Parada.RECUSADA`) e `falhou` com `resposta_recusada`,
+    sem o texto parcial e sem acao.
 
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o
@@ -274,7 +278,7 @@ def transmitir(
     partes: list[str] = []
     proposta: Proposta | None = None
     terminou = False
-    cortada = False
+    parada = Parada.TERMINOU
     codigo: CodigoDoStream | None = None
     try:
         yield PerguntaGravada(preparo.pergunta)
@@ -289,7 +293,7 @@ def transmitir(
                     proposta = evento
                 else:
                     terminou = True
-                    cortada = evento.cortada
+                    parada = evento.parada
                 # Limite TOTAL, pelo relogio injetavel.
                 if clock() - inicio > tutoria.limite:
                     raise TempoEsgotadoError("a resposta passou do limite total")
@@ -310,11 +314,18 @@ def transmitir(
     if codigo is None and not terminou:
         # O corte que o SDK nao denuncia: sem `Fim`, a resposta nao terminou.
         codigo = CodigoDoStream.PROVEDOR_INDISPONIVEL
+    cortada = parada is Parada.CORTADA
     if cortada:
-        # O teto de tokens cortou a resposta (pendencia 45): o texto parcial
-        # fica gravado e visivel, mas `interrompida`, e a proposta -- que pode
-        # ter chegado pela metade -- nao vira acao.
+        # Um limite de tamanho cortou a resposta (pendencias 45 e 120): o texto
+        # parcial fica gravado e visivel, mas `interrompida`, e a proposta --
+        # que pode ter chegado pela metade -- nao vira acao.
         proposta = None
+    if parada is Parada.RECUSADA:
+        # A recusa (pendencia 120): o parcial que veio antes dela nao e
+        # resposta, e a orientacao da API e descarta-lo. A resposta vai a
+        # `falhou`, com o motivo -- e, com `codigo`, a proposta nem e validada.
+        texto = ""
+        codigo = codigo or CodigoDoStream.RESPOSTA_RECUSADA
     if codigo is None and proposta is not None:
         dados = _validar_proposta(proposta)
         if dados is None:
@@ -326,7 +337,10 @@ def transmitir(
         return
 
     status = StatusDaMensagem.INTERROMPIDA if cortada else StatusDaMensagem.COMPLETA
-    desfecho = _completar(fabrica, preparo.resposta_id, texto, dados, clock(), status)
+    motivo = RESPOSTA_LONGA if cortada else None
+    desfecho = _completar(
+        fabrica, preparo.resposta_id, texto, dados, clock(), status, motivo
+    )
     if isinstance(desfecho, _Recolhida):
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
         yield RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
@@ -633,12 +647,14 @@ def _completar(
     dados: DadosDaProposta | None,
     agora: datetime,
     status: StatusDaMensagem,
+    motivo: str | None,
 ) -> TutorMessage | _Recolhida | _PreCondicaoRecusada:
     """Grava a resposta que chegou ao `Fim` e a acao proposta, na MESMA transacao.
 
-    `status` e `completa`, ou `interrompida` quando o teto de tokens cortou a
-    resposta (nesse caso `dados` e sempre None: nenhuma proposta, de criacao
-    ou de reagendamento, vira acao).
+    `status` e `completa`, ou `interrompida` quando um limite de tamanho
+    cortou a resposta -- e entao `motivo` e `RESPOSTA_LONGA`, gravado no
+    `error_code`, e `dados` e sempre None: nenhuma proposta, de criacao ou de
+    reagendamento, vira acao.
 
     A trava na linha evita a corrida com o recolhimento de orfaos: se a linha
     ja nao esta `gerando`, ela foi recolhida, e nada e gravado.
@@ -681,6 +697,7 @@ def _completar(
                 )
             )
         resposta.status = status
+        resposta.error_code = motivo
         session.commit()
         session.refresh(resposta)
         return resposta

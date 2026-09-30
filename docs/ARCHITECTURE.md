@@ -131,10 +131,12 @@ FocusQuest/
 │   │   │       ├── TutorPanel.tsx         # o painel: lateral (desktop) ou folha modal (celular), hooks no topo
 │   │   │       ├── actionFailure.test.ts
 │   │   │       ├── actionFailure.ts       # mapa exaustivo BY_CODE (describeActionFailure) para confirmar/recusar
+│   │   │       ├── answerOutcome.test.ts
+│   │   │       ├── answerOutcome.ts       # announceAnswer (a região viva no fim da resposta: terminou ou cortada) e unansweredNote (a nota do "Tentar de novo" pelo motivo: resposta_longa, resposta_recusada ou geral) — pendências 120–122
 │   │   │       ├── conversationHistory.test.ts
-│   │   │       ├── conversationHistory.ts # appendTurn, settleInterrupted, pendingFromHistory, replaceAction
+│   │   │       ├── conversationHistory.ts # appendTurn, settleInterrupted, pendingFromHistory, replaceAction, latestAnswerTo
 │   │   │       ├── messageFailure.test.ts
-│   │   │       ├── messageFailure.ts      # mapas PRE_STREAM e IN_STREAM para o envio de pergunta
+│   │   │       ├── messageFailure.ts      # mapas PRE_STREAM e IN_STREAM para o envio de pergunta; a recusa (resposta_recusada) descarta o parcial (discardsPartial)
 │   │   │       ├── panelPreference.test.ts
 │   │   │       ├── panelPreference.ts     # localStorage do painel aberto/fechado, tolerante a exceção
 │   │   │       ├── questionLimit.test.ts
@@ -188,7 +190,7 @@ FocusQuest/
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
-│   │   │   └── tutoring.spec.ts   # cinco cenários da tutoria contra o falso como processo (docs/QUALITY.md §9)
+│   │   │   └── tutoring.spec.ts   # sete cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho e a recusa (pendência 120)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
 │   │       └── servers.test.ts    # ambiente node: validação do deslocamento e as portas do playwright.config.ts (Frente 0)
 │   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
@@ -277,7 +279,7 @@ FocusQuest/
 │   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
 │   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável, com o bloco de thinking da API real por padrão (não é teste)
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
-│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio)
+│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio; cada stop_reason vira a Parada do Fim)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
 │   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6); criação sob demanda atrás da guarda (Frente 0)
 │   │   ├── test_completion_evidence.py  # concluir com evidência: grava, reenvio igual/diferente, os 422, a recompensa com um bônus gravado, MissionRead (E, Task 3)
@@ -801,9 +803,15 @@ mesmo padrão dos estados de `missions`
 (a pergunta já gravada, com o `id` do banco) → `delta` zero ou mais vezes
 (`{"text": "…"}`) → um final, só um: `done` (a resposta gravada e as ações
 dela, emitido **depois do commit** — `status` `completa`, ou `interrompida`,
-com o texto parcial e sem ação, quando o modelo parou por `stop_reason:
-max_tokens`, pendência 45 do `docs/HANDOFF.md`) ou `error` (`{"code": "…"}`, emitido
-**depois** de a falha estar gravada como `falhou`). Um stream sem `done` nem
+com o texto parcial, sem ação e com `error_code` `resposta_longa`, quando um
+limite de tamanho cortou a resposta (`stop_reason` `max_tokens` ou
+`model_context_window_exceeded`, pendências 45, 120 e 122 do
+`docs/HANDOFF.md`) ou `error` (`{"code": "…"}`, emitido
+**depois** de a falha estar gravada como `falhou`). A recusa (`stop_reason`
+`refusal`) é `error` `resposta_recusada`, com a resposta gravada `falhou`,
+**sem** o texto parcial e sem ação. O `error_code` de uma `interrompida` é
+`resposta_longa` ou nulo — nulo nas outras (desconexão, órfã), de resultado
+desconhecido. Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
@@ -816,7 +824,10 @@ com outro `content`); `422` do Pydantic (corpo inválido).
 **Erros dentro do stream** (`event: error`, coluna `error_code`), do enum
 `CodigoDoStream` de `tutoring/domain.py` — fora do `CodigoDeErro` de
 `main.py` de propósito, porque não passam por handler HTTP:
-`provedor_indisponivel`, `tempo_esgotado`, `proposta_invalida`.
+`provedor_indisponivel`, `tempo_esgotado`, `proposta_invalida`,
+`resposta_recusada`. O `resposta_longa` **não** é código do `error`: é a
+constante `RESPOSTA_LONGA` de `tutoring/domain.py`, gravada no `error_code` da
+`interrompida` cortada, que sai no `done`.
 
 **Confirmar e recusar**, os mesmos `code` e sentido de concluir uma missão
 (`missions`, decisão registrada acima): `200` ao confirmar uma `proposta`

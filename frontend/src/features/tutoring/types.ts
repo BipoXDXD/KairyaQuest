@@ -152,7 +152,8 @@ export type PreStreamErrorCode =
  * `src/focusquest/modules/tutoring/domain.py`, a mao (pendencia 32). Nao estao
  * no `CodigoDeErro` porque nao passam por handler HTTP.
  */
-export type StreamErrorCode = 'provedor_indisponivel' | 'tempo_esgotado' | 'proposta_invalida'
+export type StreamErrorCode =
+  'provedor_indisponivel' | 'tempo_esgotado' | 'proposta_invalida' | 'resposta_recusada'
 
 /**
  * Os `code` de confirmar e recusar uma proposta (spec, "Confirmar e recusar").

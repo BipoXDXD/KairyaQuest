@@ -30,6 +30,7 @@ interface Mensagem {
   status: string
   client_message_id: string | null
   reply_to_id: number | null
+  error_code: string | null
   actions: { id: number; state: string; payload: { instructions: string } }[]
 }
 
@@ -189,6 +190,55 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   expect(respostas.map((m) => m.status).sort()).toEqual(['completa', 'falhou'])
   // E o modelo foi chamado duas vezes -- uma por tentativa, nenhuma a mais.
   expect(await requisicoes()).toHaveLength(2)
+})
+
+test('(f) a resposta cortada por tamanho: anunciada como cortada, com a nota de pedir por partes', async ({
+  page,
+}) => {
+  // Pendencias 120, 121 e 122, ponta a ponta: o SDK real le o `stop_reason`
+  // do falso, o backend grava `interrompida` com `resposta_longa`, e a tela
+  // nao diz "terminou".
+  const pergunta = `Me explica tudo de Go (e2e ${EXECUCAO})`
+  const comeco = `Go e uma linguagem (e2e ${EXECUCAO})`
+  await definirRoteiro({ blocks: [{ text: [comeco] }], stop_reason: 'max_tokens' })
+  await abrirPainel(page)
+
+  await perguntar(page, pergunta)
+
+  const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco })
+  await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta interrompida')
+  await expect(page.getByTestId('tutor-live')).toHaveText(
+    'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+  )
+  await expect(page.getByTestId('tutor-history-retry-note')).toContainText(
+    'A última resposta ficou longa demais e foi cortada. Tente pedir por partes',
+  )
+  await semViolacoes(page)
+
+  const mensagens = await conversa(page)
+  const gravada = mensagens.find((m) => m.content === comeco)
+  expect([gravada?.status, gravada?.error_code]).toEqual(['interrompida', 'resposta_longa'])
+})
+
+test('(g) a resposta recusada: alerta proprio e o parcial fora da conversa', async ({ page }) => {
+  const pergunta = `Pergunta que o modelo recusa (e2e ${EXECUCAO})`
+  const parcial = `Texto antes da recusa (e2e ${EXECUCAO})`
+  await definirRoteiro({ blocks: [{ text: [parcial] }], stop_reason: 'refusal' })
+  await abrirPainel(page)
+
+  await perguntar(page, pergunta)
+
+  await expect(page.getByRole('alert')).toContainText('A Tifa não pôde responder a esta pergunta.')
+  await expect(page.getByText(parcial)).toHaveCount(0)
+  await semViolacoes(page)
+
+  const mensagens = await conversa(page)
+  const perguntas = mensagens.filter((m) => m.role === 'user' && m.content === pergunta)
+  expect(perguntas).toHaveLength(1)
+  const respostas = mensagens.filter((m) => m.reply_to_id === perguntas[0]?.id)
+  expect(respostas.map((m) => [m.status, m.content, m.error_code])).toEqual([
+    ['falhou', '', 'resposta_recusada'],
+  ])
 })
 
 test('(d) indisponivel: o texto da spec, o campo desabilitado e o quadro funcionando', async ({

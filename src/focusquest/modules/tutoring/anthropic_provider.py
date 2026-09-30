@@ -15,6 +15,7 @@ from focusquest.modules.tutoring.provider import (
     EventoDoProvedor,
     Ferramenta,
     Fim,
+    Parada,
     Proposta,
     ProvedorIndisponivelError,
     TempoEsgotadoError,
@@ -33,6 +34,16 @@ TENTATIVAS = 2
 # `max_tokens`). Truncado, o
 # `input` sairia parcial (ver o `stop_reason` em `avaliar`).
 MAX_TOKENS_DA_AVALIACAO = 2048
+
+# O `stop_reason` que NAO e o fim normal, traduzido para o dominio
+# (pendencias 45 e 120). `end_turn` e `tool_use` sao o fim normal; `stop_sequence`
+# e `pause_turn` nao acontecem nesta conversa (ela nao manda `stop_sequences`
+# nem ferramenta de servidor) e, se acontecessem, contariam como fim normal.
+_PARADAS: dict[str | None, Parada] = {
+    "max_tokens": Parada.CORTADA,
+    "model_context_window_exceeded": Parada.CORTADA,
+    "refusal": Parada.RECUSADA,
+}
 
 DESCRICAO_DA_FERRAMENTA = (
     "Propõe uma missão de estudo. NÃO cria nada: a pessoa vê a proposta num "
@@ -164,7 +175,7 @@ class ProvedorAnthropic:
                 elif evento.type == "message_delta":
                     motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
-                    yield Fim(cortada=motivo_da_parada == "max_tokens")
+                    yield Fim(_PARADAS.get(motivo_da_parada, Parada.TERMINOU))
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
         """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou

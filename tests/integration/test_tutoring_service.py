@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from focusquest.core.errors import MensagemEmAndamentoError, OperacaoReutilizadaError
 from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.tutoring.domain import (
+    RESPOSTA_LONGA,
     CodigoDoStream,
     EstadoDaAcao,
     StatusDaMensagem,
@@ -39,6 +40,7 @@ from integration.conftest import Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -565,17 +567,27 @@ def test_listar_traz_as_acoes_embutidas(session: Session) -> None:
 # --- O corte pelo teto de tokens (pendencia 45) ----------------------------
 
 
-def test_resposta_cortada_por_max_tokens_fica_interrompida(
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_resposta_cortada_fica_interrompida_com_o_motivo(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
+    stop_reason: MotivoDeParada,
 ) -> None:
-    """O `message_stop` chegou, mas por `max_tokens`: o texto e parcial. Ele
-    fica gravado e visivel, marcado `interrompida` -- e nao `completa`, que o
-    faria parecer inteiro para a tela e para o historico do turno seguinte."""
+    """O `message_stop` chegou, mas por um limite de tamanho -- o teto de
+    tokens ou a janela de contexto (pendencias 45 e 120): o texto e parcial.
+    Ele fica gravado e visivel, marcado `interrompida` -- e nao `completa`,
+    que o faria parecer inteiro para a tela e para o historico do turno
+    seguinte.
+
+    O `error_code` `resposta_longa` e o que separa este corte das outras
+    `interrompida` (desconexao, orfa), de resultado desconhecido: e por ele que
+    a tela diz que a resposta ficou longa demais e sugere pedir por partes
+    (pendencia 122). Ate o lote g-tifa este teste fixava `error_code` nulo; a
+    mudanca da expectativa e a mudanca principal do incremento."""
     falso.roteiro = Roteiro(
-        blocos=(Texto(("Comeco da ", "explica")),), stop_reason="max_tokens"
+        blocos=(Texto(("Comeco da ", "explica")),), stop_reason=stop_reason
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
@@ -583,31 +595,51 @@ def test_resposta_cortada_por_max_tokens_fica_interrompida(
     assert isinstance(final, RespostaConcluida)
     assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
     assert final.mensagem.content == "Comeco da explica"
+    assert final.mensagem.error_code == RESPOSTA_LONGA
     vista = _resposta(fabrica, preparo.resposta_id)
     assert (vista.status, vista.content, vista.error_code) == (
         StatusDaMensagem.INTERROMPIDA,
         "Comeco da explica",
-        None,
+        RESPOSTA_LONGA,
     )
 
 
-def test_proposta_cortada_por_max_tokens_nao_vira_acao(
+def test_resposta_completa_nao_tem_motivo_de_corte(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
+    """O `resposta_longa` so vai para a cortada: a `completa` continua sem
+    `error_code`."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Inteira.",)),))
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("inteira")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.error_code) == (StatusDaMensagem.COMPLETA, None)
+
+
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_proposta_cortada_nao_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+    stop_reason: MotivoDeParada,
+) -> None:
     """Com o corte, a entrada da ferramenta pode estar pela metade: nenhuma
     acao nasce dela, mesmo que o que chegou passe no `MissionCreate`.
 
-    O roteiro -- um bloco de ferramenta COMPLETO seguido de `max_tokens` -- e o
+    O roteiro -- um bloco de ferramenta COMPLETO seguido do corte -- e o
     pior caso escolhido de proposito, e nao o formato que a API real costuma
     mandar (nela o corte cai no meio do bloco, e um bloco fechado termina em
     `tool_use`). Com uma entrada que passa na validacao, so a guarda do corte
     impede a acao: e exatamente o que um JSON parcial valido faria."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
-        stop_reason="max_tokens",
+        stop_reason=stop_reason,
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto-acao")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
@@ -616,6 +648,55 @@ def test_proposta_cortada_por_max_tokens_nao_vira_acao(
     assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
     assert final.mensagem.actions == []
     assert _resposta(fabrica, preparo.resposta_id).actions == []
+
+
+# --- A recusa (pendencia 120) ----------------------------------------------
+
+
+def test_resposta_recusada_falha_sem_o_texto_parcial(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """`stop_reason: refusal` chega num 200, com `message_stop`, e pode vir
+    DEPOIS de texto (a recusa no meio do stream). A orientacao da API e
+    descartar esse parcial: ele nao e resposta. A resposta vai a `falhou`
+    com `resposta_recusada`, SEM o texto -- e o `error` so sai depois de a
+    falha estar gravada, como toda falha do stream."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ", "recusado")),), stop_reason="refusal"
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa")))
+    eventos = list(_transmitir(fabrica, tutoria, preparo))
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        CodigoDoStream.RESPOSTA_RECUSADA,
+    )
+
+
+def test_proposta_recusada_nao_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A recusa descarta tambem a proposta, mesmo valida: o pior caso, como no
+    corte -- a ferramenta inteira antes do `refusal`."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
+        stop_reason="refusal",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa-acao")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert final == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.actions) == (StatusDaMensagem.FALHOU, [])
 
 
 def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(

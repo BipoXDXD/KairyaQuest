@@ -28,6 +28,7 @@ from integration.falso_do_e2e import TratadorComControle, roteiro_do_json
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -63,6 +64,15 @@ def test_roteiro_do_json_monta_texto_ferramenta_e_opcoes() -> None:
         segurar_apos_eventos=2,
         status_http=200,
     )
+
+
+@pytest.mark.parametrize(
+    "stop_reason", ["max_tokens", "model_context_window_exceeded", "refusal"]
+)
+def test_stop_reason_escolhe_a_parada(stop_reason: MotivoDeParada) -> None:
+    """O cenario do corte e da recusa (pendencia 120) roteiriza a parada."""
+    roteiro = roteiro_do_json({"blocks": [], "stop_reason": stop_reason})
+    assert roteiro == Roteiro(stop_reason=stop_reason)
 
 
 def test_tool_name_escolhe_a_ferramenta_e_o_padrao_e_create_mission() -> None:
@@ -123,6 +133,13 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
             "hold_after_events precisa ser inteiro",
         ),
         ({"blocks": [], "fantasia": 1}, "chave desconhecida: fantasia"),
+        # Um motivo inventado viraria, no SDK, um `stop_reason` que a API
+        # nunca manda -- o cenario provaria um caminho que nao existe.
+        (
+            {"blocks": [], "stop_reason": "fim_do_mundo"},
+            "stop_reason precisa ser um de",
+        ),
+        ({"blocks": [], "stop_reason": 1}, "stop_reason precisa ser um de"),
         # Um numero fora da faixa viraria um roteiro que nunca corta, nunca
         # segura, ou um status que o `http.server` nem sabe mandar -- e o
         # cenario passaria pelo motivo errado.

@@ -1,6 +1,6 @@
 """O adaptador de producao, inteiro, contra o servidor falso."""
 
-from typing import Any, Literal
+from typing import Any
 
 import pytest
 
@@ -13,6 +13,7 @@ from focusquest.modules.tutoring.provider import (
     EventoDoProvedor,
     Fim,
     MensagemDoTurno,
+    Parada,
     Proposta,
     ProvedorIndisponivelError,
     TempoEsgotadoError,
@@ -22,6 +23,7 @@ from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     PENSAMENTO,
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -61,19 +63,26 @@ def test_a_ferramenta_vira_proposta_antes_do_fim(falso: ServidorAnthropicFalso) 
 
 
 @pytest.mark.parametrize(
-    ("stop_reason", "cortada"),
-    [("end_turn", False), ("tool_use", False), ("max_tokens", True)],
+    ("stop_reason", "parada"),
+    [
+        ("end_turn", Parada.TERMINOU),
+        ("tool_use", Parada.TERMINOU),
+        ("max_tokens", Parada.CORTADA),
+        ("model_context_window_exceeded", Parada.CORTADA),
+        ("refusal", Parada.RECUSADA),
+    ],
 )
-def test_o_fim_diz_se_o_teto_de_tokens_cortou_a_resposta(
-    falso: ServidorAnthropicFalso,
-    stop_reason: Literal["end_turn", "tool_use", "max_tokens"],
-    cortada: bool,
+def test_o_fim_diz_por_que_a_resposta_parou(
+    falso: ServidorAnthropicFalso, stop_reason: MotivoDeParada, parada: Parada
 ) -> None:
-    """Pendencia 45: o `message_stop` chega igual quando o modelo terminou e
-    quando o SDK bateu em `max_tokens`. Quem distingue e o `stop_reason` do
-    `message_delta`, que o adaptador leva ao `Fim`."""
+    """Pendencias 45 e 120: o `message_stop` chega igual quando o modelo
+    terminou, quando a resposta foi cortada (o teto de tokens ou a janela de
+    contexto) e quando ela foi recusada. Quem distingue e o `stop_reason` do
+    `message_delta`, que o adaptador traduz para o `Fim`. A recusa no meio do
+    stream chega DEPOIS de texto -- o `Delta` sai, e quem decide descarta-lo e
+    o servico."""
     falso.roteiro = Roteiro(blocos=(Texto(("Bora",)),), stop_reason=stop_reason)
-    assert _todos(falso) == [Delta("Bora"), Fim(cortada=cortada)]
+    assert _todos(falso) == [Delta("Bora"), Fim(parada)]
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ import pytest
 
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -65,10 +66,18 @@ def test_sem_ferramenta_a_resposta_termina_em_end_turn(
     assert [bloco.type for bloco in final.content] == ["thinking", "text"]
 
 
-def test_o_roteiro_escolhe_o_motivo_de_parada(falso: ServidorAnthropicFalso) -> None:
-    """`stop_reason` explicito vence o derivado (com ferramenta seria `tool_use`)."""
+@pytest.mark.parametrize(
+    "stop_reason", ["max_tokens", "model_context_window_exceeded", "refusal"]
+)
+def test_o_roteiro_escolhe_o_motivo_de_parada(
+    falso: ServidorAnthropicFalso, stop_reason: MotivoDeParada
+) -> None:
+    """`stop_reason` explicito vence o derivado (com ferramenta seria `tool_use`).
+
+    Os tres sao as paradas que a conversa trata (pendencias 45 e 120): o SDK
+    fixado as entrega como vieram, sem erro, e o `message_stop` chega igual."""
     falso.roteiro = Roteiro(
-        blocos=(ChamadaDeFerramenta(ENTRADA),), stop_reason="max_tokens"
+        blocos=(ChamadaDeFerramenta(ENTRADA),), stop_reason=stop_reason
     )
     with _cliente(falso).messages.stream(
         model="claude-opus-5",
@@ -76,7 +85,7 @@ def test_o_roteiro_escolhe_o_motivo_de_parada(falso: ServidorAnthropicFalso) -> 
         messages=[{"role": "user", "content": "oi"}],
     ) as stream:
         final = stream.get_final_message()
-    assert final.stop_reason == "max_tokens"
+    assert final.stop_reason == stop_reason
 
 
 def test_o_falso_registra_corpo_e_cabecalhos(falso: ServidorAnthropicFalso) -> None:

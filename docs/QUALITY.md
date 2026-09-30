@@ -1054,7 +1054,19 @@ das camadas 1 e 2 serve a avaliação como serve a conversa.
   vale o de antes (`tool_use` com ferramenta, `end_turn` sem). Provado por
   `test_o_roteiro_escolhe_o_motivo_de_parada`; **visto reprovando** por mutação
   (o `stop_reason` fixado em `None`). É o que permite testar a parada por
-  `max_tokens`, que deixa uma entrada possivelmente parcial.
+  `max_tokens`, que deixa uma entrada possivelmente parcial. **Lote g-tifa
+  (pendência 120):** o tipo virou `MotivoDeParada`, com
+  `model_context_window_exceeded` e `refusal` a mais, e o controle HTTP do E2E
+  aceita a chave `stop_reason` (só os valores de `MotivoDeParada`; outro valor
+  reprova no PUT com "stop_reason precisa ser um de"), com o tipo de
+  `frontend/tests/e2e/falso.ts` acompanhando. Provado por
+  `test_o_roteiro_escolhe_o_motivo_de_parada` (parametrizado nos três),
+  `test_stop_reason_escolhe_a_parada` e dois casos novos de recusa em
+  `test_falso_do_e2e.py`; **visto reprovando** por mutação (o falso ignorando o
+  `stop_reason` explícito reprova os três; `_motivo` sem validar reprova as duas
+  recusas; o `roteiro_do_json` sem repassar reprova os cinco). O valor do
+  `Literal` sozinho não é guarda: tirar `refusal` dele não reprova o mypy,
+  porque o `parametrize` não é conferido pelo tipo — quem prova é a execução.
 - **`avaliar` testado contra o falso** (`tests/integration/test_evaluation_provider.py`,
   10 testes), com o SDK real, camadas 1 e 2: devolve a entrada da ferramenta;
   **pede `tool_choice` `auto` com `disable_parallel_tool_use` e a ferramenta

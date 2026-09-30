@@ -17,6 +17,8 @@ export interface RoteiroDoFalso {
   http_status?: number
   cut_after_events?: number
   hold_after_events?: number
+  /** O motivo de parada; sem ele, o falso deriva do roteiro (pendencia 120). */
+  stop_reason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'model_context_window_exceeded' | 'refusal'
 }
 
 async function exigir(resposta: Response, esperado: number): Promise<Response> {

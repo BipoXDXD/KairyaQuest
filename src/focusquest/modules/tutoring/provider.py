@@ -6,6 +6,7 @@ sabe que existe Anthropic. O adaptador e a unica peca que importa o SDK.
 
 from collections.abc import Generator
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Literal, Protocol
 
 
@@ -29,6 +30,24 @@ class Proposta:
     entrada: dict[str, Any]
 
 
+class Parada(StrEnum):
+    """Por que a resposta parou, no vocabulario do dominio (pendencias 45 e 120).
+
+    - `TERMINOU`: o modelo terminou (`end_turn`) ou chamou a ferramenta
+      (`tool_use`).
+    - `CORTADA`: o limite de tamanho cortou a resposta -- o teto de tokens
+      (`max_tokens`) ou a janela de contexto (`model_context_window_exceeded`).
+      Nem o texto nem a proposta estao inteiros.
+    - `RECUSADA`: a resposta foi recusada (`refusal`): os classificadores de
+      seguranca do provedor ou o proprio modelo declinaram. Pode chegar depois
+      de texto; esse texto parcial nao vale como resposta.
+    """
+
+    TERMINOU = "terminou"
+    CORTADA = "cortada"
+    RECUSADA = "recusada"
+
+
 @dataclass(frozen=True)
 class Fim:
     """A resposta terminou de verdade (`message_stop`).
@@ -37,13 +56,11 @@ class Fim:
     termina a iteracao em silencio (o SDK nao denuncia o corte). So quem
     recebeu `Fim` pode gravar a resposta como `completa`.
 
-    `cortada` separa os dois `message_stop` que o SDK entrega iguais: o do
-    modelo que terminou e o do teto de tokens (`stop_reason: max_tokens`,
-    pendencia 45). Cortada, a resposta e parcial -- nem o texto nem a
-    proposta estao inteiros.
+    `parada` separa os `message_stop` que o SDK entrega iguais: o do modelo
+    que terminou, o da resposta cortada e o da recusada.
     """
 
-    cortada: bool = False
+    parada: Parada = Parada.TERMINOU
 
 
 EventoDoProvedor = Delta | Proposta | Fim

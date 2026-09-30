@@ -30,6 +30,7 @@ from focusquest.modules.tutoring.service import Tutoria
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -197,18 +198,24 @@ def test_o_stream_na_ordem_do_contrato(
     )
 
 
-def test_resposta_cortada_por_max_tokens_chega_no_done_como_interrompida(
-    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_resposta_cortada_chega_no_done_como_interrompida_com_o_motivo(
+    cliente: TestClient,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+    stop_reason: MotivoDeParada,
 ) -> None:
-    """Pendencia 45, pelo contrato: o `done` traz a mensagem com `status`
-    `interrompida` e sem acao. A tela ja marca esse estado ("Resposta
-    interrompida") e oferece "Tentar de novo" pela ultima pergunta.
+    """Pendencias 45, 120 e 122, pelo contrato: o `done` traz a mensagem com
+    `status` `interrompida`, sem acao e com `error_code` `resposta_longa` --
+    e por ele que a tela sabe que a resposta ficou longa demais, e nao que o
+    resultado e desconhecido. Ate o lote g-tifa este teste fixava
+    `error_code` nulo; a mudanca e a mudanca principal do incremento.
 
-    A ferramenta completa antes do `max_tokens` e o pior caso de proposito
-    (ver `test_proposta_cortada_por_max_tokens_nao_vira_acao`)."""
+    A ferramenta completa antes do corte e o pior caso de proposito
+    (ver `test_proposta_cortada_nao_vira_acao`)."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Comeco",)), ChamadaDeFerramenta(PROPOSTA)),
-        stop_reason="max_tokens",
+        stop_reason=stop_reason,
     )
     eventos = _eventos(_enviar(cliente, conversa.id("teto")).text)
 
@@ -219,7 +226,33 @@ def test_resposta_cortada_por_max_tokens_chega_no_done_como_interrompida(
         "Comeco",
         [],
     )
-    assert final["error_code"] is None
+    assert final["error_code"] == "resposta_longa"
+    *_, gravada = cliente.get("/api/tutoring/messages").json()
+    assert (gravada["status"], gravada["error_code"]) == (
+        "interrompida",
+        "resposta_longa",
+    )
+
+
+def test_resposta_recusada_vira_evento_error_sem_o_parcial(
+    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+) -> None:
+    """Pendencia 120, pelo contrato: a recusa sai como `error`
+    `resposta_recusada`, depois do `delta` que ja tinha saido; o historico
+    traz a resposta `falhou` com o mesmo codigo e SEM o texto parcial."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Comeco",)),), stop_reason="refusal")
+    eventos = _eventos(_enviar(cliente, conversa.id("recusa")).text)
+
+    assert eventos[1:] == [
+        ("delta", {"text": "Comeco"}),
+        ("error", {"code": "resposta_recusada"}),
+    ]
+    *_, gravada = cliente.get("/api/tutoring/messages").json()
+    assert (gravada["status"], gravada["content"], gravada["error_code"]) == (
+        "falhou",
+        "",
+        "resposta_recusada",
+    )
 
 
 def test_falha_do_provedor_vira_evento_error(

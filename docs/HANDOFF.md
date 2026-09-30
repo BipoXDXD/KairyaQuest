@@ -2922,6 +2922,8 @@ e de revisões diferentes, e a mais recente fica por último:
 | Chamada real 2 (pendência 109), `python -m integration.camada3_do_reagendamento`, mesma árvore e modelo | **Aprovado.** Uma chamada: `reschedule_mission`, `mission_id` 7, `falta_de_tempo`, `2026-10-02T18:00:00-03:00`, aceito pelo `RescheduleProposal`; sequência igual à da referência da conversa, que não foi regravada. Falta repetir sobre `ae01ba9` (pendência 109). |
 | `make check` pelo hook do commit `bf9eb47` (worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
 | `make check` rodado por mim sobre `bf9eb47` mais esta documentação (worktree `f-api`) | Aprovado, EXIT 0, 2m47,8s de relógio. Frontend: 48 arquivos, 833 testes, 100% nos quatro eixos (1076/1076 instruções, 826/826 ramificações, 317/317 funções, 1049/1049 linhas). `uv lock --check` aprovado. Ruff sem achados, 132 arquivos já formatados. mypy sem problemas em 127 arquivos. Backend: **993 passed**, 1 aviso (a `DeprecationWarning` já conhecida), cobertura total de 100% (1883 instruções, 320 ramificações). E2E: 18 passed. Gitleaks: `no leaks found`. |
+| `make check` rodado por mim sobre a árvore do lote g-tifa (pendências 120–122; base `9e4f191`, worktree `f-api`), antes das edições finais de documentação e da docstring de `StatusDaMensagem` | Aprovado, EXIT 0, 3m12,9s de relógio. Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 856/856 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1109 passed**, cobertura total de 100% (1983 instruções, 346 ramificações). E2E: **23 passed** (os cenários (f) e (g) novos de `tutoring.spec.ts`). Gitleaks: `no leaks found`. |
+| `make check-e2e` sob mutação, mesma árvore | O anúncio da cortada trocado por "terminou" (`announceAnswer`) reprova o (f); o serviço sem descartar o texto da recusa reprova o (g). Restaurados por `cp`. |
 
 ## Ambiente verificado
 
@@ -4764,23 +4766,64 @@ ledger; nenhum é bug esquecido.
 
 **Criadas pelo lote back (2026-09-29)**
 
-120. **Só `max_tokens` conta como corte; os outros `stop_reason` continuam
+120. ~~**Só `max_tokens` conta como corte; os outros `stop_reason` continuam
      gravando `completa`.** O adaptador de conversa (`responder`) distingue
      apenas `max_tokens` (pendência 45). `model_context_window_exceeded` —
      também uma resposta truncada — e `refusal` chegariam como `completa`. O
      servidor falso só roteiriza `end_turn`, `tool_use` e `max_tokens`, e uma
      guarda sem teste que a prove não entrou. Resolver: estender o `Literal`
      do `Roteiro` e tratar a janela de contexto como corte (e decidir o que a
-     recusa deve mostrar).
-121. **A região viva anuncia "Tifa terminou de responder." também para a
+     recusa deve mostrar).~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`):** o
+     adaptador traduz o `stop_reason` para uma `Parada` do domínio
+     (`provider.py`: `TERMINOU`, `CORTADA`, `RECUSADA`), no lugar do antigo
+     `Fim(cortada: bool)`: `max_tokens` **e** `model_context_window_exceeded`
+     são `CORTADA` (o mesmo destino da pendência 45: `interrompida`, texto
+     parcial visível, sem ação); `refusal` é `RECUSADA`. **Decisão sobre a
+     recusa:** a resposta vai a `falhou` com o código novo
+     `resposta_recusada` (`CodigoDoStream`, evento `error`), **sem o texto
+     parcial** (gravado vazio) e sem ação. Motivo: a orientação da API para a
+     recusa no meio do stream é descartar o parcial em vez de tratá-lo como
+     resposta, e a recusa não é um limite configurado (o argumento que, na 45,
+     afastou `falhou` do corte por tamanho) — é a resposta que não veio, com
+     motivo conhecido; `falhou` com código já é o caminho da tela para "não
+     veio, e por quê". A tela diz "A Tifa não pôde responder a esta
+     pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de
+     outro jeito." e mantém o "Tentar de novo" (o classificador pode errar),
+     e o parcial provisório também entra vazio (`discardsPartial` em
+     `messageFailure.ts`). `stop_sequence` e `pause_turn` contam como fim
+     normal: a conversa não manda `stop_sequences` nem ferramenta de servidor
+     (pendência 171). **Servidor falso:** o `Literal` do `Roteiro` virou
+     `MotivoDeParada`, com os dois valores novos, e o controle do E2E aceita
+     `stop_reason`. **Testes por camada:** falso
+     (`test_o_roteiro_escolhe_o_motivo_de_parada`, nos três motivos), controle
+     do E2E (`test_stop_reason_escolhe_a_parada` e duas recusas), adaptador
+     (`test_o_fim_diz_por_que_a_resposta_parou`, cinco `stop_reason`),
+     serviço (cortada nos dois motivos, proposta cortada nos dois, recusada
+     sem o parcial, proposta recusada sem ação, completa sem motivo), API
+     (`done` da cortada nos dois motivos, `error` da recusa e o histórico
+     sem o parcial), frontend (`messageFailure`, hook, P35, P36) e E2E
+     (cenários (f) e (g) de `tutoring.spec.ts`). Nenhuma dependência nova.
+121. ~~**A região viva anuncia "Tifa terminou de responder." também para a
      resposta cortada pelo teto de tokens.** O `done` `interrompida` leva o
      envio a `idle` com `finished`, e o texto da região viva
      (`TutorPanel.tsx`) não olha o `status` da resposta. Quem enxerga vê a
      marca "Resposta interrompida" e a nota de reenvio; quem usa leitor de
      tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
      pede o estado `idle` carregar o `status` da resposta (ou a região viva
-     ler a última mensagem) e um texto próprio para o corte.
-122. **O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
+     ler a última mensagem) e um texto próprio para o corte.~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`):** o
+     estado `idle` do envio carrega a resposta do `done`
+     (`{ status: 'idle', answer: MessageRead | null }`, no lugar de
+     `finished: boolean`), e a região viva anuncia por `announceAnswer`
+     (`answerOutcome.ts`): "Tifa terminou de responder." só para a
+     `completa`; a cortada por tamanho é "A resposta da Tifa ficou longa
+     demais e foi cortada. Tente pedir por partes."; qualquer outra
+     incompleta, "A resposta da Tifa chegou incompleta." (sem inventar
+     motivo). Os testes do hook que conferiam `finished: true` passaram a
+     conferir a resposta (`answer`), o que é mais forte; o P33 prova o
+     anúncio no painel e o cenário (f) do E2E, no navegador real.
+122. ~~**O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
      cortar de novo** (M1 da revisão do lote back). O reenvio manda a mesma
      pergunta com o mesmo teto (`tutor_max_tokens`, 1024 por padrão), e a
      nota da tela ("A última pergunta ficou sem resposta completa. Tentar de
@@ -4789,7 +4832,76 @@ ledger; nenhum é bug esquecido.
      aviso (descartada de propósito: a entrada podia estar pela metade).
      Resolver pede a tela distinguir o corte — o que esbarra na 121: o
      `MessageRead` não diz **por que** a resposta ficou `interrompida` — e um
-     texto próprio ("a resposta ficou longa demais; tente pedir por partes").
+     texto próprio ("a resposta ficou longa demais; tente pedir por partes").~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`)**, na
+     parte que dependia da tela; a limitação de fundo continua na pendência
+     173. **Decisão de contrato — o menor desenho correto:** o motivo do
+     corte vai no `error_code` que a linha e o `MessageRead` **já têm**, com o
+     valor novo `resposta_longa` (constante `RESPOSTA_LONGA` de
+     `tutoring/domain.py`, que não é código do evento `error`). Sem coluna
+     nova, sem migração e sem chave nova no JSON: a coluna
+     `tutor_messages.error_code` é texto livre sem CHECK, o tipo do frontend
+     já é `string | null`, e um cliente antigo só ignora o valor. A
+     alternativa descartada — uma chave `stop_reason` com coluna própria e
+     migração `0007` — separaria melhor "erro" de "motivo", mas custa uma
+     migração para carregar um único valor; o custo do nome está registrado
+     na pendência 170. As outras `interrompida` (desconexão, órfã) seguem
+     com `error_code` nulo: nelas o resultado é desconhecido. **Tela:** a nota
+     do "Tentar de novo" sai de `unansweredNote`, pela última tentativa da
+     pergunta (`latestAnswerTo`): na cortada, "A última resposta ficou longa
+     demais e foi cortada. Tente pedir por partes, um tópico de cada vez.
+     Tentar de novo refaz a mesma pergunta e pode cortar outra vez."; na
+     recusada, "A Tifa não pôde responder à última pergunta. Tentar de novo
+     tende a dar o mesmo resultado: pergunte de outro jeito."; nas demais, a
+     nota geral de antes. **Testes cuja expectativa mudou de propósito** (é a
+     mudança principal do lote, e cada docstring diz isso):
+     `test_resposta_cortada_fica_interrompida_com_o_motivo` e
+     `test_resposta_cortada_chega_no_done_como_interrompida_com_o_motivo`
+     (antes fixavam `error_code` nulo) e o P33 do `TutorPanel.test.tsx` (o
+     `done` passou a trazer `resposta_longa`, e a nota esperada é a de pedir
+     por partes).
+
+**Criadas pelo lote g-tifa (2026-09-29)**
+
+170. **O `error_code` da `interrompida` cortada não é erro** (lote g-tifa,
+     decisão da pendência 122). O motivo do corte (`resposta_longa`) mora na
+     coluna e na chave `error_code`, que nas outras linhas quer dizer falha.
+     É intencional e documentado (`domain.py`, `docs/ARCHITECTURE.md`), mas
+     quem ler só o nome vai estranhar. Se aparecer um segundo motivo que não
+     seja erro, o desenho certo passa a ser uma coluna e uma chave próprias
+     (`stop_reason`, com migração), e esta reutilização sai.
+171. **`stop_sequence` e `pause_turn` contam como fim normal** (lote g-tifa).
+     Hoje não acontecem: a conversa não manda `stop_sequences` nem
+     ferramenta de servidor. Se um dia a Tifa ganhar uma ferramenta de
+     servidor (busca na web, por exemplo), o `pause_turn` passa a existir e
+     pede tratamento próprio (continuar o turno); gravá-lo como `completa`
+     seria o mesmo defeito da pendência 45. O `Roteiro` do falso não os
+     roteiriza de propósito.
+172. **A recusa no meio do stream aparece na tela antes de sumir** (lote
+     g-tifa). Os `delta` anteriores à recusa são desenhados enquanto chegam —
+     nem o backend nem a tela sabem, antes do `message_stop`, que haverá
+     recusa. O descarte vale do `error` em diante (a lista, o banco e o
+     histórico do modelo). Também não se lê o `stop_details` (a categoria da
+     recusa): a tela não distingue o classificador de segurança do modelo que
+     declinou.
+173. **Repetir a cortada ainda repete o mesmo teto** (lote g-tifa; o fundo da
+     pendência 122). A tela agora diz que a resposta ficou longa demais e
+     sugere pedir por partes, mas o "Tentar de novo" reenvia a mesma
+     pergunta com o mesmo `tutor_max_tokens` (1024 por padrão) e tende a
+     cortar de novo. Resolver de verdade pede decidir entre subir o teto,
+     pedir continuação ou orientar a persona a responder em partes — decisão
+     de produto e de custo, para o dono.
+174. **Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
+     reexecutar a requisição recusada noutro modelo (`fallbacks`, beta, com
+     custo e modelo próprios). Não foi ligado: muda o modelo que responde,
+     o custo e o contrato com o provedor. Hoje a recusa é final para aquela
+     tentativa.
+175. **Nenhuma chamada real provou `refusal` nem `model_context_window_exceeded`**
+     (lote g-tifa). Os dois são provados contra o falso, com o SDK fixado
+     (camadas 1 e 2); a camada 3 não os provoca sob demanda, e este lote não
+     fez chamada real. A `avaliar` (Incremento E) já devolve `None` para
+     qualquer parada que não seja `tool_use`, mas os testes dela cobrem só
+     `max_tokens` e `end_turn`.
 
 ## Próximo incremento
 
