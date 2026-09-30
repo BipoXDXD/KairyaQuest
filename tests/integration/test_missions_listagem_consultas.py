@@ -1,8 +1,9 @@
 """Quantas consultas a listagem de missoes custa (pendencia 96).
 
-O `MissionRead` deriva `verification`, `evidence` e `evaluation` dos
-relacionamentos da missao. Com `lazy="select"`, cada missao listada custava
-duas consultas a mais (N+1): a lista de 50 missoes fazia 101 idas ao banco.
+O `MissionRead` deriva `verification`, `evidence`, `evaluation` e
+`reschedules` dos relacionamentos da missao. Com `lazy="select"`, cada missao
+listada custava uma consulta a mais por relacionamento (N+1): so com evidencia
+e avaliacao, a lista de 50 missoes fazia 101 idas ao banco.
 Estes testes contam as consultas que chegam ao cursor e exigem que o numero
 nao cresca com o tamanho da lista.
 """
@@ -18,20 +19,27 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from focusquest.core.usuario_unico import USUARIO_UNICO
-from focusquest.modules.missions.domain import EstadoDaAvaliacao, FalhaDaAvaliacao
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
+)
 from focusquest.modules.missions.models import MissionEvaluation
 from focusquest.modules.missions.router import listar
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
     criar_missao,
+    reagendar_missao,
 )
 
 AGORA = datetime(2026, 9, 18, 15, 0, tzinfo=UTC)
 
-# Uma consulta das missoes, uma das evidencias e uma das avaliacoes: o numero
-# e fixo, qualquer que seja o tamanho da lista.
-CONSULTAS_DA_LISTAGEM = 3
+# Uma consulta das missoes, uma das evidencias, uma das avaliacoes e uma do
+# historico de prazos (o `reschedules` do Incremento F): o numero e fixo,
+# qualquer que seja o tamanho da lista.
+CONSULTAS_DA_LISTAGEM = 4
 
 
 @contextmanager
@@ -64,12 +72,25 @@ def _criar(session: Session, indice: int) -> int:
 
 
 def _povoar(session: Session, quantas: int) -> None:
-    """Missoes de todos os tipos de entrega: pendente, concluida sem
-    evidencia, concluida com evidencia e concluida com evidencia e avaliacao."""
+    """Missoes de todos os tipos de entrega: pendente reagendada, concluida
+    sem evidencia, concluida com evidencia e concluida com evidencia e
+    avaliacao."""
     for indice in range(quantas):
         mission_id = _criar(session, indice)
         tipo = indice % 4
         if tipo == 0:
+            reagendar_missao(
+                session,
+                USUARIO_UNICO,
+                mission_id,
+                f"reag-{indice}",
+                # Uma hora depois do prazo original: a ordem da listagem, por
+                # prazo, continua a da criacao.
+                novo_prazo=AGORA + timedelta(days=indice + 1, hours=1),
+                motivo=MotivoDoReagendamento.FALTA_DE_TEMPO,
+                origem=OrigemDoReagendamento.USUARIO,
+                clock=lambda: AGORA,
+            )
             continue
         concluir_missao(
             session,
@@ -115,7 +136,7 @@ def test_a_listagem_carregada_de_uma_vez_traz_evidencia_e_avaliacao_certas(
     session: Session,
 ) -> None:
     """O carregamento antecipado nao pode trocar a evidencia de uma missao pela
-    de outra, nem perder a avaliacao."""
+    de outra, nem perder a avaliacao ou o historico de prazos."""
     _povoar(session, 4)
 
     lidas = listar(session)
@@ -130,3 +151,5 @@ def test_a_listagem_carregada_de_uma_vez_traz_evidencia_e_avaliacao_certas(
     avaliacao = lidas[3].evaluation
     assert avaliacao is not None
     assert avaliacao.state is EstadoDaAvaliacao.FALHOU
+    assert [len(m.reschedules) for m in lidas] == [1, 0, 0, 0]
+    assert lidas[0].reschedules[0].new_deadline == AGORA + timedelta(days=1, hours=1)

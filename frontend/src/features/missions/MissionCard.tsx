@@ -5,10 +5,15 @@ import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
+import { sameDraft } from './rescheduleDraft'
+import { RescheduleForm } from './RescheduleForm'
+import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
-import type { EvidenceDraft } from './types'
+import type { EvidenceDraft, RescheduleDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
+import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
+import { useStartMission, type StartState } from './useStartMission'
 
 const CARD_CLASS =
   'rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
@@ -88,9 +93,9 @@ function blockedReason(draft: EvidenceDraft): string | null {
  *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
  *   a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
  *   ali nao atualiza um "quadro" -- recarrega o ciclo.
- * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
- *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
- *   recarrega sozinho quando ela termina (`useCompletionRegistry`). Quem
+ * - **esperando o quadro**: o `reloadLabel` pedido com outro pedido em voo
+ *   (conclusao, Iniciar ou Reagendar) fica desabilitado e diz "Aguardando o
+ *   pedido em andamento…"; o quadro recarrega sozinho quando ele termina (`useCompletionRegistry`). Quem
  *   anuncia a espera e a regiao viva do QUADRO, e nao a deste cartao: a espera
  *   e do quadro inteiro, e varios cartoes com o botao anunciariam o mesmo
  *   texto varias vezes.
@@ -113,6 +118,7 @@ function CompletionControls({
   onReload,
   reloadWaiting,
   reloadLabel,
+  otherInFlight,
 }: {
   mission: Mission
   completion: CompletionState
@@ -124,6 +130,8 @@ function CompletionControls({
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
+  /** Um Iniciar ou Reagendar deste cartao esta em voo: um envio de cada vez. */
+  otherInFlight: boolean
 }) {
   const blockedId = useId()
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
@@ -141,7 +149,7 @@ function CompletionControls({
         <button
           type="button"
           data-testid="mission-complete"
-          disabled={completion.status === 'submitting' || blocked !== null}
+          disabled={completion.status === 'submitting' || otherInFlight || blocked !== null}
           aria-describedby={blocked === null ? undefined : blockedId}
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
@@ -190,6 +198,163 @@ function CompletionControls({
   )
 }
 
+/** O texto do botao Iniciar em cada estado em que ele aparece. */
+function startLabel(start: StartState): string {
+  if (start.status === 'submitting') {
+    return 'Iniciando…'
+  }
+  return start.status === 'failed' ? 'Tentar de novo' : 'Iniciar'
+}
+
+/** O que a regiao viva do Iniciar anuncia. */
+function startStatusText(start: StartState): string {
+  if (start.status === 'submitting') {
+    return 'Iniciando a missão…'
+  }
+  return start.status === 'started' ? 'Missão iniciada.' : ''
+}
+
+/** O que a regiao viva do Reagendar anuncia. */
+function rescheduleStatusText(reschedule: RescheduleState): string {
+  if (reschedule.status === 'submitting') {
+    return 'Salvando o novo prazo…'
+  }
+  return reschedule.status === 'rescheduled' ? 'Prazo reagendado.' : ''
+}
+
+/**
+ * A missao mais recente que o Iniciar ou o Reagendar devolveu, ou `null`.
+ *
+ * Com os dois feitos no mesmo cartao, a resposta mais nova e a que ja contem a
+ * outra: um reagendamento DEPOIS do inicio volta com o `started_at`; um inicio
+ * DEPOIS do reagendamento volta com o historico, e o reagendamento guardado
+ * (anterior) tem `started_at` nulo. Decidir pelo conteudo que o servidor
+ * devolveu dispensa guardar a ordem dos cliques.
+ *
+ * `rescheduled` e o ultimo reagendamento que DEU CERTO (`lastRescheduled` do
+ * hook), e nao o estado da tentativa corrente: com um segundo reagendamento em
+ * voo ou recusado, o cartao continua no resultado do primeiro.
+ */
+function latestFromActions(start: StartState, rescheduled: Mission | null): Mission | null {
+  const started = start.status === 'started' ? start.mission : null
+  if (rescheduled !== null && (started === null || rescheduled.started_at !== null)) {
+    return rescheduled
+  }
+  return started
+}
+
+/** A falha que pede atualizar, com o botao de recarga do cartao. */
+function RefreshNotice({
+  message,
+  testId,
+  onReload,
+  reloadWaiting,
+  reloadLabel,
+}: {
+  message: string
+  testId: string
+  onReload: () => void
+  reloadWaiting: boolean
+  reloadLabel: string
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        data-testid={`${testId}-reload`}
+        disabled={reloadWaiting}
+        onClick={onReload}
+        className={RELOAD_BUTTON_CLASS}
+      >
+        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+      </button>
+      <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
+        {message}
+      </p>
+    </>
+  )
+}
+
+/**
+ * O botao Iniciar (F1, F20) e o que a tela diz durante e depois do inicio. O
+ * desenho e o do Concluir:
+ *
+ * - so na pendente DISPONIVEL: a perdida, a expirada, a em andamento e a
+ *   concluida nao se iniciam (a regra e do servidor; a tela so nao oferece);
+ * - em voo, "Iniciando…" desabilitado;
+ * - no sucesso o botao some (a missao ja esta em andamento) e a regiao viva
+ *   anuncia "Missão iniciada.";
+ * - falha que se repete: o aviso e "Tentar de novo" (a chave, quem decide e o
+ *   hook); falha que pede atualizar: o aviso e o botao de recarga no lugar.
+ *
+ * A regiao viva existe desde o primeiro render de todo cartao nao concluido,
+ * vazia, pelo mesmo motivo da regiao do Concluir.
+ */
+function StartControls({
+  mission,
+  start,
+  onStart,
+  otherInFlight,
+  onReload,
+  reloadWaiting,
+  reloadLabel,
+}: {
+  mission: Mission
+  start: StartState
+  onStart: () => void
+  otherInFlight: boolean
+  onReload: () => void
+  reloadWaiting: boolean
+  reloadLabel: string
+}) {
+  const failure = start.status === 'failed' ? start.failure : null
+  const startable =
+    (mission.state === 'pendente' && mission.availability === 'disponivel') ||
+    start.status === 'submitting'
+  // Sem botao, sem aviso e sem anuncio (a missao ja veio em andamento), o
+  // bloco e so a regiao viva vazia: sem a margem, que viraria folga sem nada.
+  const shown = startable || start.status !== 'idle'
+  return (
+    <div className={`${shown ? 'mt-3 ' : ''}flex flex-wrap items-center gap-3`}>
+      {failure?.recovery === 'refresh' ? (
+        <RefreshNotice
+          message={failure.message}
+          testId="mission-start"
+          onReload={onReload}
+          reloadWaiting={reloadWaiting}
+          reloadLabel={reloadLabel}
+        />
+      ) : (
+        <>
+          {startable && (
+            <button
+              type="button"
+              data-testid="mission-start"
+              disabled={start.status === 'submitting' || otherInFlight}
+              onClick={onStart}
+              className={COMPLETE_BUTTON_CLASS}
+            >
+              {startLabel(start)} <span className="sr-only">a missão: {mission.instructions}</span>
+            </button>
+          )}
+          {failure !== null && (
+            <p
+              role="alert"
+              data-testid="mission-start-error"
+              className="w-full text-sm text-red-300"
+            >
+              {failure.message}
+            </p>
+          )}
+        </>
+      )}
+      <p role="status" data-testid="mission-start-status" className="text-sm text-emerald-300">
+        {startStatusText(start)}
+      </p>
+    </div>
+  )
+}
+
 export function MissionCard({
   mission: listed,
   registry,
@@ -226,6 +391,32 @@ export function MissionCard({
   reloadLabel?: string
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
+  const { state: start, start: startMission } = useStartMission(listed.id, registry)
+  const {
+    state: reschedule,
+    reschedule: rescheduleMission,
+    lastRescheduled,
+  } = useRescheduleMission(listed.id, registry)
+  // O ultimo rascunho de reagendamento enviado. Ref, e nao estado: so e lido no
+  // clique, e mudar nao deve renderizar nada.
+  const lastSentReschedule = useRef<RescheduleDraft | null>(null)
+  const submitReschedule = (draft: RescheduleDraft) => {
+    // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
+    // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
+    // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
+    // evitavel. Sem mudanca, a mesma chave reenvia.
+    const previous = lastSentReschedule.current
+    if (
+      reschedule.status === 'failed' &&
+      reschedule.failure.recovery === 'retry' &&
+      previous !== null &&
+      !sameDraft(previous, draft)
+    ) {
+      registry.releaseActionKey(listed.id, 'reschedule')
+    }
+    lastSentReschedule.current = draft
+    rescheduleMission(draft)
+  }
   // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
   // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
   // texto morreria com eles, como a chave de operacao morria (pendencia 35).
@@ -245,7 +436,17 @@ export function MissionCard({
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
-  const mission = completion.status === 'completed' ? completion.mission : listed
+  // Sem conclusao, vale a ultima devolvida pelo Iniciar ou pelo Reagendar
+  // (incremento F), e so entao a listada.
+  const mission =
+    completion.status === 'completed'
+      ? completion.mission
+      : (latestFromActions(start, lastRescheduled) ?? listed)
+  // Um envio de cada vez no cartao: com o Iniciar em voo, um Concluir chegaria
+  // ao servidor numa ordem que a tela nao controla (e vice-versa).
+  const completing = completion.status === 'submitting'
+  const starting = start.status === 'submitting'
+  const rescheduling = reschedule.status === 'submitting'
   const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
   // Ao concluir, o Concluir (e o formulario) saem do documento, e o foco que
   // estava neles cairia no `body`: quem navega pelo teclado ou por leitor de
@@ -258,12 +459,32 @@ export function MissionCard({
       titleRef.current?.focus()
     }
   }, [completed])
+  // O mesmo para o Iniciar: no sucesso, o botao sai do documento.
+  const started = start.status === 'started'
+  useEffect(() => {
+    if (started && document.activeElement === document.body) {
+      titleRef.current?.focus()
+    }
+  }, [started])
   // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
   // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
   const retryPending = registry.isRetryPending(listed.id)
-  const offersEvidence =
+  const completionStale =
+    completion.status === 'failed' && completion.failure.recovery === 'refresh'
+  const offersEvidence = mission.state !== 'concluida' && !completionStale
+  // O reagendamento e so da avulsa (F7: o prazo da diaria e da especial vem do
+  // ciclo) e so enquanto nao concluida (F8). Uma falha que pede atualizar -- a
+  // do reagendamento ou a do Concluir -- tira o formulario: a missao ja mudou.
+  const rescheduleFailure = reschedule.status === 'failed' ? reschedule.failure : null
+  const offersReschedule =
+    mission.mission_type === 'avulsa' &&
     mission.state !== 'concluida' &&
-    !(completion.status === 'failed' && completion.failure.recovery === 'refresh')
+    !completionStale &&
+    rescheduleFailure?.recovery !== 'refresh'
+  // As regioes vivas nascem com o cartao e so no que tem o que anunciar: a
+  // missao listada nao concluida (a do Reagendar, so na avulsa).
+  const liveStart = listed.state !== 'concluida'
+  const liveReschedule = liveStart && listed.mission_type === 'avulsa'
 
   return (
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
@@ -325,6 +546,16 @@ export function MissionCard({
         )}
       </dl>
 
+      {/* "Iniciada em" so em andamento; concluida, o que conta e a duracao real. */}
+      {mission.state === 'em_andamento' && mission.started_at !== null && (
+        <p data-testid="mission-started-at" className="mt-2 text-sm text-slate-300">
+          <span className="text-slate-400">Iniciada em </span>
+          <time dateTime={mission.started_at}>{formatDeadline(mission.started_at)}</time>
+        </p>
+      )}
+
+      <RescheduleHistory reschedules={mission.reschedules} />
+
       {offersEvidence && (
         <EvidenceForm
           draft={draft}
@@ -332,6 +563,18 @@ export function MissionCard({
           disabled={completion.status === 'submitting'}
           retryPending={retryPending}
           describedBy={titleId}
+        />
+      )}
+
+      {liveStart && !completed && (
+        <StartControls
+          mission={mission}
+          start={start}
+          onStart={startMission}
+          otherInFlight={completing || rescheduling}
+          onReload={onReload}
+          reloadWaiting={reloadWaiting}
+          reloadLabel={reloadLabel}
         />
       )}
 
@@ -346,7 +589,38 @@ export function MissionCard({
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
+        otherInFlight={starting || rescheduling}
       />
+
+      {offersReschedule && (
+        <RescheduleForm
+          mission={mission}
+          disabled={completing || starting || rescheduling}
+          failure={rescheduleFailure}
+          onSubmit={submitReschedule}
+          describedBy={titleId}
+        />
+      )}
+      {rescheduleFailure?.recovery === 'refresh' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <RefreshNotice
+            message={rescheduleFailure.message}
+            testId="mission-reschedule"
+            onReload={onReload}
+            reloadWaiting={reloadWaiting}
+            reloadLabel={reloadLabel}
+          />
+        </div>
+      )}
+      {liveReschedule && (
+        <p
+          role="status"
+          data-testid="mission-reschedule-status"
+          className="mt-2 text-sm text-emerald-300"
+        >
+          {rescheduleStatusText(reschedule)}
+        </p>
+      )}
 
       {mission.state === 'concluida' && (
         <EvaluationPanel

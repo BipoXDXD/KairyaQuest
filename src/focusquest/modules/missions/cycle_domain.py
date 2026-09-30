@@ -196,3 +196,66 @@ def disponibilidade_da_especial(
     if agora < fim_da_janela_da_especial(marco):
         return Availability.DISPONIVEL
     return Availability.EXPIRADA
+
+
+# F25 (pendencia 115): o que ja venceu e pode ser reaberto pela conclusao tardia.
+# FORA_DO_PLANO nao entra: o que nao era do plano nunca pode ter sido iniciado.
+_VENCIDAS = frozenset({Availability.PERDIDA, Availability.EXPIRADA})
+
+
+def limite_da_conclusao_tardia(prazo: datetime) -> datetime:
+    """F25: a missao iniciada a tempo pode ser concluida ate o fim do dia
+    civil que o prazo abre -- o prazo e sempre uma meia-noite de Sao Paulo, e
+    o limite e a meia-noite seguinte. Para a diaria de quarta: sexta 00:00.
+
+    E o mesmo desenho da janela da especial (C8), e garante que a diaria
+    concluida com atraso que bate um marco ainda encontra a janela da
+    especial aberta (ela vai ate o fim do dia seguinte ao marco)."""
+    return fim_do_dia(dia_de(prazo))
+
+
+def com_inicio_a_tempo(
+    disponibilidade: Availability,
+    prazo: datetime,
+    iniciada_em: datetime | None,
+    agora: datetime,
+) -> Availability:
+    """F25: a missao vencida (perdida ou expirada) que foi INICIADA antes do
+    prazo volta a ser `disponivel` ate o limite da conclusao tardia.
+
+    A pessoa comecou a tempo: prender a missao em `em_andamento` para sempre
+    seria a perda destrutiva que o README s5 proibe. So quem nunca comecou
+    (pendente) continua perdida depois do prazo. `disponivel` aqui so serve
+    para concluir: iniciar de novo e `transicao_ilegal`, porque ja esta em
+    andamento.
+    """
+    if (
+        disponibilidade in _VENCIDAS
+        and iniciada_em is not None
+        and iniciada_em < prazo
+        and agora < limite_da_conclusao_tardia(prazo)
+    ):
+        return Availability.DISPONIVEL
+    return disponibilidade
+
+
+def na_conclusao_tardia(
+    prazo: datetime,
+    disponibilidade: Availability,
+    concluida_em: datetime | None,
+    agora: datetime,
+) -> bool:
+    """F25: depois do prazo, a missao continua a vista no Quartel-General
+    enquanto pode ser concluida com atraso (`disponivel` pela
+    `com_inicio_a_tempo`) e, depois de concluida com atraso, ate o limite --
+    o `refresh` que segue a conclusao nao pode tirar da tela o cartao que
+    acabou de concluir (e o anuncio da recompensa que mora nele)."""
+    if agora < prazo:
+        return False
+    if disponibilidade is Availability.DISPONIVEL:
+        return True
+    return (
+        concluida_em is not None
+        and concluida_em >= prazo
+        and agora < limite_da_conclusao_tardia(prazo)
+    )

@@ -273,4 +273,29 @@ describe('useDecideAction', () => {
     // O registro nao cresce sem limite, como no A: a acao decidida sai dele.
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
   })
+
+  it('D10 reagendamento_invalido marca a acao como falhou com esse code, e solta a chave', async () => {
+    const fetchMock = routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
+    const { changed, missionCreated, result } = mount()
+
+    act(() => {
+      result.current.decision.confirm()
+    })
+    await waitFor(() => {
+      expect(result.current.decision.state.status).toBe('failed')
+    })
+
+    expect(changed).toHaveBeenCalledExactlyOnceWith({
+      ...proposta(5),
+      state: 'falhou',
+      error_code: 'reagendamento_invalido',
+    })
+    expect(missionCreated).not.toHaveBeenCalled()
+    expect(result.current.decision.state).toMatchObject({
+      failure: { recovery: 'invalidated' },
+      attempted: 'confirm',
+    })
+    expect(result.current.keys.operationIdFor(5)).toBe(K2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

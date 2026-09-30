@@ -330,6 +330,8 @@ def test_ciclo_sem_plano(client: TestClient, relogio: list[datetime]) -> None:
         "streak": 0,
         "days_to_milestone": 7,
         "special": None,
+        # F25: campo novo do contrato (aditivo), nulo sem diaria tardia.
+        "late_daily": None,
     }
 
 
@@ -405,6 +407,38 @@ def test_diaria_perdida_responde_409_missao_expirada(
     relogio[0] = ao_meio_dia(QUARTA + timedelta(days=1))
     resposta = _concluir(client, _id_da_diaria(session, QUARTA))
     assert (resposta.status_code, resposta.json()["code"]) == (409, "missao_expirada")
+
+
+def test_diaria_iniciada_a_tempo_conclui_depois_da_meia_noite_pela_api(
+    client: TestClient, relogio: list[datetime], session: Session
+) -> None:
+    """F25 pela API: iniciada quarta 23:50, a diaria aparece em `late_daily`
+    na quinta 00:10 (a `mission` e a de quinta), e concluir responde 200 com a
+    duracao real e o XP normal da diaria -- e nao `409 missao_expirada`."""
+    client.post("/api/plans", json=_corpo())
+    mission_id = _id_da_diaria(session, QUARTA)
+    relogio[0] = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+    iniciar = client.post(
+        f"/api/missions/{mission_id}/start", json={"operation_id": "op-api-i"}
+    )
+    assert iniciar.status_code == 200
+
+    relogio[0] = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+    ciclo = client.get("/api/cycle").json()
+    assert ciclo["mission"]["day"] == "2026-09-24"
+    assert ciclo["late_daily"]["id"] == mission_id
+    assert ciclo["late_daily"]["availability"] == "disponivel"
+    assert ciclo["streak"] == 0
+
+    resposta = _concluir(client, mission_id, "op-api-c")
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["state"] == "concluida"
+    assert corpo["actual_duration_minutes"] == 20
+    assert corpo["reward"]["xp_awarded"] == 40  # dificuldade 2, o XP de sempre
+    depois = client.get("/api/cycle").json()
+    assert depois["late_daily"]["availability"] == "concluida"
+    assert depois["streak"] == 1
 
 
 def test_reenvio_depois_da_meia_noite_pela_api(

@@ -28,6 +28,7 @@ function stubPage() {
         streak: 0,
         days_to_milestone: 7,
         special: null,
+        late_daily: null,
       }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -165,6 +166,7 @@ describe('Headquarters', () => {
       verification: null,
       evidence: null,
       evaluation: null,
+      reschedules: [],
     }
     const recompensa: Reward = {
       xp_awarded: 80,
@@ -201,6 +203,7 @@ describe('Headquarters', () => {
           streak: 0,
           days_to_milestone: 7,
           special: null,
+          late_daily: null,
         }),
       'GET /api/missions': () => Response.json([avulsa]),
       'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -259,6 +262,7 @@ describe('Headquarters', () => {
       verification: null,
       evidence: null,
       evaluation: null,
+      reschedules: [],
     }
     const diariaConcluida: Mission = {
       ...diaria,
@@ -286,6 +290,7 @@ describe('Headquarters', () => {
                 streak: 0,
                 days_to_milestone: 7,
                 special: null,
+                late_daily: null,
               }
             : {
                 today: '2026-09-23',
@@ -293,6 +298,7 @@ describe('Headquarters', () => {
                 streak: 1,
                 days_to_milestone: 6,
                 special: null,
+                late_daily: null,
               },
         ),
       'GET /api/missions': () => Response.json([]),
@@ -383,6 +389,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     verification: null,
     evidence: null,
     evaluation: null,
+    reschedules: [],
   }
 
   const confirmed: Route = () =>
@@ -436,7 +443,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     await screen.findByTestId('proposal-created')
     expect(requestsTo(fetchMock, MISSIONS)).toHaveLength(1)
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
-      'Aguardando a conclusão em andamento para atualizar o quadro.',
+      'Aguardando o pedido em andamento para atualizar o quadro.',
     )
 
     await act(async () => {

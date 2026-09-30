@@ -5,15 +5,29 @@ from datetime import datetime
 from typing import Literal
 
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
+from focusquest.modules.missions.domain import MissionState, MotivoDoReagendamento
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.progression.service import Progresso
-from focusquest.modules.tutoring.domain import Papel
-from focusquest.modules.tutoring.models import TutorMessage
+from focusquest.modules.tutoring.domain import EstadoDaAcao, Papel, TipoDeAcao
+from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 
 _PAPEL_NA_API: dict[Papel, Literal["user", "assistant"]] = {
     Papel.USUARIO: "user",
     Papel.TUTORA: "assistant",
+}
+
+# O motivo como o modelo le (F19): texto de produto, com acento. Um teste
+# confere que todo membro do enum tem rotulo -- o mypy nao garante
+# exaustividade de `dict`.
+ROTULO_DO_MOTIVO: dict[MotivoDoReagendamento, str] = {
+    MotivoDoReagendamento.DIFICULDADE: "dificuldade",
+    MotivoDoReagendamento.FALTA_DE_TEMPO: "falta de tempo",
+    MotivoDoReagendamento.MUDANCA_DE_PRIORIDADE: "mudança de prioridade",
+}
+# O mesmo, pelo valor gravado no `payload` (JSON: texto, nao o enum).
+_ROTULO_POR_VALOR = {
+    motivo.value: rotulo for motivo, rotulo in ROTULO_DO_MOTIVO.items()
 }
 
 
@@ -49,13 +63,28 @@ def _contexto(
     ]
     if not pendentes:
         linhas.append("- nenhuma")
-    linhas.extend(
-        f"- #{missao.id}: {missao.instructions} "
-        f"(prazo {leitura_da_avulsa(missao).deadline.isoformat()})"
-        for missao in pendentes
-    )
+    linhas.extend(_linha_da_pendente(missao) for missao in pendentes)
     linhas.append(_linha_de_progresso(progresso))
     return "\n".join(linhas)
+
+
+def _linha_da_pendente(missao: Mission) -> str:
+    """O id (que a `reschedule_mission` precisa), a instrucao, o prazo, o
+    estado com o inicio, e quantas vezes foi reagendada com o ultimo motivo
+    (F19). A contagem e dado para planejar, nunca para culpar (persona)."""
+    detalhes = [f"prazo {leitura_da_avulsa(missao).deadline.isoformat()}"]
+    if missao.state is MissionState.EM_ANDAMENTO and missao.started_at is not None:
+        detalhes.append(f"em andamento desde {missao.started_at.isoformat()}")
+    else:
+        detalhes.append("pendente")
+    if missao.reschedules:
+        vezes = len(missao.reschedules)
+        motivo = ROTULO_DO_MOTIVO[missao.reschedules[-1].reason]
+        detalhes.append(
+            f"reagendada {vezes} {'vez' if vezes == 1 else 'vezes'}; "
+            f"último motivo: {motivo}"
+        )
+    return f"- #{missao.id}: {missao.instructions} ({'; '.join(detalhes)})"
 
 
 def _linha_de_progresso(progresso: Progresso) -> str:
@@ -82,12 +111,34 @@ def _texto(mensagem: TutorMessage) -> str:
     formado e conta ao modelo o que de fato aconteceu com ela.
     """
     partes = [mensagem.content]
-    partes.extend(
-        f"[Proposta de missao #{acao.id}: {acao.payload.get('instructions', '')} "
-        f"-- {acao.state.value}]"
-        for acao in mensagem.actions
-    )
+    partes.extend(_texto_da_acao(acao) for acao in mensagem.actions)
     return "\n\n".join(parte for parte in partes if parte)
+
+
+def _texto_da_acao(acao: TutorAction) -> str:
+    """A acao antiga como texto, POR TIPO (F19): lida como criacao, uma
+    proposta de reagendamento apareceria ao modelo como "Proposta de missao"
+    com a instrucao do retrato."""
+    if acao.kind is TipoDeAcao.REAGENDAR_MISSAO:
+        motivo = str(acao.payload.get("reason"))
+        rotulo = _ROTULO_POR_VALOR.get(motivo, motivo)
+        return (
+            f"[Proposta de reagendamento da missão #{acao.payload.get('mission_id')} "
+            f"para {acao.payload.get('new_deadline')} ({rotulo}) "
+            f"-- {acao.state.value}]"
+        )
+    # So ids de MISSAO levam `#`: e o `#` da lista de
+    # pendentes e o que a `reschedule_mission` recebe. O id da acao com `#`
+    # faria "a missao que voce criou" virar o `mission_id` errado.
+    criada = (
+        f" -> missão #{acao.mission_id}"
+        if acao.state is EstadoDaAcao.EXECUTADA and acao.mission_id is not None
+        else ""
+    )
+    return (
+        f"[Proposta de missão (ação {acao.id}): "
+        f"{acao.payload.get('instructions', '')} -- {acao.state.value}{criada}]"
+    )
 
 
 def _mensagens(historico: Sequence[TutorMessage]) -> tuple[MensagemDoTurno, ...]:

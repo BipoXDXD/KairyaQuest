@@ -1,112 +1,11 @@
 import type { ReactElement } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MAX_DIFFICULTY } from '../../shared/types/mission'
-import type { ActionRead } from './types'
-import type { ActionKeys } from './useActionKeys'
+import { failedActionText } from './actionFailure'
+import { BoardLink, DecisionControls } from './DecisionControls'
+import { RescheduleProposalCard } from './RescheduleProposalCard'
+import type { CreateMissionAction, ProposalCardProps } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
-
-const EXPIRED_TEXT = 'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.'
-const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'
-
-const BUTTON =
-  'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-
-const SECONDARY_BUTTON =
-  'rounded border border-slate-400/60 px-3 py-1 text-sm font-medium text-slate-100 ' +
-  'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-
-function confirmLabel(decision: DecisionState): string {
-  if (decision.status === 'confirming') {
-    return 'Confirmando…'
-  }
-  return decision.status === 'failed' && decision.attempted === 'confirm'
-    ? 'Tentar de novo'
-    : 'Confirmar'
-}
-
-function rejectLabel(decision: DecisionState): string {
-  if (decision.status === 'rejecting') {
-    return 'Recusando…'
-  }
-  return decision.status === 'failed' && decision.attempted === 'reject'
-    ? 'Tentar de novo'
-    : 'Recusar'
-}
-
-/**
- * Confirmar e Recusar de uma proposta ainda em aberto.
- *
- * - **decidindo**: os DOIS botoes desabilitados. E a guarda contra o clique
- *   duplo (pendencia 34): o hook nao se protege sozinho.
- * - **falha que se repete**: o aviso, e o botao da acao tentada vira "Tentar
- *   de novo"; o outro volta ao normal.
- * - **falha que nao se repete** (ja decidida, nao existe mais): o aviso, e
- *   "Atualizar a conversa" no lugar dos dois. Repetir so daria o mesmo erro.
- *
- * O nome acessivel de cada botao completa QUAL proposta ele afeta, num
- * `sr-only`: com duas propostas na conversa, "Confirmar" sozinho seria o mesmo
- * nome nos dois. O espaco fica FORA do `span` (licao medida no Incremento A).
- */
-function DecisionControls({
-  instructions,
-  decision,
-  onConfirm,
-  onReject,
-  onRefresh,
-}: {
-  instructions: string
-  decision: DecisionState
-  onConfirm: () => void
-  onReject: () => void
-  onRefresh: () => void
-}) {
-  const failure = decision.status === 'failed' ? decision.failure : null
-  const busy = decision.status === 'confirming' || decision.status === 'rejecting'
-
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
-      {failure?.recovery === 'refresh' ? (
-        <button
-          type="button"
-          data-testid="proposal-refresh"
-          onClick={onRefresh}
-          className={SECONDARY_BUTTON}
-        >
-          Atualizar a conversa
-        </button>
-      ) : (
-        <>
-          <button
-            type="button"
-            data-testid="proposal-confirm"
-            disabled={busy}
-            onClick={onConfirm}
-            className={BUTTON}
-          >
-            {confirmLabel(decision)} <span className="sr-only">a proposta: {instructions}</span>
-          </button>
-          <button
-            type="button"
-            data-testid="proposal-reject"
-            disabled={busy}
-            onClick={onReject}
-            className={SECONDARY_BUTTON}
-          >
-            {rejectLabel(decision)} <span className="sr-only">a proposta: {instructions}</span>
-          </button>
-        </>
-      )}
-      {failure !== null && (
-        <p role="alert" data-testid="proposal-failure" className="w-full text-sm text-red-300">
-          {failure.message}
-        </p>
-      )}
-    </div>
-  )
-}
 
 /**
  * O fim do cartao, um ramo por estado da acao.
@@ -124,7 +23,7 @@ function Outcome({
   boardHref,
   onGoToBoard,
 }: {
-  action: ActionRead
+  action: CreateMissionAction
   decision: DecisionState
   onConfirm: () => void
   onReject: () => void
@@ -136,7 +35,7 @@ function Outcome({
     case 'proposta':
       return (
         <DecisionControls
-          instructions={action.payload.instructions}
+          target={`a proposta: ${action.payload.instructions}`}
           decision={decision}
           onConfirm={onConfirm}
           onReject={onReject}
@@ -149,17 +48,7 @@ function Outcome({
           <p data-testid="proposal-created" className="font-medium text-emerald-300">
             Missão criada
           </p>
-          {/* No celular a folha cobre o quadro: quem a desenha passa
-              `onGoToBoard` para fecha-la. No desktop o painel fica ao lado, e
-              o link so segue o endereco. */}
-          <a
-            href={boardHref}
-            data-testid="proposal-board-link"
-            onClick={onGoToBoard}
-            className="text-emerald-200 underline hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-          >
-            Ver no Quartel-General
-          </a>
+          <BoardLink href={boardHref} onGoToBoard={onGoToBoard} />
         </div>
       )
     case 'recusada':
@@ -171,7 +60,7 @@ function Outcome({
     case 'falhou':
       return (
         <p data-testid="proposal-expired" className="mt-3 text-sm text-amber-200">
-          {action.error_code === 'prazo_expirado' ? EXPIRED_TEXT : FAILED_TEXT}
+          {failedActionText(action.error_code)}
         </p>
       )
   }
@@ -184,7 +73,7 @@ function Outcome({
  * este cartao, e o que sobrevive a ela nao pode morar aqui. O cartao guarda so
  * o estado da decisao em andamento.
  */
-export function ProposalCard({
+function MissionProposalCard({
   action,
   keys,
   onChanged,
@@ -192,15 +81,7 @@ export function ProposalCard({
   onRefresh,
   boardHref,
   onGoToBoard,
-}: {
-  action: ActionRead
-  keys: ActionKeys
-  onChanged: (action: ActionRead) => void
-  onMissionCreated: () => void
-  onRefresh: () => void
-  boardHref: string
-  onGoToBoard?: () => void
-}) {
+}: ProposalCardProps<CreateMissionAction>) {
   const {
     state: decision,
     confirm,
@@ -256,4 +137,54 @@ export function ProposalCard({
       />
     </div>
   )
+}
+
+/**
+ * A acao de um `kind` que esta versao nao conhece -- uma API mais nova, com
+ * uma ferramenta que este cliente ainda nao sabe desenhar.
+ *
+ * O parametro e `never`: com um ramo faltando no `switch` do `ProposalCard`,
+ * a acao que chega aqui deixa de ser `never` e o `tsc` reprova. Em tempo de
+ * execucao, o valor fora do tipo cai aqui e a conversa continua; o `kind` cru
+ * nao vai para a tela, e nada pode ser decidido (o que confirmar faria, este
+ * cliente nao sabe dizer).
+ */
+function UnknownProposal({ action }: { action: never }): ReactElement {
+  const { id } = action as { id: unknown }
+  return (
+    <p
+      data-testid="tutor-proposal-unknown"
+      data-action-id={String(id)}
+      className="mt-3 rounded-lg border border-slate-700/70 bg-slate-900/60 p-3 text-sm text-slate-300"
+    >
+      Proposta que esta versão não sabe mostrar.
+    </p>
+  )
+}
+
+/**
+ * O cartao de uma acao proposta pela Tifa, escolhido pelo `kind` (F22).
+ *
+ * Os dois cartoes mostram coisas diferentes -- uma missao nova; dois prazos e
+ * um motivo -- e compartilham so os controles de decisao, o link do quadro e
+ * o texto da falha gravada (`DecisionControls`, `BoardLink`,
+ * `failedActionText`).
+ *
+ * A escolha mora AQUI, e nao no painel, porque quem monta o cartao guarda a
+ * acao como a uniao `ActionRead` (o estado da conversa, e o `Harness` dos
+ * testes do cartao da criacao, que nao mudaram).
+ *
+ * Tipo de retorno declarado e `default` com `never`: um `kind` novo em
+ * `ActionRead` reprova o `tsc` ate ganhar cartao.
+ */
+export function ProposalCard(props: ProposalCardProps): ReactElement {
+  const { action } = props
+  switch (action.kind) {
+    case 'create_mission':
+      return <MissionProposalCard {...props} action={action} />
+    case 'reschedule_mission':
+      return <RescheduleProposalCard {...props} action={action} />
+    default:
+      return <UnknownProposal action={action} />
+  }
 }

@@ -25,6 +25,7 @@ function diaria(id: number, day: string, ajustes: Partial<Mission> = {}): Missio
     verification: null,
     evidence: null,
     evaluation: null,
+    reschedules: [],
     ...ajustes,
   }
 }

@@ -18,12 +18,14 @@ class Delta:
 
 @dataclass(frozen=True)
 class Proposta:
-    """O modelo chamou a ferramenta `create_mission` com esta entrada.
+    """O modelo chamou uma ferramenta de proposta com esta entrada.
 
-    A entrada ainda NAO foi validada: quem valida e o servico, pelo
-    `MissionCreate`, antes de gravar qualquer acao.
+    `nome` diz QUAL ferramenta foi chamada (F18). A entrada ainda NAO foi
+    validada: quem valida e o servico, pelo schema da ferramenta, antes de
+    gravar qualquer acao.
     """
 
+    nome: str
     entrada: dict[str, Any]
 
 

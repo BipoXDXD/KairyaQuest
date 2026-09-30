@@ -9,6 +9,12 @@ import type { EvidenceDraft } from './types'
 const EMPTY_DRAFT: Readonly<EvidenceDraft> = Object.freeze({ text: '', link: '' })
 
 /**
+ * As operacoes de escrita da missao que, alem do Concluir, tem chave no
+ * registro (incremento F). O Concluir segue por `operationIdFor`/`release`.
+ */
+export type MissionAction = 'start' | 'reschedule'
+
+/**
  * O que cada conclusao de missao usa do quadro: a chave, o rascunho da
  * evidencia, a marca de retry pendente e o aviso de voo.
  *
@@ -23,6 +29,15 @@ export interface CompletionRegistry {
    * houver, uma nova, que passa a ser dela ate `release`.
    */
   operationIdFor: (missionId: number) => string
+  /**
+   * A chave (`operation_id`) da acao `action` da missao: a que ja existe ou uma
+   * nova, que passa a ser dela ate `releaseActionKey`. Uma chave por missao E por
+   * tipo de operacao (F20): a UNIQUE do banco e sobre a chave sozinha, e a do
+   * Concluir gasta num Iniciar faria o Concluir falhar com `operacao_reutilizada`.
+   */
+  actionKeyFor: (missionId: number, action: MissionAction) => string
+  /** Tira a chave da acao da missao: o proximo pedido dela gera outra. */
+  releaseActionKey: (missionId: number, action: MissionAction) => void
   /**
    * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
    * formulario, pelo mesmo motivo da chave: o reload remonta os cartoes.
@@ -81,6 +96,9 @@ export interface UseCompletionRegistryResult {
  * dele no meio do pedido. Pedida com conclusao em voo, ela fica pendente e e
  * executada UMA vez, por quem terminar por ultimo.
  *
+ * As chaves do Iniciar e do Reagendar (incremento F) moram no mesmo registro,
+ * pelo mesmo motivo, num mapa a parte: por missao e por tipo (`actionKeyFor`).
+ *
  * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e
  * escritos so dentro de callbacks, e mudar um deles nao deve renderizar nada.
  * O que a tela mostra -- se ha espera -- e estado. O pedido pendente tem as duas formas porque
@@ -88,6 +106,7 @@ export interface UseCompletionRegistryResult {
  */
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {
   const operationIds = useRef(new Map<number, string>())
+  const actionKeys = useRef(new Map<string, string>())
   const drafts = useRef(new Map<number, EvidenceDraft>())
   const retryPending = useRef(new Set<number>())
   const inFlight = useRef(0)
@@ -103,6 +122,18 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
           operationIds.current.set(missionId, operationId)
         }
         return operationId
+      },
+      actionKeyFor: (missionId, action) => {
+        const slot = `${action}:${String(missionId)}`
+        let operationId = actionKeys.current.get(slot)
+        if (operationId === undefined) {
+          operationId = crypto.randomUUID()
+          actionKeys.current.set(slot, operationId)
+        }
+        return operationId
+      },
+      releaseActionKey: (missionId, action) => {
+        actionKeys.current.delete(`${action}:${String(missionId)}`)
       },
       draftFor: (missionId) => drafts.current.get(missionId) ?? EMPTY_DRAFT,
       saveDraft: (missionId, draft) => {

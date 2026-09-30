@@ -10,7 +10,11 @@ from sqlalchemy.orm import sessionmaker
 
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import SessaoDaRequisicao, get_engine
-from focusquest.core.errors import PrazoExpiradoError, ProvedorNaoConfiguradoError
+from focusquest.core.errors import (
+    PrazoExpiradoError,
+    ProvedorNaoConfiguradoError,
+    ReagendamentoInvalidoError,
+)
 from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.schemas import MAIOR_INTEIRO_DA_COLUNA, MissionRead
@@ -30,6 +34,7 @@ from focusquest.modules.tutoring.service import (
     EventoDoTurno,
     PerguntaGravada,
     PrazoExpirado,
+    ReagendamentoInvalido,
     RespostaConcluida,
     RespostaFalhou,
     Tutoria,
@@ -132,14 +137,19 @@ def confirmar(
     session: SessaoDaRequisicao,
     clock: Relogio,
 ) -> ConfirmRead:
-    """Confirma a proposta. O prazo expirado e GRAVADO e so depois vira 422:
-    o commit vem antes de levantar, ou a falha morreria com a transacao."""
+    """Confirma a proposta. O prazo expirado e o reagendamento que nao vale
+    mais (F17) sao GRAVADOS e so depois viram 422/409: o commit vem antes de
+    levantar, ou a falha morreria com a transacao."""
     resultado = confirmar_acao(
         session, USUARIO_UNICO, action_id, dados.operation_id, clock=clock
     )
     session.commit()
     if isinstance(resultado, PrazoExpirado):
         raise PrazoExpiradoError("o prazo proposto ja passou; peca outra proposta")
+    if isinstance(resultado, ReagendamentoInvalido):
+        raise ReagendamentoInvalidoError(
+            "a missao mudou depois da proposta; peca outra proposta"
+        )
     return ConfirmRead(
         action=ActionRead.model_validate(resultado.acao),
         mission=MissionRead.da_leitura(leitura_da_avulsa(resultado.missao)),

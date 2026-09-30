@@ -74,6 +74,27 @@ export interface EvaluationSummary {
   finished_at: string | null
 }
 
+/**
+ * O motivo do reagendamento, fechado em tres valores (spec do incremento F,
+ * F10). Dado, nao texto de interface: quem traduz e `RESCHEDULE_REASON_LABELS`.
+ */
+export type RescheduleReason = 'dificuldade' | 'falta_de_tempo' | 'mudanca_de_prioridade'
+
+/** Quem reagendou: a pessoa pela tela (`usuario`) ou a Tifa, por proposta confirmada. */
+export type RescheduleOrigin = 'usuario' | 'tifa'
+
+/**
+ * Um elo do historico de prazos (`RescheduleRead`, spec do incremento F). O
+ * historico so cresce: cada linha traz os dois lados da mudanca e o motivo.
+ */
+export interface Reschedule {
+  previous_deadline: string
+  new_deadline: string
+  reason: RescheduleReason
+  origin: RescheduleOrigin
+  rescheduled_at: string
+}
+
 export interface Mission {
   id: number
   instructions: string
@@ -103,6 +124,11 @@ export interface Mission {
   verification: Verification | null
   evidence: Evidence | null
   evaluation: EvaluationSummary | null
+  /**
+   * O historico de prazos, na ordem de gravacao. Lista vazia quando nunca
+   * houve reagendamento (e sempre vazia em diaria e especial).
+   */
+  reschedules: Reschedule[]
 }
 
 /**
@@ -118,4 +144,14 @@ export const MISSION_STATE_LABELS: Record<MissionState, string> = {
   pendente: 'Pendente',
   em_andamento: 'Em andamento',
   concluida: 'Concluída',
+}
+
+/**
+ * Rotulo em pt-BR de cada motivo de reagendamento. `Record` pelo mesmo motivo
+ * de `MISSION_STATE_LABELS`: um motivo novo no tipo exige o rotulo aqui.
+ */
+export const RESCHEDULE_REASON_LABELS: Record<RescheduleReason, string> = {
+  dificuldade: 'Dificuldade',
+  falta_de_tempo: 'Falta de tempo',
+  mudanca_de_prioridade: 'Mudança de prioridade',
 }

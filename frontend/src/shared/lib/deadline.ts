@@ -34,3 +34,92 @@ const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
 export function formatDeadline(iso: string): string {
   return deadlineFormatter.format(new Date(iso))
 }
+
+const SAO_PAULO = 'America/Sao_Paulo'
+
+/** As partes do instante no relogio de Sao Paulo. `h23`: meia-noite e 00, nao 24. */
+const partsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: SAO_PAULO,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+
+type CivilParts = Record<'year' | 'month' | 'day' | 'hour' | 'minute' | 'second', number>
+
+function saoPauloParts(instant: number): CivilParts {
+  const parts = Object.fromEntries(
+    partsFormatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]),
+  )
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  }
+}
+
+/** Quanto o relogio de SP esta a frente de UTC nesse instante (negativo: atras). */
+function offsetMs(instant: number): number {
+  const p = saoPauloParts(instant)
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second)
+  return asUtc - Math.floor(instant / 1000) * 1000
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * A hora civil de Sao Paulo do instante, no formato do `datetime-local`
+ * (`YYYY-MM-DDTHH:mm`). Os segundos sao cortados, como no `formatDeadline`.
+ */
+export function isoToSaoPauloCivil(iso: string): string {
+  const p = saoPauloParts(new Date(iso).getTime())
+  return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`
+}
+
+const CIVIL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
+
+/**
+ * O instante (ISO em UTC) da hora civil de Sao Paulo, ou `null` se ela nao
+ * existe: formato que nao e o do `datetime-local`, data invalida, ou a hora
+ * pulada no inicio de um horario de verao.
+ *
+ * Duas passadas pelo deslocamento, e NAO um deslocamento fixo (F21): Sao Paulo
+ * ja teve horario de verao, e a regra do backend (`cycle_domain.py`) recusa
+ * suposicao pelo mesmo motivo. A volta (`isoToSaoPauloCivil`) e a prova: o que
+ * nao da a mesma hora civil de volta nao existe no relogio de SP (o `Date.UTC`
+ * "rola" o 31/02 para marco, e a volta desmente).
+ *
+ * Numa hora que se repete (o fim do horario de verao), vale a primeira
+ * ocorrencia. O `datetime-local` nao tem como escolher, e as duas tem o mesmo
+ * texto de volta.
+ */
+export function saoPauloCivilToIso(civil: string): string | null {
+  const match = CIVIL.exec(civil)
+  if (match === null) {
+    return null
+  }
+  const [year, month, day, hour, minute] = match.slice(1).map(Number)
+  const naive = Date.UTC(year, month - 1, day, hour, minute)
+  const first = naive - offsetMs(naive)
+  const instant = naive - offsetMs(first)
+  const iso = new Date(instant).toISOString()
+  return isoToSaoPauloCivil(iso) === civil ? iso : null
+}
+
+/**
+ * A data CIVIL ("2026-09-29") do instante em `America/Sao_Paulo`: o mesmo dia
+ * que o `cycle_domain.py` chama de `dia_de`. Sai das mesmas partes de
+ * `isoToSaoPauloCivil` (`formatToParts`), e nao do formato curto de uma
+ * localidade: a ordem e o zero a esquerda nao dependem da versao do ICU. O
+ * texto nunca vai para a tela.
+ */
+export function saoPauloCivilDate(iso: string): string {
+  return isoToSaoPauloCivil(iso).slice(0, 10)
+}

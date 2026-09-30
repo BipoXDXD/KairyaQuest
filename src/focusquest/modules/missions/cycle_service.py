@@ -32,6 +32,7 @@ from focusquest.modules.missions.cycle_domain import (
     Availability,
     DiaDoPlano,
     Historico,
+    com_inicio_a_tempo,
     dia_de,
     dias_da_semana,
     dias_para_o_marco,
@@ -41,6 +42,7 @@ from focusquest.modules.missions.cycle_domain import (
     fim_do_dia,
     marco_da_semana,
     marco_mais_recente,
+    na_conclusao_tardia,
     segunda_da_semana,
     sequencia,
 )
@@ -114,6 +116,9 @@ class CicloLido:
     sequencia: int
     dias_para_o_marco: int
     especial: MissaoLida | None
+    # F25: a diaria de ontem, iniciada a tempo, enquanto pode ser concluida
+    # com atraso (e, depois de concluida com atraso, ate o limite).
+    diaria_de_ontem: MissaoLida | None
 
 
 def dia_da_diaria(missao: Mission) -> date:
@@ -165,7 +170,8 @@ def _plano_da_missao(session: Session, missao: Mission) -> WeeklyPlan:
     ).one()
 
 
-def _ler_diaria(missao: Mission, plano: WeeklyPlan, hoje: date) -> MissaoLida:
+def _ler_diaria(missao: Mission, plano: WeeklyPlan, agora: datetime) -> MissaoLida:
+    hoje = dia_de(agora)
     dia = dia_da_diaria(missao)
     if dia > hoje:
         raise MissaoNaoEncontradaError(
@@ -175,17 +181,31 @@ def _ler_diaria(missao: Mission, plano: WeeklyPlan, hoje: date) -> MissaoLida:
         concluida=missao.state is MissionState.CONCLUIDA,
         plano_criado_em=dia_de(plano.created_at),
     )
+    prazo = fim_do_dia(dia)
     return MissaoLida(
-        missao, fim_do_dia(dia), disponibilidade_da_diaria(dia, estado, hoje)
+        missao,
+        prazo,
+        com_inicio_a_tempo(
+            disponibilidade_da_diaria(dia, estado, hoje),
+            prazo,
+            missao.started_at,
+            agora,
+        ),
     )
 
 
 def _ler_especial(missao: Mission, marco: date, agora: datetime) -> MissaoLida:
+    prazo = fim_da_janela_da_especial(marco)
     return MissaoLida(
         missao,
-        fim_da_janela_da_especial(marco),
-        disponibilidade_da_especial(
-            marco, missao.state is MissionState.CONCLUIDA, agora
+        prazo,
+        com_inicio_a_tempo(
+            disponibilidade_da_especial(
+                marco, missao.state is MissionState.CONCLUIDA, agora
+            ),
+            prazo,
+            missao.started_at,
+            agora,
         ),
     )
 
@@ -202,7 +222,7 @@ def ler_missao(session: Session, missao: Mission, agora: datetime) -> MissaoLida
         return leitura_da_avulsa(missao)
     plano = _plano_da_missao(session, missao)
     if missao.mission_type is MissionType.DIARIA:
-        return _ler_diaria(missao, plano, dia_de(agora))
+        return _ler_diaria(missao, plano, agora)
     marco = marco_da_semana(
         carregar_historico(session, missao.user_id), plano.week_start
     )
@@ -304,7 +324,7 @@ def _ler_plano(session: Session, plano: WeeklyPlan, agora: datetime) -> PlanoLid
         if dia > hoje:
             dias.append(DiaLido(dia, Availability.BLOQUEADA, None))
             continue
-        lida = _ler_diaria(diarias[dia], plano, hoje)
+        lida = _ler_diaria(diarias[dia], plano, agora)
         dias.append(DiaLido(dia, lida.availability, lida))
 
     historico = carregar_historico(session, plano.user_id)
@@ -344,9 +364,13 @@ def _especial_vigente(
     session: Session, user_id: int, historico: Historico, agora: datetime
 ) -> MissaoLida | None:
     """A especial do marco mais recente, enquanto a janela dela estiver aberta
-    (spec, "A especial no Quartel-General")."""
+    (spec, "A especial no Quartel-General") -- ou, depois dela, enquanto
+    estiver na conclusao tardia da F25 (iniciada na janela). O limite da F25
+    (fim do dia seguinte ao fim da janela) ainda cabe na semana que
+    `marco_mais_recente` olha: o marco mais tardio, no domingo, tem o limite
+    na quarta seguinte."""
     marco = marco_mais_recente(historico, dia_de(agora))
-    if marco is None or agora >= fim_da_janela_da_especial(marco):
+    if marco is None:
         return None
     especial = session.scalars(
         select(Mission)
@@ -357,11 +381,40 @@ def _especial_vigente(
             WeeklyPlan.week_start == segunda_da_semana(marco),
         )
     ).one()
-    return _ler_especial(especial, marco, agora)
+    lida = _ler_especial(especial, marco, agora)
+    if agora < lida.deadline or _tardia(lida, agora):
+        return lida
+    return None
+
+
+def _tardia(lida: MissaoLida, agora: datetime) -> bool:
+    return na_conclusao_tardia(
+        lida.deadline, lida.availability, lida.missao.completed_at, agora
+    )
+
+
+def _diaria_de_ontem(
+    session: Session, user_id: int, hoje: date, agora: datetime
+) -> MissaoLida | None:
+    """F25: a diaria de ontem, se ela esta na conclusao tardia. So a de
+    ontem: o limite da F25 e o fim do dia seguinte ao dia da diaria, entao
+    nunca ha mais de uma."""
+    de_ontem = session.scalar(
+        select(Mission).where(
+            Mission.user_id == user_id,
+            Mission.mission_type == MissionType.DIARIA,
+            Mission.day == hoje - timedelta(days=1),
+        )
+    )
+    if de_ontem is None:
+        return None
+    lida = ler_missao(session, de_ontem, agora)
+    return lida if _tardia(lida, agora) else None
 
 
 def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
-    """O dia: a missao de hoje, a sequencia e a especial vigente."""
+    """O dia: a missao de hoje, a sequencia, a especial vigente e a diaria de
+    ontem em conclusao tardia (F25)."""
     agora = clock()
     hoje = dia_de(agora)
     historico = carregar_historico(session, user_id)
@@ -379,4 +432,5 @@ def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
         sequencia=atual,
         dias_para_o_marco=dias_para_o_marco(atual),
         especial=_especial_vigente(session, user_id, historico, agora),
+        diaria_de_ontem=_diaria_de_ontem(session, user_id, hoje, agora),
     )

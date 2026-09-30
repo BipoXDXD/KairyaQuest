@@ -1,6 +1,6 @@
 """Regras da missao, independentes de framework e de persistencia."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 
@@ -178,4 +178,91 @@ def validar_transicao_da_avaliacao(
         raise TransicaoIlegalError(
             f"nao e possivel ir de '{atual.value}' para '{destino.value}'; "
             f"a partir de '{atual.value}' so se pode ir para: {alvo}"
+        )
+
+
+class TipoDeOperacao(StrEnum):
+    """O `kind` de `mission_operations`: QUAL operacao a chave nomeou. A
+    UNIQUE e sobre `operation_id` sozinho, entao uma chave gasta num tipo esta
+    gasta nos outros (ver `CONCLUSAO` em service.py)."""
+
+    CONCLUSAO = "complete"
+    INICIO = "start"
+    REAGENDAMENTO = "reschedule"
+
+
+class MotivoDoReagendamento(StrEnum):
+    """Por que o prazo mudou (README s5). Fechado de proposito (F10): a maquina
+    distingue, e texto livre seria mais um dado nao confiavel no prompt."""
+
+    DIFICULDADE = "dificuldade"
+    FALTA_DE_TEMPO = "falta_de_tempo"
+    MUDANCA_DE_PRIORIDADE = "mudanca_de_prioridade"
+
+
+class OrigemDoReagendamento(StrEnum):
+    """Quem pediu: a pessoa pela tela, ou a Tifa por proposta confirmada."""
+
+    USUARIO = "usuario"
+    TIFA = "tifa"
+
+
+class ProblemaDoNovoPrazo(StrEnum):
+    """Por que um novo prazo nao serve. O servico traduz cada um no erro dele."""
+
+    NO_PASSADO = "no_passado"
+    INALTERADO = "inalterado"
+
+
+def prazo_em_utc(prazo: datetime) -> datetime:
+    """O mesmo instante em UTC, ou `ValueError` se ele nao for um instante UTC
+    representavel (F9).
+
+    Duas recusas, e nenhuma pode ficar para o `astimezone` sozinho:
+
+    - **sem fuso**: `astimezone` NAO falha num `datetime` sem fuso -- assume o
+      fuso da maquina. O mesmo 10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z
+      num container em UTC, sem erro.
+    - **fora da faixa**: a data local cabe no `datetime`, o instante em UTC nao
+      (`9999-12-31T23:59:59-03:00`); o `OverflowError` cru viraria 500.
+
+    A borda (`PrazoComFuso`, em `schemas.py`) usa esta mesma funcao; o servico
+    tambem a chama porque a Tifa chega a ele sem passar pela borda.
+    """
+    if prazo.utcoffset() is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    try:
+        return prazo.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError(
+            "prazo fora da faixa representavel quando convertido para UTC"
+        ) from exc
+
+
+def problema_do_novo_prazo(
+    novo: datetime, atual: datetime, agora: datetime
+) -> ProblemaDoNovoPrazo | None:
+    """O que impede `novo` de ser o prazo, ou `None` (F9).
+
+    O passado vem primeiro: um prazo vencido igual ao atual e, antes de tudo,
+    um prazo vencido -- e a mensagem que ajuda a pessoa. Antecipar e permitido.
+    Instantes comparam como instantes: o mesmo momento em `Z` e em `-03:00` e
+    o mesmo prazo.
+    """
+    if novo.tzinfo is None or atual.tzinfo is None or agora.tzinfo is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    if novo <= agora:
+        return ProblemaDoNovoPrazo.NO_PASSADO
+    if novo == atual:
+        return ProblemaDoNovoPrazo.INALTERADO
+    return None
+
+
+def validar_reagendamento(estado: MissionState) -> None:
+    """Reagendar vale em `pendente` e `em_andamento` (F8); a concluida nao tem
+    mais prazo a cumprir. Mesmo erro (e mesmo `code`) da transicao ilegal."""
+    if estado is MissionState.CONCLUIDA:
+        raise TransicaoIlegalError(
+            "nao e possivel reagendar uma missao 'concluida'; "
+            "so se reagenda o que ainda nao foi feito"
         )

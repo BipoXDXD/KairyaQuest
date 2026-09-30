@@ -13,7 +13,7 @@ banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
 da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Annotated, TypedDict
 
 from pydantic import (
@@ -33,13 +33,20 @@ from focusquest.modules.missions.domain import (
     FalhaDaAvaliacao,
     MissionState,
     MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
     Veredito,
     Verificacao,
     duracao_real,
+    prazo_em_utc,
     verificacao_da_missao,
     xp_da_missao,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+    MissionReschedule,
+)
 from focusquest.modules.progression.schemas import RewardRead
 
 # O teto da dificuldade aceita na ENTRADA. Escolhido em 5 por dois motivos que
@@ -98,13 +105,15 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
     test_sessao_em_utc.py`).
     """
-    try:
-        prazo.astimezone(UTC)
-    except OverflowError as exc:
-        raise ValueError(
-            "prazo fora da faixa representavel quando convertido para UTC"
-        ) from exc
+    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica;
+    # o valor devolvido e o ORIGINAL, com o offset que o cliente mandou.
+    prazo_em_utc(prazo)
     return prazo
+
+
+# O instante com fuso e representavel em UTC: a regra do `deadline` da criacao,
+# com nome, porque o reagendamento (F9) e a proposta da Tifa (F15) usam a MESMA.
+PrazoComFuso = Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
 
 
 class MissionCreate(BaseModel):
@@ -135,7 +144,7 @@ class MissionCreate(BaseModel):
     completion_criterion: str = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
-    deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
+    deadline: PrazoComFuso
 
 
 # Teto TECNICO de um identificador gerado pelo cliente (`operation_id` aqui e
@@ -242,6 +251,53 @@ def _campos_da_entrega(
     }
 
 
+class MissionStart(BaseModel):
+    """O corpo do inicio: so a chave de idempotencia (F2)."""
+
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+
+
+class MissionRescheduleIn(BaseModel):
+    """O corpo do reagendamento (F6): a chave, o novo prazo e o motivo.
+
+    `extra="forbid"`, como `EvidenceIn`: um campo a mais (uma `note` que ninguem
+    guardaria) seria ignorado em silencio, e quem o mandou acharia que foi
+    gravado. O motivo e um dos tres do README (F10); sem texto livre.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    new_deadline: PrazoComFuso
+    reason: MotivoDoReagendamento
+
+
+class RescheduleRead(BaseModel):
+    """Um elo do historico de prazos, como a API o publica (F12)."""
+
+    previous_deadline: datetime
+    new_deadline: datetime
+    reason: MotivoDoReagendamento
+    origin: OrigemDoReagendamento
+    rescheduled_at: datetime
+
+    @classmethod
+    def do_reagendamento(cls, linha: MissionReschedule) -> RescheduleRead:
+        return cls(
+            previous_deadline=linha.previous_deadline,
+            new_deadline=linha.new_deadline,
+            reason=linha.reason,
+            origin=linha.origin,
+            rescheduled_at=linha.rescheduled_at,
+        )
+
+
+def _historico_de_prazos(missao: Mission) -> list[RescheduleRead]:
+    """O historico em ordem de gravacao (a do relacionamento). Escrito uma vez,
+    porque os dois construtores de `MissionRead` o usam."""
+    return [RescheduleRead.do_reagendamento(r) for r in missao.reschedules]
+
+
 class MissionComplete(BaseModel):
     """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
 
@@ -289,6 +345,7 @@ class MissionRead(BaseModel):
     verification: Verificacao | None
     evidence: EvidenceRead | None
     evaluation: EvaluationSummaryRead | None
+    reschedules: list[RescheduleRead]
 
     @classmethod
     def da_leitura(cls, lida: MissaoLida) -> MissionRead:
@@ -307,6 +364,7 @@ class MissionRead(BaseModel):
             started_at=missao.started_at,
             completed_at=missao.completed_at,
             **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
         )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -364,5 +422,6 @@ class MissionCompletionRead(MissionRead):
             started_at=missao.started_at,
             completed_at=missao.completed_at,
             **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
             reward=recompensa,
         )

@@ -23,6 +23,7 @@ const concluida: Mission = {
   verification: 'autodeclarada',
   evidence: null,
   evaluation: null,
+  reschedules: [],
 }
 
 /** A recompensa desta conclusao, como a API a devolve junto da missao. */

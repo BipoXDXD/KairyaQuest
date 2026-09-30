@@ -20,6 +20,7 @@ from focusquest.modules.tutoring.provider import (
     TempoEsgotadoError,
     Turno,
 )
+from focusquest.modules.tutoring.schemas import RescheduleProposal
 
 # Tentativas do proprio SDK, alem da primeira chamada. Elas so acontecem antes
 # do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
@@ -40,6 +41,14 @@ DESCRICAO_DA_FERRAMENTA = (
     "no futuro."
 )
 
+DESCRICAO_DO_REAGENDAMENTO = (
+    "Propõe mudar o prazo de UMA missão avulsa ainda não concluída da lista do "
+    "contexto (pelo número #id dela). NÃO muda "
+    "nada: a pessoa vê a proposta num cartão e decide se confirma ou recusa. "
+    "Use só depois de conversar o motivo, e no máximo uma proposta por resposta. "
+    "O novo prazo (new_deadline) é um instante ISO 8601 com fuso horário, no futuro."
+)
+
 
 def esquema_da_proposta() -> dict[str, Any]:
     """O `input_schema` da ferramenta, gerado do MESMO `MissionCreate` do
@@ -52,6 +61,18 @@ def esquema_da_proposta() -> dict[str, Any]:
     esquema = MissionCreate.model_json_schema()
     esquema.pop("description", None)
     esquema.pop("title", None)
+    return esquema
+
+
+def esquema_do_reagendamento() -> dict[str, Any]:
+    """O `input_schema` de `reschedule_mission`, gerado do `RescheduleProposal`
+    (a tecnica de `esquema_da_proposta`)."""
+    esquema = RescheduleProposal.model_json_schema()
+    esquema.pop("description", None)
+    esquema.pop("title", None)
+    # A docstring do enum tambem vai para o `$defs`; e de manutencao.
+    for definicao in esquema.get("$defs", {}).values():
+        definicao.pop("description", None)
     return esquema
 
 
@@ -108,10 +129,15 @@ class ProvedorAnthropic:
         self._max_tokens = max_tokens
 
     def responder(self, turno: Turno) -> Generator[EventoDoProvedor]:
-        ferramenta: ToolParam = {
+        criar: ToolParam = {
             "name": TipoDeAcao.CRIAR_MISSAO.value,
             "description": DESCRICAO_DA_FERRAMENTA,
             "input_schema": esquema_da_proposta(),
+        }
+        reagendar: ToolParam = {
+            "name": TipoDeAcao.REAGENDAR_MISSAO.value,
+            "description": DESCRICAO_DO_REAGENDAMENTO,
+            "input_schema": esquema_do_reagendamento(),
         }
         with (
             _traduzir_erros(),
@@ -120,7 +146,7 @@ class ProvedorAnthropic:
                 max_tokens=self._max_tokens,
                 system=turno.sistema,
                 messages=_mensagens_da_api(turno),
-                tools=[ferramenta],
+                tools=[criar, reagendar],
                 # Uma proposta por resposta (README s14).
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
@@ -132,7 +158,9 @@ class ProvedorAnthropic:
                 elif evento.type == "content_block_stop" and isinstance(
                     evento.content_block, ToolUseBlock
                 ):
-                    yield Proposta(dict(evento.content_block.input))
+                    yield Proposta(
+                        evento.content_block.name, dict(evento.content_block.input)
+                    )
                 elif evento.type == "message_delta":
                     motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
