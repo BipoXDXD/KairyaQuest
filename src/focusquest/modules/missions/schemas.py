@@ -13,7 +13,7 @@ banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
 da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Annotated, TypedDict
 
 from pydantic import (
@@ -38,6 +38,7 @@ from focusquest.modules.missions.domain import (
     Veredito,
     Verificacao,
     duracao_real,
+    prazo_em_utc,
     verificacao_da_missao,
     xp_da_missao,
 )
@@ -104,12 +105,9 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
     test_sessao_em_utc.py`).
     """
-    try:
-        prazo.astimezone(UTC)
-    except OverflowError as exc:
-        raise ValueError(
-            "prazo fora da faixa representavel quando convertido para UTC"
-        ) from exc
+    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica;
+    # o valor devolvido e o ORIGINAL, com o offset que o cliente mandou.
+    prazo_em_utc(prazo)
     return prazo
 
 

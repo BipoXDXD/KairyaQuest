@@ -8,7 +8,7 @@ tornar tudo permanente para o dono da transacao.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +33,7 @@ from focusquest.modules.missions.domain import (
     OrigemDoReagendamento,
     ProblemaDoNovoPrazo,
     TipoDeOperacao,
+    prazo_em_utc,
     problema_do_novo_prazo,
     validar_reagendamento,
     validar_transicao,
@@ -327,8 +328,11 @@ def reagendar_missao(
     serializaria o instante COM o offset que o cliente mandou (`-03:00`), e o
     reenvio, lido do banco, o mesmo instante em `Z` -- o "mesmo corpo" (F13)
     nao seria o mesmo. Normalizar aqui vale para a tela e para a Tifa.
+    `prazo_em_utc` recusa, com `ValueError` e antes de tudo, o instante sem fuso
+    e o que nao cabe em UTC: `astimezone` sozinho aceitaria o primeiro com o
+    fuso da maquina (revisao da T4, I1).
     """
-    novo_prazo = novo_prazo.astimezone(UTC)
+    novo_prazo = prazo_em_utc(novo_prazo)
     missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
     agora = clock()
     lida = ler_missao(session, missao, agora)
