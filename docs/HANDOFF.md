@@ -3384,7 +3384,7 @@ que não tinham chegado aqui)
     fusos. Efeito no contrato: todo instante lido do banco sai com `Z`; o 201
     da criação continua ecoando o prazo com o offset que o cliente mandou
     (`docs/ARCHITECTURE.md`).
-28. **`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
+28. ~~**`/ready` responde 500 — e não 503 — sem configuração de banco.** Sem
     `FOCUSQUEST_DATABASE_URL` no ambiente e no `.env`, a dependência
     `get_engine` estoura `ValidationError` antes do `try` que traduz a falha
     do banco em 503 (medido). Diferido desde a Task 4, com decisão
@@ -3392,7 +3392,47 @@ que não tinham chegado aqui)
     liveness/readiness foi a parte mais delicada da execução. Se ninguém
     mexer: um orquestrador vê "não pronto" do mesmo jeito; quem ler só o
     status não distingue "banco fora" de "implantação sem configuração". O
-    `docs/ARCHITECTURE.md` descreve os três casos.
+    `docs/ARCHITECTURE.md` descreve os três casos.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(saude): ready responde 503 sem
+    configuracao de banco`).** A correção coube no tamanho pedido e não mexe
+    na pendência 14: `core/database.py` ganhou `get_engine_se_configurada`,
+    que chama o mesmo `get_engine` e devolve `None` quando o `Settings` não
+    tem a `database_url` (ver a correção I1 abaixo); o `/ready` depende dela
+    e responde `503` com `{"status": "unavailable", "database":
+    "not_configured"}` — o corpo separa "sem
+    configuração" de "banco fora" (`unavailable`), já que o status agora é o
+    mesmo nos dois. A engine continua global e preguiçosa, e o `/health`
+    continua sem dependência nenhuma (o teste
+    `test_health_responde_sem_configuracao_de_banco` passa sem mudança). As
+    rotas de negócio continuam em `get_engine` e respondem 500 sem
+    configuração — para elas é defeito de implantação, e trocar isso pediria
+    um `code` novo que o frontend repetiria. Testes em
+    `tests/integration/test_health.py`: o `/ready` sem `.env` e sem as
+    variáveis (RED visto: o `ValidationError` subia pelo `TestClient`) e o
+    ramo configurado de `get_engine_se_configurada` devolvendo a mesma engine
+    de `get_engine`. A fixture `override_engine` passou a substituir as duas
+    dependências (sem isso o `/ready` dos testes com engine quebrada iria ao
+    banco real); nenhuma asserção existente mudou. Mutações: tirar o `except`
+    reprova o teste novo; tirar o `503` do ramo sem configuração reprova; e
+    devolver `unavailable` no lugar de `not_configured` reprova.
+    **Correção da revisão (I1, commit `fix(saude): so a database_url ausente
+    vira not_configured no ready`):** a primeira versão engolia **qualquer**
+    `ValidationError` do `Settings` — `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, chave
+    desconhecida no `.env`, a URL de teste ausente — e respondia 503
+    `not_configured` sem log, apontando o banco quando o erro era outro.
+    Agora `get_engine_se_configurada` só devolve `None` quando os `errors()`
+    contêm a `database_url` com `type` `missing`; qualquer outro erro sobe
+    como antes (500, com o traceback que nomeia o campo). "Contém", e não "é
+    só": sem configuração nenhuma, a URL de teste falta junto, e o banco de
+    fato não está configurado. Teste novo, parametrizado (campo inválido com a
+    URL presente; só a URL de teste ausente), exige que o `ValidationError`
+    suba — RED visto (`DID NOT RAISE`, os dois casos respondiam 503).
+    Mutações: devolver `None` sempre reprova os dois casos novos; `all` no
+    lugar de `any` reprova o caso "nada configurado". A condição `type ==
+    "missing"` é mutação **equivalente** nos testes (tirá-la não reprova
+    nada): `database_url` é `str` e, vinda do ambiente ou do `.env`, só pode
+    faltar (vazia também conta como falta, `env_ignore_empty`); ela fica como
+    documentação da intenção, a pedido da revisão.
 29. **Os comandos dependem de rodar da raiz do repositório.** O `Settings` lê
     o `.env` do diretório **corrente**, e o `alembic.ini` também é achado
     pelo diretório corrente. Medido fora da raiz: a aplicação estoura
@@ -3637,7 +3677,7 @@ que não tinham chegado aqui)
     `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence` (Task 6, fix
     round 1/5) — discriminaram a mutação em **5 de 5** execuções cada, sem
     nenhuma passagem por acidente. Não há taxa parcial a acompanhar.
-45. **Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
+45. ~~**Um `message_stop` com `stop_reason: max_tokens` grava a resposta como
     `completa`, e não como cortada.** A guarda da medição M3 cobre o corte de
     **transporte** (a conexão cai e a iteração termina em silêncio, sem
     `Fim`); ela não distingue um `Fim` que chega porque o modelo terminou de
@@ -3650,7 +3690,41 @@ que não tinham chegado aqui)
     corte veio antes do `tool_use`. A tela não tem como distinguir: o
     `MessageRead` não carrega o `stop_reason`. Resolver pede mudar o backend
     (gravar o `stop_reason`, ou tratar `max_tokens` como `interrompida`) —
-    fora do escopo do 1b-2, que não muda `src/focusquest/`.
+    fora do escopo do 1b-2, que não muda `src/focusquest/`.~~ **Resolvida em
+    2026-09-29 (lote back, commit `fix(tutoria): resposta cortada por
+    max_tokens fica interrompida`).** **Decisão:** a resposta cortada pelo
+    teto de tokens é gravada `interrompida`, com o texto parcial, **sem
+    ação**, e chega ao cliente no `done` de sempre. Escolhida por ser a que
+    menos muda contrato: nenhum valor de enum novo (`interrompida` já existe
+    na coluna, no `CHECK` e no `MessageStatus` do frontend), nenhuma coluna
+    nem migração, nenhum `error_code` novo e nenhum evento SSE novo — muda só
+    **qual** `status` o `done` pode carregar. As alternativas custavam mais:
+    gravar o `stop_reason` pede migração, schema e tela; `falhou` com um
+    `error_code` novo pede um código no `CodigoDoStream`, no
+    `StreamErrorCode` e no mapa exaustivo de `messageFailure.ts`, e trataria
+    como falha do provedor algo que é um limite configurado. `interrompida`
+    também é a leitura honesta — "a resposta não chegou inteira" — e reusa o
+    que já existe para esse estado: a tela marca "Resposta interrompida" e oferece o
+    "Tentar de novo" do histórico (`pendingFromHistory`), o reenvio com o
+    mesmo id gera resposta nova (só a `completa` conta como resposta), e o
+    `_historico` do turno seguinte já exclui a `interrompida`, então o texto
+    cortado não volta ao modelo. A proposta é descartada porque a entrada da
+    ferramenta pode ter chegado pela metade. **Frontend:** nenhuma mudança de
+    código; um teste novo (`TutorPanel.test.tsx`, P33) prova o fluxo do
+    `done` `interrompida` (marca, nota de reenvio, reenvio com o mesmo id).
+    **Backend:** `Fim` ganhou `cortada: bool = False`; o adaptador guarda o
+    `stop_reason` do `message_delta` e emite `Fim(cortada=True)` quando é
+    `max_tokens`; `transmitir` grava `interrompida` e zera a proposta; a
+    docstring de `StatusDaMensagem` e o `docs/ARCHITECTURE.md` (o stream do
+    `POST /messages`) passaram a descrever o caso. RED visto: o teste do
+    adaptador reprovou com `TypeError` (o `Fim` sem o campo) e os de serviço
+    com `completa` no lugar de `interrompida`. Mutações: o adaptador emitindo
+    `Fim()` sempre reprova 5 testes; o serviço gravando sempre `completa`
+    reprova 4; sem o descarte da proposta, 2 (a ação nascia de uma entrada
+    cortada); no frontend, a marca de `interrompida` nula reprova o P33 (e
+    P5, P14, P30), e `pendingFromHistory` tratando `interrompida` como
+    resolvida reprova o P33 e o P17. Limitações novas: 120, 121 e 122 (esta
+    da revisão: o reenvio oferecido tende a cortar de novo).
 46. **Quando o recolhimento de órfãos já marcou a linha como `interrompida`,
     o `RespostaFalhou` ainda sai, mas o `UPDATE` condicional de `_encerrar`
     não grava nada** (ele só atualiza uma linha ainda `gerando`). Nesse
@@ -3778,7 +3852,7 @@ que não tinham chegado aqui)
     meia-noite não dispara nenhum dos dois eventos — o Quartel-General
     oculto (K2) continua mostrando o dia anterior até a aba sair e voltar,
     ou até um recarregamento.
-58. **Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
+58. ~~**Faltam testes de serviço para a especial EXPIRADA na trilha/`ler_missao`
     e para a diária PERDIDA na trilha** (triagem da revisão final da branch;
     já estava listado como "minor" diferido da Task 3, promovido a pendência
     aqui). `tests/integration/test_cycle_service.py` cobre a especial
@@ -3796,7 +3870,26 @@ que não tinham chegado aqui)
     que force `ler_missao`/`ler_plano_atual` a produzir os dois estados —
     isso é backend, e o Incremento C, por desenho, não muda
     `src/focusquest/` (Autorrevisão do plano do C, "Pendências do B
-    absorvidas"). Continua aberta.
+    absorvidas").~~ **Resolvida em 2026-09-29 (lote back, commit
+    `test(ciclo): diaria perdida e especial expirada na trilha contra o banco`).**
+    Cinco testes novos em `tests/integration/test_cycle_service.py`, contra o
+    PostgreSQL real e com o relógio injetado: a trilha de `ler_plano_atual`
+    com diárias `perdida` (com a missão e o prazo) ao lado de uma `concluida`;
+    `ler_missao` na diária de ontem devolvendo `perdida` (e não 404); a trilha
+    com a especial `expirada` — ainda com a missão e o prazo do fim do dia
+    seguinte ao marco —, depois de ter estado `disponivel` no último dia da
+    janela; `ler_missao` na especial fora da janela devolvendo `expirada`; e
+    `ler_ciclo` escondendo a especial expirada enquanto a trilha a mostra.
+    Para a trilha da semana **atual** exibir a especial expirada, o marco
+    precisa cair no meio da semana (com ele no domingo, a janela só fecha na
+    terça da semana seguinte, quando a trilha já é outra): o auxiliar
+    `_marco_na_quarta` monta a sequência atravessando duas semanas (quinta a
+    domingo de S-1, com o plano criado na quinta, e segunda a quarta de S).
+    Nenhum defeito encontrado: os testes passaram de primeira, e o RED foi
+    obtido por mutação — `disponibilidade_da_diaria` devolvendo `disponivel`
+    no lugar de `perdida` reprova 3 dos testes novos, e
+    `disponibilidade_da_especial` devolvendo `disponivel` no lugar de
+    `expirada` reprova outros 3.
 
 **Criadas pelo Incremento C**
 
@@ -4246,11 +4339,28 @@ ledger; nenhum é bug esquecido.
     `EvaluationPanel` recebe `reloadWaiting` (`reloadWaiting.ts`), e o botão de
     recarga fica desabilitado, com o texto de espera, enquanto a conclusão em voo
     termina.
-96. **N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
+96. ~~**N+1 (`lazy="select"`) de `evidence` e `evaluation` na listagem** (Task 3).
     O `MissionRead` deriva `verification`, `evidence` e `evaluation` dos
     relacionamentos, carregados com `lazy="select"`: cada missão listada custa
     até duas consultas a mais. Aceito enquanto o usuário tem poucas missões
-    (A2); com muitas, trocar por `selectinload` na listagem.
+    (A2); com muitas, trocar por `selectinload` na listagem.~~ **Resolvida em
+    2026-09-29 (lote back, commit `perf(missoes): selectinload de evidencia e
+    avaliacao na listagem`).** `listar_missoes` pede
+    `selectinload(Mission.evidence)` e `selectinload(Mission.evaluation)` na
+    própria consulta; o `lazy="select"` do modelo fica para a leitura de uma
+    missão só. O teste novo
+    `tests/integration/test_missions_listagem_consultas.py` conta, com um
+    ouvinte `before_cursor_execute` na conexão da sessão, as consultas que a
+    rota `listar` dispara depois de `expire_all()`: antes da correção, 8
+    missões custavam **17** consultas (1 + 2 × 8, RED visto); depois, **3**
+    para 1 e para 8 missões. Mutação: tirar qualquer um dos dois
+    `selectinload` volta a 10 consultas e reprova. Um segundo teste confere que
+    o carregamento antecipado não troca a evidência de uma missão pela de
+    outra nem perde a avaliação. Efeito colateral declarado: a montagem do
+    turno da Tifa (`tutoring/service.py`), que também usa `listar_missoes` e
+    não lê evidência nem avaliação, passa a fazer duas consultas pequenas a
+    mais por turno — custo fixo, aceito para manter uma única consulta de
+    listagem.
 97. **Minors das revisões adiados** (ledger e revisões), nenhum com efeito no
     produto: (a) os três `TypeDecorator` de `missions/models.py` são quase
     iguais, e o `cascade` de `Mission.evidence`/`Mission.evaluation` não usa
@@ -4480,6 +4590,35 @@ ledger; nenhum é bug esquecido.
     (pendência 12): por esse caminho, uma chave `FOCUSQUEST_*` desconhecida
     no `.env` é descartada em silêncio em vez de reprovar. Se ninguém mexer:
     nada muda para quem trabalha da raiz.
+
+**Criadas pelo lote back (2026-09-29)**
+
+120. **Só `max_tokens` conta como corte; os outros `stop_reason` continuam
+     gravando `completa`.** O adaptador de conversa (`responder`) distingue
+     apenas `max_tokens` (pendência 45). `model_context_window_exceeded` —
+     também uma resposta truncada — e `refusal` chegariam como `completa`. O
+     servidor falso só roteiriza `end_turn`, `tool_use` e `max_tokens`, e uma
+     guarda sem teste que a prove não entrou. Resolver: estender o `Literal`
+     do `Roteiro` e tratar a janela de contexto como corte (e decidir o que a
+     recusa deve mostrar).
+121. **A região viva anuncia "Tifa terminou de responder." também para a
+     resposta cortada pelo teto de tokens.** O `done` `interrompida` leva o
+     envio a `idle` com `finished`, e o texto da região viva
+     (`TutorPanel.tsx`) não olha o `status` da resposta. Quem enxerga vê a
+     marca "Resposta interrompida" e a nota de reenvio; quem usa leitor de
+     tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
+     pede o estado `idle` carregar o `status` da resposta (ou a região viva
+     ler a última mensagem) e um texto próprio para o corte.
+122. **O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
+     cortar de novo** (M1 da revisão do lote back). O reenvio manda a mesma
+     pergunta com o mesmo teto (`tutor_max_tokens`, 1024 por padrão), e a
+     nota da tela ("A última pergunta ficou sem resposta completa. Tentar de
+     novo é seguro…") não diz que a resposta ficou longa demais nem sugere
+     perguntar de outro jeito. A proposta que vinha depois do corte some sem
+     aviso (descartada de propósito: a entrada podia estar pela metade).
+     Resolver pede a tela distinguir o corte — o que esbarra na 121: o
+     `MessageRead` não diz **por que** a resposta ficou `interrompida` — e um
+     texto próprio ("a resposta ficou longa demais; tente pedir por partes").
 
 ## Próximo incremento
 

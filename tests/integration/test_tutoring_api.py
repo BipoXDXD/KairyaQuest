@@ -197,6 +197,31 @@ def test_o_stream_na_ordem_do_contrato(
     )
 
 
+def test_resposta_cortada_por_max_tokens_chega_no_done_como_interrompida(
+    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+) -> None:
+    """Pendencia 45, pelo contrato: o `done` traz a mensagem com `status`
+    `interrompida` e sem acao. A tela ja marca esse estado ("Resposta
+    interrompida") e oferece "Tentar de novo" pela ultima pergunta.
+
+    A ferramenta completa antes do `max_tokens` e o pior caso de proposito
+    (ver `test_proposta_cortada_por_max_tokens_nao_vira_acao`)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco",)), ChamadaDeFerramenta(PROPOSTA)),
+        stop_reason="max_tokens",
+    )
+    eventos = _eventos(_enviar(cliente, conversa.id("teto")).text)
+
+    assert [nome for nome, _ in eventos] == ["user_message", "delta", "done"]
+    final = eventos[-1][1]
+    assert (final["status"], final["content"], final["actions"]) == (
+        "interrompida",
+        "Comeco",
+        [],
+    )
+    assert final["error_code"] is None
+
+
 def test_falha_do_provedor_vira_evento_error(
     cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
 ) -> None:

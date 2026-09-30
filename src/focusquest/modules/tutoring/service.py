@@ -211,6 +211,9 @@ def transmitir(
 
     O `RespostaConcluida` sai depois do commit, e o `RespostaFalhou` depois de
     a falha estar gravada: o cliente nunca age sobre algo que o banco nao tem.
+    A mensagem do `RespostaConcluida` e `completa` ou, quando o teto de tokens
+    cortou a resposta (`Fim(cortada=True)`, pendencia 45), `interrompida`, com
+    o texto parcial e sem acao.
 
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o
@@ -228,6 +231,7 @@ def transmitir(
     partes: list[str] = []
     proposta: dict[str, object] | None = None
     terminou = False
+    cortada = False
     codigo: CodigoDoStream | None = None
     try:
         yield PerguntaGravada(preparo.pergunta)
@@ -242,6 +246,7 @@ def transmitir(
                     proposta = evento.entrada
                 else:
                     terminou = True
+                    cortada = evento.cortada
                 # Limite TOTAL, pelo relogio injetavel.
                 if clock() - inicio > tutoria.limite:
                     raise TempoEsgotadoError("a resposta passou do limite total")
@@ -262,6 +267,11 @@ def transmitir(
     if codigo is None and not terminou:
         # O corte que o SDK nao denuncia: sem `Fim`, a resposta nao terminou.
         codigo = CodigoDoStream.PROVEDOR_INDISPONIVEL
+    if cortada:
+        # O teto de tokens cortou a resposta (pendencia 45): o texto parcial
+        # fica gravado e visivel, mas `interrompida`, e a proposta -- que pode
+        # ter chegado pela metade -- nao vira acao.
+        proposta = None
     if codigo is None and proposta is not None:
         try:
             dados = MissionCreate.model_validate(proposta)
@@ -273,7 +283,8 @@ def transmitir(
         yield RespostaFalhou(codigo)
         return
 
-    concluida = _completar(fabrica, preparo.resposta_id, texto, dados, clock())
+    status = StatusDaMensagem.INTERROMPIDA if cortada else StatusDaMensagem.COMPLETA
+    concluida = _completar(fabrica, preparo.resposta_id, texto, dados, clock(), status)
     if concluida is None:
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
         yield RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
@@ -452,8 +463,12 @@ def _completar(
     texto: str,
     dados: MissionCreate | None,
     agora: datetime,
+    status: StatusDaMensagem,
 ) -> TutorMessage | None:
-    """Grava a resposta completa e a acao proposta, na MESMA transacao.
+    """Grava a resposta que chegou ao `Fim` e a acao proposta, na MESMA transacao.
+
+    `status` e `completa`, ou `interrompida` quando o teto de tokens cortou a
+    resposta (nesse caso `dados` e sempre None).
 
     A trava na linha evita a corrida com o recolhimento de orfaos: se a linha
     ja nao esta `gerando`, ela foi recolhida, e nada e gravado.
@@ -463,7 +478,7 @@ def _completar(
         assert resposta is not None
         if resposta.status is not StatusDaMensagem.GERANDO:
             return None
-        resposta.status = StatusDaMensagem.COMPLETA
+        resposta.status = status
         resposta.content = texto
         if dados is not None:
             session.add(

@@ -16,9 +16,11 @@ class StatusDaMensagem(StrEnum):
     """O ciclo de vida de uma mensagem.
 
     A pergunta nasce `completa`. A resposta nasce `gerando`, gravada ANTES de
-    chamar o provedor, e termina em um dos outros tres. `interrompida` e
-    "resultado desconhecido": o cliente sumiu, o processo morreu ou a resposta
-    foi recolhida como orfa. `falhou` tem sempre um `error_code`.
+    chamar o provedor, e termina em um dos outros tres. `interrompida` e a
+    resposta que nao chegou inteira: o cliente sumiu, o processo morreu, a
+    resposta foi recolhida como orfa (nesses tres, resultado desconhecido) ou
+    o teto de tokens a cortou (pendencia 45: o texto parcial fica, a acao
+    nao). `falhou` tem sempre um `error_code`.
     """
 
     GERANDO = "gerando"

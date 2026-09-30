@@ -34,7 +34,14 @@ class Fim:
     Existe porque o fim da iteracao nao prova nada: um stream cortado no meio
     termina a iteracao em silencio (o SDK nao denuncia o corte). So quem
     recebeu `Fim` pode gravar a resposta como `completa`.
+
+    `cortada` separa os dois `message_stop` que o SDK entrega iguais: o do
+    modelo que terminou e o do teto de tokens (`stop_reason: max_tokens`,
+    pendencia 45). Cortada, a resposta e parcial -- nem o texto nem a
+    proposta estao inteiros.
     """
+
+    cortada: bool = False
 
 
 EventoDoProvedor = Delta | Proposta | Fim

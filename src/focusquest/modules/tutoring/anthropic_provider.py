@@ -125,6 +125,7 @@ class ProvedorAnthropic:
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
         ):
+            motivo_da_parada: str | None = None
             for evento in stream:
                 if evento.type == "text":
                     yield Delta(evento.text)
@@ -132,8 +133,10 @@ class ProvedorAnthropic:
                     evento.content_block, ToolUseBlock
                 ):
                     yield Proposta(dict(evento.content_block.input))
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
-                    yield Fim()
+                    yield Fim(cortada=motivo_da_parada == "max_tokens")
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
         """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou

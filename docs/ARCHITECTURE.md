@@ -673,7 +673,7 @@ medição em `docs/HANDOFF.md`, pendência 29.
 | `GET /api/missions` | `200` com a lista | Lista as missões **avulsas** do usuário único (desde o Incremento B; ver "O contrato HTTP do ciclo diário", abaixo), em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
-| `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
+| `GET /ready` | `200` ou `503` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; `503` com `{"status": "unavailable", "database": "not_configured"}` quando **falta a `database_url`** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente). Qualquer outro erro do `Settings` — um campo inválido como `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, uma chave desconhecida, a `FOCUSQUEST_TEST_DATABASE_URL` ausente — continua respondendo `500`, com o traceback que nomeia o campo: não é "banco não configurado". Até a pendência 28 este terceiro caso era `500`: a rota dependia de `get_engine`, e o `ValidationError` do `Settings` estourava na resolução da dependência; agora ela depende de `get_engine_se_configurada` (`core/database.py`), que devolve `None` só quando os `errors()` do `ValidationError` trazem a `database_url` como `missing`. As rotas de negócio continuam em `get_engine` e respondem `500` sem configuração. |
 
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` de `core/usuario_unico.py` (desde o E; até
@@ -799,8 +799,10 @@ mesmo padrão dos estados de `missions`
 
 **O stream do `POST /messages`**, eventos SSE nesta ordem: `user_message`
 (a pergunta já gravada, com o `id` do banco) → `delta` zero ou mais vezes
-(`{"text": "…"}`) → um final, só um: `done` (a resposta completa e as ações
-dela, emitido **depois do commit**) ou `error` (`{"code": "…"}`, emitido
+(`{"text": "…"}`) → um final, só um: `done` (a resposta gravada e as ações
+dela, emitido **depois do commit** — `status` `completa`, ou `interrompida`,
+com o texto parcial e sem ação, quando o modelo parou por `stop_reason:
+max_tokens`, pendência 45 do `docs/HANDOFF.md`) ou `error` (`{"code": "…"}`, emitido
 **depois** de a falha estar gravada como `falhou`). Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do

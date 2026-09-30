@@ -1,6 +1,6 @@
 """O adaptador de producao, inteiro, contra o servidor falso."""
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -58,6 +58,22 @@ def test_texto_em_pedacos_e_fim(falso: ServidorAnthropicFalso) -> None:
 def test_a_ferramenta_vira_proposta_antes_do_fim(falso: ServidorAnthropicFalso) -> None:
     falso.roteiro = Roteiro(blocos=(Texto(("Toma:",)), ChamadaDeFerramenta(ENTRADA)))
     assert _todos(falso) == [Delta("Toma:"), Proposta(ENTRADA), Fim()]
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "cortada"),
+    [("end_turn", False), ("tool_use", False), ("max_tokens", True)],
+)
+def test_o_fim_diz_se_o_teto_de_tokens_cortou_a_resposta(
+    falso: ServidorAnthropicFalso,
+    stop_reason: Literal["end_turn", "tool_use", "max_tokens"],
+    cortada: bool,
+) -> None:
+    """Pendencia 45: o `message_stop` chega igual quando o modelo terminou e
+    quando o SDK bateu em `max_tokens`. Quem distingue e o `stop_reason` do
+    `message_delta`, que o adaptador leva ao `Fim`."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Bora",)),), stop_reason=stop_reason)
+    assert _todos(falso) == [Delta("Bora"), Fim(cortada=cortada)]
 
 
 @pytest.mark.parametrize(

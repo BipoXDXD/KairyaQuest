@@ -17,6 +17,8 @@ from collections.abc import Iterator
 from typing import Annotated, Any
 
 from fastapi import Depends
+from pydantic import ValidationError
+from pydantic_core import ErrorDetails
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import ConnectionPoolEntry, Pool
@@ -90,6 +92,36 @@ def get_engine() -> Engine:
     if _engine is None:
         _engine = create_engine_from_url(Settings().database_url)
     return _engine
+
+
+def get_engine_se_configurada() -> Engine | None:
+    """A engine, ou None quando a `database_url` nao esta configurada.
+
+    So o `/ready` usa (pendencia 28): ali "sem configuracao" e um estado a
+    responder com 503, e nao um 500. Com `Depends(get_engine)`, o
+    `ValidationError` do `Settings` estoura na resolucao da dependencia, antes
+    de a rota poder traduzi-lo. As rotas de negocio continuam em `get_engine`:
+    para elas, faltar configuracao e defeito de implantacao, e 500 e a verdade.
+    A engine continua preguicosa e global (pendencia 14): nada aqui a cria na
+    partida, e o `/health` segue sem tocar em nada disto.
+
+    So a AUSENCIA da `database_url` vira None (revisao I1 do lote back): um
+    outro campo invalido -- `tutor_max_tokens=0`, chave desconhecida no .env,
+    a URL de teste faltando -- nao e "banco nao configurado", e sobe como
+    antes, com o traceback que nomeia o campo. "Contem", e nao "e so": sem
+    configuracao nenhuma, a URL de teste falta junto, e o banco de fato nao
+    esta configurado.
+    """
+    try:
+        return get_engine()
+    except ValidationError as erro:
+        if any(_falta_a_url_do_banco(falha) for falha in erro.errors()):
+            return None
+        raise
+
+
+def _falta_a_url_do_banco(falha: ErrorDetails) -> bool:
+    return falha["loc"] == ("database_url",) and falha["type"] == "missing"
 
 
 def get_session(engine: Annotated[Engine, Depends(get_engine)]) -> Iterator[Session]:
