@@ -50,7 +50,11 @@ interface CardProps {
   onCompleted: () => void
   /** O bonus da avaliacao: so avisa a pagina (a sequencia nao muda com ele). */
   onRewarded?: () => void
-  /** Aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
+  /**
+   * Aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". Este e o
+   * rotulo do cartao da missao de hoje; os da diaria de ontem e da especial
+   * trocam o proprio, porque "a missao de hoje" seria falso neles.
+   */
   reloadLabel: string
 }
 
@@ -108,11 +112,14 @@ function CycleLoaded({
             {lateDailyReason(cycle.late_daily)}
           </p>
           <ul role="list" className="flex flex-col gap-3">
-            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. O
+                rotulo de recarga e o do PROPRIO cartao: "a missao de hoje"
+                num cartao titulado "Diaria de ontem" seria falso. */}
             <MissionCard
               key={cycle.late_daily.id}
               mission={cycle.late_daily}
               {...card}
+              reloadLabel="Atualizar a diária de ontem"
               titleLevel={4}
             />
           </ul>
@@ -136,7 +143,7 @@ function CycleLoaded({
           <h3 className="mb-2 text-base font-semibold text-emerald-200">
             Missão especial — bônus da sequência
           </h3>
-          {/* F25 (m2 da revisao): depois do fim da janela, o prazo impresso no
+          {/* F25: depois do fim da janela, o prazo impresso no
               cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
           {specialReason !== null && (
             <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">
@@ -144,8 +151,15 @@ function CycleLoaded({
             </p>
           )}
           <ul role="list" className="flex flex-col gap-3">
-            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
-            <MissionCard key={cycle.special.id} mission={cycle.special} {...card} titleLevel={4} />
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje, e o
+                rotulo de recarga tambem e o do proprio cartao. */}
+            <MissionCard
+              key={cycle.special.id}
+              mission={cycle.special}
+              {...card}
+              reloadLabel="Atualizar a missão especial"
+              titleLevel={4}
+            />
           </ul>
         </div>
       )}

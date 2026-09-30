@@ -291,7 +291,7 @@ describe('CycleSection', () => {
     })
   })
 
-  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida (m1)', async () => {
+  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida', async () => {
     const concluidaComAtraso: Mission = {
       ...diariaDeOntem,
       state: 'concluida',
@@ -309,7 +309,7 @@ describe('CycleSection', () => {
     expect(secao).not.toHaveTextContent('ainda pode ser concluída')
   })
 
-  it('a especial em conclusao tardia ganha o motivo a vista (m2)', async () => {
+  it('a especial em conclusao tardia ganha o motivo a vista', async () => {
     const especialTardia: Mission = {
       ...especial,
       state: 'em_andamento',
@@ -328,7 +328,7 @@ describe('CycleSection', () => {
     expect(within(secao).getByTestId('mission-complete')).toBeInTheDocument()
   })
 
-  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo (m2)', async () => {
+  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo', async () => {
     const especialConcluidaTarde: Mission = {
       ...especial,
       state: 'concluida',
@@ -525,6 +525,40 @@ describe('CycleSection', () => {
     // O rotulo padrao do MissionCard (do quadro de avulsas) nao pode aparecer
     // aqui: seria falar de um "quadro" que a secao do ciclo nao tem.
     expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
+  })
+
+  it('o botao de recuperacao da diaria de ontem diz "Atualizar a diária de ontem", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ streak: 0, late_daily: diariaDeOntem })),
+      'POST /api/missions/30/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a diária de ontem' }),
+    ).toBeInTheDocument()
+    // O rotulo da missao de hoje, num cartao que nao e a de hoje, mentiria.
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+  })
+
+  it('o botao de recuperacao da especial diz "Atualizar a missão especial", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/38/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a missão especial' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
   })
 
   it('se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {

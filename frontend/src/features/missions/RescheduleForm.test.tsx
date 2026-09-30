@@ -200,8 +200,8 @@ describe('RescheduleForm', () => {
     expect(aviso).toHaveTextContent(
       'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.',
     )
-    // Os campos continuam editaveis: mudar e uma decisao da pessoa (M1 da
-    // revisao da Task 8), e quem troca a chave nesse caso e o cartao.
+    // Os campos continuam editaveis: mudar e uma decisao da pessoa, e quem
+    // troca a chave nesse caso e o cartao.
     expect(campo()).toBeEnabled()
     expect(salvar()).toBeEnabled()
     expect(salvar()).toHaveTextContent('Tentar de novo')
@@ -234,7 +234,7 @@ describe('RescheduleForm', () => {
     expect(salvar()).toHaveTextContent('Salvar novo prazo')
   })
 
-  it('falha "retry" e a pessoa muda SO a data: o botao volta a "Salvar novo prazo" (I2)', () => {
+  it('falha "retry" e a pessoa muda SO a data: o botao volta a "Salvar novo prazo"', () => {
     const { rerender, onSubmit } = renderForm()
     abrir()
     fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })

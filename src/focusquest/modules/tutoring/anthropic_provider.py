@@ -93,11 +93,11 @@ def esquema_da_proposta() -> dict[str, Any]:
 
 def esquema_do_reagendamento() -> dict[str, Any]:
     """O `input_schema` de `reschedule_mission`, gerado do `RescheduleProposal`
-    (a tecnica de `esquema_da_proposta`, M8)."""
+    (a tecnica de `esquema_da_proposta`)."""
     esquema = RescheduleProposal.model_json_schema()
     esquema.pop("description", None)
     esquema.pop("title", None)
-    # A docstring do enum tambem vai para o `$defs`; e de manutencao (M8).
+    # A docstring do enum tambem vai para o `$defs`; e de manutencao.
     for definicao in esquema.get("$defs", {}).values():
         definicao.pop("description", None)
     return esquema

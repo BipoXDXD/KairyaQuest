@@ -4,7 +4,7 @@ import { useCompletionRegistry, type CompletionRegistry } from './useCompletionR
 import { useMissions, type MissionsState } from './useMissions'
 
 /** O que a regiao viva do quadro anuncia durante essa espera. */
-const RELOAD_WAITING_ANNOUNCEMENT = 'Aguardando a conclusão em andamento para atualizar o quadro.'
+const RELOAD_WAITING_ANNOUNCEMENT = 'Aguardando o pedido em andamento para atualizar o quadro.'
 
 /**
  * Os quatro estados da tela, um por ramo.

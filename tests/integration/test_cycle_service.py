@@ -651,7 +651,7 @@ def test_a_especial_iniciada_na_janela_e_nao_concluida_some_no_limite(
 def test_a_diaria_concluida_com_atraso_abre_o_marco_e_a_especial_dele(
     session: Session,
 ) -> None:
-    """Revisao da F25: o marco que nasce da conclusao tardia. O domingo
+    """F25: o marco que nasce da conclusao tardia. O domingo
     20/09 (plano da semana anterior, criado nele) e seg-sex concluidos no dia
     somam 6; o sabado 26 e iniciado as 23:50 e concluido no domingo. Antes da
     conclusao tardia nao ha marco; depois, o marco e o sabado, a janela da
@@ -697,7 +697,7 @@ def test_a_diaria_concluida_com_atraso_abre_o_marco_e_a_especial_dele(
 def test_a_especial_iniciada_na_janela_nao_conclui_depois_do_limite(
     session: Session,
 ) -> None:
-    """Revisao da F25, m3(a): no limite (quarta 00:00 para o marco no domingo)
+    """F25: no limite (quarta 00:00 para o marco no domingo)
     a conclusao da especial iniciada na janela e `missao_expirada`."""
     _semana_inteira(session)
     especial = session.scalars(
@@ -719,7 +719,7 @@ def test_a_especial_iniciada_na_janela_nao_conclui_depois_do_limite(
 def test_reenvio_da_conclusao_tardia_depois_do_limite_devolve_o_mesmo_sucesso(
     session: Session,
 ) -> None:
-    """Revisao da F25, m3(b): a conclusao tardia reenviada depois do limite
+    """F25: a conclusao tardia reenviada depois do limite
     devolve a mesma missao concluida, sem erro e sem segunda conclusao."""
     _criar(session)
     quarta = _diaria_do_dia(session, QUARTA)

@@ -33,7 +33,7 @@ const FAILURE_BY_CODE: Record<StartErrorCode, StartFailure> = {
     message: 'Esta missão já foi iniciada ou concluída. Atualize para ver o estado atual.',
     recovery: 'refresh',
   },
-  // "prazo", e nao "dia": a janela da especial e de dois dias (m5 do C).
+  // "prazo", e nao "dia": a janela da especial e de dois dias.
   missao_expirada: {
     message:
       'O prazo desta missão já terminou e ela não pode mais ser iniciada. Atualize para ver o estado atual.',

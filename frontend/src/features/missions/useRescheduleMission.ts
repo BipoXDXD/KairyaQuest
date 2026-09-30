@@ -32,8 +32,7 @@ export interface UseRescheduleMissionResult {
    * A missao do ultimo reagendamento que DEU CERTO, ou `null`. O `state`
    * descreve a tentativa corrente e deixa de ser `rescheduled` assim que um
    * segundo envio sai; sem isto, o cartao voltava ao prazo listado (e sumia
-   * com o historico) durante o voo ou a falha do segundo reagendamento (I1 da
-   * revisao da Task 10).
+   * com o historico) durante o voo ou a falha do segundo reagendamento.
    */
   lastRescheduled: Mission | null
 }

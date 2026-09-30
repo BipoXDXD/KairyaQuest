@@ -222,12 +222,12 @@ def prazo_em_utc(prazo: datetime) -> datetime:
 
     - **sem fuso**: `astimezone` NAO falha num `datetime` sem fuso -- assume o
       fuso da maquina. O mesmo 10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z
-      num container em UTC, sem erro (revisao da T4, I1).
+      num container em UTC, sem erro.
     - **fora da faixa**: a data local cabe no `datetime`, o instante em UTC nao
       (`9999-12-31T23:59:59-03:00`); o `OverflowError` cru viraria 500.
 
     A borda (`PrazoComFuso`, em `schemas.py`) usa esta mesma funcao; o servico
-    tambem a chama porque a Tifa (T7) chega a ele sem passar pela borda.
+    tambem a chama porque a Tifa chega a ele sem passar pela borda.
     """
     if prazo.utcoffset() is None:
         raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")

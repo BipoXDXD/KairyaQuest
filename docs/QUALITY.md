@@ -927,7 +927,7 @@ honesta à frase "todo o resto continua sendo varrido": `node_modules/` não é,
 porque a **allowlist padrão do Gitleaks** já o exclui — não é decisão deste
 projeto, mas o efeito prático é o mesmo e vale estar escrito.
 
-## 9. O servidor falso da Anthropic (Incrementos 1b-1, 1b-2 e E)
+## 9. O servidor falso da Anthropic (Incrementos 1b-1, 1b-2, E e F)
 
 > **Fonte de verdade:** `tests/integration/provedor_falso.py`,
 > `tests/integration/conftest.py` (fixtures `falso`, `fabrica`, `tutoria`,
@@ -1151,15 +1151,52 @@ scripts novos chamam o **adaptador de produção**:
   sequência mudar). `tests/integration/test_camada3_do_reagendamento.py`
   compara o falso roteirizado com `reschedule_mission` com essa referência;
   **vistos reprovando** por mutação: a guarda do endereço, a conferência do
-  nome da ferramenta e a do id da missão. A medição é da árvore **anterior**
-  às correções da revisão da Task 7 do F (persona com bloco contra injeção,
-  `#` só para id de missão no contexto); repeti-la sobre elas é a pendência
-  109, ainda aberta.
+  nome da ferramenta e a do id da missão. Uma primeira medição, sobre a árvore
+  anterior às correções da revisão da Task 7 do F, foi **repetida sobre o
+  código final** do incremento (persona com bloco contra injeção, `#` só para
+  id de missão no contexto, prazo só em ISO 8601 com fuso): mesmo script, uma
+  chamada, modelo `claude-opus-5`, `reschedule_mission` com uma entrada aceita
+  e a sequência igual à da referência — pendência 109, resolvida.
 - **O que elas não provam.** Uma amostra de cada: o modelo pode deixar de
   chamar a ferramenta às vezes (na avaliação, `avaliacao_invalida`,
   repetível). Só o veredito `atende` foi pedido à API real, e nenhuma das duas
   passou pela tela. **O CI nunca chama a Anthropic:** os três scripts só rodam
   à mão.
+
+### A conversa com duas ferramentas nas camadas 1 e 2 (Incremento F)
+
+O falso **não mudou** para o F: o roteiro já sabia escolher o nome da
+ferramenta (`ChamadaDeFerramenta(entrada, nome=...)`, e o `tool_name` do JSON do
+controle, do E). O que o F acrescentou está nos testes do adaptador e no
+serviço:
+
+- **Camada 1, a requisição.** `test_a_requisicao_leva_o_que_a_spec_manda`
+  (`test_anthropic_provider.py`) passou a esperar **duas** ferramentas
+  (`create_mission` e `reschedule_mission`), ainda sem `strict` e com
+  `tool_choice` `auto` e `disable_parallel_tool_use` (F18); é um teste
+  **existente que mudou de expectativa** (antes desempacotava uma ferramenta só):
+  a mudança é a mudança principal da Task 6, motivada pelo F18 e registrada em
+  "Alterações do Incremento F" do `docs/HANDOFF.md`. `test_o_reagendamento_vira_proposta_com_o_nome`
+  prova que o adaptador emite `Proposta("reschedule_mission", entrada)` e não
+  o nome fixo da criação (mutação: nome fixo → reprova), e
+  `test_o_esquema_do_reagendamento_vai_sem_a_docstring` fixa o esquema
+  publicado. `tests/unit/test_tutoring_proposta_de_reagendamento.py` prende a
+  validação da entrada (id estrito, prazo só em texto ISO com fuso, campo a mais).
+- **Camada 2, o serviço.** `tests/integration/test_tutoring_reagendamento.py`
+  roteiriza o falso com `reschedule_mission` e prova, contra o banco real, a
+  proposta (pré-condição, retrato no `payload`, a proposta cortada por
+  `max_tokens` que não vira ação), a confirmação com cada desfecho e o reenvio.
+- **O que o falso não faz.** Não valida a entrada contra o esquema da ferramenta
+  (como já não validava o `strict`): quem valida é o backend, pelo
+  `RescheduleProposal`. Que o **modelo real** escolhe a ferramenta certa é o que
+  a camada 3 mediu — uma amostra, uma chamada (seção anterior, pendência 109).
+- **O E2E** (`frontend/tests/e2e/tracking.spec.ts`, terceiro cenário) roteiriza o
+  falso como processo com `tool_name: reschedule_mission`, confere que o fluxo
+  faz **uma** chamada ao modelo com as ferramentas `['create_mission',
+  'reschedule_mission']`, confirma pela tela e confere o prazo novo, o histórico
+  "proposto pela Tifa" e que **nenhuma** segunda missão nasceu. **Visto
+  reprovando** por mutação: a confirmação que ignora o `kind` (a API responde
+  500) e o cartão que não recarrega o quadro.
 
 ### O fallback da recusa nas três camadas (pendência 174, 2026-09-30)
 

@@ -93,9 +93,9 @@ function blockedReason(draft: EvidenceDraft): string | null {
  *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
  *   a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
  *   ali nao atualiza um "quadro" -- recarrega o ciclo.
- * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
- *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
- *   recarrega sozinho quando ela termina (`useCompletionRegistry`). Quem
+ * - **esperando o quadro**: o `reloadLabel` pedido com outro pedido em voo
+ *   (conclusao, Iniciar ou Reagendar) fica desabilitado e diz "Aguardando o
+ *   pedido em andamento…"; o quadro recarrega sozinho quando ele termina (`useCompletionRegistry`). Quem
  *   anuncia a espera e a regiao viva do QUADRO, e nao a deste cartao: a espera
  *   e do quadro inteiro, e varios cartoes com o botao anunciariam o mesmo
  *   texto varias vezes.
@@ -404,7 +404,7 @@ export function MissionCard({
     // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
     // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
     // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
-    // evitavel (M1 da revisao da Task 8). Sem mudanca, a mesma chave reenvia.
+    // evitavel. Sem mudanca, a mesma chave reenvia.
     const previous = lastSentReschedule.current
     if (
       reschedule.status === 'failed' &&

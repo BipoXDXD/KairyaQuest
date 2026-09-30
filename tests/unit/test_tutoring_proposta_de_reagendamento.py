@@ -39,7 +39,7 @@ def test_a_entrada_valida() -> None:
         {"reason": "outro"},
         {"instructions": "o modelo tentando escrever o retrato"},
         {"previous_deadline": "2026-10-01T18:00:00-03:00"},
-        # Coercoes que o modelo nao quis dizer (M10 da revisao da T6): `true`
+        # Coercoes que o modelo nao quis dizer: `true`
         # viraria a missao #1; um numero viraria um instante UTC.
         {"mission_id": True},
         {"mission_id": "12"},
@@ -47,7 +47,7 @@ def test_a_entrada_valida() -> None:
         {"new_deadline": 1790000000},
         {"new_deadline": 1790000000.5},
         {"new_deadline": True},
-        # O mesmo numero em TEXTO (I1 da revisao da T7): no modo lax o
+        # O mesmo numero em TEXTO: no modo lax o
         # Pydantic le texto so de digitos como tempo Unix.
         {"new_deadline": "1790000000"},
         {"new_deadline": "1790000000.5"},
@@ -63,7 +63,7 @@ def test_a_entrada_invalida(ajuste: dict[str, Any]) -> None:
 def test_o_esquema_nomeia_os_tres_motivos_e_nao_leva_docstring() -> None:
     """O enum sai em linha ou por `$ref` (o Pydantic escolhe); nas duas formas
     os tres valores precisam estar la. E nenhuma `description`: as docstrings do
-    schema e do enum sao de manutencao, nao servem ao modelo (M8)."""
+    schema e do enum sao de manutencao, nao servem ao modelo."""
     texto = json.dumps(esquema_do_reagendamento())
     for motivo in MotivoDoReagendamento:
         assert f'"{motivo.value}"' in texto
@@ -90,6 +90,6 @@ def test_o_retrato_nunca_e_campo_da_entrada_do_modelo() -> None:
 
 
 def test_a_descricao_nao_restringe_a_pendente() -> None:
-    """F8 permite reagendar a `em_andamento` (M11 da revisao da T6)."""
+    """F8 permite reagendar a `em_andamento`."""
     assert "pendente" not in DESCRICAO_DO_REAGENDAMENTO
     assert "ainda não concluída" in DESCRICAO_DO_REAGENDAMENTO

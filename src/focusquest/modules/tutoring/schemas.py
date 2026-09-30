@@ -40,11 +40,11 @@ def _prazo_em_texto(valor: object) -> object:
     """Aceita so texto ISO 8601 (ou o `datetime` que o proprio backend monta).
 
     No modo lax o Pydantic le como tempo Unix tanto o NUMERO `1790000000`
-    (M10 da revisao da T6) quanto o TEXTO `"1790000000"` ou `"20261005"` (I1
-    da revisao da T7): um instante UTC que o modelo nao quis dizer. Por isso o
-    texto e convertido AQUI, por `datetime.fromisoformat`, e o Pydantic recebe
-    um `datetime` pronto -- a leitura lax de texto nunca roda. Sem fuso, quem
-    recusa depois e o `AwareDatetime`."""
+    quanto o TEXTO `"1790000000"` ou `"20261005"`: um instante UTC que o
+    modelo nao quis dizer. Por isso o texto e convertido AQUI, por
+    `datetime.fromisoformat`, e o Pydantic recebe um `datetime` pronto -- a
+    leitura lax de texto nunca roda. Sem fuso, quem recusa depois e o
+    `AwareDatetime`."""
     if isinstance(valor, datetime):
         return valor
     if not isinstance(valor, str):
@@ -61,7 +61,7 @@ class RescheduleProposal(BaseModel):
     O retrato (`CAMPOS_DO_RETRATO`) e escrito pelo backend, nunca pelo modelo
     (F16) -- por isso `extra='forbid'`: um campo a mais e proposta invalida.
 
-    Sem coercao (M10 da revisao da T6): `mission_id: true` viraria a missao #1
+    Sem coercao: `mission_id: true` viraria a missao #1
     e `"12"` ou `12.0` viraria 12 -- o cartao mostraria uma missao que o
     modelo nao escolheu. `StrictInt` recusa os tres; o prazo so em texto.
     """
