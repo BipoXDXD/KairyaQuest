@@ -117,6 +117,10 @@ class MessageRead(BaseModel):
     client_message_id: str | None
     reply_to_id: int | None
     error_code: str | None
+    # O modelo substituto que serviu a resposta depois de uma recusa (fallback
+    # do servidor, pendencia 174); nulo quando foi o modelo pedido. Chave
+    # aditiva: um cliente antigo a ignora.
+    fallback_model: str | None
     created_at: datetime
     actions: list[ActionRead]
 

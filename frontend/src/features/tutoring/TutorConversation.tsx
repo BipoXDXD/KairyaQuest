@@ -70,6 +70,15 @@ function MessageItem({
           {mark}
         </p>
       )}
+      {/* Pendencia 174: outro modelo escreveu a resposta (o fallback do
+          servidor depois de uma recusa). Dentro do `li`, para o leitor de
+          tela ler junto com a mensagem; sem alarme e sem a categoria. */}
+      {message.fallback_model !== null && (
+        <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-slate-400">
+          Respondida por um modelo substituto ({message.fallback_model}), porque o modelo principal
+          não pôde responder a esta pergunta.
+        </p>
+      )}
       {message.actions.map((action) => (
         <Fragment key={action.id}>{renderAction(action)}</Fragment>
       ))}

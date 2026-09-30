@@ -38,9 +38,13 @@ class Parada(StrEnum):
     - `CORTADA`: o limite de tamanho cortou a resposta -- o teto de tokens
       (`max_tokens`) ou a janela de contexto (`model_context_window_exceeded`).
       Nem o texto nem a proposta estao inteiros.
-    - `RECUSADA`: a resposta foi recusada (`refusal`): os classificadores de
-      seguranca do provedor ou o proprio modelo declinaram. Pode chegar depois
-      de texto; esse texto parcial nao vale como resposta.
+    - `RECUSADA`: a resposta foi recusada (`refusal`) e ninguem a refez: os
+      classificadores de seguranca do provedor ou o proprio modelo
+      declinaram, e o fallback nao estava ligado, nao tinha substituto para a
+      categoria ou o substituto tambem recusou. Pode chegar depois de texto;
+      esse texto parcial nao vale como resposta. A recusa que o fallback
+      resolveu (pendencia 174) NAO e `RECUSADA`: a parada e a da tentativa
+      final, e o parcial e o comeco da resposta que veio.
     """
 
     TERMINOU = "terminou"
@@ -61,6 +65,10 @@ class Fim:
     """
 
     parada: Parada = Parada.TERMINOU
+    # O modelo que serviu a resposta quando o provedor a refez noutro modelo
+    # depois de uma recusa (fallback, pendencia 174); `None` quando quem
+    # respondeu foi o modelo pedido.
+    substituto: str | None = None
 
 
 EventoDoProvedor = Delta | Proposta | Fim

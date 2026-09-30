@@ -17,6 +17,7 @@ const question = (id: number, content: string, cmid: string): MessageRead => ({
   client_message_id: cmid,
   reply_to_id: null,
   error_code: null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:00Z',
   actions: [],
 })
@@ -34,6 +35,7 @@ const answer = (
   client_message_id: null,
   reply_to_id: replyTo,
   error_code: status === 'falhou' ? 'provedor_indisponivel' : null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:01Z',
   actions: [],
 })

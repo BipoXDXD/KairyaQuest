@@ -25,6 +25,7 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
+from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 from focusquest.modules.tutoring.schemas import TAMANHO_MAXIMO_DA_PERGUNTA
 from focusquest.modules.tutoring.service import Tutoria
 from integration.conftest import Conversa
@@ -33,6 +34,7 @@ from integration.provedor_falso import (
     MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
 )
 
@@ -330,6 +332,30 @@ def test_corpo_invalido_responde_422_sem_code(
 # --- Listar ----------------------------------------------------------------
 
 
+def test_a_resposta_substituida_traz_o_modelo_no_done_e_no_historico(
+    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+) -> None:
+    """Pendencia 174, pelo contrato: a chave `fallback_model` (em ingles,
+    aditiva) diz qual modelo serviu a resposta depois da recusa; nula na
+    pergunta e na resposta do modelo pedido."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ",)), Texto(("e fim",))),
+        substituicao=Substituicao("claude-opus-4-8", apos_blocos=1),
+    )
+    eventos = _eventos(_enviar(cliente, conversa.id("troca")).text)
+    pergunta, final = eventos[0][1], eventos[-1][1]
+    assert (final["status"], final["content"], final["fallback_model"]) == (
+        "completa",
+        "Comeco e fim",
+        "claude-opus-4-8",
+    )
+    assert pergunta["fallback_model"] is None
+
+    historico = {m["id"]: m for m in cliente.get("/api/tutoring/messages").json()}
+    assert historico[final["id"]]["fallback_model"] == "claude-opus-4-8"
+    assert historico[pergunta["id"]]["fallback_model"] is None
+
+
 def test_listar_mensagens(cliente_na_sessao: TestClient, session: Session) -> None:
     _acao_proposta(session)
     (pergunta, resposta) = cliente_na_sessao.get("/api/tutoring/messages").json()
@@ -477,6 +503,7 @@ def test_a_chave_nao_aparece_na_resposta_nem_no_log(
                 modelo="claude-opus-5",
                 max_tokens=8,
                 timeout_segundos=1,
+                fallback=True,
             ),
             historico=20,
             limite=timedelta(seconds=60),
@@ -541,3 +568,33 @@ def test_get_tutoria_leva_o_modelo_configurado(
     tutoria = dependencias.get_tutoria()
     assert tutoria is not None
     assert tutoria.modelo == "modelo-de-teste"
+
+
+@pytest.mark.parametrize(("valor", "pede"), [("false", False), ("true", True)])
+def test_get_tutoria_leva_o_fallback_configurado(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    falso: ServidorAnthropicFalso,
+    valor: str,
+    pede: bool,
+) -> None:
+    """`FOCUSQUEST_TUTOR_FALLBACK` chega a requisicao de verdade (pendencia
+    174): sem isto, o `false` de emergencia existiria so no `Settings`."""
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_BASE_URL", falso.url)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", valor)
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    list(
+        tutoria.provedor.responder(
+            Turno(sistema="S", mensagens=(MensagemDoTurno("user", "oi"),))
+        )
+    )
+    assert ("fallbacks" in falso.recebidas[0].corpo) is pede

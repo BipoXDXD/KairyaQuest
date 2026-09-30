@@ -167,6 +167,34 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     assert settings.tutor_max_tokens == 4096
     assert settings.tutor_timeout_seconds == 60
     assert settings.tutor_history_messages == 20
+    # O fallback da recusa vem LIGADO por decisao do dono (pendencia 174).
+    assert settings.tutor_fallback is True
+
+
+@pytest.mark.parametrize(("valor", "esperado"), [("false", False), ("true", True)])
+def test_o_fallback_da_recusa_desliga_pelo_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str, esperado: bool
+) -> None:
+    """`FOCUSQUEST_TUTOR_FALLBACK=false` e a saida de emergencia se o beta do
+    fallback mudar e a API passar a recusar a requisicao (pendencia 174)."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, f"FOCUSQUEST_TUTOR_FALLBACK={valor}\n"
+    )
+    assert settings.tutor_fallback is esperado
+
+
+def test_o_fallback_da_recusa_recusa_valor_que_nao_e_booleano(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Um `talvez` nao liga nem desliga: e erro na partida, e nao um padrao
+    escolhido em silencio."""
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(
+            monkeypatch, tmp_path, "FOCUSQUEST_TUTOR_FALLBACK=talvez\n"
+        )
+    assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
+        (("tutor_fallback",), "bool_parsing")
+    ]
 
 
 def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
@@ -189,6 +217,7 @@ def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
         "FOCUSQUEST_TUTOR_HISTORY_MESSAGES": str(
             campos["tutor_history_messages"].default
         ),
+        "FOCUSQUEST_TUTOR_FALLBACK": str(campos["tutor_fallback"].default).lower(),
     }
 
 

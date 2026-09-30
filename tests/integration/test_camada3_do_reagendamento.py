@@ -44,6 +44,7 @@ def _capturar(falso: ServidorAnthropicFalso) -> tuple[list[str], list[Proposta]]
         modelo="claude-opus-5",
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
+        fallback=True,
     )
     return camada3_do_reagendamento.capturar(provedor, espiao, agora=AGORA)
 

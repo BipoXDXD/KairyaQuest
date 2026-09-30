@@ -157,6 +157,8 @@ def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
             modelo="claude-opus-5",
             max_tokens=256,
             timeout_segundos=TIMEOUT_DE_TESTE,
+            # O padrao de producao (`Settings.tutor_fallback`, pendencia 174).
+            fallback=True,
         ),
         historico=20,
         limite=timedelta(seconds=60),

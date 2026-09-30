@@ -56,7 +56,9 @@ FocusQuest/
 │   │   ├── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
 │   │   ├── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
 │   │   ├── 0004_progressao.py     # xp_entries e user_achievements, com o backfill retroativo por cópias congeladas (D8) (D)
-│   │   └── 0005_entrega_avaliacao.py  # mission_evidence e mission_evaluations; xp_entries único por (mission_id, source) e o CHECK de source com evaluation_bonus (E, decisões E14 e EM2)
+│   │   ├── 0005_entrega_avaliacao.py  # mission_evidence e mission_evaluations; xp_entries único por (mission_id, source) e o CHECK de source com evaluation_bonus (E, decisões E14 e EM2)
+│   │   ├── 0006_acompanhamento.py # mission_reschedules e as regras do início; reschedule_mission no kind das ações (F)
+│   │   └── 0007_fallback_model.py # tutor_messages.fallback_model, o modelo substituto que serviu a resposta, com o CHECK de só a Tifa tê-lo (pendência 174)
 │   ├── README
 │   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
 │   └── script.py.mako             # modelo de migração nova
@@ -259,7 +261,7 @@ FocusQuest/
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação
 │       │       ├── models.py      # TutorMessage, TutorAction
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12)
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E)
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; responder pelo endpoint beta com o fallback da recusa (pendência 174); avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
@@ -786,7 +788,7 @@ mesmo padrão dos estados de `missions`
 
 | Tabela | O que guarda | Restrições que o banco garante |
 |---|---|---|
-| `tutor_messages` | Cada mensagem da conversa contínua (`role` `user`/`tutor`). | `ck_tutor_messages_role` (valor de `role`); `ck_tutor_messages_status` (valor de `status`); `ck_tutor_messages_forma` — um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec original descrevia (ver "Emendas" da spec) — a forma exigida de cada papel, com a legalidade do próprio `role` delegada só a `ck_tutor_messages_role`; um índice único parcial por `reply_to_id WHERE status = 'completa'` (uma resposta viva por pergunta) e por `user_id WHERE status = 'gerando'` (uma geração por vez); `client_message_id` único entre as mensagens do usuário. |
+| `tutor_messages` | Cada mensagem da conversa contínua (`role` `user`/`tutor`). | `ck_tutor_messages_role` (valor de `role`); `ck_tutor_messages_status` (valor de `status`); `ck_tutor_messages_forma` — um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec original descrevia (ver "Emendas" da spec) — a forma exigida de cada papel, com a legalidade do próprio `role` delegada só a `ck_tutor_messages_role`; um índice único parcial por `reply_to_id WHERE status = 'completa'` (uma resposta viva por pergunta) e por `user_id WHERE status = 'gerando'` (uma geração por vez); `client_message_id` único entre as mensagens do usuário. `fallback_model` (0007, pendência 174): o modelo substituto que serviu a resposta depois de uma recusa, nulo quando foi o modelo pedido; `ck_tutor_messages_fallback_so_da_tutora` (`fallback_model IS NULL OR role = 'tutor'`). Coluna própria, e não o `error_code`: o fallback não é erro, e a resposta substituída **e** cortada precisa dos dois valores (pendência 170). |
 | `tutor_actions` | Uma proposta de ação da Tifa (hoje só `create_mission`) e o seu ciclo de vida. | `ck_tutor_actions_kind`; `ck_tutor_actions_state`; `ck_tutor_actions_missao_so_quando_executada` (`(state = 'executada') = (mission_id IS NOT NULL)`); `ck_tutor_actions_decisao_datada` (`(state = 'proposta') = (decided_at IS NULL)`); `operation_id` único. `mission_id` **sem** `ondelete` (decisão registrada em `docs/HANDOFF.md`: nem `SET NULL` nem `CASCADE` servem, e não existe exclusão de missão no produto). |
 
 **As cinco rotas de `/api/tutoring`:**
@@ -818,6 +820,22 @@ tela, e volta ao contexto quando é reenviada. Um stream sem `done` nem
 `error` é resultado desconhecido (a desconexão do cliente, provada com
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
+
+**O fallback da recusa** (pendência 174, beta da Anthropic, ligado por
+padrão e desligável por `FOCUSQUEST_TUTOR_FALLBACK=false`): o adaptador chama
+`client.beta.messages.stream` com `fallbacks="default"` e o beta
+`server-side-fallback-2026-07-01` (`BETA_DO_FALLBACK`), e a API refaz a
+requisição recusada no modelo que a Anthropic recomenda para a categoria da
+recusa, dentro do mesmo stream. O adaptador lê quem serviu na entrada
+`fallback_message` de `usage.iterations` (`Fim.substituto`), entrega a
+proposta só no `message_stop` e descarta a que fechou **antes** do bloco
+`fallback`. O parcial de uma recusa no meio **fica**: o substituto o
+continua, e a resposta termina `completa` (ou `interrompida` cortada) com
+`fallback_model` gravado e a chave `fallback_model` no `MessageRead` (nula
+nas outras). A tela mostra uma nota discreta dentro da bolha. O descarte do
+parcial vale só quando a parada **final** é `refusal` (cadeia esgotada,
+categoria sem substituto, `tool_use` aberto). A avaliação (`avaliar`) não usa
+o fallback: continua no endpoint estável.
 
 **Erros antes do stream** (a pergunta não é gravada): `503
 provedor_nao_configurado` (sem chave); `409 mensagem_em_andamento` (já há

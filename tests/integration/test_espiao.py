@@ -72,7 +72,33 @@ def test_o_provedor_espionado_nao_tenta_de_novo(
         modelo="claude-opus-5",
         max_tokens=16,
         timeout_segundos=TIMEOUT_DE_TESTE,
+        fallback=True,
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(Turno(sistema="s", mensagens=())))
     assert len(falso.recebidas) == 1
+
+
+def test_o_espiao_guarda_do_pedido_so_o_corpo_e_o_beta() -> None:
+    """A camada 3 do fallback (pendencia 174) prova que o pedido REAL levou
+    `fallbacks` e o cabecalho beta. O espiao guarda so esses dois: nunca os
+    cabecalhos inteiros, que tem a chave (`x-api-key`)."""
+    espiao = Espiao(_responder_com(b"", {}))
+    with httpx2.Client(transport=espiao) as cliente:
+        cliente.post(
+            "https://exemplo.invalido/v1/messages?beta=true",
+            json={"fallbacks": "default"},
+            headers={
+                "x-api-key": "sk-ant-segredo",
+                "anthropic-beta": "server-side-fallback-2026-07-01",
+            },
+        )
+    assert espiao.corpo_do_pedido() == {"fallbacks": "default"}
+    assert espiao.betas_do_pedido() == ["server-side-fallback-2026-07-01"]
+    assert "sk-ant-segredo" not in repr(vars(espiao))
+
+
+def test_sem_pedido_o_espiao_nao_tem_corpo_nem_beta() -> None:
+    espiao = Espiao(_responder_com(b"", {}))
+    assert espiao.corpo_do_pedido() is None
+    assert espiao.betas_do_pedido() == []

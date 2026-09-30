@@ -34,6 +34,7 @@ const question = (id: number, content: string, cmid: string): MessageRead => ({
   client_message_id: cmid,
   reply_to_id: null,
   error_code: null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:00Z',
   actions: [],
 })
@@ -51,6 +52,7 @@ const answer = (
   client_message_id: null,
   reply_to_id: replyTo,
   error_code: status === 'falhou' ? 'provedor_indisponivel' : null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:01Z',
   actions: [],
 })
@@ -625,6 +627,26 @@ describe('TutorPanel: o envio', () => {
     )
     expect(screen.queryByText('Comeco recusado')).not.toBeInTheDocument()
     expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P37 a resposta servida pelo modelo substituto traz a nota com o modelo; a do pedido, nao', async () => {
+    // Pendencia 174: o fallback do servidor refez a resposta noutro modelo.
+    const history = [
+      question(10, 'Pergunta', 'c10'),
+      { ...answer(11, 10, 'Resposta do substituto'), fallback_model: 'claude-opus-4-8' },
+      question(12, 'Outra', 'c12'),
+      answer(13, 12, 'Resposta normal'),
+    ]
+    mountPanel({ [HISTORY]: () => Response.json(history) })
+    await ready()
+
+    const bolha = (id: string) =>
+      screen.getAllByTestId('tutor-message').find((li) => li.dataset.messageId === id)!
+    expect(within(bolha('11')).getByTestId('tutor-message-fallback')).toHaveTextContent(
+      'Respondida por um modelo substituto (claude-opus-4-8), porque o modelo principal não pôde responder a esta pergunta.',
+    )
+    expect(within(bolha('13')).queryByTestId('tutor-message-fallback')).not.toBeInTheDocument()
+    expect(within(bolha('10')).queryByTestId('tutor-message-fallback')).not.toBeInTheDocument()
   })
 
   it('P36 depois de recarregar, a recusada mostra a nota de perguntar de outro jeito', async () => {

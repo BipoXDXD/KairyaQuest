@@ -32,6 +32,7 @@ def get_tutoria() -> Tutoria | None:
                 modelo=modelo,
                 max_tokens=settings.tutor_max_tokens,
                 timeout_segundos=settings.tutor_timeout_seconds,
+                fallback=settings.tutor_fallback,
             ),
             historico=settings.tutor_history_messages,
             limite=timedelta(seconds=settings.tutor_timeout_seconds),

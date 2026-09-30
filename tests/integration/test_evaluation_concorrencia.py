@@ -170,6 +170,7 @@ def test_dois_pedidos_juntos_um_avalia_e_o_outro_recebe_409(
             modelo="claude-opus-5",
             max_tokens=256,
             timeout_segundos=SEGUNDOS_LIMITE,
+            fallback=True,
         ),
     )
     barreira = threading.Barrier(2, timeout=SEGUNDOS_LIMITE)

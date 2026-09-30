@@ -52,6 +52,7 @@ def test_o_falso_emite_a_sequencia_da_avaliacao_real(
         modelo="claude-opus-5",
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
+        fallback=True,
     )
     tipos, entrada = camada3_da_avaliacao.capturar(provedor, espiao)
     referencia = json.loads(camada3_da_avaliacao.REFERENCIA.read_text())["eventos"]
@@ -75,6 +76,7 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
         modelo="claude-opus-5",
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
+        fallback=True,
     )
     camada3_da_avaliacao.capturar(provedor, espiao)
     corpo = falso.recebidas[-1].corpo

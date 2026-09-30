@@ -260,7 +260,10 @@ def transmitir(
     tamanho cortou a resposta (`Parada.CORTADA`, pendencias 45 e 120),
     `interrompida` com `error_code` `resposta_longa`, o texto parcial e sem
     acao. A recusa (`Parada.RECUSADA`) e `falhou` com `resposta_recusada`,
-    sem o texto parcial e sem acao.
+    sem o texto parcial e sem acao. A recusa que o fallback do servidor
+    resolveu (pendencia 174) nao e `RECUSADA`: o parcial e o comeco da
+    resposta, que o substituto continuou, e o modelo dele vai para
+    `fallback_model`.
 
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o
@@ -279,6 +282,7 @@ def transmitir(
     proposta: Proposta | None = None
     terminou = False
     parada = Parada.TERMINOU
+    substituto: str | None = None
     codigo: CodigoDoStream | None = None
     try:
         yield PerguntaGravada(preparo.pergunta)
@@ -294,6 +298,7 @@ def transmitir(
                 else:
                     terminou = True
                     parada = evento.parada
+                    substituto = evento.substituto
                 # Limite TOTAL, pelo relogio injetavel.
                 if clock() - inicio > tutoria.limite:
                     raise TempoEsgotadoError("a resposta passou do limite total")
@@ -342,7 +347,7 @@ def transmitir(
     status = StatusDaMensagem.INTERROMPIDA if cortada else StatusDaMensagem.COMPLETA
     motivo = RESPOSTA_LONGA if cortada else None
     desfecho = _completar(
-        fabrica, preparo.resposta_id, texto, dados, clock(), status, motivo
+        fabrica, preparo.resposta_id, texto, dados, clock(), status, motivo, substituto
     )
     if isinstance(desfecho, _Recolhida):
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
@@ -677,6 +682,7 @@ def _completar(
     agora: datetime,
     status: StatusDaMensagem,
     motivo: str | None,
+    substituto: str | None,
 ) -> TutorMessage | _Recolhida | _PreCondicaoRecusada:
     """Grava a resposta que chegou ao `Fim` e a acao proposta, na MESMA transacao.
 
@@ -684,6 +690,11 @@ def _completar(
     cortou a resposta -- e entao `motivo` e `RESPOSTA_LONGA`, gravado no
     `error_code`, e `dados` e sempre None: nenhuma proposta, de criacao ou de
     reagendamento, vira acao.
+
+    `substituto` e o modelo que serviu a resposta depois de uma recusa
+    (fallback, pendencia 174), gravado em `fallback_model`; `None` quando foi
+    o modelo pedido. So aqui: a resposta que nao veio (`falhou`, inclusive a
+    cadeia esgotada) nao grava quem tentou.
 
     A trava na linha evita a corrida com o recolhimento de orfaos: se a linha
     ja nao esta `gerando`, ela foi recolhida, e nada e gravado.
@@ -727,6 +738,7 @@ def _completar(
             )
         resposta.status = status
         resposta.error_code = motivo
+        resposta.fallback_model = substituto
         session.commit()
         session.refresh(resposta)
         return resposta

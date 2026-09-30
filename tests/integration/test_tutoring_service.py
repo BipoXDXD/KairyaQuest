@@ -43,6 +43,7 @@ from integration.provedor_falso import (
     MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
 )
 
@@ -810,3 +811,116 @@ def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
     assert isinstance(final, RespostaConcluida)
     assert final.mensagem.status is StatusDaMensagem.COMPLETA
     assert len(falso.recebidas) == 2
+
+
+# --- O fallback do servidor para a recusa (pendencia 174) ------------------
+
+SUBSTITUTO = "claude-opus-4-8"
+
+
+def test_resposta_substituida_fica_completa_com_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A recusa no meio que o substituto resolveu: o parcial NAO e descartado
+    (o substituto o continua), a resposta e `completa` e grava quem serviu."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ",)), Texto(("e continuacao",))),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.fallback_model == SUBSTITUTO
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code, vista.fallback_model) == (
+        StatusDaMensagem.COMPLETA,
+        "Comeco e continuacao",
+        None,
+        SUBSTITUTO,
+    )
+
+
+def test_resposta_sem_substituicao_tem_modelo_nulo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    falso.roteiro = Roteiro(blocos=(Texto(("Normal.",)),))
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("sem-troca")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert _resposta(fabrica, preparo.resposta_id).fallback_model is None
+
+
+def test_substituida_e_cortada_fica_interrompida_com_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """Os dois fatos ao mesmo tempo: o substituto serviu E o teto cortou. E o
+    motivo de a coluna ser propria, e nao o `error_code` (pendencia 170)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Longa",)),),
+        substituicao=Substituicao(SUBSTITUTO),
+        stop_reason="max_tokens",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca-teto")))
+    list(_transmitir(fabrica, tutoria, preparo))
+
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.error_code, vista.fallback_model) == (
+        StatusDaMensagem.INTERROMPIDA,
+        RESPOSTA_LONGA,
+        SUBSTITUTO,
+    )
+
+
+def test_cadeia_esgotada_segue_recusada_sem_texto_nem_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """O substituto tambem recusou: a recusa de hoje, com o parcial descartado
+    e sem modelo gravado -- a resposta nao veio."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial",)),),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+        stop_reason="refusal",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("esgotada")))
+    eventos = list(_transmitir(fabrica, tutoria, preparo))
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.fallback_model) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        None,
+    )
+
+
+def test_proposta_do_substituto_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca-acao")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert vista.fallback_model == SUBSTITUTO
+    assert [acao.state for acao in vista.actions] == [EstadoDaAcao.PROPOSTA]

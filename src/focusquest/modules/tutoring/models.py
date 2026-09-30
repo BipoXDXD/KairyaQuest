@@ -69,6 +69,9 @@ class TutorMessage(Base):
         Integer, ForeignKey("tutor_messages.id", ondelete="CASCADE"), default=None
     )
     error_code: Mapped[str | None] = mapped_column(Text, default=None)
+    # O modelo substituto que serviu a resposta depois de uma recusa (fallback
+    # do servidor, pendencia 174); nulo quando foi o modelo pedido.
+    fallback_model: Mapped[str | None] = mapped_column(Text, default=None)
     # Sem `server_default`: aqui o instante e ENTRADA da regra do orfao, e vem
     # do relogio injetavel, como toda hora que decide alguma coisa.
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -100,6 +103,10 @@ class TutorMessage(Base):
             "AND reply_to_id IS NOT NULL "
             "ELSE true END",
             name="ck_tutor_messages_forma",
+        ),
+        CheckConstraint(
+            "fallback_model IS NULL OR role = 'tutor'",
+            name="ck_tutor_messages_fallback_so_da_tutora",
         ),
         UniqueConstraint(
             "client_message_id", name="uq_tutor_messages_client_message_id"

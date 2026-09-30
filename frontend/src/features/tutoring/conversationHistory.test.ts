@@ -15,6 +15,7 @@ function message(overrides: Partial<MessageRead> & Pick<MessageRead, 'id' | 'rol
     client_message_id: overrides.role === 'user' ? `cmid-${String(overrides.id)}` : null,
     reply_to_id: null,
     error_code: null,
+    fallback_model: null,
     created_at: '2026-09-22T12:00:00Z',
     actions: [],
     ...overrides,

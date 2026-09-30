@@ -115,6 +115,11 @@ export interface MessageRead {
   client_message_id: string | null
   reply_to_id: number | null
   error_code: string | null
+  /**
+   * O modelo substituto que serviu a resposta depois de uma recusa (fallback
+   * do servidor, pendencia 174); `null` quando foi o modelo pedido.
+   */
+  fallback_model: string | null
   created_at: string
   actions: ActionRead[]
 }

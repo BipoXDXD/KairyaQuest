@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from focusquest.modules.tutoring.anthropic_provider import (
+    BETA_DO_FALLBACK,
     TENTATIVAS,
     ProvedorAnthropic,
 )
@@ -26,6 +27,7 @@ from integration.provedor_falso import (
     MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
     eventos_do_roteiro,
 )
@@ -37,7 +39,10 @@ TIMEOUT = 0.3
 
 
 def _provedor(
-    falso: ServidorAnthropicFalso, chave: str = "sk-ant-teste"
+    falso: ServidorAnthropicFalso,
+    chave: str = "sk-ant-teste",
+    *,
+    fallback: bool = True,
 ) -> ProvedorAnthropic:
     return ProvedorAnthropic(
         chave=chave,
@@ -45,6 +50,7 @@ def _provedor(
         modelo="claude-opus-5",
         max_tokens=256,
         timeout_segundos=TIMEOUT,
+        fallback=fallback,
     )
 
 
@@ -215,6 +221,7 @@ def test_provedor_fora_do_ar_vira_indisponivel() -> None:
         modelo="claude-opus-5",
         max_tokens=8,
         timeout_segundos=TIMEOUT,
+        fallback=True,
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(TURNO))
@@ -254,3 +261,129 @@ def test_o_esquema_do_reagendamento_vai_sem_a_docstring(
     assert set(esquema["required"]) == {"mission_id", "new_deadline", "reason"}
     assert esquema["additionalProperties"] is False
     assert "strict" not in reagendar  # F18: como a create_mission
+
+
+# ---------------------------------------------------------------------------
+# O fallback do servidor para a recusa (pendencia 174, beta)
+# ---------------------------------------------------------------------------
+
+SUBSTITUTO = "claude-opus-4-8"
+
+
+def test_a_requisicao_pede_o_fallback_padrao(falso: ServidorAnthropicFalso) -> None:
+    """`"default"` so e aceito com o beta de data `2026-07-01` EXATA: qualquer
+    outra data de `server-side-fallback-*` da 400 (documentacao "Refusals and
+    fallback"). Por isso a string inteira e conferida."""
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    _todos(falso)
+    recebida = falso.recebidas[0]
+    assert BETA_DO_FALLBACK == "server-side-fallback-2026-07-01"
+    assert recebida.corpo["fallbacks"] == "default"
+    assert BETA_DO_FALLBACK in recebida.cabecalhos["anthropic-beta"].split(",")
+
+
+def test_desligado_a_requisicao_nao_pede_fallback(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    """`FOCUSQUEST_TUTOR_FALLBACK=false`: o corpo e o de antes, sem `fallbacks`
+    e sem o cabecalho beta -- a saida se o beta mudar (pendencia 174)."""
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    assert list(_provedor(falso, fallback=False).responder(TURNO)) == [
+        Delta("ok"),
+        Fim(),
+    ]
+    recebida = falso.recebidas[0]
+    assert "fallbacks" not in recebida.corpo
+    assert "anthropic-beta" not in recebida.cabecalhos
+
+
+@pytest.mark.parametrize(
+    "substituicao",
+    [
+        Substituicao(SUBSTITUTO),
+        Substituicao(SUBSTITUTO, apos_blocos=1),
+        Substituicao(SUBSTITUTO, fixa=True),
+    ],
+    ids=["antes-da-saida", "no-meio", "fixa"],
+)
+def test_o_fim_diz_quem_substituiu(
+    falso: ServidorAnthropicFalso, substituicao: Substituicao
+) -> None:
+    """O sinal e a entrada `fallback_message` de `usage.iterations`, e nao o
+    bloco `fallback` (ausente no roteamento fixo) nem o `model` do
+    `message_start` (o do pedido quando a troca vem no meio)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial ",)), Texto(("fim",))), substituicao=substituicao
+    )
+    eventos = _todos(falso)
+    assert eventos[-1] == Fim(Parada.TERMINOU, substituto=SUBSTITUTO)
+
+
+def test_sem_substituicao_o_fim_nao_tem_substituto(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    fim = _todos(falso)[-1]
+    assert isinstance(fim, Fim)
+    assert fim.substituto is None
+
+
+def test_o_texto_do_pedido_continua_depois_da_troca(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    """O substituto continua A PARTIR do parcial ("nothing you have already
+    received is invalidated"): os `Delta` saem os dois, nessa ordem."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial ",)), Texto(("continuacao",))),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    assert _todos(falso) == [
+        Delta("parcial "),
+        Delta("continuacao"),
+        Fim(Parada.TERMINOU, substituto=SUBSTITUTO),
+    ]
+
+
+def test_a_proposta_antes_da_troca_e_descartada(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    """Um `tool_use` que fechou antes da troca e trabalho do modelo que
+    recusou; a documentacao manda descarta-lo, e o substituto so recebe o
+    texto parcial como contexto. Se ele nao chamar a ferramenta, nada vira
+    proposta."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma:",)), ChamadaDeFerramenta(ENTRADA), Texto((" pronto",))),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=2),
+        stop_reason="end_turn",
+    )
+    assert _todos(falso) == [
+        Delta("Toma:"),
+        Delta(" pronto"),
+        Fim(Parada.TERMINOU, substituto=SUBSTITUTO),
+    ]
+
+
+def test_a_proposta_do_substituto_vale(falso: ServidorAnthropicFalso) -> None:
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma:",)), ChamadaDeFerramenta(ENTRADA)),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    assert _todos(falso) == [
+        Delta("Toma:"),
+        Proposta("create_mission", ENTRADA),
+        Fim(Parada.TERMINOU, substituto=SUBSTITUTO),
+    ]
+
+
+def test_a_cadeia_esgotada_continua_recusada(falso: ServidorAnthropicFalso) -> None:
+    """O substituto tambem recusou: a parada FINAL e `refusal`, e o servico
+    segue o caminho da recusa de hoje (pendencia 120)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial",)),),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+        stop_reason="refusal",
+    )
+    assert _todos(falso) == [
+        Delta("parcial"),
+        Fim(Parada.RECUSADA, substituto=SUBSTITUTO),
+    ]

@@ -60,6 +60,7 @@ export function settleInterrupted(
     client_message_id: null,
     reply_to_id: question.id,
     error_code: null,
+    fallback_model: null,
     created_at: question.created_at,
     actions: [],
   })

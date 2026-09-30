@@ -7,15 +7,30 @@ deixar de entender o falso, este arquivo reprova no gate -- antes de a tela
 quebrar em silencio.
 """
 
+import json
+import urllib.request
+
 import anthropic
 import pytest
+from anthropic.types.beta import (
+    BetaFallbackBlock,
+    BetaFallbackMessageIterationUsage,
+    BetaMessageIterationUsage,
+    BetaRawContentBlockStartEvent,
+    BetaRawMessageDeltaEvent,
+    BetaRawMessageStartEvent,
+    BetaRawMessageStreamEvent,
+)
 
 from integration.provedor_falso import (
+    MODELO_DO_FALSO,
     ChamadaDeFerramenta,
     MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
+    eventos_do_roteiro,
 )
 
 ENTRADA = {"instructions": "Ler o capitulo 3", "difficulty": 2}
@@ -114,3 +129,147 @@ def test_status_de_erro_vira_o_erro_do_sdk(falso: ServidorAnthropicFalso) -> Non
         ) as stream,
     ):
         stream.get_final_message()
+
+
+# ---------------------------------------------------------------------------
+# A troca de modelo depois de uma recusa (fallback do servidor, pendencia 174)
+# ---------------------------------------------------------------------------
+
+SUBSTITUTO = "claude-opus-4-8"
+
+
+def _inicio(eventos: list[BetaRawMessageStreamEvent]) -> BetaRawMessageStartEvent:
+    primeiro = eventos[0]
+    assert isinstance(primeiro, BetaRawMessageStartEvent)
+    return primeiro
+
+
+def _aberturas(
+    eventos: list[BetaRawMessageStreamEvent],
+) -> list[BetaRawContentBlockStartEvent]:
+    return [e for e in eventos if isinstance(e, BetaRawContentBlockStartEvent)]
+
+
+def _iteracoes(eventos: list[BetaRawMessageStreamEvent]) -> list[tuple[str, str]]:
+    """As tentativas do `usage.iterations`, como `(tipo, modelo)`."""
+    (delta,) = [e for e in eventos if isinstance(e, BetaRawMessageDeltaEvent)]
+    tentativas: list[tuple[str, str]] = []
+    for iteracao in delta.usage.iterations or []:
+        assert isinstance(
+            iteracao, BetaMessageIterationUsage | BetaFallbackMessageIterationUsage
+        )
+        assert iteracao.model is not None
+        tentativas.append((iteracao.type, iteracao.model))
+    return tentativas
+
+
+def test_sem_substituicao_o_uso_nao_tem_iteracoes() -> None:
+    """Como a resposta normal da API real: nenhuma `fallback_message`."""
+    eventos = eventos_do_roteiro(Roteiro(blocos=(Texto(("oi",)),)))
+    assert _inicio(eventos).message.model == MODELO_DO_FALSO
+    assert [a.content_block.type for a in _aberturas(eventos)] == ["thinking", "text"]
+    assert _iteracoes(eventos) == []
+
+
+def test_a_substituicao_antes_da_saida_abre_com_o_substituto() -> None:
+    """Recusa antes de qualquer saida: o `message_start` ja nomeia o
+    substituto e o bloco `fallback` e o primeiro (documentacao "Refusals and
+    fallback")."""
+    eventos = eventos_do_roteiro(
+        Roteiro(blocos=(Texto(("oi",)),), substituicao=Substituicao(SUBSTITUTO))
+    )
+    assert _inicio(eventos).message.model == SUBSTITUTO
+    aberturas = _aberturas(eventos)
+    assert [a.content_block.type for a in aberturas] == ["fallback", "thinking", "text"]
+    troca = aberturas[0].content_block
+    assert isinstance(troca, BetaFallbackBlock)
+    assert aberturas[0].index == 0
+    assert (troca.from_.model, troca.to.model) == (MODELO_DO_FALSO, SUBSTITUTO)
+    assert troca.trigger.type == "refusal"
+    assert _iteracoes(eventos) == [
+        ("message", MODELO_DO_FALSO),
+        ("fallback_message", SUBSTITUTO),
+    ]
+
+
+def test_a_substituicao_no_meio_fica_entre_os_blocos() -> None:
+    """Recusa no meio: o pedido entrega `apos_blocos` blocos, vem a troca, e
+    o substituto continua. Os indices seguem monotonicos."""
+    eventos = eventos_do_roteiro(
+        Roteiro(
+            blocos=(Texto(("parcial ",)), Texto(("continuacao",))),
+            substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+        )
+    )
+    assert _inicio(eventos).message.model == MODELO_DO_FALSO
+    aberturas = _aberturas(eventos)
+    assert [(a.index, a.content_block.type) for a in aberturas] == [
+        (0, "thinking"),
+        (1, "text"),
+        (2, "fallback"),
+        (3, "text"),
+    ]
+    assert _iteracoes(eventos) == [
+        ("message", MODELO_DO_FALSO),
+        ("fallback_message", SUBSTITUTO),
+    ]
+
+
+def test_a_substituicao_fixa_nao_tem_bloco() -> None:
+    """Roteamento fixo (sticky): a API vai direto ao substituto, sem bloco
+    `fallback`, e o uso so tem a `fallback_message`."""
+    eventos = eventos_do_roteiro(
+        Roteiro(
+            blocos=(Texto(("oi",)),), substituicao=Substituicao(SUBSTITUTO, fixa=True)
+        )
+    )
+    assert _inicio(eventos).message.model == SUBSTITUTO
+    assert [a.content_block.type for a in _aberturas(eventos)] == ["thinking", "text"]
+    assert _iteracoes(eventos) == [("fallback_message", SUBSTITUTO)]
+
+
+def test_o_bloco_fallback_vai_com_from_no_fio(falso: ServidorAnthropicFalso) -> None:
+    """O nome do campo no fio e `from` (palavra reservada no Python, `from_` no
+    SDK). O SDK monta o evento sem validar: um `from_` no fio nao reprovaria
+    nada, e o falso mentiria em silencio. Por isso a linha CRUA."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("oi",)),), substituicao=Substituicao(SUBSTITUTO)
+    )
+    pedido = urllib.request.Request(
+        f"{falso.url}/v1/messages",
+        data=json.dumps({"model": MODELO_DO_FALSO}).encode(),
+        method="POST",
+    )
+    with urllib.request.urlopen(pedido, timeout=5) as resposta:
+        corpo = resposta.read().decode()
+    (linha,) = [
+        linha
+        for linha in corpo.splitlines()
+        if linha.startswith("data: ") and '"fallback"' in linha
+    ]
+    bloco = json.loads(linha.removeprefix("data: "))["content_block"]
+    assert bloco["from"] == {"model": MODELO_DO_FALSO}
+    assert "from_" not in bloco
+
+
+def test_o_sdk_beta_monta_a_troca_do_stream_do_falso(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    """Camada 2 do falso com o fallback: o SDK fixado, pelo endpoint beta,
+    troca o modelo da mensagem final pelo substituto e guarda o bloco."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial ",)), Texto(("fim",))),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    with _cliente(falso).beta.messages.stream(
+        model=MODELO_DO_FALSO,
+        max_tokens=100,
+        messages=[{"role": "user", "content": "oi"}],
+    ) as stream:
+        final = stream.get_final_message()
+    assert final.model == SUBSTITUTO
+    assert [b.type for b in final.content] == ["thinking", "text", "fallback", "text"]
+    assert [i.type for i in final.usage.iterations or []] == [
+        "message",
+        "fallback_message",
+    ]

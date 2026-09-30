@@ -10,6 +10,7 @@ const tutor = (status: MessageRead['status'], errorCode: string | null): Message
   client_message_id: null,
   reply_to_id: 1,
   error_code: errorCode,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:01Z',
   actions: [],
 })

@@ -98,3 +98,9 @@ class Settings(ConfiguracaoDeLog):
     tutor_max_tokens: int = Field(default=4096, ge=1)
     tutor_timeout_seconds: float = Field(default=60, gt=0)
     tutor_history_messages: int = Field(default=20, ge=1)
+    # O fallback do lado do servidor para a recusa (pendencia 174, beta): a API
+    # refaz a requisicao recusada no modelo que a Anthropic recomenda para a
+    # categoria da recusa. Ligado por decisao do dono (2026-09-29); desligar com
+    # FOCUSQUEST_TUTOR_FALLBACK=false se o beta mudar e a API passar a recusar a
+    # requisicao inteira (risco R1 do plano da pendencia 174).
+    tutor_fallback: bool = True
