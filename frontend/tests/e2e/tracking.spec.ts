@@ -14,10 +14,14 @@ import { definirRoteiro, reiniciar, requisicoes } from './falso'
  * nunca por posicao no quadro. O falso e reiniciado antes de cada cenario.
  *
  * Janela da meia-noite de SP (pendencia 54): nenhum cenario daqui depende do
- * dia civil -- as missoes sao avulsas com prazo fixo em 2026/2027, e o texto
- * esperado de "Iniciada em" sai do `started_at` que a propria API devolveu,
- * nao do relogio do teste. Nao ha semeadura "de hoje" que possa virar "de
- * ontem" entre dois passos.
+ * dia civil -- as missoes sao avulsas, e o texto esperado de "Iniciada em"
+ * sai do `started_at` que a propria API devolveu, nao do relogio do teste.
+ * Nao ha semeadura "de hoje" que possa virar "de ontem" entre dois passos.
+ *
+ * Prazos: a API roda com o relogio real, e o reagendamento recusa um prazo
+ * novo que ja passou (`prazo_expirado`). Por isso nenhum prazo daqui e uma
+ * data escrita a mao: todos saem de `daquiADias`, a partir do relogio do
+ * teste, e um prazo fixo viraria passado e derrubaria o gate sozinho.
  */
 const EXECUCAO = randomUUID().slice(0, 8)
 
@@ -80,6 +84,20 @@ async function lerMissao(api: APIRequestContext, id: number): Promise<Missao> {
   return missao as Missao
 }
 
+const UMA_HORA_EM_MS = 60 * 60 * 1000
+const UM_DIA_EM_MS = 24 * UMA_HORA_EM_MS
+
+/**
+ * O instante daqui a `dias` dias, arredondado para a hora cheia seguinte, em
+ * ISO 8601 com `Z`. Hora cheia porque o deslocamento de Sao Paulo e de horas
+ * inteiras: o minuto e o mesmo em UTC e no relogio de Brasilia, e a conversao
+ * do `datetime-local` nao tem o que arredondar.
+ */
+function daquiADias(dias: number): string {
+  const instante = Math.ceil((Date.now() + dias * UM_DIA_EM_MS) / UMA_HORA_EM_MS) * UMA_HORA_EM_MS
+  return new Date(instante).toISOString()
+}
+
 /** As partes do instante no relogio de Sao Paulo. `h23`: meia-noite e 00. */
 const PARTES_EM_SP = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Sao_Paulo',
@@ -99,10 +117,28 @@ const PARTES_EM_SP = new Intl.DateTimeFormat('en-US', {
  * formatador com ele mesmo.
  */
 function naTela(iso: string): RegExp {
-  const p = Object.fromEntries(
+  return new RegExp(trechoDaTela(iso))
+}
+
+/** O trecho `dd/mm/aaaa.*HH:MM` de `naTela`, para compor regex maiores. */
+function trechoDaTela(iso: string): string {
+  const p = partesEmSp(iso)
+  return `${p.day}/${p.month}/${p.year}.*${p.hour}:${p.minute}`
+}
+
+/**
+ * O valor de um `datetime-local` (`aaaa-mm-ddTHH:mm`) para o instante: a hora
+ * civil de Brasilia, que e o que a tela pergunta e converte de volta.
+ */
+function paraDatetimeLocal(iso: string): string {
+  const p = partesEmSp(iso)
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`
+}
+
+function partesEmSp(iso: string): Record<string, string> {
+  return Object.fromEntries(
     PARTES_EM_SP.formatToParts(new Date(iso)).map((parte) => [parte.type, parte.value]),
   )
-  return new RegExp(`${p.day}/${p.month}/${p.year}.*${p.hour}:${p.minute}`)
 }
 
 async function semViolacoes(page: Page): Promise<void> {
@@ -124,7 +160,7 @@ test('(1) iniciar pela tela persiste o inicio, e concluir mostra a duracao real 
   page,
   request,
 }) => {
-  const criada = await criarMissao(request, 'Ler o capítulo 7', '2027-03-15T15:00:00Z')
+  const criada = await criarMissao(request, 'Ler o capítulo 7', daquiADias(45))
   expect(criada.state).toBe('pendente')
   expect(criada.started_at).toBeNull()
 
@@ -172,7 +208,10 @@ test('(2) reagendar pela tela com motivo: prazo novo, contagem e historico apos 
   page,
   request,
 }) => {
-  const criada = await criarMissao(request, 'Revisar ponteiros', '2026-12-01T12:00:00Z')
+  const criada = await criarMissao(request, 'Revisar ponteiros', daquiADias(10))
+  // O prazo novo e depois do atual: o cenario prova o reagendamento, e nao a
+  // antecipacao.
+  const novoPrazo = daquiADias(30)
 
   await page.goto('/')
   const cartao = cartaoDa(page, criada)
@@ -181,8 +220,8 @@ test('(2) reagendar pela tela com motivo: prazo novo, contagem e historico apos 
   await abrir.click()
   await expect(abrir).toHaveAttribute('aria-expanded', 'true')
   // `datetime-local`: a hora civil de Brasilia, que a tela converte para o
-  // instante (10:00 em SP, UTC-03:00 sem horario de verao, e 13:00 UTC).
-  await cartao.getByLabel('Novo prazo (horário de Brasília)').fill('2027-01-10T10:00')
+  // instante `novoPrazo`; a conferencia do instante gravado vem logo abaixo.
+  await cartao.getByLabel('Novo prazo (horário de Brasília)').fill(paraDatetimeLocal(novoPrazo))
   await cartao
     .getByRole('group', { name: 'Por que reagendar?' })
     .getByLabel('Falta de tempo')
@@ -191,22 +230,22 @@ test('(2) reagendar pela tela com motivo: prazo novo, contagem e historico apos 
 
   await cartao.getByTestId('reschedule-submit').click()
   await expect(cartao.getByTestId('mission-reschedule-status')).toHaveText('Prazo reagendado.')
-  await expect(cartao.getByTestId('mission-deadline')).toHaveText(/10\/01\/2027.*10:00/)
+  await expect(cartao.getByTestId('mission-deadline')).toHaveText(naTela(novoPrazo))
   await expect(cartao.getByTestId('mission-reschedule-count')).toHaveText('Reagendada 1 vez')
 
   // O servidor gravou o elo do historico com o instante certo e a origem.
   const reagendada = await lerMissao(request, criada.id)
-  expect(Date.parse(reagendada.deadline)).toBe(Date.parse('2027-01-10T13:00:00Z'))
+  expect(Date.parse(reagendada.deadline)).toBe(Date.parse(novoPrazo))
   expect(reagendada.reschedules).toHaveLength(1)
   const elo = reagendada.reschedules[0]
   expect(elo?.reason).toBe('falta_de_tempo')
   expect(elo?.origin).toBe('usuario')
-  expect(Date.parse(elo?.new_deadline ?? '')).toBe(Date.parse('2027-01-10T13:00:00Z'))
+  expect(Date.parse(elo?.new_deadline ?? '')).toBe(Date.parse(novoPrazo))
   expect(Date.parse(elo?.previous_deadline ?? '')).toBe(Date.parse(criada.deadline))
 
   // Recarregar: o prazo novo, a contagem e o historico vem da API.
   await page.reload()
-  await expect(cartao.getByTestId('mission-deadline')).toHaveText(/10\/01\/2027.*10:00/)
+  await expect(cartao.getByTestId('mission-deadline')).toHaveText(naTela(novoPrazo))
   await expect(cartao.getByTestId('mission-deadline')).toHaveAttribute(
     'dateTime',
     reagendada.deadline,
@@ -217,7 +256,9 @@ test('(2) reagendar pela tela com motivo: prazo novo, contagem e historico apos 
   const linhas = historico.getByTestId('mission-reschedule-entry')
   await expect(linhas).toHaveCount(1)
   await expect(linhas.first()).toHaveText(
-    /^01\/12\/2026.*09:00 → 10\/01\/2027.*10:00 · Falta de tempo · por você$/,
+    new RegExp(
+      `^${trechoDaTela(criada.deadline)} → ${trechoDaTela(novoPrazo)} · Falta de tempo · por você$`,
+    ),
   )
   await semViolacoes(page)
 })
@@ -226,8 +267,8 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   page,
   request,
 }) => {
-  const criada = await criarMissao(request, 'Estudar interfaces', '2027-01-20T15:00:00Z')
-  const novoPrazo = '2027-02-01T21:00:00Z'
+  const criada = await criarMissao(request, 'Estudar interfaces', daquiADias(20))
+  const novoPrazo = daquiADias(40)
   await definirRoteiro({
     blocks: [
       { text: [`Vamos mover (e2e ${EXECUCAO}).`] },
@@ -257,9 +298,9 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   await expect(proposta).toContainText('Proposta de reagendamento')
   await expect(proposta.getByTestId('reschedule-instructions')).toHaveText(criada.instructions)
   await expect(proposta.getByTestId('reschedule-previous-deadline')).toHaveText(
-    /20\/01\/2027.*12:00/,
+    naTela(criada.deadline),
   )
-  await expect(proposta.getByTestId('reschedule-new-deadline')).toHaveText(/01\/02\/2027.*18:00/)
+  await expect(proposta.getByTestId('reschedule-new-deadline')).toHaveText(naTela(novoPrazo))
   await expect(proposta.getByTestId('reschedule-reason')).toContainText('Mudança de prioridade')
   await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
   await semViolacoes(page)
@@ -280,11 +321,13 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
 
   // O quadro recarregou sozinho: o cartao da missao tem o prazo novo e o elo.
   const cartao = cartaoDa(page, criada)
-  await expect(cartao.getByTestId('mission-deadline')).toHaveText(/01\/02\/2027.*18:00/)
+  await expect(cartao.getByTestId('mission-deadline')).toHaveText(naTela(novoPrazo))
   await expect(cartao.getByTestId('mission-reschedule-count')).toHaveText('Reagendada 1 vez')
   await cartao.getByTestId('mission-reschedule-history').getByText('Histórico de prazos').click()
   await expect(cartao.getByTestId('mission-reschedule-entry')).toHaveText([
-    /^20\/01\/2027.*12:00 → 01\/02\/2027.*18:00 · Mudança de prioridade · proposto pela Tifa$/,
+    new RegExp(
+      `^${trechoDaTela(criada.deadline)} → ${trechoDaTela(novoPrazo)} · Mudança de prioridade · proposto pela Tifa$`,
+    ),
   ])
 
   // A confirmacao reagendou a missao existente, e nao criou outra.
@@ -299,7 +342,7 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
 
   // Recarregar: o prazo novo e o historico "proposto pela Tifa" persistem.
   await page.reload()
-  await expect(cartao.getByTestId('mission-deadline')).toHaveText(/01\/02\/2027.*18:00/)
+  await expect(cartao.getByTestId('mission-deadline')).toHaveText(naTela(novoPrazo))
   await cartao.getByTestId('mission-reschedule-history').getByText('Histórico de prazos').click()
   await expect(cartao.getByTestId('mission-reschedule-entry')).toHaveText([
     /· Mudança de prioridade · proposto pela Tifa$/,
