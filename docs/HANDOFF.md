@@ -5601,25 +5601,30 @@ ledger; nenhum é bug esquecido.
      cortar de novo. Resolver de verdade pede decidir entre subir o teto,
      pedir continuação ou orientar a persona a responder em partes — decisão
      de produto e de custo, para o dono.~~
-     **Resolvida em 2026-09-29 por decisão do dono ("subir o limite"):** o
-     padrão de `tutor_max_tokens` (`core/config.py`) subiu de 1024 para
-     **4096**, e o `.env.example` acompanha. **Por que 1024 cortava cedo:** o
+     **Resolvida por decisão do dono, em dois passos:** em 2026-09-29
+     ("subir o limite") o padrão de `tutor_max_tokens` (`core/config.py`)
+     subiu de 1024 para 4096; em **2026-09-30** o dono o fixou em **2048**
+     (integração dos lotes G). O `.env.example` acompanha nos dois passos, e
+     o valor em vigor é **2048**. **Por que 1024 cortava cedo:** o
      `claude-opus-5` pensa por padrão (thinking adaptativo), e o thinking gasta
      do mesmo `max_tokens`. O adaptador não manda `thinking` nem
      `budget_tokens` (conferido em `anthropic_provider.py`), então não há
      orçamento de thinking a manter abaixo do teto — nada mais a ajustar.
      **Custo:** a saída é cobrada pelos tokens gerados de fato, não pelo teto.
      Uma resposta que já cabia em 1024 custa o mesmo; só a que antes era
-     cortada passa a ir até onde precisa, no máximo 4096 tokens de saída —
-     a US$ 25 por milhão no `claude-opus-5`, cerca de US$ 0,10 no pior caso
-     por resposta, contra cerca de US$ 0,026 do teto antigo. **Atenção para
+     cortada passa a ir até onde precisa, no máximo 2048 tokens de saída —
+     a US$ 25 por milhão no `claude-opus-5`, cerca de US$ 0,05 no pior caso
+     por resposta (metade dos cerca de US$ 0,10 do teto de 4096), contra
+     cerca de US$ 0,026 do teto original de 1024. **Atenção para
      quem já tem `.env`:** o arquivo vence o padrão do `Settings`, e um `.env`
-     copiado do exemplo antigo continua com `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
-     — a linha precisa ser trocada à mão em cada clone. O teste novo
+     copiado de um exemplo antigo continua com `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+     (ou `=4096`, entre 2026-09-29 e 2026-09-30) — a linha precisa ser
+     trocada à mão para `2048` em cada clone. O teste novo
      `test_o_env_example_traz_os_padroes_da_tutoria` amarra o exemplo aos
-     padrões do `Settings`, e `test_padroes_da_tutoria` fixa 4096. O "Tentar
-     de novo" da cortada continua repetindo o mesmo teto, agora quatro vezes
-     maior; o caso da janela de contexto, que o teto não resolve, é a
+     padrões do `Settings`, e `test_padroes_da_tutoria` fixa 2048 (os dois
+     vistos reprovando antes da troca para 2048: `4096 == 2048` no primeiro,
+     o `.env.example` com 4096 no segundo). O "Tentar de novo" da cortada
+     continua repetindo o mesmo teto, agora o dobro do original; o caso da janela de contexto, que o teto não resolve, é a
      pendência 176, e o do tempo, a 177.
 174. ~~**Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
      reexecutar a requisição recusada noutro modelo (`fallbacks`, beta, com
@@ -5700,14 +5705,18 @@ ledger; nenhum é bug esquecido.
      conversa), não subir o teto. Na prática é raro: o histórico vai até
      `tutor_history_messages` (20) e a pergunta tem limite de tamanho. Se
      acontecer, a tela diz "pedir por partes", que ajuda só em parte.
-177. **Resposta de até 4096 tokens contra o limite total de 60 s** (lote
+177. **Resposta de até 2048 tokens contra o limite total de 60 s** (lote
      g-tifa, consequência da 173). O limite total do serviço é
      `tutor_timeout_seconds` (60 s, `dependencies.py`), medido do início do
-     stream. Com o teto quatro vezes maior, uma resposta longa (thinking
+     stream. Com o teto maior que o original (4096 em 2026-09-29, **2048**
+     desde 2026-09-30, o dobro dos 1024), uma resposta longa (thinking
      incluído) pode passar de 60 s e sair `tempo_esgotado` em vez de
      `completa`. Não medido: nenhuma chamada real foi feita neste lote. Se
      aparecer, a decisão é subir o `tutor_timeout_seconds` (e o `.env`) —
-     para o dono, porque muda quanto a pessoa espera.
+     para o dono, porque muda quanto a pessoa espera. **Atualizada em
+     2026-09-30:** com o teto em 2048 (metade dos 4096 que motivaram esta
+     pendência), o estouro dos 60 s fica **menos provável, não descartado**:
+     o thinking adaptativo também gasta tempo, e nada disso foi medido.
 178. **Dois testes de foco do `MissionList.test.tsx` reprovaram uma vez sob
      carga** (lote g-tifa, correções da revisão). Num `make check` (EXIT 2), com
      outros worktrees rodando o gate na mesma máquina, reprovaram
