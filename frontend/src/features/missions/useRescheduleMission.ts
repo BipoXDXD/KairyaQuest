@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { postJson } from '../../shared/api/client'
+import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
 import { saoPauloCivilToIso } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
 import { describeRescheduleFailure, type RescheduleFailure } from './rescheduleFailure'
@@ -56,6 +56,9 @@ export interface UseRescheduleMissionResult {
  *   o pedido, nada foi gravado, e a correcao da pessoa e outro conteudo -- com a
  *   mesma chave seria `operacao_reutilizada`.
  *
+ * O POST tem prazo (`MUTATION_TIMEOUT_MS`), com o mesmo efeito do Iniciar: falha
+ * `retry`, chave mantida, botao de volta.
+ *
  * O hook tambem avisa o registro de que um POST saiu e terminou.
  */
 export function useRescheduleMission(
@@ -82,11 +85,15 @@ export function useRescheduleMission(
       setState({ status: 'submitting' })
       registry.started()
 
-      postJson<Mission>(`/missions/${String(missionId)}/reschedule`, {
-        operation_id: operationId,
-        new_deadline: newDeadline,
-        reason: draft.reason,
-      })
+      postJson<Mission>(
+        `/missions/${String(missionId)}/reschedule`,
+        {
+          operation_id: operationId,
+          new_deadline: newDeadline,
+          reason: draft.reason,
+        },
+        { timeoutMs: MUTATION_TIMEOUT_MS },
+      )
         .then((mission) => {
           registry.releaseActionKey(missionId, 'reschedule')
           setState({ status: 'rescheduled', mission })
