@@ -67,8 +67,21 @@ const ciclo = (ajustes: Partial<Cycle> = {}): Cycle => ({
   streak: 3,
   days_to_milestone: 4,
   special: null,
+  late_daily: null,
   ...ajustes,
 })
+
+/** F25: a diaria de ontem, iniciada as 23:50, ainda concluivel hoje. */
+const diariaDeOntem: Mission = {
+  ...diaria,
+  id: 30,
+  instructions: 'Revisar a lista de ontem',
+  day: '2026-09-22',
+  deadline: '2026-09-23T00:00:00-03:00',
+  state: 'em_andamento',
+  availability: 'disponivel',
+  started_at: '2026-09-23T02:50:00Z',
+}
 
 describe('CycleSection', () => {
   afterEach(() => {
@@ -225,6 +238,51 @@ describe('CycleSection', () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
     render(<CycleSection />)
     expect(await screen.findByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
+  })
+
+  it('sem diaria de ontem em conclusao tardia, nao mostra a secao dela', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
+    render(<CycleSection />)
+    await screen.findByTestId('mission-item')
+    expect(screen.queryByTestId('cycle-late-daily')).toBeNull()
+  })
+
+  it('a diaria de ontem iniciada a tempo aparece com Concluir e o limite (F25)', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ streak: 0, late_daily: diariaDeOntem })),
+      'POST /api/missions/30/complete': () =>
+        Response.json(
+          comRecompensa({
+            ...diariaDeOntem,
+            state: 'concluida',
+            availability: 'concluida',
+            completed_at: '2026-09-23T03:10:00Z',
+            actual_duration_minutes: 20,
+          }),
+        ),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    expect(
+      within(secao).getByRole('heading', {
+        level: 3,
+        name: 'Diária de ontem — iniciada a tempo',
+      }),
+    ).toBeInTheDocument()
+    expect(secao).toHaveTextContent(
+      'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.',
+    )
+    expect(
+      within(secao).getByRole('heading', { level: 4, name: diariaDeOntem.instructions }),
+    ).toBeInTheDocument()
+    // A missao de hoje continua no lugar dela, fora da secao.
+    expect(within(secao).queryByText(diaria.instructions)).toBeNull()
+    expect(screen.getAllByTestId('mission-item')).toHaveLength(2)
+
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'POST /api/missions/30/complete')).toHaveLength(1)
+    })
   })
 
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {

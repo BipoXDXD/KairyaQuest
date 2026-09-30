@@ -11,6 +11,7 @@ const semPlano: Cycle = {
   streak: 0,
   days_to_milestone: 7,
   special: null,
+  late_daily: null,
 }
 const comSequencia: Cycle = { ...semPlano, streak: 1, days_to_milestone: 6 }
 

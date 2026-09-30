@@ -22,6 +22,7 @@ function stubPage(plan: unknown = null) {
         streak: 0,
         days_to_milestone: 7,
         special: null,
+        late_daily: null,
       }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),

@@ -815,7 +815,7 @@ modelo×migração — os `UNIQUE`, o índice parcial e a FK composta não
 |---|---|---|
 | `POST /api/plans` | `201` com `PlanRead` | Cria o plano da semana: sete diárias e uma especial. Reenvio responde `409 plano_existente` — nunca duplica (README §6). |
 | `GET /api/plans/current` | `200` com `{"plan": PlanRead \| null}` | O plano da semana atual, na **mesma forma** do 201 acima (decisão P2) — "sem plano" é estado, não erro. |
-| `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco e a especial (se disponível). |
+| `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco, a especial (se disponível, ou iniciada na janela e ainda em conclusão tardia) e `late_daily`, a diária de ontem iniciada a tempo que ainda pode ser concluída até o fim de hoje (F25, ou `null`). |
 
 **A forma da trilha (`PlanRead`)**: `{"week_start", "days": [{"day",
 "availability", "mission"} × 7], "special": {"availability", "progress",

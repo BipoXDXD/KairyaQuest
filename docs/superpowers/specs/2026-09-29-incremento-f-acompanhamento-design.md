@@ -112,6 +112,20 @@ valores; o contexto e a persona da Tifa para essas duas coisas; a migração
 esforço, e o F não a toca); a diária e a especial ficam fora do reagendamento
 porque o prazo delas é do ciclo.
 
+## Emendas
+
+Decisões tomadas depois da aprovação, durante a execução do F, com o mesmo
+formato da tabela acima. Cada emenda diz qual decisão anterior ela ajusta.
+
+| # | Decisão | Por quê | Alternativa descartada |
+|---|---|---|---|
+| F25 | **A missão iniciada dentro do prazo pode ser concluída depois dele, até o fim do dia seguinte ao prazo** (pendência 115, decisão do controlador por delegação do dono, 2026-09-29). A diária de quarta iniciada às 23:50 conclui às 00:10 de quinta, e até quinta 23:59:59; a especial iniciada na janela conclui até o fim do dia seguinte ao fim da janela. A conclusão grava normalmente: `completed_at`, duração real, **o XP normal da missão** e as conquistas. **A sequência conta o dia da missão** — a diária pertence ao dia dela, e a sequência já é derivada da conclusão de cada dia (`carregar_historico`), sem mudança no cálculo; a diária que completa 7 dias abre o marco dela, e a janela da especial desse marco ainda está aberta na hora da conclusão tardia. A disponibilidade derivada dessa missão volta a ser `disponivel` (`com_inicio_a_tempo`, `cycle_domain.py`) — só para concluir: iniciar de novo é `409 transicao_ilegal`. **Só vale para `em_andamento` com `started_at` antes do prazo**: a pendente depois do prazo continua perdida/expirada (`409 missao_expirada`), como antes. O `GET /api/cycle` ganha `late_daily` (a diária de ontem nessa situação, ou `null`), e o `special` continua a especial nesse período; o Quartel-General mostra a diária de ontem numa seção própria, com o motivo a vista. Ajusta **F3** (a regra do dia deixa de olhar só "concluída?" e o dia) e **F5** (a missão iniciada não fica mais presa em `em_andamento` sem saída), e é coerente com **F24**: iniciar continua sem dar XP. | A pessoa começou a tempo. Prender a missão em `em_andamento` para sempre, sem duração real e com um Concluir que sempre falha, é a perda destrutiva que o README §5 proíbe. O limite existe porque, sem ele, uma missão iniciada meses atrás reescreveria a sequência e os marcos de semanas passadas, e "iniciar tudo e concluir quando der" viraria atalho; "até o fim do dia seguinte" cobre a virada da noite (quem começa às 23:50 e termina de manhã), é o mesmo desenho da janela da especial (C8), garante que só a diária de **ontem** pode estar nessa situação (um campo só no ciclo) e que o marco aberto por ela ainda encontra a janela da especial. | (a) Manter como estava (a pendência 115 descreve o defeito); (b) dar o XP e **não** contar para a sequência — exigiria um segundo critério de "concluída" no histórico só para a sequência, sem ganho de honestidade, porque a diária foi começada no dia dela; (c) sem limite — reescrita arbitrária do passado; (d) 24 h corridas a partir do prazo — igual ao limite escolhido fora do horário de verão, mas com um instante que não é meia-noite, diferente de toda outra borda do ciclo. |
+
+**Efeito declarado da F25:** entre a meia-noite e a conclusão tardia, a
+sequência exibida já não conta o dia de ontem (ele ainda não tem conclusão) e
+volta a contar assim que a diária de ontem é concluída. O cálculo da sequência
+não mudou: ele mostra o que está concluído no instante da leitura.
+
 ## Contratos
 
 ### `POST /api/missions/{mission_id}/start`

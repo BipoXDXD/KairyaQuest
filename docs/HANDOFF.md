@@ -14,7 +14,7 @@ interativa. Especificação completa em `README.md`. Entrega por incrementos.
 `feat/incremento-f`, aberta a partir de `580f6cc` (a `main`: o merge do PR #2,
 o Incremento E). Spec em
 `docs/superpowers/specs/2026-09-29-incremento-f-acompanhamento-design.md`
-(decisões F1–F24), aprovada por delegação do dono em 2026-09-29 ("tome todas
+(decisões F1–F24, e a emenda F25 da pendência 115), aprovada por delegação do dono em 2026-09-29 ("tome todas
 as decisões por mim"); plano em `docs/superpowers/plans/2026-09-29-incremento-f.md`.
 **Estado de publicação: não publicado.**
 
@@ -4181,6 +4181,38 @@ ledger; nenhum é bug esquecido.
     quebraria — o que já valia antes. Também *minors* da revisão da Task 8 não
     tratados: o axe varre a página inteira (o poll de opacidade só espera o fade-in
     deste cartão) e `mode: 'serial'` com um único teste é inócuo.
+115. ~~**Missão do ciclo iniciada no dia e concluída depois dele fica
+    `em_andamento` para sempre.** Uma diária iniciada às 23:50 (SP) e concluída
+    às 00:10 do dia seguinte já era `perdida`: a conclusão respondia `409
+    missao_expirada`, e a F5 proíbe voltar a `pendente`. O mesmo valia para a
+    especial iniciada na janela e concluída depois dela.~~ **Resolvida em
+    2026-09-29 (Incremento F, emenda F25 da spec):** a missão `em_andamento` com
+    `started_at` antes do prazo pode ser concluída até o fim do dia seguinte ao
+    prazo (a diária de quarta, até quinta 23:59:59; a especial, até o fim do dia
+    seguinte ao fim da janela). A conclusão grava normalmente, com duração real,
+    o XP normal da missão e as conquistas. **A sequência conta o dia da
+    missão:** ela já é derivada da conclusão de cada dia (`carregar_historico`),
+    então o cálculo não mudou — contar foi a opção mais honesta (a diária foi
+    começada no dia dela) e a mais simples (não contar exigiria um segundo
+    critério de "concluída" só para a sequência). O limite existe para que uma
+    missão iniciada há semanas não reescreva sequência e marcos do passado;
+    "fim do dia seguinte" cobre a virada da noite, repete o desenho da janela da
+    especial (C8) e garante que a diária que abre um marco com atraso ainda
+    encontra a janela da especial aberta. A pendente depois do prazo continua
+    `409 missao_expirada`. **Contrato:** `GET /api/cycle` ganha `late_daily`
+    (`MissionRead | null`, aditivo) — sem ele, a diária de ontem sumiria do
+    Quartel-General na primeira recarga depois da meia-noite e o Concluir ficaria
+    inalcançável; o `special` continua mostrando a especial nesse período. O
+    Quartel-General mostra a diária de ontem numa seção própria ("Diária de
+    ontem — iniciada a tempo"), e na trilha o dia dela aparece `disponivel`
+    enquanto der para concluir. **Efeito declarado:** entre a meia-noite e a
+    conclusão tardia, a sequência exibida não conta ontem, e volta a contar
+    quando ele é concluído. O teste documental
+    `test_diaria_iniciada_que_passa_do_dia_fica_em_andamento_sem_saida`
+    (`59901df`) foi substituído por
+    `test_diaria_iniciada_no_dia_e_concluida_depois_da_meia_noite`, que fixa a
+    regra nova — a mudança desse teste é a mudança principal do incremento.
+    Nenhuma dependência nova.
 
 ## Próximo incremento
 

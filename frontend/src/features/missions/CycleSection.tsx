@@ -68,6 +68,29 @@ function CycleLoaded({
           <MissionCard key={cycle.mission.id} mission={cycle.mission} {...card} />
         </ul>
       )}
+      {/* F25: a diaria de ontem iniciada a tempo. Fica numa secao propria, com
+          o motivo a vista: o prazo impresso no cartao ja passou, e sem o texto
+          o Concluir pareceria um erro. */}
+      {cycle.late_daily !== null && (
+        <div data-testid="cycle-late-daily">
+          <h3 className="mb-1 text-base font-semibold text-amber-200">
+            Diária de ontem — iniciada a tempo
+          </h3>
+          <p className="mb-2 text-sm text-slate-300">
+            Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e
+            conta para a sequência.
+          </p>
+          <ul role="list" className="flex flex-col gap-3">
+            {/* m1: mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
+            <MissionCard
+              key={cycle.late_daily.id}
+              mission={cycle.late_daily}
+              {...card}
+              titleLevel={4}
+            />
+          </ul>
+        </div>
+      )}
       {/* m4: `role="status"` desde o primeiro render do estado carregado -- um
           leitor de tela so anuncia mudanca numa regiao viva que ja estava no
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
