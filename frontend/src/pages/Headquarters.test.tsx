@@ -165,6 +165,7 @@ describe('Headquarters', () => {
       verification: null,
       evidence: null,
       evaluation: null,
+      reschedules: [],
     }
     const recompensa: Reward = {
       xp_awarded: 80,
@@ -259,6 +260,7 @@ describe('Headquarters', () => {
       verification: null,
       evidence: null,
       evaluation: null,
+      reschedules: [],
     }
     const diariaConcluida: Mission = {
       ...diaria,
@@ -383,6 +385,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     verification: null,
     evidence: null,
     evaluation: null,
+    reschedules: [],
   }
 
   const confirmed: Route = () =>

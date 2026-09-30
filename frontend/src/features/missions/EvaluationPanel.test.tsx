@@ -27,6 +27,7 @@ const concluida: Mission = {
   verification: 'autodeclarada',
   evidence: null,
   evaluation: null,
+  reschedules: [],
 }
 
 const comEvidencia: Mission = {
