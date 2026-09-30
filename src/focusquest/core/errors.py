@@ -65,7 +65,7 @@ class PrazoExpiradoError(DomainError):
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
-    E um erro DIFERENTE de MissaoNaoEncontradaError mesmo que a Task 9 traduza
+    E um erro DIFERENTE de MissaoNaoEncontradaError mesmo que a camada web traduza
     os dois para o mesmo status HTTP. Nao sao a mesma pergunta: quem le o log
     precisa saber se o identificador nao existe ou se existe e foi negado --
     um aponta para bug no cliente, o outro para tentativa de acesso indevido.

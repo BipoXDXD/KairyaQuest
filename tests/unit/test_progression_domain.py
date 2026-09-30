@@ -32,7 +32,7 @@ SEGUNDA = date(2026, 9, 21)
         (1000, 5),
         (19000, 20),
         # Um XP abaixo do piso do nivel 8388609: a raiz em ponto flutuante de
-        # 1 + 4*xp/50 arredonda para cima e erra o nivel (R4 corrigida).
+        # 1 + 4*xp/50 arredonda para cima e erra o nivel.
         (3518437628313599, 8388608),
         # Um XP abaixo do piso do nivel 83886081: aqui nem a divisao inteira
         # salva o float -- int(math.sqrt(1 + 4*(xp//50))) erra por um. Ainda

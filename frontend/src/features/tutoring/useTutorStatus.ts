@@ -28,6 +28,12 @@ export function useTutorStatus(): { state: TutorStatus; reload: () => void } {
     const controller = new AbortController()
     requestJson<StatusRead>('/tutoring/status', controller.signal)
       .then((status) => {
+        // Uma resposta que ja estava em processamento quando o pedido foi
+        // abortado (o `reload` ou a desmontagem limparam o efeito) e velha:
+        // gravar por cima esconderia a carga mais nova.
+        if (controller.signal.aborted) {
+          return
+        }
         setState({ status: status.available ? 'available' : 'unavailable' })
       })
       .catch(() => {

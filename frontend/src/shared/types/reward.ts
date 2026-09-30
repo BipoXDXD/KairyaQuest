@@ -19,7 +19,7 @@ export interface UnlockedAchievement {
 /**
  * A recompensa de UMA conclusao: o XP ganho e, se mudou, o nivel e as
  * conquistas destravadas por ela -- nunca o saldo atual de outra conclusao
- * (Review Focus 1 das Global Constraints, reenvio antigo).
+ * (por exemplo, no reenvio de uma conclusao antiga).
  */
 export interface Reward {
   xp_awarded: number

@@ -112,7 +112,7 @@ def _concluir_em_paralelo(
 def test_duas_primeiras_conclusoes_em_paralelo_destravam_uma_conquista(
     banco_migrado: Engine, missao_commitada: int, outra_missao_commitada: int
 ) -> None:
-    """Review Focus 2: as duas primeiras missoes da vida, em paralelo.
+    """As duas primeiras missoes da vida, concluidas em paralelo.
 
     As duas ganham XP, `first_steps` existe uma vez so (a restricao
     `pk_user_achievements` garante), e nenhuma das duas explode.
@@ -152,7 +152,7 @@ def test_duas_primeiras_conclusoes_em_paralelo_destravam_uma_conquista(
 def test_falha_no_credito_desfaz_a_conclusao_e_o_reenvio_funciona(
     banco_migrado: Engine, missao_commitada: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Review Focus 3: o banco falha no meio do credito.
+    """O banco falha no meio do credito.
 
     A primeira chamada de `_inserir_lancamento` levanta `OperationalError`
     (simula uma falha real do banco durante o credito, ja dentro da mesma

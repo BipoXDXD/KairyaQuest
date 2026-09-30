@@ -36,7 +36,10 @@ function AchievementItem({ achievement }: { achievement: Achievement }): ReactEl
 function Loaded({ progress }: { progress: Progress }): ReactElement {
   const span = progress.next_level_xp - progress.level_floor_xp
   const into = progress.xp_total - progress.level_floor_xp
-  const text = `${xpFormat.format(into)} de ${xpFormat.format(span)} XP até o nível ${String(progress.level + 1)}`
+  const nextLevel = `até o nível ${String(progress.level + 1)}`
+  // o aria-label da barra ja diz o nivel; o valor anunciado fica so com o XP, sem repetir o sufixo
+  const valueText = `${xpFormat.format(into)} de ${xpFormat.format(span)} XP`
+  const text = `${valueText} ${nextLevel}`
   return (
     <div>
       <p data-testid="progress-level" className="text-xl font-bold text-slate-50">
@@ -48,11 +51,11 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       <div
         role="progressbar"
         data-testid="progress-bar"
-        aria-label={`Progresso até o nível ${String(progress.level + 1)}`}
+        aria-label={`Progresso ${nextLevel}`}
         aria-valuemin={0}
         aria-valuemax={span}
         aria-valuenow={into}
-        aria-valuetext={text}
+        aria-valuetext={valueText}
         className="mt-2 h-2 w-full rounded bg-slate-800"
       >
         <div
@@ -60,7 +63,7 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
           style={{ width: `${String((into / span) * 100)}%` }}
         />
       </div>
-      {/* o mesmo texto ja e o aria-valuetext da barra: fora da arvore, para nao ser lido duas vezes */}
+      {/* nome e valor da barra ja dizem este texto: fora da arvore, para nao ser lido duas vezes */}
       <p data-testid="progress-bar-text" aria-hidden="true" className="mt-1 text-sm text-slate-300">
         {text}
       </p>

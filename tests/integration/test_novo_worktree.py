@@ -320,7 +320,7 @@ def test_sem_argumento_mostra_o_uso(repo: Repositorio) -> None:
     assert "uso: scripts/novo-worktree.sh <nome> [deslocamento]" in resultado.stderr
 
 
-# --- Colisao com o banco do push (revisao da Frente 0) ---------------------
+# --- Colisao com o banco do push -------------------------------------------
 #
 # O banco de um worktree criado pelo script e `focusquest_<nome>_test`; o push
 # de quem tem o banco `R_test` usa `R_push_test` (F9). `focusquest_<x>_test`

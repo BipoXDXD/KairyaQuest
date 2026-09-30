@@ -152,7 +152,7 @@ class WeeklyPlan(Base):
 class User(Base):
     """Usuario dono das missoes.
 
-    Nao faz parte do brief da tarefa, e existe por uma razao estrutural:
+    Existe por uma razao estrutural, e nao de negocio:
     `Mission.user_id` e `ForeignKey("users.id")`, e o SQLAlchemy resolve esse
     alvo procurando a tabela em `Base.metadata`. Sem `users` registrada, a
     configuracao dos mappers levanta NoReferencedTableError no primeiro uso
@@ -206,9 +206,10 @@ class Mission(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"`: a listagem tem
-    # poucas missoes, e cada missao lida dispara ate duas consultas pequenas
-    # (evidencia e avaliacao).
+    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"` para a leitura de
+    # UMA missao (conclusao, avaliacao), onde carregar sob demanda e o certo.
+    # A listagem, que le as duas de todas as missoes, pede `selectinload` na
+    # propria consulta (`listar_missoes`, pendencia 96).
     evidence: Mapped[MissionEvidence | None] = relationship(
         cascade="all, delete-orphan", lazy="select"
     )

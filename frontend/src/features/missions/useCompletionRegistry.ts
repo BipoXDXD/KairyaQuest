@@ -81,9 +81,9 @@ export interface UseCompletionRegistryResult {
  * dele no meio do pedido. Pedida com conclusao em voo, ela fica pendente e e
  * executada UMA vez, por quem terminar por ultimo.
  *
- * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e escritos so dentro de
- * callbacks, e mudar um deles nao deve renderizar nada. O que a tela mostra --
- * se ha espera -- e estado. O pedido pendente tem as duas formas porque
+ * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e
+ * escritos so dentro de callbacks, e mudar um deles nao deve renderizar nada.
+ * O que a tela mostra -- se ha espera -- e estado. O pedido pendente tem as duas formas porque
  * `settled` precisa le-lo na hora, sem esperar o proximo render.
  */
 export function useCompletionRegistry(reload: () => void): UseCompletionRegistryResult {

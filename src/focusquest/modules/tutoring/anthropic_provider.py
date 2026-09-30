@@ -45,8 +45,8 @@ def esquema_da_proposta() -> dict[str, Any]:
     """O `input_schema` da ferramenta, gerado do MESMO `MissionCreate` do
     `POST /api/missions`, para os dois contratos nao divergirem.
 
-    O `description` do topo e a docstring de manutencao do schema (medicao
-    M8): fala de 422 e de defeitos medidos, e nao serve ao modelo. A descricao
+    O `description` do topo e a docstring de manutencao do schema:
+    fala de 422 e de defeitos medidos, e nao serve ao modelo. A descricao
     para o modelo e `DESCRICAO_DA_FERRAMENTA`.
     """
     esquema = MissionCreate.model_json_schema()
@@ -68,7 +68,7 @@ def _traduzir_erros() -> Iterator[None]:
         yield
     except (anthropic.APITimeoutError, httpx2.TimeoutException) as erro:
         # Os DOIS tipos, e nao so o do SDK: a demora no meio do stream sai
-        # como `httpx2.ReadTimeout` cru (medicao M4).
+        # como `httpx2.ReadTimeout` cru (medido).
         raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
     except (anthropic.APIError, httpx2.TransportError) as erro:
         raise ProvedorIndisponivelError(
@@ -97,7 +97,7 @@ class ProvedorAnthropic:
         timeout_segundos: float,
     ) -> None:
         # A chave e o endereco SEMPRE explicitos: sem eles o SDK procura
-        # credencial e endereco no ambiente sozinho (medicoes M6 e M7).
+        # credencial e endereco no ambiente sozinho (medido).
         self._cliente = anthropic.Anthropic(
             api_key=chave,
             base_url=base_url,
@@ -125,6 +125,7 @@ class ProvedorAnthropic:
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
         ):
+            motivo_da_parada: str | None = None
             for evento in stream:
                 if evento.type == "text":
                     yield Delta(evento.text)
@@ -132,8 +133,10 @@ class ProvedorAnthropic:
                     evento.content_block, ToolUseBlock
                 ):
                     yield Proposta(dict(evento.content_block.input))
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
-                    yield Fim()
+                    yield Fim(cortada=motivo_da_parada == "max_tokens")
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
         """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou
@@ -146,7 +149,7 @@ class ProvedorAnthropic:
         e o sistema da avaliacao; se ele nao chamar, o resultado e `None`, que
         o servico grava como `avaliacao_invalida`. `strict` faz a entrada
         obedecer ao esquema. O stream e consumido inteiro por dentro; so
-        `message_stop` prova que a resposta terminou (M3), como na conversa.
+        `message_stop` prova que a resposta terminou, como na conversa.
         """
         definicao: ToolParam = {
             "name": ferramenta.nome,

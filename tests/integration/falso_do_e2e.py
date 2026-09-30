@@ -98,7 +98,7 @@ def roteiro_do_json(dados: object) -> Roteiro:
     # Cada opcao POR NOME, e nao `Roteiro(**opcoes)`: com um `dict[str, int]`
     # desempacotado, o mypy strict confere o dict contra TODOS os campos do
     # `Roteiro` e reprova no `atrasar_evento: tuple[int, float] | None`
-    # (medido na revisao do plano).
+    # (medido).
     status = _inteiro(dados, "http_status", 100, 599)
     return Roteiro(
         blocos=tuple(_bloco(b) for b in blocos),
