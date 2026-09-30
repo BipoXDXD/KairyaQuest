@@ -246,6 +246,28 @@ describe('ProposalCard', () => {
     expect(confirmButton()).toBeEnabled()
   })
 
+  it('a falha gravada AGORA e anunciada: o texto novo nasce dentro de um alerta', async () => {
+    routeFetch({
+      [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),
+    })
+    render(<Harness initial={proposta} />)
+
+    fireEvent.click(confirmButton())
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toBe(screen.getByTestId('proposal-expired'))
+    expect(alert).toHaveTextContent(
+      'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+    )
+  })
+
+  it('uma falha que ja veio gravada do historico NAO e anunciada de novo', () => {
+    render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />)
+
+    expect(screen.getByTestId('proposal-expired')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('o prazo expirado na confirmacao leva o cartao ao estado falhou, sem outra ida a rede', async () => {
     const fetchMock = routeFetch({
       [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),

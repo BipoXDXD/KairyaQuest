@@ -1,7 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
-import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
+import { MUTATION_TIMEOUT_MS } from '../../shared/api/client'
+import {
+  jsonBody,
+  pendingUntilAborted,
+  requestsTo,
+  routeFetch,
+  type Route,
+} from '../../test/fetchRoutes'
 import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useStartMission } from './useStartMission'
@@ -71,6 +78,7 @@ describe('useStartMission', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -346,5 +354,60 @@ describe('useStartMission', () => {
     await waitFor(() => {
       expect(reload).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('um Iniciar pendurado falha ao fim do prazo, solta o cartao e a espera do quadro', async () => {
+    vi.useFakeTimers()
+    routeFetch({ [ROTA]: pendingUntilAborted })
+    const { result, reload } = renderStart()
+
+    act(() => {
+      result.current.start()
+    })
+    act(() => {
+      result.current.requestReload()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+    })
+    // Antes do prazo nada muda: o Iniciar continua em voo e o quadro espera.
+    expect(result.current.state).toEqual({ status: 'submitting' })
+    expect(reload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+
+    expect(result.current.state).toMatchObject({
+      status: 'failed',
+      failure: { recovery: 'retry' },
+    })
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('depois do prazo, o "tentar de novo" reenvia a MESMA chave', async () => {
+    // O servidor pode ter iniciado a missao sem que a resposta chegasse: so a
+    // mesma chave torna o reenvio seguro (F2).
+    vi.useFakeTimers()
+    const fetchMock = routeFetch({
+      [ROTA]: (init, call) => (call === 1 ? pendingUntilAborted(init, call) : sucesso(init, call)),
+    })
+    const { result } = renderStart()
+
+    act(() => {
+      result.current.start()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS)
+    })
+    act(() => {
+      result.current.start()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(result.current.state).toEqual({ status: 'started', mission: iniciada })
+    expect(sentKeys(fetchMock)).toEqual([K1, K1])
   })
 })

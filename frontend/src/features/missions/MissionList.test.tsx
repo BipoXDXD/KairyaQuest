@@ -1441,7 +1441,12 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
 
     await within(card(7)).findByTestId('evaluation-panel')
     expect(concluir).not.toBeInTheDocument()
-    expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+    // O painel aparece no commit; o foco vem do useEffect, que o React roda
+    // DEPOIS (passivo, fora do act de `findBy*`). Esperar so o painel deixava a
+    // assercao correr antes do efeito, sob carga -- por isso espera o foco.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+    })
   })
 
   it('se o foco ja esta em outro lugar quando a conclusao chega, ele nao e roubado', async () => {
@@ -1904,7 +1909,13 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
 
       await within(card(7)).findByText('Missão iniciada.')
       expect(iniciar).not.toBeInTheDocument()
-      expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+      // O texto aparece no commit; o foco vem do useEffect, que o React roda
+      // DEPOIS (passivo, fora do act de `findBy*`). Sob carga a assercao
+      // corria antes do efeito e via o `body` (pendencia 183) -- por isso
+      // espera o foco, e nao so o texto.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+      })
     })
 
     it('depois de iniciar, o foco que ja estava em outro lugar nao e roubado', async () => {

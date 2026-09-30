@@ -1024,6 +1024,22 @@ describe('TutorPanel: a proposta de missao', () => {
     expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('P38 a proposta que cai ao confirmar e anunciada dentro do painel', async () => {
+    // O cartao continua montado quando a acao vira `falhou` (a chave da lista e
+    // o id da acao): e isso que deixa o alerta nascer no lugar certo.
+    mountPanel({
+      [HISTORY]: historyWith(proposal),
+      [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),
+    })
+
+    const card = await screen.findByTestId('tutor-proposal')
+    fireEvent.click(within(card).getByTestId('proposal-confirm'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('O prazo desta proposta já passou.')
+    expect(within(messageWith('Proponho esta missão.')).getByRole('alert')).toBe(alert)
+  })
+
   it('P29 Ver no Quartel-General fecha a folha no celular', async () => {
     mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
 

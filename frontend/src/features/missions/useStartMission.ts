@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { postJson } from '../../shared/api/client'
+import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import { describeStartFailure, type StartFailure } from './startFailure'
 import type { CompletionRegistry } from './useCompletionRegistry'
@@ -47,6 +47,11 @@ export interface UseStartMissionResult {
  * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que faz
  * o "Atualizar o quadro" esperar o Iniciar em andamento.
  *
+ * O POST tem prazo (`MUTATION_TIMEOUT_MS`): um pedido que o navegador manteve
+ * aberto sem resposta vira falha `retry` -- resultado desconhecido, chave mantida --
+ * e o cartao volta a oferecer o Iniciar, em vez de ficar em "Iniciando..." para
+ * sempre.
+ *
  * Quem precisa reagir ao sucesso passa `onStarted`.
  */
 export function useStartMission(
@@ -73,7 +78,11 @@ export function useStartMission(
     // encontra este Iniciar em voo.
     registry.started()
 
-    postJson<Mission>(`/missions/${String(missionId)}/start`, { operation_id: operationId })
+    postJson<Mission>(
+      `/missions/${String(missionId)}/start`,
+      { operation_id: operationId },
+      { timeoutMs: MUTATION_TIMEOUT_MS },
+    )
       .then((mission) => {
         registry.releaseActionKey(missionId, 'start')
         setState({ status: 'started', mission })

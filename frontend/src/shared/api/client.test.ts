@@ -114,6 +114,121 @@ describe('client', () => {
     })
   })
 
+  describe('postJson com timeout', () => {
+    /**
+     * Um `fetch` que nunca responde e obedece ao `signal`, como o de verdade:
+     * o abort rejeita com `AbortError`. So o `signal` o destrava.
+     */
+    function fetchUntilAborted() {
+      return vi.fn((_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        })
+      })
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('sem a opcao, o pedido segue sem signal e sem timer', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 7 }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { postJson } = await loadClient()
+
+      await postJson('/missions/7/complete', { operation_id: 'op-1' })
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal).toBeUndefined()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('aborta o pedido pendurado ao fim do prazo e falha como rede fora, com a causa', async () => {
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, postJson } = await loadClient()
+
+      const pending = failureOf(
+        postJson('/missions/7/start', { operation_id: 'op-1' }, { timeoutMs: 5000 }),
+      )
+      await vi.advanceTimersByTimeAsync(4999)
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      const erro = await pending
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      // Como a falha de rede: sem status e sem code, e e isso que faz as telas
+      // oferecerem o reenvio com a MESMA chave (resultado desconhecido).
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect((erro as Error).cause).toBeInstanceOf(Error)
+    })
+
+    it('tambem aborta quando o corpo da resposta nao termina de chegar', async () => {
+      // Os cabecalhos chegaram, o corpo nao: o `json()` fica pendurado e o
+      // pedido continua preso ate o signal o soltar.
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        const response = new Response(null, { status: 200 })
+        vi.spyOn(response, 'json').mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        )
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, postJson } = await loadClient()
+
+      const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+      await vi.advanceTimersByTimeAsync(5000)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+    })
+
+    it('uma resposta a tempo desarma o timer e chega intacta', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ id: 7 })))
+      const { postJson } = await loadClient()
+
+      const resposta = await postJson('/missions/7/start', {}, { timeoutMs: 5000 })
+
+      expect(resposta).toEqual({ id: 7 })
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('uma falha que nao e o prazo continua sendo a falha original', async () => {
+      // O timer nao pode reescrever um 409 real como "demorou demais".
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+          ),
+      )
+      const { ApiError, postJson } = await loadClient()
+
+      const erro = await failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+      expect((erro as InstanceType<typeof ApiError>).code).toBe('transicao_ilegal')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('traducao de falha em ApiError', () => {
     it('transforma falha de rede em ApiError sem status nem code, preservando a causa', async () => {
       const causa = new TypeError('Failed to fetch')

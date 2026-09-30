@@ -3946,6 +3946,10 @@ que não tinham chegado aqui)
     sobre a remontagem dos cartões, não sobre recarregar a página). Saída,
     se virar problema: um `AbortSignal.timeout` no `postJson`, tratado como
     falha de rede — resultado desconhecido, chave mantida.
+    **Atualização (lote g-front, 2026-09-29):** o `postJson` ganhou `timeoutMs`
+    (ver a 190) e o Iniciar, o Reagendar e a decisão da proposta o usam, então
+    um Iniciar pendurado já não segura o "Atualizar o quadro". O **Concluir**
+    continua sem prazo — é o caso desta pendência, e segue aberto na 192.
 38. **O registro de chaves (`useCompletionRegistry`) pode reter uma entrada
     além do necessário**, nos dois casos em que a missão com falha de
     resultado desconhecido (`recovery: 'retry'`) deixa de oferecer um
@@ -5741,6 +5745,101 @@ ledger; nenhum é bug esquecido.
      entrada `fallback_message` para saber quem serviu. Contar as respostas
      substituídas dá (`WHERE fallback_model IS NOT NULL`); o custo, não. A
      categoria da recusa (`trigger.category`) também não é gravada.
+
+**Criadas pelo lote g-front (2026-09-29)**
+
+190. ~~**Os POSTs de Iniciar, Reagendar e da decisão da proposta de
+     reagendamento não tinham timeout**: um pedido que o navegador mantivesse
+     aberto sem resposta deixava o botão em "Iniciando…" / "Confirmando…" para
+     sempre (revisão da Task 10).~~ **Resolvida em
+     2026-09-29 (lote g-front).** O `postJson` aceita `{ timeoutMs }` e as
+     três hooks (`useStartMission`, `useRescheduleMission`, e `useDecideAction`
+     em `confirm` **e** `reject`) passam `MUTATION_TIMEOUT_MS` (20 s, em
+     `shared/api/client.ts`). O prazo é um `AbortController` com `setTimeout`
+     (e não `AbortSignal.timeout`, que os timers falsos do Vitest não
+     alcançam), cobre também a leitura do corpo, e é desarmado em `finally`. Ao
+     fim do prazo o erro sai como `ApiError` sem `status` e sem `code` — o
+     mesmo da rede fora —, e cada `describe*Failure` já o traduz para
+     `recovery: 'retry'`: **a chave fica** (o servidor pode ter gravado) e o
+     botão volta com "Tentar de novo", que reenvia o MESMO `operation_id`.
+     Testado com timers falsos: 38 testes no cliente (5 novos), e em cada hook
+     um caso de "falha no prazo, antes dele nada muda" e um de "o reenvio usa
+     a mesma chave" (Iniciar, Reagendar, D11 confirmar, D12 recusar). O Iniciar
+     pendurado também libera a espera do "Atualizar o quadro".
+191. ~~**A falha gravada de uma proposta não era anunciada ao leitor de tela**
+     (revisão da Task 9): ao confirmar, o servidor gravava a ação
+     como `falhou` (`prazo_expirado` ou `reagendamento_invalido`), o
+     `DecisionControls` some com o botão focado e com o `role="alert"`, e o
+     texto novo aparecia num `<p>` sem região viva — o foco caía no `body` sem
+     nenhuma fala.~~ **Resolvida em 2026-09-29 (lote g-front).** O `<p
+     data-testid="proposal-expired">` dos dois cartões virou o componente
+     `RecordedFailure` (em `DecisionControls.tsx`), que recebe `announce` e só
+     então tem `role="alert"`. `announce` é `decision.status === 'failed'`: a
+     falha foi gravada **por esta tela**. Uma falha que já veio do histórico
+     **não** é anunciada, para abrir a conversa não ler de uma vez todas as
+     propostas que caíram em outros dias. O cartão continua montado quando a
+     ação vira `falhou` (a lista chaveia pelo id), e é isso que faz o
+     `decision` dele ainda saber de onde veio a falha. Testes: R14–R16 (cartão
+     de reagendamento), o par equivalente no `ProposalCard.test.tsx` e o P38
+     (no painel, dentro da mensagem da Tifa). Na integração dos lotes G, os
+     ids foram renumerados: no lote eram R12–R14 e P32, que já nomeavam outros
+     casos do mesmo arquivo (R12/R13 do F, P32 da conversa rolável).
+192. **O Concluir e a avaliação continuam sem timeout** (lote g-front; o que
+     sobrou da 37). O mecanismo existe (`postJson(..., { timeoutMs })`), mas
+     não foi ligado aos dois: o Concluir é o caso da 37 e caberia ligar já com
+     o mesmo `MUTATION_TIMEOUT_MS`; a **avaliação** chama o modelo, e o prazo
+     dela tem de ser maior que o do backend (`tutor_timeout_seconds`, 60 s, e a
+     tentativa possível de 90 s da pendência 106) — 20 s a derrubaria em
+     resposta lenta mas legítima, e o reenvio cairia na avaliação órfã. Ligar o
+     Concluir é uma linha mais testes; a avaliação pede escolher o prazo.
+193. **O prazo de 20 s é um palpite, não uma medida, e a tela não distingue
+     "demorou demais" de "sem rede".** Iniciar, Reagendar e confirmar são
+     operações de banco (sem modelo), 20 s é bem acima do normal, mas nada
+     mediu a latência real numa rede móvel ruim. E as duas causas caem no
+     mesmo texto ("Não foi possível confirmar…"): a mensagem do
+     `ApiError` ("O servidor demorou demais para responder.") existe, mas
+     nenhuma tela a lê (as mensagens vêm dos `describe*Failure`, por
+     `code`/`status`). Se importar, o `ApiError` ganha um `code` próprio
+     (`tempo_esgotado`) e os três `describe*` um texto para ele. Um caso de
+     borda no mesmo lugar: se o 409 (ou outro erro com resposta) já chegou e o
+     timer dispara durante a leitura do corpo do erro (`readCode`), o erro vira
+     o de tempo esgotado e perde o `status`/`code` reais. É seguro — o reenvio
+     com a mesma chave devolve o mesmo 409 —, só custa uma ida a mais à rede.
+194. **O anúncio da falha gravada (191) foi provado no DOM, não num leitor de
+     tela.** Os testes conferem que o texto nasce dentro de `role="alert"` e
+     que o do histórico não; não foi medido o que VoiceOver, NVDA ou TalkBack
+     falam ao inserir um `role="alert"` dentro do painel/folha da Tifa, nem se
+     a folha do celular (um `dialog`) muda o comportamento. Depois de "Atualizar
+     a conversa" o cartão remonta e não repete o aviso (de propósito). Não
+     coberto pelo axe do E2E, que só vê violações estáticas.
+
+**Criadas pelo lote f-prop (2026-09-30)**
+
+195. ~~**Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+     body vai para o titulo do cartao"** (a **183 do lote g-back**, registrada
+     no HANDOFF do worktree `f-e2e`; este item a resolve).~~ **Resolvida em
+     2026-09-30 (lote f-prop).** Defeito do **teste**, não do componente:
+     o `MissionCard` move o foco num `useEffect`, e a asserção corria antes
+     dele. O texto "Missão iniciada." nasce no mesmo commit que o estado
+     `started`, mas o efeito é **passivo** e o React o roda depois, num
+     agendamento próprio; o `findByText` (dentro do `asyncWrapper` do
+     Testing Library, com `IS_REACT_ACT_ENVIRONMENT` desligado) resolve pelo
+     `MutationObserver` assim que o texto aparece, e sob carga cai entre o
+     commit e o efeito — `document.activeElement` ainda é o `body`. Em
+     produção o efeito roda logo em seguida e o foco chega ao título (o
+     componente está certo). **Medido** (`vitest run ... -t`, 20 processos
+     ocupando os 10 núcleos): sem carga, 0/30 no teste isolado e 0/30 no
+     arquivo inteiro; sob carga, 4/90 (2/30 + 2/60). O irmão
+     "depois de concluir, o foco nao se perde para o body" tinha a mesma
+     forma (espera `evaluation-panel`, depois olha o foco) e reprovou 1/60.
+     **Correção:** os dois passaram a esperar o próprio foco com
+     `await waitFor(() => expect(document.activeElement).toBe(titulo))`;
+     as asserções são as mesmas, só a espera muda. Depois: 0/60 e 0/60 sob a
+     mesma carga. Mutação: trocar o `titleRef.current?.focus()` de cada efeito
+     por nada faz o respectivo teste reprovar (`activeElement` no `body`).
+     Os casos de "o foco não é roubado" não foram tocados: eles reprovam com
+     a guarda `document.activeElement === document.body` removida (3/3 sem
+     carga), e a corrida deles, se houver, dá falso verde, não falso vermelho.
 
 ## Próximo incremento
 
