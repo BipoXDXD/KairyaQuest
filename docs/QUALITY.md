@@ -1054,7 +1054,19 @@ das camadas 1 e 2 serve a avaliação como serve a conversa.
   vale o de antes (`tool_use` com ferramenta, `end_turn` sem). Provado por
   `test_o_roteiro_escolhe_o_motivo_de_parada`; **visto reprovando** por mutação
   (o `stop_reason` fixado em `None`). É o que permite testar a parada por
-  `max_tokens`, que deixa uma entrada possivelmente parcial.
+  `max_tokens`, que deixa uma entrada possivelmente parcial. **Lote g-tifa
+  (pendência 120):** o tipo virou `MotivoDeParada`, com
+  `model_context_window_exceeded` e `refusal` a mais, e o controle HTTP do E2E
+  aceita a chave `stop_reason` (só os valores de `MotivoDeParada`; outro valor
+  reprova no PUT com "stop_reason precisa ser um de"), com o tipo de
+  `frontend/tests/e2e/falso.ts` acompanhando. Provado por
+  `test_o_roteiro_escolhe_o_motivo_de_parada` (parametrizado nos três),
+  `test_stop_reason_escolhe_a_parada` e dois casos novos de recusa em
+  `test_falso_do_e2e.py`; **visto reprovando** por mutação (o falso ignorando o
+  `stop_reason` explícito reprova os três; `_motivo` sem validar reprova as duas
+  recusas; o `roteiro_do_json` sem repassar reprova os cinco). O valor do
+  `Literal` sozinho não é guarda: tirar `refusal` dele não reprova o mypy,
+  porque o `parametrize` não é conferido pelo tipo — quem prova é a execução.
 - **`avaliar` testado contra o falso** (`tests/integration/test_evaluation_provider.py`,
   10 testes), com o SDK real, camadas 1 e 2: devolve a entrada da ferramenta;
   **pede `tool_choice` `auto` com `disable_parallel_tool_use` e a ferramenta
@@ -1185,6 +1197,77 @@ serviço:
   "proposto pela Tifa" e que **nenhuma** segunda missão nasceu. **Visto
   reprovando** por mutação: a confirmação que ignora o `kind` (a API responde
   500) e o cartão que não recarrega o quadro.
+
+### O fallback da recusa nas três camadas (pendência 174, 2026-09-30)
+
+A conversa chama o endpoint **beta** (`client.beta.messages.stream`, com
+`fallbacks="default"` e o beta `server-side-fallback-2026-07-01`), e o falso
+acompanhou:
+
+- **Camada 1.** O roteiro é construído com os tipos de `anthropic.types.beta`
+  (o `content_block_start` estável não aceita o bloco `fallback`, e o uso
+  estável não tem `iterations`), e serializado com `by_alias=True`: sem ele,
+  o bloco sai no fio com `"from_"`, o nome do Python, e não `"from"` — e o SDK
+  o monta sem validar, sem reprovar nada. `Substituicao(modelo, apos_blocos,
+  fixa)` roteiriza a troca antes da saída (o `message_start` já com o
+  substituto e o bloco no índice 0), no meio (entre os blocos) e o roteamento
+  fixo (sem bloco, só a `fallback_message`). O bloco soma
+  `EVENTOS_DA_TROCA` (2) às contagens de corte e espera.
+- **Camada 2.** `test_provedor_falso.py` monta a troca pelo SDK beta
+  (o `model` final é o substituto); `test_anthropic_provider.py` prova o
+  pedido (corpo e cabeçalho, e nada disso com o flag desligado), o
+  `Fim.substituto` nos três casos, a proposta descartada antes da troca e a
+  do substituto valendo, e a cadeia esgotada seguindo `RECUSADA`. **Vistos
+  reprovando** por mutação: data do beta `2026-06-01`, `fallbacks` omitido,
+  flag ignorado, substituto lido de `message.model`, só do bloco (o fixo
+  reprova), só do `message_start` (o meio reprova), a pendente não zerada no
+  bloco, zerada também depois dele, e a substituição tratada como `TERMINOU`.
+- **Camada 3** (`tests/integration/camada3_do_fallback.py`). Não dá para
+  provocar recusa sob demanda sem tentar burlar os classificadores, e isso
+  não se faz: o script prova só que a API **aceita** o pedido, pelo
+  `responder` de produção com o fallback ligado, numa resposta normal. O
+  `Espiao` passou a guardar do pedido só o corpo e o `anthropic-beta` (nunca
+  a chave). **Executada em 2026-09-30, uma chamada autorizada pelo dono,
+  sobre `dd50e85`, `claude-opus-5`, SDK 1.7.0: aprovada.** Stream até o
+  `message_stop`, parada `terminou`, sem substituto, proposta
+  `create_mission`, sequência de tipos **igual** à da referência da conversa;
+  o Models API deu `allowed_fallback_models: ["claude-opus-4-8"]`. Gravada em
+  `tests/integration/referencia_do_fallback_real.json`.
+  `test_camada3_do_fallback.py` prova a captura contra o falso e o veredito;
+  **vistos reprovando** por mutação: a guarda do endereço, `fallback=False` na
+  captura e o veredito sem a conferência do beta. O fallback em si (o bloco no
+  fio real, a continuação do parcial) continua sem prova real (pendência 175).
+- **E2E.** O falso como processo responde também `/v1/messages?beta=true` (o
+  caminho do endpoint beta) e aceita a chave de controle `fallback` (`model`,
+  `after_blocks`, `sticky`); o cenário (h) de `tutoring.spec.ts` mostra o
+  parcial e a continuação, a nota do substituto e o axe limpo.
+
+### A conclusão tardia no contexto contra a API real (pendência 180, 2026-09-30)
+
+O lote g-back (pendência 117) mudou o **texto** que o modelo recebe — a seção
+"Missões do ciclo em conclusão tardia" no contexto e o item novo do bloco
+"Reagendar" da persona — e só o texto montado estava provado (unitários e
+integração com o falso). `tests/integration/camada3_da_conclusao_tardia.py`
+monta, pelo `montar_turno` de produção e sem banco, uma avulsa pendente com
+`#id` e a diária de ontem em andamento na seção tardia, e pede "adiar a
+diária de ontem" pelo `responder` de produção (duas ferramentas, fallback
+ligado). **Aprovado** só se o modelo não propuser `reschedule_mission` e o
+stream chegar ao `message_stop`; o script mostra o texto da resposta e não
+grava nada. `test_camada3_da_conclusao_tardia.py` prova o cenário contra o
+falso; **vistos reprovando** por mutação: o veredito sem o filtro do
+reagendamento, o turno sem a seção tardia, o bloco `tool_use` não retirado da
+comparação, a guarda do endereço e o texto não capturado.
+
+**Executada em 2026-09-30, uma chamada autorizada pelo dono, sobre `c2895fa`,
+`claude-opus-5`, `max_tokens` 2048, fallback ligado: aprovada.** Nenhuma
+proposta; a sequência de tipos (thinking, texto, `message_delta`,
+`message_stop`) é **igual** à da referência da conversa sem o bloco da
+ferramenta, e a referência não foi regravada. Lido no texto: a Tifa disse que
+a diária não se adia, lembrou que ainda dá para concluir até a meia-noite de
+hoje em São Paulo (o limite certo, com a conta de horas certa para 01:19 de
+São Paulo) e ofereceu reagendar só a avulsa `#7`, se o aperto fosse nela.
+**O que não prova:** é uma amostra; não mede a especial vencida, o pedido de
+reagendar a diária pelo `#id` (ela não tem), nem a tela.
 
 ### O falso como processo (E2E)
 

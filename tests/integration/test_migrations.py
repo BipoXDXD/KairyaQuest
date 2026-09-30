@@ -203,7 +203,7 @@ def test_guarda_permite_o_banco_de_teste_configurado(engine: Engine) -> None:
 
 
 def test_sequence_de_users_avanca_apos_a_migracao(banco_migrado: Engine) -> None:
-    """O proximo usuario recebe id=2, nao colide com o id=1 semeado.
+    """O proximo usuario recebe um id DEPOIS do id=1 semeado, sem colidir.
 
     `bulk_insert` com id explicito nao mexe na sequence; a migracao chama
     `setval` justamente por isso. Sem esse ajuste, este INSERT levantaria
@@ -212,17 +212,21 @@ def test_sequence_de_users_avanca_apos_a_migracao(banco_migrado: Engine) -> None
 
     O INSERT roda dentro de uma transacao revertida para nao deixar linha
     para tras. A sequence em si nao volta atras no rollback -- sequence nao e
-    transacional --, e tudo bem: o que importa e que o valor entregue tenha
-    vindo DEPOIS do id=1.
+    transacional. Por isso a assercao e "maior que o maior id gravado", e nao
+    "igual a 2": o `banco_migrado` e de sessao, e qualquer teste anterior que
+    inseriu um usuario e reverteu ja consumiu valores da sequence (com
+    `test_tutoring_models.py` antes deste arquivo, o id entregue era 3).
     """
     with banco_migrado.connect() as conexao:
         transacao = conexao.begin()
+        maior_gravado = conexao.execute(text("SELECT max(id) FROM users")).scalar_one()
         novo_id = conexao.execute(
             text("INSERT INTO users (display_name) VALUES ('Segundo') RETURNING id")
         ).scalar_one()
         transacao.rollback()
 
-    assert novo_id == 2
+    assert maior_gravado == 1
+    assert novo_id > maior_gravado
 
 
 def test_downgrade_apaga_e_upgrade_devolve_o_esquema(banco_migrado: Engine) -> None:

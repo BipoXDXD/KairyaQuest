@@ -28,8 +28,10 @@ from integration.falso_do_e2e import TratadorComControle, roteiro_do_json
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
 )
 
@@ -63,6 +65,15 @@ def test_roteiro_do_json_monta_texto_ferramenta_e_opcoes() -> None:
         segurar_apos_eventos=2,
         status_http=200,
     )
+
+
+@pytest.mark.parametrize(
+    "stop_reason", ["max_tokens", "model_context_window_exceeded", "refusal"]
+)
+def test_stop_reason_escolhe_a_parada(stop_reason: MotivoDeParada) -> None:
+    """O cenario do corte e da recusa (pendencia 120) roteiriza a parada."""
+    roteiro = roteiro_do_json({"blocks": [], "stop_reason": stop_reason})
+    assert roteiro == Roteiro(stop_reason=stop_reason)
 
 
 def test_tool_name_escolhe_a_ferramenta_e_o_padrao_e_create_mission() -> None:
@@ -123,6 +134,13 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
             "hold_after_events precisa ser inteiro",
         ),
         ({"blocks": [], "fantasia": 1}, "chave desconhecida: fantasia"),
+        # Um motivo inventado viraria, no SDK, um `stop_reason` que a API
+        # nunca manda -- o cenario provaria um caminho que nao existe.
+        (
+            {"blocks": [], "stop_reason": "fim_do_mundo"},
+            "stop_reason precisa ser um de",
+        ),
+        ({"blocks": [], "stop_reason": 1}, "stop_reason precisa ser um de"),
         # Um numero fora da faixa viraria um roteiro que nunca corta, nunca
         # segura, ou um status que o `http.server` nem sabe mandar -- e o
         # cenario passaria pelo motivo errado.
@@ -153,6 +171,70 @@ def test_roteiro_invalido_e_recusado_com_o_motivo(dados: object, motivo: str) ->
     virar uma resposta vazia que o cenario leria como "a Tifa nao disse nada"."""
     with pytest.raises(ValueError, match=motivo):
         roteiro_do_json(dados)
+
+
+@pytest.mark.parametrize(
+    ("fallback", "substituicao"),
+    [
+        (
+            {"model": "claude-opus-4-8", "after_blocks": 1, "sticky": False},
+            Substituicao("claude-opus-4-8", apos_blocos=1, fixa=False),
+        ),
+        ({"sticky": True}, Substituicao(fixa=True)),
+        ({}, Substituicao()),
+    ],
+)
+def test_fallback_monta_a_substituicao(
+    fallback: dict[str, object], substituicao: Substituicao
+) -> None:
+    """Pendencia 174: o cenario do E2E roteiriza a troca de modelo depois da
+    recusa. Cada chave e opcional dentro do objeto, com o padrao do Python."""
+    assert roteiro_do_json({"blocks": [], "fallback": fallback}) == Roteiro(
+        substituicao=substituicao
+    )
+
+
+@pytest.mark.parametrize(
+    ("fallback", "motivo"),
+    [
+        ([], "fallback precisa ser um objeto"),
+        ({"modelo": "x"}, "chave desconhecida em fallback: modelo"),
+        ({"model": ""}, "fallback.model precisa ser um texto nao vazio"),
+        ({"model": 3}, "fallback.model precisa ser um texto nao vazio"),
+        ({"after_blocks": -1}, "after_blocks precisa ser inteiro entre 0 e"),
+        ({"after_blocks": True}, "after_blocks precisa ser inteiro entre 0 e"),
+        ({"sticky": "sim"}, "fallback.sticky precisa ser booleano"),
+    ],
+)
+def test_fallback_invalido_e_recusado_com_o_motivo(
+    fallback: object, motivo: str
+) -> None:
+    with pytest.raises(ValueError, match=motivo):
+        roteiro_do_json({"blocks": [], "fallback": fallback})
+
+
+def test_o_endpoint_beta_responde_o_roteiro(controlado: ServidorAnthropicFalso) -> None:
+    """A conversa de producao chama o endpoint BETA (pendencia 174), que o SDK
+    posta em `/v1/messages?beta=true`: o caminho com a query tambem e a API, e
+    nao uma rota desconhecida (404)."""
+    resposta = httpx.put(
+        f"{controlado.url}/_control/script",
+        json={
+            "blocks": [{"text": ["parcial "]}, {"text": ["fim"]}],
+            "fallback": {"model": "claude-opus-4-8", "after_blocks": 1},
+        },
+    )
+    assert resposta.status_code == 204
+    with _sdk(controlado).beta.messages.stream(
+        model="claude-opus-5",
+        max_tokens=10,
+        messages=[{"role": "user", "content": "oi"}],
+        fallbacks="default",
+        betas=["server-side-fallback-2026-07-01"],
+    ) as stream:
+        final = stream.get_final_message()
+    assert final.model == "claude-opus-4-8"
+    assert controlado.recebidas[-1].corpo["fallbacks"] == "default"
 
 
 def test_o_roteiro_definido_pelo_controle_chega_ao_sdk(

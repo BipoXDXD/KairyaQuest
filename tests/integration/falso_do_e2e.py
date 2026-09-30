@@ -14,18 +14,31 @@ para ca por `FOCUSQUEST_ANTHROPIC_BASE_URL`, e a guarda de
 import argparse
 import json
 import threading
-from typing import Any
+from typing import Any, cast, get_args
+from urllib.parse import urlsplit
 
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
     TratadorDoFalso,
     falso_do_tratador,
 )
 
-_OPCOES = frozenset({"blocks", "http_status", "cut_after_events", "hold_after_events"})
+_OPCOES = frozenset(
+    {
+        "blocks",
+        "http_status",
+        "cut_after_events",
+        "hold_after_events",
+        "stop_reason",
+        "fallback",
+    }
+)
+_OPCOES_DO_FALLBACK = frozenset({"model", "after_blocks", "sticky"})
 
 
 # Teto das contagens de eventos: nenhuma resposta do falso chega perto, e um
@@ -54,6 +67,45 @@ def _inteiro(
     ):
         raise ValueError(f"{chave} precisa ser inteiro entre {minimo} e {maximo}")
     return valor
+
+
+def _motivo(dados: dict[str, object]) -> MotivoDeParada | None:
+    """O `stop_reason` escolhido pelo cenario, ou `None` se ausente (o falso
+    deriva a parada do roteiro). So os valores de `MotivoDeParada`: um motivo
+    inventado seria um `stop_reason` que a API nunca manda."""
+    if "stop_reason" not in dados:
+        return None
+    valor = dados["stop_reason"]
+    validos = get_args(MotivoDeParada)
+    if valor not in validos:
+        raise ValueError(f"stop_reason precisa ser um de: {', '.join(validos)}")
+    return cast(MotivoDeParada, valor)
+
+
+def _substituicao(dados: dict[str, object]) -> Substituicao | None:
+    """A troca de modelo depois da recusa (pendencia 174), ou `None` se o
+    cenario nao a pediu. Estrita como o roteiro: chave desconhecida reprova."""
+    if "fallback" not in dados:
+        return None
+    troca = dados["fallback"]
+    if not isinstance(troca, dict):
+        raise ValueError("fallback precisa ser um objeto")
+    desconhecidas = set(troca) - _OPCOES_DO_FALLBACK
+    if desconhecidas:
+        raise ValueError(
+            f"chave desconhecida em fallback: {', '.join(sorted(desconhecidas))}"
+        )
+    padrao = Substituicao()
+    modelo = troca.get("model", padrao.modelo)
+    if not isinstance(modelo, str) or not modelo:
+        raise ValueError("fallback.model precisa ser um texto nao vazio")
+    fixa = troca.get("sticky", padrao.fixa)
+    if not isinstance(fixa, bool):
+        raise ValueError("fallback.sticky precisa ser booleano")
+    apos = _inteiro(troca, "after_blocks", 0, _MAX_EVENTOS)
+    return Substituicao(
+        modelo, apos_blocos=padrao.apos_blocos if apos is None else apos, fixa=fixa
+    )
 
 
 def _bloco(dados: object) -> Texto | ChamadaDeFerramenta:
@@ -105,6 +157,8 @@ def roteiro_do_json(dados: object) -> Roteiro:
         status_http=200 if status is None else status,
         cortar_apos_eventos=_inteiro(dados, "cut_after_events", 0, _MAX_EVENTOS),
         segurar_apos_eventos=_inteiro(dados, "hold_after_events", 0, _MAX_EVENTOS),
+        stop_reason=_motivo(dados),
+        substituicao=_substituicao(dados),
     )
 
 
@@ -159,7 +213,9 @@ class TratadorComControle(TratadorDoFalso):
 
     def do_POST(self) -> None:
         falso = self._falso()
-        if self.path == "/v1/messages":
+        # O endpoint beta, que a conversa chama (pendencia 174), posta em
+        # `/v1/messages?beta=true`: a query nao muda a rota.
+        if urlsplit(self.path).path == "/v1/messages":
             super().do_POST()
         elif self.path == "/_control/release":
             falso.liberar.set()

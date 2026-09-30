@@ -223,6 +223,11 @@ _VIOLACOES: list[tuple[str, Caso]] = [
         lambda s: _acao(s, _resposta(s, _pergunta(s)), state=EstadoDaAcao.RECUSADA),
     ),
     (
+        # O modelo substituto so existe na resposta da Tifa (pendencia 174).
+        "ck_tutor_messages_fallback_so_da_tutora",
+        lambda s: _pergunta(s, fallback_model="claude-opus-4-8"),
+    ),
+    (
         "uq_tutor_actions_operation_id",
         lambda s: (
             lambda r: (
@@ -243,6 +248,24 @@ def test_o_banco_recusa(session: Session, restricao: str, caso: Caso) -> None:
     with pytest.raises(IntegrityError) as recusa:
         caso(session)
     assert restricao in str(recusa.value.orig)
+
+
+def test_a_resposta_guarda_o_modelo_substituto(session: Session) -> None:
+    """A resposta servida pelo substituto grava quem serviu; sem troca, nulo."""
+    pergunta = _pergunta(session)
+    substituida = _resposta(session, pergunta, fallback_model="claude-opus-4-8")
+    normal = _resposta(
+        session, _pergunta(session, "c-2"), status=StatusDaMensagem.FALHOU
+    )
+    session.expire_all()
+
+    def gravado(mensagem: TutorMessage) -> str | None:
+        return session.scalar(
+            select(TutorMessage.fallback_model).where(TutorMessage.id == mensagem.id)
+        )
+
+    assert gravado(substituida) == "claude-opus-4-8"
+    assert gravado(normal) is None
 
 
 def test_papel_status_e_estado_voltam_do_banco_como_enum(session: Session) -> None:

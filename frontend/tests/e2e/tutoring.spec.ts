@@ -30,6 +30,8 @@ interface Mensagem {
   status: string
   client_message_id: string | null
   reply_to_id: number | null
+  error_code: string | null
+  fallback_model: string | null
   actions: { id: number; state: string; payload: { instructions: string } }[]
 }
 
@@ -189,6 +191,90 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   expect(respostas.map((m) => m.status).sort()).toEqual(['completa', 'falhou'])
   // E o modelo foi chamado duas vezes -- uma por tentativa, nenhuma a mais.
   expect(await requisicoes()).toHaveLength(2)
+})
+
+for (const motivo of ['max_tokens', 'model_context_window_exceeded'] as const) {
+  test(`(f) a resposta cortada por tamanho (${motivo}): anunciada como cortada, com a nota de pedir por partes`, async ({
+    page,
+  }) => {
+    // Pendencias 120, 121 e 122, ponta a ponta: o SDK real le o `stop_reason`
+    // do falso, o backend grava `interrompida` com `resposta_longa`, e a tela
+    // nao diz "terminou".
+    const pergunta = `Me explica tudo de Go (${motivo}, e2e ${EXECUCAO})`
+    const comeco = `Go e uma linguagem (${motivo}, e2e ${EXECUCAO})`
+    await definirRoteiro({ blocks: [{ text: [comeco] }], stop_reason: motivo })
+    await abrirPainel(page)
+
+    await perguntar(page, pergunta)
+
+    const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco })
+    await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta interrompida')
+    await expect(page.getByTestId('tutor-live')).toHaveText(
+      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+    )
+    await expect(page.getByTestId('tutor-history-retry-note')).toContainText(
+      'A última resposta ficou longa demais e foi cortada. Tente pedir por partes',
+    )
+    await semViolacoes(page)
+
+    const mensagens = await conversa(page)
+    const gravada = mensagens.find((m) => m.content === comeco)
+    expect([gravada?.status, gravada?.error_code]).toEqual(['interrompida', 'resposta_longa'])
+  })
+}
+
+test('(g) a resposta recusada: alerta proprio e o parcial fora da conversa', async ({ page }) => {
+  const pergunta = `Pergunta que o modelo recusa (e2e ${EXECUCAO})`
+  const parcial = `Texto antes da recusa (e2e ${EXECUCAO})`
+  await definirRoteiro({ blocks: [{ text: [parcial] }], stop_reason: 'refusal' })
+  await abrirPainel(page)
+
+  await perguntar(page, pergunta)
+
+  await expect(page.getByRole('alert')).toContainText('A Tifa não pôde responder a esta pergunta.')
+  await expect(page.getByText(parcial)).toHaveCount(0)
+  await semViolacoes(page)
+
+  const mensagens = await conversa(page)
+  const perguntas = mensagens.filter((m) => m.role === 'user' && m.content === pergunta)
+  expect(perguntas).toHaveLength(1)
+  const respostas = mensagens.filter((m) => m.reply_to_id === perguntas[0]?.id)
+  expect(respostas.map((m) => [m.status, m.content, m.error_code])).toEqual([
+    ['falhou', '', 'resposta_recusada'],
+  ])
+})
+
+test('(h) a recusa no meio que o substituto continuou: o texto inteiro e a nota do substituto', async ({
+  page,
+}) => {
+  // Pendencia 174, ponta a ponta: o SDK real le o bloco `fallback` do falso
+  // pelo endpoint beta, o backend grava `fallback_model`, e a tela mostra o
+  // parcial do modelo pedido e a continuacao do substituto, com a nota.
+  const pergunta = `Pergunta que o substituto responde (e2e ${EXECUCAO})`
+  const parcial = `Comeco do modelo pedido (e2e ${EXECUCAO}). `
+  const continuacao = `Fim do substituto (e2e ${EXECUCAO}).`
+  await definirRoteiro({
+    blocks: [{ text: [parcial] }, { text: [continuacao] }],
+    fallback: { model: 'claude-opus-4-8', after_blocks: 1 },
+  })
+  await abrirPainel(page)
+
+  await perguntar(page, pergunta)
+
+  const resposta = page.getByTestId('tutor-message').filter({ hasText: continuacao })
+  await expect(resposta.getByTestId('tutor-message-content')).toHaveText(parcial + continuacao)
+  await expect(resposta.getByTestId('tutor-message-fallback')).toHaveText(
+    'Respondida por um modelo substituto (claude-opus-4-8), porque o modelo principal não pôde responder a esta pergunta.',
+  )
+  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
+  await semViolacoes(page)
+
+  const mensagens = await conversa(page)
+  const gravada = mensagens.find((m) => m.content === parcial + continuacao)
+  expect([gravada?.status, gravada?.fallback_model]).toEqual(['completa', 'claude-opus-4-8'])
+  // A requisicao pediu o fallback padrao.
+  const [enviada] = await requisicoes()
+  expect((enviada?.body as { fallbacks?: string }).fallbacks).toBe('default')
 })
 
 test('(d) indisponivel: o texto da spec, o campo desabilitado e o quadro funcionando', async ({

@@ -96,6 +96,7 @@ def main() -> None:
         # conversa, que `avaliar` nao le.
         max_tokens=settings.tutor_max_tokens,
         timeout_segundos=settings.tutor_timeout_seconds,
+        fallback=settings.tutor_fallback,
     )
     try:
         tipos, entrada = capturar(provedor, espiao)

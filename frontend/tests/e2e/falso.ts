@@ -17,6 +17,14 @@ export interface RoteiroDoFalso {
   http_status?: number
   cut_after_events?: number
   hold_after_events?: number
+  /** O motivo de parada; sem ele, o falso deriva do roteiro (pendencia 120). */
+  stop_reason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'model_context_window_exceeded' | 'refusal'
+  /**
+   * A troca de modelo depois de uma recusa (fallback do servidor, pendencia
+   * 174): `after_blocks` blocos do modelo pedido antes da troca (0 = antes de
+   * qualquer saida); `sticky` e o roteamento fixo, sem bloco `fallback`.
+   */
+  fallback?: { model?: string; after_blocks?: number; sticky?: boolean }
 }
 
 async function exigir(resposta: Response, esperado: number): Promise<Response> {

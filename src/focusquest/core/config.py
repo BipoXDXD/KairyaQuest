@@ -90,6 +90,18 @@ class Settings(ConfiguracaoDeLog):
     # mandaria a conversa para outro endereco.
     anthropic_base_url: str = "https://api.anthropic.com"
     tutor_model: str = "claude-opus-5"
-    tutor_max_tokens: int = Field(default=1024, ge=1)
+    # O teto de SAIDA de uma resposta da Tifa. O `claude-opus-5` pensa por
+    # padrao (thinking adaptativo, sem `budget_tokens`: o adaptador nao manda
+    # `thinking`), e o thinking gasta deste mesmo teto -- com 1024, respostas
+    # comuns eram cortadas cedo. 2048 por decisao do dono (pendencia 173:
+    # primeiro 4096, depois 2048); a saida e cobrada pelo uso real, nao pelo
+    # teto.
+    tutor_max_tokens: int = Field(default=2048, ge=1)
     tutor_timeout_seconds: float = Field(default=60, gt=0)
     tutor_history_messages: int = Field(default=20, ge=1)
+    # O fallback do lado do servidor para a recusa (pendencia 174, beta): a API
+    # refaz a requisicao recusada no modelo que a Anthropic recomenda para a
+    # categoria da recusa. Ligado por decisao do dono (2026-09-29); desligar com
+    # FOCUSQUEST_TUTOR_FALLBACK=false se o beta mudar e a API passar a recusar a
+    # requisicao inteira (risco R1 do plano da pendencia 174).
+    tutor_fallback: bool = True

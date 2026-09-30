@@ -20,6 +20,12 @@ export interface MessageFailure {
   /** Texto para a pessoa, em pt-BR. Nunca e o `detail` do backend. */
   message: string
   recovery: MessageRecovery
+  /**
+   * O parcial que chegou antes da falha NAO fica na conversa. So a recusa
+   * (pendencia 120): a orientacao da API e descartar o texto que veio antes
+   * dela, e o backend o grava vazio.
+   */
+  discardsPartial?: true
 }
 
 /**
@@ -65,6 +71,14 @@ const IN_STREAM: Record<StreamErrorCode, MessageFailure> = {
     message:
       'A Tifa tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
     recovery: 'retry',
+  },
+  // Repetir e permitido (o classificador pode ter errado), mas o texto nao
+  // promete que vai dar certo: o caminho provavel e perguntar de outro jeito.
+  resposta_recusada: {
+    message:
+      'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    recovery: 'retry',
+    discardsPartial: true,
   },
 }
 

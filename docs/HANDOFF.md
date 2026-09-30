@@ -3141,6 +3141,10 @@ FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-ant
 # SÓ se a sequência mudar
 FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
   PYTHONPATH=tests uv run python -m integration.camada3_do_reagendamento
+# Fallback da recusa (pendências 174 e 200): a API aceita fallbacks="default" e
+# o beta? Grava referencia_do_fallback_real.json; não provoca recusa
+FOCUSQUEST_ANTHROPIC_API_KEY="$(security find-generic-password -s focusquest-anthropic -w)" \
+  PYTHONPATH=tests uv run python -m integration.camada3_do_fallback
 ```
 
 O frontend de desenvolvimento encaminha `/api` para a porta 8000. Para outro
@@ -3231,6 +3235,19 @@ e de revisões diferentes, e a mais recente fica por último:
 | `make check` **completo, rodado por mim (Task 12)**, sobre a árvore de `9e4f191` com esta documentação por cima (`docs/HANDOFF.md`, `docs/ARCHITECTURE.md`, `docs/QUALITY.md`), 2026-09-29, com o PostgreSQL de pé | Aprovado, **EXIT 0**. Frontend: **50 arquivos, 846 testes**, cobertura de 100% nos quatro eixos (1089/1089 instruções, 842/842 ramificações, 320/320 funções, 1062/1062 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1093 passed** em 2m28s, cobertura total de 100,00% (1969 instruções, 344 ramificações). **E2E: 21 passed** (18,6 s). Gitleaks: `no leaks found`. |
 | Datas fixas do `tracking.spec.ts` (pendência 168) | **Corrigido na rodada de correção da revisão final do F** (prazos calculados a partir do relógio; ver a pendência 168). Antes: **não rodado no futuro**, medido só por leitura: os prazos `2027-01-10T13:00Z` e `2027-02-01T21:00Z` deixavam de estar no futuro nesses instantes, e o gate reprovava a partir do primeiro. |
 | `make check` **completo, rodado por mim (rodada de correção da revisão final do F)**, sobre a árvore final (`762b4e7`, `aad0587`, `398fff0`, `c1b630c` e `b2316a8` sobre `3871209`, com esta documentação por cima), 2026-09-29 | Aprovado, EXIT 0, 2m58s. Vitest 50 arquivos/849 testes, 100% nos quatro eixos (1088/1088 instruções, 842/842 ramificações, 320/320 funções, 1061/1061 linhas); `uv lock --check` (59 pacotes), Ruff sem achados, 137 arquivos formatados, mypy em 132 arquivos; pytest **1093 passed**, 100%; **E2E 21 passed** (19,6 s); Gitleaks `no leaks found`. Cada um dos cinco commits de código da rodada passou pelo hook `pre-commit` (`gate completo (make check)... Passed`). |
+| `make check` rodado por mim sobre a árvore do lote g-tifa (pendências 120–122; base `9e4f191`, worktree `f-api`), antes das edições finais de documentação e da docstring de `StatusDaMensagem` | Aprovado, EXIT 0, 3m12,9s de relógio. Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 856/856 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1109 passed**, cobertura total de 100% (1983 instruções, 346 ramificações). E2E: **23 passed** (os cenários (f) e (g) novos de `tutoring.spec.ts`). Gitleaks: `no leaks found`. |
+| `make check-e2e` sob mutação, mesma árvore | O anúncio da cortada trocado por "terminou" (`announceAnswer`) reprova o (f); o serviço sem descartar o texto da recusa reprova o (g). Restaurados por `cp`. |
+| `make check` rodado por mim sobre as correções da revisão do g-tifa (por cima de `b035500`, worktree `f-api`), primeira vez | **Reprovou**, EXIT 2, no `check-web`: 2 testes de foco do `MissionList.test.tsx` (pendência 178); 859 dos 861 passaram. O arquivo isolado passou duas vezes (91/91). |
+| `make check` rodado por mim sobre a mesma árvore, em seguida | Aprovado, EXIT 0, 7m16s de relógio (máquina carregada). Frontend: **51 arquivos, 861 testes**, 100% nos quatro eixos (1102/1102 instruções, 858/858 ramificações, 325/325 funções, 1074/1074 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. Backend: **1113 passed**, cobertura total de 100% (1986 instruções, 346 ramificações). E2E: **24 passed**. Gitleaks: `no leaks found`. |
+| `make check` pelo hook do commit `dd50e85` (pendência 174, código; worktree `f-api`) | Aprovado (`gate completo (make check)....Passed`). |
+| Chamada real 3 (pendência 174), `python -m integration.camada3_do_fallback`, 2026-09-30, sobre `dd50e85`, modelo `claude-opus-5`, SDK 1.7.0 | **Aprovado.** Uma chamada, com a autorização do dono: a API aceitou `fallbacks="default"` e o beta `server-side-fallback-2026-07-01` (duas ferramentas, `disable_parallel_tool_use`, sem `thinking`); stream até o `message_stop`, parada `terminou`, substituto nulo, proposta `create_mission`, sequência igual à da referência da conversa. Models API: `allowed_fallback_models: ["claude-opus-4-8"]`. Gravado em `referencia_do_fallback_real.json`. |
+| `make check` rodado por mim sobre `dd50e85` mais a documentação e a referência da camada 3 (worktree `f-api`) | Aprovado, EXIT 0, 193 s de relógio. Frontend: **51 arquivos, 862 testes**, 100% nos quatro eixos (1102/1102 instruções, 860/860 ramificações, 325/325 funções, 1074/1074 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 141 arquivos já formatados. mypy sem problemas em 136 arquivos. Backend: **1165 passed**, cobertura total de 100% (2008 instruções, 354 ramificações). E2E: **25 passed** (o cenário (h) novo). Gitleaks: `no leaks found`. |
+| `make check` pelo hook dos commits `84cc453` (pendência 117) e `f38db69` (pendência 181), lote g-back (worktree `f-e2e`) | Aprovado nos dois (`gate completo (make check)....Passed`). Uma tentativa anterior do commit da 181 reprovou num teste de frontend fora do lote, intermitente (pendência 183); o mesmo arquivo passou 5 de 5 sozinho e o gate passou na tentativa seguinte, sem mudança no teste. |
+| `make check` rodado por mim sobre `f38db69` (worktree `f-e2e`) | Aprovado, EXIT 0, 188 s de relógio. Frontend: 50 arquivos, 846 testes, 100% nos quatro eixos (1089/1089 instruções, 842/842 ramificações, 320/320 funções, 1062/1062 linhas). Ruff sem achados, 137 arquivos já formatados. mypy sem problemas em 132 arquivos. pytest: 1107 testes, cobertura total de 100% (1984 instruções, 346 ramificações). E2E: 21 cenários aprovados. Gitleaks sem achados. |
+| `make check` pelo hook de `63754ef` (correções da revisão do lote g-back) e rodado por mim sobre ele (worktree `f-e2e`) | Aprovado nos dois. O meu: EXIT 0, 359 s de relógio. Frontend: 50 arquivos, 846 testes, 100% nos quatro eixos (1089/1089, 842/842, 320/320, 1062/1062). Ruff: 137 arquivos já formatados. mypy sem problemas em 132 arquivos. pytest: 1111 testes, cobertura de 100% (1987 instruções, 346 ramificações). E2E: 21 cenários. Gitleaks sem achados. |
+| `make check` pelo hook de cada commit da integração dos lotes G (worktree `f-api`): `27efa4a` (merge da `main`), `541afc8` (merge do g-back), `d21d8de` (merge do g-front), `02306f8` (teto 2048), `ccb4ecd` (pendência 205), `c2895fa` (camada 3 da 180), `2d3e71f` (registro da 180) | Aprovado nos sete (`gate completo (make check)....Passed`); o hook mostra só o status, sem os números. |
+| Chamada real 4 (pendência 180), `python -m integration.camada3_da_conclusao_tardia`, 2026-09-30, sobre `c2895fa`, `claude-opus-5`, `max_tokens` 2048, fallback ligado | **Aprovado.** Uma chamada, com a autorização do dono: nenhuma proposta, stream até o `message_stop`, sequência igual à da referência da conversa sem o bloco da ferramenta; nada gravado. |
+| `make check` rodado por mim sobre `2d3e71f`, árvore limpa (integração dos lotes G, worktree `f-api`), 2026-09-30 | Aprovado, EXIT 0, 202 s de relógio. Frontend: **51 arquivos, 882 testes**, 100% nos quatro eixos (1115/1115 instruções, 867/867 ramificações, 327/327 funções, 1087/1087 linhas). `uv lock --check` aprovado (59 pacotes). Ruff sem achados, 143 arquivos já formatados. mypy sem problemas em 138 arquivos. Backend: **1192 passed**, cobertura total de 100% (2026 instruções, 356 ramificações). E2E: **25 passed** (19,8 s). Gitleaks: `no leaks found`. |
 
 ## Ambiente verificado
 
@@ -3932,6 +3949,10 @@ que não tinham chegado aqui)
     sobre a remontagem dos cartões, não sobre recarregar a página). Saída,
     se virar problema: um `AbortSignal.timeout` no `postJson`, tratado como
     falha de rede — resultado desconhecido, chave mantida.
+    **Atualização (lote g-front, 2026-09-29):** o `postJson` ganhou `timeoutMs`
+    (ver a 190) e o Iniciar, o Reagendar e a decisão da proposta o usam, então
+    um Iniciar pendurado já não segura o "Atualizar o quadro". O **Concluir**
+    continua sem prazo — é o caso desta pendência, e segue aberto na 192.
 38. **O registro de chaves (`useCompletionRegistry`) pode reter uma entrada
     além do necessário**, nos dois casos em que a missão com falha de
     resultado desconhecido (`recovery: 'retry'`) deixa de oferecer um
@@ -4180,6 +4201,12 @@ que não tinham chegado aqui)
     reagendamentos (a contagem e o último motivo); o **ciclo** (as diárias, a
     especial, `late_daily`) continua fora do contexto, e ela também não sabe da
     conclusão tardia (pendência 117).
+    **Parcialmente atendida em 2026-09-29 (pendência 117, lote g-back):**
+    `preparar_turno` já lê o ciclo (`ler_ciclo`), mas o contexto só usa dele
+    a conclusão tardia — a diária de ontem e a especial vencidas que ainda se
+    concluem. **Continua aberto:** a diária de hoje, a sequência, os dias
+    para o marco, a especial dentro da janela e a existência (ou falta) de
+    plano da semana — a Tifa segue sem ver nada disso.
 56. **A rota de concluir relê a missão com `clock()` chamado de novo depois
     do commit** (`cycle_router.py`, achado registrado no ledger da Task 5,
     minor deferido): `concluir_missao` grava a conclusão com um relógio,
@@ -5105,12 +5132,152 @@ ledger; nenhum é bug esquecido.
     `CycleSection.test.tsx`), mas nenhum cenário do Playwright atravessa a
     meia-noite: o E2E usa o relógio real da API (`core/clock.py`, `system_now`), e simular a virada exigiria
     um relógio controlável no ambiente do E2E, que não existe hoje.
-117. **A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
+117. ~~**A Tifa não sabe da conclusão tardia (F25).** O contexto da conversa
     (`tutoring/service.py`, via `listar_missoes`) só traz avulsas não
     concluídas, então não há texto errado no contexto; mas a
     Tifa não vai lembrar a pessoa de que a diária de ontem, iniciada a tempo,
     ainda pode ser concluída hoje. Liga-se à pendência 55 (a Tifa continua sem
-    ver o ciclo).
+    ver o ciclo).~~ **Resolvida em 2026-09-29 (lote g-back, branch
+    `wt/f-e2e`):** `preparar_turno` lê o ciclo (`ler_ciclo`) com o MESMO
+    instante do turno — um segundo `clock()` poderia cair do outro lado da
+    meia-noite — e `tardias_do_ciclo` (`tutoring/context.py`) escolhe a diária
+    de ontem e a especial que passaram do prazo e ainda estão `disponivel`
+    (a conclusão tardia da `com_inicio_a_tempo`), nessa ordem. O contexto
+    ganha, entre as pendentes e o progresso, a seção "Missões do ciclo em
+    conclusão tardia (iniciadas a tempo; a pessoa ainda pode concluí-las, mas
+    elas não podem ser reagendadas):", com uma linha por missão —
+    `- diária de ontem: <instrução> (em andamento desde <início>; pode ser
+    concluída antes de <limite em UTC>, que é <limite em SP> em São Paulo)`.
+    O limite vai em UTC, como o "Agora", e também na hora de São Paulo (m1 da
+    revisão do lote): ele é uma meia-noite de lá, e só em UTC a Tifa diria
+    "até as 3h". "Antes de" porque o intervalo é semiaberto. **Decisões:** (a) **sem `#id`** nessas
+    linhas: o `#` é o que a `reschedule_mission` recebe (I2 da revisão da T7),
+    e diária e especial não são reagendáveis; a Tifa não precisa do id para
+    nada, porque não há ferramenta de concluir. (b) A **concluída com atraso
+    fica fora**: `ler_ciclo` a mantém até o limite para o cartão do
+    Quartel-General, mas para a Tifa não há o que lembrar. (c) A **especial
+    ainda na janela fica fora**: é o ciclo de hoje, escopo da pendência 55.
+    (d) A seção **some** quando não há tardia, em vez de dizer "nenhuma": é
+    exceção, e uma linha a mais em todo turno seria ruído. (e) A persona
+    (bloco "Reagendar") passou a nomear a lista do reagendamento pelo título
+    ("da lista \"Missões pendentes\" do contexto", antes "da lista do
+    contexto", ambíguo com a seção nova) e ganhou o item "A diária e a missão
+    especial do ciclo nunca são reagendadas. Se o contexto trouxer uma delas
+    em conclusão tardia, lembre que ainda dá para concluí-la até o limite
+    indicado, no Quartel-General." — o bloco anti-injeção continua o último
+    (teste da m4 intacto). Testes: 9 unitários em
+    `tests/unit/test_tutoring_context.py`, 1 em
+    `tests/unit/test_tutoring_persona.py` e 2 de integração em
+    `tests/integration/test_tutoring_service.py`. Os testes de integração eram
+    2 e, depois da revisão do lote, são 5:
+    - o turno de quinta 00:10 lembra a diária de quarta iniciada às 23:50, com
+      limite sexta 00:00 SP e sem `#id`;
+    - a diária de hoje iniciada não é tardia;
+    - a de ontem concluída com atraso não entra;
+    - a de ontem aparece dentro do limite e some fora dele;
+    - o ciclo é lido no mesmo instante do turno. Esse teste usa um relógio que
+      anda a cada chamada, e o turno cai no último microssegundo antes do
+      limite: trocar `lambda: agora` por `clock` o reprova. O comportamento do
+    modelo com o texto novo não foi medido (pendência 180).
+180. **O contexto e a persona mudaram (pendência 117) sem medição contra a API
+    real.** A seção de conclusão tardia e o item novo do "Reagendar" são
+    provados só pelo texto montado (unitários e integração com o falso);
+    ninguém mediu se o modelo de fato lembra a diária de ontem, se deixa de
+    propor `reschedule_mission` para ela, nem se a mudança de
+    "da lista do contexto" para "da lista \"Missões pendentes\" do contexto"
+    altera a sequência da referência da conversa
+    (`tests/integration/referencia_da_api_real.json`, não regravada). Medir
+    exige chamada paga, que este lote não fez por instrução.
+    **Medida em 2026-09-30 (integração dos lotes G), uma chamada autorizada
+    pelo dono, sobre `c2895fa`, `claude-opus-5`, `max_tokens` 2048, fallback
+    ligado — aprovada:** `python -m integration.camada3_da_conclusao_tardia`
+    (script novo; `docs/QUALITY.md` §9) com uma avulsa `#7` pendente e a
+    diária de ontem em andamento na seção tardia, e o pedido "adiar a diária
+    de ontem". Nenhuma proposta (nem `reschedule_mission`, nem para a `#7`);
+    stream até o `message_stop`; a sequência de tipos é igual à da
+    referência da conversa sem o bloco da ferramenta. No texto, a Tifa disse
+    que a diária não se adia, lembrou o limite (meia-noite de hoje em São
+    Paulo) e ofereceu reagendar só a avulsa. **Continua aberta** no que a
+    amostra não cobre: uma chamada só; a especial vencida, a sequência com
+    `reschedule_mission` sob a persona nova (a do reagendamento,
+    `camada3_do_reagendamento.py`, não foi repetida) e a tela.
+181. ~~**`_buscar_acao` e `evaluation_records._corrente` travavam sem
+    `populate_existing`** (candidata da revisão da T7).~~ **Resolvida em
+    2026-09-29 (lote g-back, branch `wt/f-e2e`).** O risco é real para as
+    funções, embora nenhum caminho de produção o alcance hoje: a rota de
+    confirmar/recusar abre sessão nova e `_buscar_acao` é a primeira leitura
+    dela; a transação 2 de `avaliar_missao` também abre sessão nova e
+    `_corrente` é a primeira leitura. Mas `session.get(...,
+    with_for_update=True)` emite o `SELECT ... FOR UPDATE` e, sem
+    `populate_existing`, **não** sobrescreve um objeto já no identity map — o
+    mesmo M3 da T4 que `buscar_para_escrever` já corrigia. Medido com o objeto
+    carregado de propósito antes (RED visto nos dois): (a) a ação recusada por
+    outra conexão foi **executada** — `confirmar_acao` não levantou
+    `TransicaoIlegalError` e reagendou a missão por cima da recusa
+    (`test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_tutoring_reagendamento.py`); (b) o resultado atrasado da avaliação
+    tentou gravar `concluida` sobre a tentativa que outra conexão encerrou como
+    `falhou` — só o CHECK `ck_mission_evaluations_falha_com_codigo` barrou, com
+    `IntegrityError` (500), porque o `error_code` já estava gravado; numa
+    tentativa retomada (sem `error_code`) nada barraria
+    (`test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_evaluation_concorrencia.py`). Correção: `populate_existing=True`
+    junto com a trava nos dois. **Correção da revisão do lote (I1):** a
+    primeira versão dizia que o `populate_existing` da missão "também traz a
+    avaliação relida". Isso era falso. Ele só esquece o atributo
+    `missao.evaluation`, e a carga preguiçosa seguinte não propaga a opção. O
+    teste passava porque ninguém guardava a avaliação: o identity map (que usa
+    referências fracas) a soltava, e a carga criava um objeto novo. Com
+    `velha = missao.evaluation` guardada antes da trava, o RED voltou nos dois
+    lugares. Em `_corrente`, a gravação de `concluida` sobre `falhou` foi barrada
+    só pelo CHECK. Em `abrir_tentativa`, que tinha a mesma dependência por
+    `buscar_para_escrever`, a resposta foi `AvaliacaoEmAndamentoError` para uma
+    `avaliando` que o banco não tinha mais. Agora as duas funções releem a
+    avaliação com `_avaliacao_relida`: um `select(MissionEvaluation)` com
+    `execution_options(populate_existing=True)`, que atualiza no lugar a
+    instância já carregada na sessão. Os testes guardam a referência até o fim
+    e conferem a própria instância velha:
+    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava` e
+    `test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao`.
+182. **`tutoring/service.py::_completar` trava a resposta sem
+    `populate_existing`.** Mesmo padrão da 181, mas numa sessão própria da
+    `fabrica` em que a trava é a primeira leitura: não há objeto no identity
+    map para ficar velho, e nenhum chamador passa sessão. Não corrigido nem
+    testado por isso; vira risco se `_completar` passar a receber uma sessão
+    já usada.
+183. ~~**Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+    body vai para o titulo do cartao"** (`frontend/src/features/missions/
+    MissionList.test.tsx`). Visto reprovar **uma** vez, no `make check` do
+    hook de um commit do lote g-back (2026-09-29, worktree `f-e2e`), com o
+    `document.activeElement` ainda no `body`; o mesmo arquivo passou 5 de 5
+    rodado sozinho logo depois (91/91), e o gate inteiro passou nos outros
+    commits do lote. Suspeita, não medida: a asserção do foco vem logo depois
+    do `findByText('Missão iniciada.')`, e o foco é movido depois dessa
+    renderização — sob a carga do gate (pytest, Vitest e E2E de vários
+    worktrees ao mesmo tempo) a ordem pode inverter; um `waitFor` na asserção
+    resolveria se a suspeita estiver certa. Não corrigido aqui: é frontend,
+    fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.~~
+    **Resolvida em 2026-09-30 pela 195** (lote f-prop, `048a9ad`): a
+    suspeita estava certa, a falha foi reproduzida sob carga (4/90) e os dois
+    testes de foco passaram a esperar o próprio foco com `waitFor` (0/60
+    depois). A 178 é a mesma família e fica resolvida pela mesma correção.
+184. **A instrução da missão entra crua no contexto da Tifa.** Pendência
+    anterior ao lote, apontada na revisão do lote g-back (m2). As linhas das
+    pendentes e da conclusão tardia (`tutoring/context.py`) interpolam
+    `instructions` sem normalizar quebras de linha. Os esquemas só exigem
+    `min_length=1` (`cycle_schemas.py`, `schemas.py`). Uma instrução com
+    `\n## ...` forja um cabeçalho ou uma linha a mais dentro do "Contexto
+    desta conversa", que vem DEPOIS do bloco anti-injeção da persona no
+    `sistema`. Saídas possíveis: normalizar `\n` e `\r` ao montar o contexto
+    (o texto gravado fica intacto), ou recusar quebra de linha no esquema da
+    missão. Não medido contra o modelo real.
+185. **O chat passa a depender de o ciclo ser legível.** Registrada a partir
+    do m5 da revisão do lote g-back, aceita como está. Desde a pendência 117,
+    `preparar_turno` chama `ler_ciclo`. Um dado de ciclo que o esquema proíbe
+    faria todo turno da conversa responder 500, e não só o `GET /api/cycle`.
+    Os casos são `RuntimeError` de CHECK divergente e `NoResultFound` do
+    `.one()` da especial. Não há proteção porque o CHECK e as FKs já impedem
+    esse dado.
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa
@@ -5308,23 +5475,64 @@ ledger; nenhum é bug esquecido.
 
 **Criadas pelo lote back (2026-09-29)**
 
-120. **Só `max_tokens` conta como corte; os outros `stop_reason` continuam
+120. ~~**Só `max_tokens` conta como corte; os outros `stop_reason` continuam
      gravando `completa`.** O adaptador de conversa (`responder`) distingue
      apenas `max_tokens` (pendência 45). `model_context_window_exceeded` —
      também uma resposta truncada — e `refusal` chegariam como `completa`. O
      servidor falso só roteiriza `end_turn`, `tool_use` e `max_tokens`, e uma
      guarda sem teste que a prove não entrou. Resolver: estender o `Literal`
      do `Roteiro` e tratar a janela de contexto como corte (e decidir o que a
-     recusa deve mostrar).
-121. **A região viva anuncia "Tifa terminou de responder." também para a
+     recusa deve mostrar).~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`):** o
+     adaptador traduz o `stop_reason` para uma `Parada` do domínio
+     (`provider.py`: `TERMINOU`, `CORTADA`, `RECUSADA`), no lugar do antigo
+     `Fim(cortada: bool)`: `max_tokens` **e** `model_context_window_exceeded`
+     são `CORTADA` (o mesmo destino da pendência 45: `interrompida`, texto
+     parcial visível, sem ação); `refusal` é `RECUSADA`. **Decisão sobre a
+     recusa:** a resposta vai a `falhou` com o código novo
+     `resposta_recusada` (`CodigoDoStream`, evento `error`), **sem o texto
+     parcial** (gravado vazio) e sem ação. Motivo: a orientação da API para a
+     recusa no meio do stream é descartar o parcial em vez de tratá-lo como
+     resposta, e a recusa não é um limite configurado (o argumento que, na 45,
+     afastou `falhou` do corte por tamanho) — é a resposta que não veio, com
+     motivo conhecido; `falhou` com código já é o caminho da tela para "não
+     veio, e por quê". A tela diz "A Tifa não pôde responder a esta
+     pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de
+     outro jeito." e mantém o "Tentar de novo" (o classificador pode errar),
+     e o parcial provisório também entra vazio (`discardsPartial` em
+     `messageFailure.ts`). `stop_sequence` e `pause_turn` contam como fim
+     normal: a conversa não manda `stop_sequences` nem ferramenta de servidor
+     (pendência 171). **Servidor falso:** o `Literal` do `Roteiro` virou
+     `MotivoDeParada`, com os dois valores novos, e o controle do E2E aceita
+     `stop_reason`. **Testes por camada:** falso
+     (`test_o_roteiro_escolhe_o_motivo_de_parada`, nos três motivos), controle
+     do E2E (`test_stop_reason_escolhe_a_parada` e duas recusas), adaptador
+     (`test_o_fim_diz_por_que_a_resposta_parou`, cinco `stop_reason`),
+     serviço (cortada nos dois motivos, proposta cortada nos dois, recusada
+     sem o parcial, proposta recusada sem ação, completa sem motivo), API
+     (`done` da cortada nos dois motivos, `error` da recusa e o histórico
+     sem o parcial), frontend (`messageFailure`, hook, P35, P36) e E2E
+     (cenários (f) e (g) de `tutoring.spec.ts`). Nenhuma dependência nova.
+121. ~~**A região viva anuncia "Tifa terminou de responder." também para a
      resposta cortada pelo teto de tokens.** O `done` `interrompida` leva o
      envio a `idle` com `finished`, e o texto da região viva
      (`TutorPanel.tsx`) não olha o `status` da resposta. Quem enxerga vê a
      marca "Resposta interrompida" e a nota de reenvio; quem usa leitor de
      tela ouve "terminou" e só descobre o corte ao ler a mensagem. Resolver
      pede o estado `idle` carregar o `status` da resposta (ou a região viva
-     ler a última mensagem) e um texto próprio para o corte.
-122. **O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
+     ler a última mensagem) e um texto próprio para o corte.~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`):** o
+     estado `idle` do envio carrega a resposta do `done`
+     (`{ status: 'idle', answer: MessageRead | null }`, no lugar de
+     `finished: boolean`), e a região viva anuncia por `announceAnswer`
+     (`answerOutcome.ts`): "Tifa terminou de responder." só para a
+     `completa`; a cortada por tamanho é "A resposta da Tifa ficou longa
+     demais e foi cortada. Tente pedir por partes."; qualquer outra
+     incompleta, "A resposta da Tifa chegou incompleta." (sem inventar
+     motivo). Os testes do hook que conferiam `finished: true` passaram a
+     conferir a resposta (`answer`), o que é mais forte; o P33 prova o
+     anúncio no painel e o cenário (f) do E2E, no navegador real.
+122. ~~**O "Tentar de novo" de uma resposta cortada por `max_tokens` tende a
      cortar de novo** (M1 da revisão do lote back). O reenvio manda a mesma
      pergunta com o mesmo teto (`tutor_max_tokens`, 1024 por padrão), e a
      nota da tela ("A última pergunta ficou sem resposta completa. Tentar de
@@ -5333,7 +5541,358 @@ ledger; nenhum é bug esquecido.
      aviso (descartada de propósito: a entrada podia estar pela metade).
      Resolver pede a tela distinguir o corte — o que esbarra na 121: o
      `MessageRead` não diz **por que** a resposta ficou `interrompida` — e um
-     texto próprio ("a resposta ficou longa demais; tente pedir por partes").
+     texto próprio ("a resposta ficou longa demais; tente pedir por partes").~~
+     **Resolvida em 2026-09-29 (lote g-tifa, branch `wt/f-api`)**, na
+     parte que dependia da tela; a limitação de fundo continua na pendência
+     173. **Decisão de contrato — o menor desenho correto:** o motivo do
+     corte vai no `error_code` que a linha e o `MessageRead` **já têm**, com o
+     valor novo `resposta_longa` (constante `RESPOSTA_LONGA` de
+     `tutoring/domain.py`, que não é código do evento `error`). Sem coluna
+     nova, sem migração e sem chave nova no JSON: a coluna
+     `tutor_messages.error_code` é texto livre sem CHECK, o tipo do frontend
+     já é `string | null`, e um cliente antigo só ignora o valor. A
+     alternativa descartada — uma chave `stop_reason` com coluna própria e
+     migração `0007` — separaria melhor "erro" de "motivo", mas custa uma
+     migração para carregar um único valor; o custo do nome está registrado
+     na pendência 170. As outras `interrompida` (desconexão, órfã) seguem
+     com `error_code` nulo: nelas o resultado é desconhecido. **Tela:** a nota
+     do "Tentar de novo" sai de `unansweredNote`, pela última tentativa da
+     pergunta (`latestAnswerTo`): na cortada, "A última resposta ficou longa
+     demais e foi cortada. Tente pedir por partes, um tópico de cada vez.
+     Tentar de novo refaz a mesma pergunta e pode cortar outra vez."; na
+     recusada, "A Tifa não pôde responder à última pergunta. Tentar de novo
+     tende a dar o mesmo resultado: pergunte de outro jeito."; nas demais, a
+     nota geral de antes. **Testes cuja expectativa mudou de propósito** (é a
+     mudança principal do lote, e cada docstring diz isso):
+     `test_resposta_cortada_fica_interrompida_com_o_motivo` e
+     `test_resposta_cortada_chega_no_done_como_interrompida_com_o_motivo`
+     (antes fixavam `error_code` nulo) e o P33 do `TutorPanel.test.tsx` (o
+     `done` passou a trazer `resposta_longa`, e a nota esperada é a de pedir
+     por partes).
+     **Correções da revisão do lote g-tifa (aprovada com ressalvas):**
+     **I1** — a pergunta cuja tentativa mais recente é `resposta_recusada`
+     saiu do contexto do modelo (`_historico`); continua gravada e na tela, e
+     volta ao contexto quando reenviada (a tentativa nova passa a ser a mais
+     recente). **m2** — a recusa vence o limite total estourado no próprio
+     `Fim`: o código é `resposta_recusada`, coerente com o texto descartado
+     (antes saía `tempo_esgotado` com o texto vazio). **m6** — a bolha da
+     resposta sem texto (a recusada, ou a falha antes do primeiro pedaço) não
+     desenha mais um parágrafo vazio: fica o autor e a marca. **m7** — o
+     cenário (f) do E2E roda nos dois motivos de corte. **m5** — saiu a
+     etiqueta de lote dos três testes de expectativa mudada. m1, m3 e m4 estão
+     nas pendências 172, 175 e 176.
+
+**Criadas pelo lote g-tifa (2026-09-29)**
+
+170. **O `error_code` da `interrompida` cortada não é erro** (lote g-tifa,
+     decisão da pendência 122). O motivo do corte (`resposta_longa`) mora na
+     coluna e na chave `error_code`, que nas outras linhas quer dizer falha.
+     É intencional e documentado (`domain.py`, `docs/ARCHITECTURE.md`), mas
+     quem ler só o nome vai estranhar. Se aparecer um segundo motivo que não
+     seja erro, o desenho certo passa a ser uma coluna e uma chave próprias
+     (`stop_reason`, com migração), e esta reutilização sai.
+171. **`stop_sequence` e `pause_turn` contam como fim normal** (lote g-tifa).
+     Hoje não acontecem: a conversa não manda `stop_sequences` nem
+     ferramenta de servidor. Se um dia a Tifa ganhar uma ferramenta de
+     servidor (busca na web, por exemplo), o `pause_turn` passa a existir e
+     pede tratamento próprio (continuar o turno); gravá-lo como `completa`
+     seria o mesmo defeito da pendência 45. O `Roteiro` do falso não os
+     roteiriza de propósito.
+172. **A recusa no meio do stream aparece na tela antes de sumir** (lote
+     g-tifa). Os `delta` anteriores à recusa são desenhados enquanto chegam —
+     nem o backend nem a tela sabem, antes do `message_stop`, que haverá
+     recusa. O descarte vale do `error` em diante: a **resposta** sai da
+     lista (entra vazia), do banco (gravada vazia) e do histórico do modelo
+     (só `completa` entra); e a **pergunta** recusada, que continua gravada e
+     na tela, também fica fora do contexto do modelo enquanto a tentativa
+     mais recente dela for a recusada (correção I1 da revisão, abaixo). Também não se lê o `stop_details` (a categoria da
+     recusa): a tela não distingue o classificador de segurança do modelo que
+     declinou.
+     **Atenuada pela 174 (2026-09-30):** com o fallback do servidor, a recusa
+     no meio seguida de substituto não some mais — o substituto continua a
+     partir do parcial, e a resposta termina `completa` com a nota do
+     substituto. Continua valendo para a parada final `refusal` (cadeia
+     esgotada, categoria sem substituto, `tool_use` aberto no momento da
+     recusa).
+173. ~~**Repetir a cortada ainda repete o mesmo teto** (lote g-tifa; o fundo da
+     pendência 122). A tela agora diz que a resposta ficou longa demais e
+     sugere pedir por partes, mas o "Tentar de novo" reenvia a mesma
+     pergunta com o mesmo `tutor_max_tokens` (1024 por padrão) e tende a
+     cortar de novo. Resolver de verdade pede decidir entre subir o teto,
+     pedir continuação ou orientar a persona a responder em partes — decisão
+     de produto e de custo, para o dono.~~
+     **Resolvida por decisão do dono, em dois passos:** em 2026-09-29
+     ("subir o limite") o padrão de `tutor_max_tokens` (`core/config.py`)
+     subiu de 1024 para 4096; em **2026-09-30** o dono o fixou em **2048**
+     (integração dos lotes G). O `.env.example` acompanha nos dois passos, e
+     o valor em vigor é **2048**. **Por que 1024 cortava cedo:** o
+     `claude-opus-5` pensa por padrão (thinking adaptativo), e o thinking gasta
+     do mesmo `max_tokens`. O adaptador não manda `thinking` nem
+     `budget_tokens` (conferido em `anthropic_provider.py`), então não há
+     orçamento de thinking a manter abaixo do teto — nada mais a ajustar.
+     **Custo:** a saída é cobrada pelos tokens gerados de fato, não pelo teto.
+     Uma resposta que já cabia em 1024 custa o mesmo; só a que antes era
+     cortada passa a ir até onde precisa, no máximo 2048 tokens de saída —
+     a US$ 25 por milhão no `claude-opus-5`, cerca de US$ 0,05 no pior caso
+     por resposta (metade dos cerca de US$ 0,10 do teto de 4096), contra
+     cerca de US$ 0,026 do teto original de 1024. **Atenção para
+     quem já tem `.env`:** o arquivo vence o padrão do `Settings`, e um `.env`
+     copiado de um exemplo antigo continua com `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+     (ou `=4096`, entre 2026-09-29 e 2026-09-30) — a linha precisa ser
+     trocada à mão para `2048` em cada clone. O teste novo
+     `test_o_env_example_traz_os_padroes_da_tutoria` amarra o exemplo aos
+     padrões do `Settings`, e `test_padroes_da_tutoria` fixa 2048 (os dois
+     vistos reprovando antes da troca para 2048: `4096 == 2048` no primeiro,
+     o `.env.example` com 4096 no segundo). O "Tentar de novo" da cortada
+     continua repetindo o mesmo teto, agora o dobro do original; o caso da janela de contexto, que o teto não resolve, é a
+     pendência 176, e o do tempo, a 177.
+174. ~~**Sem fallback para a recusa** (lote g-tifa; para o dono). A API oferece
+     reexecutar a requisição recusada noutro modelo (`fallbacks`, beta, com
+     custo e modelo próprios). Não foi ligado: muda o modelo que responde,
+     o custo e o contrato com o provedor. Hoje a recusa é final para aquela
+     tentativa.~~
+     **Resolvida em 2026-09-30 (branch `wt/f-api`):** a conversa pede o
+     fallback do lado do servidor (`client.beta.messages.stream` com
+     `fallbacks="default"` e o beta `server-side-fallback-2026-07-01`,
+     `BETA_DO_FALLBACK`), **ligado por padrão por decisão do dono** e
+     desligável por `FOCUSQUEST_TUTOR_FALLBACK=false` (`Settings.tutor_fallback`,
+     `.env.example`). O do servidor, e não o `BetaRefusalFallbackMiddleware` do
+     SDK: uma requisição só, o `"default"` só existe no servidor, e a Anthropic
+     mantém a escolha do substituto por categoria de recusa. O adaptador lê o
+     modelo que serviu na entrada `fallback_message` de `usage.iterations`
+     (`Fim.substituto`; o único sinal que cobre a troca antes da saída, no meio
+     e o roteamento fixo, que não tem bloco `fallback`), entrega a proposta só
+     no `message_stop` e descarta a que fechou antes do bloco `fallback` (é do
+     modelo que recusou). O texto parcial de uma recusa no meio **fica**,
+     porque o substituto o continua; o descarte do g-tifa vale só para a parada
+     final `refusal`. A resposta servida pelo substituto grava
+     `tutor_messages.fallback_model` (migração `0007`, com
+     `ck_tutor_messages_fallback_so_da_tutora`; chave `fallback_model` no
+     `MessageRead`, aditiva), e a tela mostra uma nota discreta na bolha
+     ("Respondida por um modelo substituto (…), porque o modelo principal não
+     pôde responder a esta pergunta."). Coluna própria, e não `error_code`
+     (pendência 170): a substituída **e** cortada precisa dos dois. **Testes:**
+     falso em tipos beta com a `Substituicao` (antes da saída, no meio, fixa,
+     `from` no fio por `by_alias`, e o SDK beta montando a troca); adaptador
+     (corpo e cabeçalho, desligado, substituto nos três casos, proposta antes e
+     depois da troca, texto que continua, cadeia esgotada); serviço (completa
+     com o modelo, sem modelo, substituída e cortada, cadeia esgotada,
+     proposta do substituto); API (`done` e histórico); migração e modelo
+     (coluna nula, CHECK pelo nome, downgrade só da coluna, espelho dos CHECK);
+     `get_tutoria` leva o flag até a requisição; controle do falso do E2E
+     (`fallback`, rota `?beta=true`); frontend P37; E2E (h). **Desvios do
+     plano, com motivo:** (1) o falso do E2E respondia só `path ==
+     "/v1/messages"`, e o endpoint beta posta em `/v1/messages?beta=true` — o
+     plano dizia "nada a mudar"; sem a correção, todo o E2E da conversa daria
+     404; (2) o `Espiao` passou a guardar do **pedido** só o corpo e o
+     `anthropic-beta` (nunca os cabeçalhos inteiros, que têm a chave), para a
+     camada 3 provar o que foi mandado; (3) dois testes de
+     `test_acompanhamento_migration.py` fixavam `versao == "0006"` como "o
+     banco ficou como estava", o que só valia com a 0006 na head: passaram a
+     comparar com `get_current_head()`, o mesmo ajuste que o teste da 0005 já
+     recebeu (`1a46e3f`) — a expectativa (nada muda quando o downgrade
+     recusa) é a mesma. **Camada 3 executada em 2026-09-30**, uma chamada,
+     autorizada pelo dono (`camada3_do_fallback.py`): a API **aceitou**
+     `fallbacks="default"` + o beta com as duas ferramentas,
+     `disable_parallel_tool_use` e sem `thinking`, no `claude-opus-5`; stream
+     até o `message_stop`, parada `terminou`, `Fim.substituto` nulo, proposta
+     `create_mission`, e a sequência de tipos **igual** à da referência da
+     conversa (sem bloco `fallback`). O Models API disse
+     `allowed_fallback_models: ["claude-opus-4-8"]` para o `claude-opus-5`.
+     Gravado em `tests/integration/referencia_do_fallback_real.json` (sem
+     texto nem chave). Pendências criadas: 200 a 204.
+175. **Nenhuma chamada real provou `refusal` nem `model_context_window_exceeded`**
+     (lote g-tifa). Os dois são provados contra o falso, com o SDK fixado
+     (camadas 1 e 2); a camada 3 não os provoca sob demanda, e este lote não
+     fez chamada real. A `avaliar` já devolve `None` para qualquer parada
+     que não seja `tool_use`, mas os testes dela cobrem só `max_tokens` e
+     `end_turn`. **E a avaliação não distingue a recusa** (m3 da revisão):
+     `refusal` vira `avaliacao_invalida`, e a tela da avaliação sugere tentar
+     de novo, quando repetir tende a dar o mesmo resultado — ao contrário da
+     conversa, que agora trata a recusa à parte. Não foi corrigido aqui: um
+     código novo pede entrar no CHECK de `mission_evaluations.error_code`
+     (migração `0005` congela os valores), ou seja, migração nova, além do
+     mapa da tela da avaliação.
+     **Nem o fallback (pendência 174, 2026-09-30):** nenhuma chamada real
+     mostrou o bloco `fallback`, a `fallback_message` nem a continuação do
+     parcial. A camada 3 da 174 prova só que a API **aceita** o pedido numa
+     resposta normal; o fallback em si é provado só contra o falso.
+176. **A janela de contexto estourada tende a estourar de novo no reenvio**
+     (m4 da revisão). O `model_context_window_exceeded` é tratado como o
+     `max_tokens` (mesma marca, mesma nota de pedir por partes), mas o
+     "Tentar de novo" reenvia o mesmo histórico, e o que resolve esse caso é
+     reduzir o contexto (a orientação da API é compactar ou dividir a
+     conversa), não subir o teto. Na prática é raro: o histórico vai até
+     `tutor_history_messages` (20) e a pergunta tem limite de tamanho. Se
+     acontecer, a tela diz "pedir por partes", que ajuda só em parte.
+177. **Resposta de até 2048 tokens contra o limite total de 60 s** (lote
+     g-tifa, consequência da 173). O limite total do serviço é
+     `tutor_timeout_seconds` (60 s, `dependencies.py`), medido do início do
+     stream. Com o teto maior que o original (4096 em 2026-09-29, **2048**
+     desde 2026-09-30, o dobro dos 1024), uma resposta longa (thinking
+     incluído) pode passar de 60 s e sair `tempo_esgotado` em vez de
+     `completa`. Não medido: nenhuma chamada real foi feita neste lote. Se
+     aparecer, a decisão é subir o `tutor_timeout_seconds` (e o `.env`) —
+     para o dono, porque muda quanto a pessoa espera. **Atualizada em
+     2026-09-30:** com o teto em 2048 (metade dos 4096 que motivaram esta
+     pendência), o estouro dos 60 s fica **menos provável, não descartado**:
+     o thinking adaptativo também gasta tempo, e nada disso foi medido.
+178. ~~**Dois testes de foco do `MissionList.test.tsx` reprovaram uma vez sob
+     carga** (lote g-tifa, correções da revisão). Num `make check` (EXIT 2), com
+     outros worktrees rodando o gate na mesma máquina, reprovaram
+     "depois de concluir, o foco nao se perde para o body" e "depois de
+     iniciar, o foco que caiu no body vai para o titulo do cartao": o foco
+     ficou no `body`, e o arquivo levou 17,3 s. O lote não toca
+     `features/missions` nem `shared` (diff vazio). O mesmo arquivo isolado
+     passou duas vezes (91/91), e o `make check` seguinte passou inteiro.
+     Suspeita não medida: o foco é movido numa tarefa assíncrona que perde a
+     corrida quando a máquina está sobrecarregada. Nada foi ignorado nem
+     afrouxado; falta achar a causa.~~
+     **Resolvida em 2026-09-30 pela 195 (integração dos lotes G):** são os
+     mesmos dois testes que a 195 corrigiu ("depois de iniciar..." e "depois
+     de concluir..."), e a causa medida lá é a desta suspeita — o foco vai
+     para o título num `useEffect` passivo, e a asserção corria antes dele.
+     Os dois esperam o foco com `waitFor` desde `048a9ad`.
+
+**Criadas pela pendência 174 (fallback da recusa, 2026-09-30)**
+
+200. **O fallback depende de um beta com data fixa** (pendência 174). Se a
+     API recusar `server-side-fallback-2026-07-01` (ou o `fallbacks`), toda
+     pergunta vira `provedor_indisponivel` — o 4xx não é repetido e, pela
+     pendência 100, não tem log da causa. Desligar:
+     `FOCUSQUEST_TUTOR_FALLBACK=false`. A camada 3 de 2026-09-30 mostrou que
+     a API aceita hoje; acompanhar a documentação de "Refusals and fallback" a
+     cada atualização do SDK e repetir `camada3_do_fallback.py`.
+201. **A avaliação não tem fallback** (pendência 174). Uma avaliação recusada
+     segue `avaliacao_invalida`. Ligar lá pede gravar em
+     `mission_evaluations.model` o modelo que serviu, e não o configurado, e
+     provar o `strict` no substituto.
+202. **A emenda do texto no fallback do meio não foi medida** (pendência 174).
+     O app concatena o parcial e a continuação. Espaço duplo ou palavra colada
+     na emenda só aparece numa recusa real; não se normaliza sem medida.
+203. **O fallback pode estourar o limite total** (pendência 174). A tentativa
+     recusada soma à do substituto dentro dos `tutor_timeout_seconds` (60 s),
+     e a resposta pode sair `tempo_esgotado`. Sem medida real de quanto (ver
+     também a 177).
+204. **O custo por tentativa não é gravado** (pendência 174).
+     `usage.iterations` diz o que foi cobrado de cada modelo, e o app só lê a
+     entrada `fallback_message` para saber quem serviu. Contar as respostas
+     substituídas dá (`WHERE fallback_model IS NOT NULL`); o custo, não. A
+     categoria da recusa (`trigger.category`) também não é gravada.
+
+**Criadas pelo lote g-front (2026-09-29)**
+
+190. ~~**Os POSTs de Iniciar, Reagendar e da decisão da proposta de
+     reagendamento não tinham timeout**: um pedido que o navegador mantivesse
+     aberto sem resposta deixava o botão em "Iniciando…" / "Confirmando…" para
+     sempre (revisão da Task 10).~~ **Resolvida em
+     2026-09-29 (lote g-front).** O `postJson` aceita `{ timeoutMs }` e as
+     três hooks (`useStartMission`, `useRescheduleMission`, e `useDecideAction`
+     em `confirm` **e** `reject`) passam `MUTATION_TIMEOUT_MS` (20 s, em
+     `shared/api/client.ts`). O prazo é um `AbortController` com `setTimeout`
+     (e não `AbortSignal.timeout`, que os timers falsos do Vitest não
+     alcançam), cobre também a leitura do corpo, e é desarmado em `finally`. Ao
+     fim do prazo o erro sai como `ApiError` sem `status` e sem `code` — o
+     mesmo da rede fora —, e cada `describe*Failure` já o traduz para
+     `recovery: 'retry'`: **a chave fica** (o servidor pode ter gravado) e o
+     botão volta com "Tentar de novo", que reenvia o MESMO `operation_id`.
+     Testado com timers falsos: 38 testes no cliente (5 novos), e em cada hook
+     um caso de "falha no prazo, antes dele nada muda" e um de "o reenvio usa
+     a mesma chave" (Iniciar, Reagendar, D11 confirmar, D12 recusar). O Iniciar
+     pendurado também libera a espera do "Atualizar o quadro".
+191. ~~**A falha gravada de uma proposta não era anunciada ao leitor de tela**
+     (revisão da Task 9): ao confirmar, o servidor gravava a ação
+     como `falhou` (`prazo_expirado` ou `reagendamento_invalido`), o
+     `DecisionControls` some com o botão focado e com o `role="alert"`, e o
+     texto novo aparecia num `<p>` sem região viva — o foco caía no `body` sem
+     nenhuma fala.~~ **Resolvida em 2026-09-29 (lote g-front).** O `<p
+     data-testid="proposal-expired">` dos dois cartões virou o componente
+     `RecordedFailure` (em `DecisionControls.tsx`), que recebe `announce` e só
+     então tem `role="alert"`. `announce` é `decision.status === 'failed'`: a
+     falha foi gravada **por esta tela**. Uma falha que já veio do histórico
+     **não** é anunciada, para abrir a conversa não ler de uma vez todas as
+     propostas que caíram em outros dias. O cartão continua montado quando a
+     ação vira `falhou` (a lista chaveia pelo id), e é isso que faz o
+     `decision` dele ainda saber de onde veio a falha. Testes: R14–R16 (cartão
+     de reagendamento), o par equivalente no `ProposalCard.test.tsx` e o P38
+     (no painel, dentro da mensagem da Tifa). Na integração dos lotes G, os
+     ids foram renumerados: no lote eram R12–R14 e P32, que já nomeavam outros
+     casos do mesmo arquivo (R12/R13 do F, P32 da conversa rolável).
+192. **O Concluir e a avaliação continuam sem timeout** (lote g-front; o que
+     sobrou da 37). O mecanismo existe (`postJson(..., { timeoutMs })`), mas
+     não foi ligado aos dois: o Concluir é o caso da 37 e caberia ligar já com
+     o mesmo `MUTATION_TIMEOUT_MS`; a **avaliação** chama o modelo, e o prazo
+     dela tem de ser maior que o do backend (`tutor_timeout_seconds`, 60 s, e a
+     tentativa possível de 90 s da pendência 106) — 20 s a derrubaria em
+     resposta lenta mas legítima, e o reenvio cairia na avaliação órfã. Ligar o
+     Concluir é uma linha mais testes; a avaliação pede escolher o prazo.
+193. **O prazo de 20 s é um palpite, não uma medida, e a tela não distingue
+     "demorou demais" de "sem rede".** Iniciar, Reagendar e confirmar são
+     operações de banco (sem modelo), 20 s é bem acima do normal, mas nada
+     mediu a latência real numa rede móvel ruim. E as duas causas caem no
+     mesmo texto ("Não foi possível confirmar…"): a mensagem do
+     `ApiError` ("O servidor demorou demais para responder.") existe, mas
+     nenhuma tela a lê (as mensagens vêm dos `describe*Failure`, por
+     `code`/`status`). Se importar, o `ApiError` ganha um `code` próprio
+     (`tempo_esgotado`) e os três `describe*` um texto para ele. Um caso de
+     borda no mesmo lugar: se o 409 (ou outro erro com resposta) já chegou e o
+     timer dispara durante a leitura do corpo do erro (`readCode`), o erro vira
+     o de tempo esgotado e perde o `status`/`code` reais. É seguro — o reenvio
+     com a mesma chave devolve o mesmo 409 —, só custa uma ida a mais à rede.
+194. **O anúncio da falha gravada (191) foi provado no DOM, não num leitor de
+     tela.** Os testes conferem que o texto nasce dentro de `role="alert"` e
+     que o do histórico não; não foi medido o que VoiceOver, NVDA ou TalkBack
+     falam ao inserir um `role="alert"` dentro do painel/folha da Tifa, nem se
+     a folha do celular (um `dialog`) muda o comportamento. Depois de "Atualizar
+     a conversa" o cartão remonta e não repete o aviso (de propósito). Não
+     coberto pelo axe do E2E, que só vê violações estáticas.
+
+**Criadas pelo lote f-prop (2026-09-30)**
+
+195. ~~**Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+     body vai para o titulo do cartao"** (a **183 do lote g-back**, registrada
+     no HANDOFF do worktree `f-e2e`; este item a resolve).~~ **Resolvida em
+     2026-09-30 (lote f-prop).** Defeito do **teste**, não do componente:
+     o `MissionCard` move o foco num `useEffect`, e a asserção corria antes
+     dele. O texto "Missão iniciada." nasce no mesmo commit que o estado
+     `started`, mas o efeito é **passivo** e o React o roda depois, num
+     agendamento próprio; o `findByText` (dentro do `asyncWrapper` do
+     Testing Library, com `IS_REACT_ACT_ENVIRONMENT` desligado) resolve pelo
+     `MutationObserver` assim que o texto aparece, e sob carga cai entre o
+     commit e o efeito — `document.activeElement` ainda é o `body`. Em
+     produção o efeito roda logo em seguida e o foco chega ao título (o
+     componente está certo). **Medido** (`vitest run ... -t`, 20 processos
+     ocupando os 10 núcleos): sem carga, 0/30 no teste isolado e 0/30 no
+     arquivo inteiro; sob carga, 4/90 (2/30 + 2/60). O irmão
+     "depois de concluir, o foco nao se perde para o body" tinha a mesma
+     forma (espera `evaluation-panel`, depois olha o foco) e reprovou 1/60.
+     **Correção:** os dois passaram a esperar o próprio foco com
+     `await waitFor(() => expect(document.activeElement).toBe(titulo))`;
+     as asserções são as mesmas, só a espera muda. Depois: 0/60 e 0/60 sob a
+     mesma carga. Mutação: trocar o `titleRef.current?.focus()` de cada efeito
+     por nada faz o respectivo teste reprovar (`activeElement` no `body`).
+     Os casos de "o foco não é roubado" não foram tocados: eles reprovam com
+     a guarda `document.activeElement === document.body` removida (3/3 sem
+     carga), e a corrida deles, se houver, dá falso verde, não falso vermelho.
+
+**Criadas pela integração dos lotes G (2026-09-30)**
+
+205. ~~**`test_sequence_de_users_avanca_apos_a_migracao` dependia da ordem dos
+     testes.** Registrada no relatório da 174, sem pendência: com
+     `test_tutoring_models.py` rodando antes de `test_migrations.py`, o teste
+     reprovava com `assert 3 == 2`; na ordem normal da suíte passava.~~
+     **Resolvida em 2026-09-30 (integração dos lotes G):** o comportamento
+     estava certo; a expectativa é que estava errada. O `banco_migrado` é
+     de sessão, e a sequence não volta no rollback: qualquer teste anterior
+     que inseriu um usuário e reverteu já consumiu valores dela, então "o
+     próximo id é 2" só valia se ninguém tivesse inserido antes. O teste
+     passou a afirmar o que a docstring sempre quis dizer: o maior id
+     gravado é o 1 semeado, e o id entregue vem depois dele, sem colidir.
+     **Medido:** a ordem `test_tutoring_models.py test_migrations.py`, que
+     reprovava (`3 == 2`, reproduzido nesta sessão), passa, e o arquivo
+     sozinho também. **Mutação:** tirar o `setval` da `0001` faz o teste
+     reprovar com `UniqueViolation` em `users_pkey` (restaurado por `cp`,
+     conferido com `cmp`).
 
 ## Próximo incremento
 

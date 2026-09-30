@@ -136,19 +136,72 @@ export async function requestJson<T>(path: string, signal?: AbortSignal): Promis
 }
 
 /**
+ * O prazo, em milissegundos, que os POSTs que mudam estado da tela (Iniciar,
+ * Reagendar, confirmar e recusar a proposta da Tifa) dao ao servidor.
+ *
+ * Sao operacoes de banco, sem modelo no caminho: 20 s e muito mais que o
+ * normal, e ainda assim o botao nao fica preso para sempre num pedido que o
+ * navegador manteve aberto. O Concluir e a avaliacao NAO usam (pendencia 37 e
+ * 190): a avaliacao chama o modelo e pode demorar mais que isto.
+ */
+export const MUTATION_TIMEOUT_MS = 20_000
+
+/** As opcoes do `postJson`. */
+export interface PostOptions {
+  /**
+   * Aborta o pedido depois desse tempo, e a falha sai como a de rede fora --
+   * `ApiError` sem status e sem `code`. Sem a opcao, o pedido nao tem prazo.
+   */
+  timeoutMs?: number
+}
+
+/**
  * Faz um POST em `path` com `body` serializado em JSON, e devolve a resposta.
  *
- * Nao recebe `AbortSignal`, de proposito: o unico POST da tela e a conclusao
- * de missao, e cancelar um pedido que muda estado no servidor nao desfaz a
- * mudanca -- so esconde da tela se ela aconteceu. Quem precisa saber repete o
- * pedido com o mesmo `operation_id`, que e idempotente.
+ * Nao recebe `AbortSignal` do chamador, de proposito: cancelar um pedido que
+ * muda estado no servidor nao desfaz a mudanca -- so esconde da tela se ela
+ * aconteceu. Quem precisa saber repete o pedido com o mesmo `operation_id`, que
+ * e idempotente.
+ *
+ * O unico aborto que existe e o do PRAZO (`timeoutMs`), e ele segue o mesmo
+ * raciocinio: ao fim do prazo o resultado e DESCONHECIDO -- o servidor pode ter
+ * gravado --, e por isso a falha sai igual a de rede fora (`status` e `code`
+ * nulos), que as telas ja tratam como "repita com a mesma chave". O prazo cobre
+ * tambem a leitura do corpo: uma resposta que comecou e nao termina prende o
+ * botao do mesmo jeito.
+ *
+ * `setTimeout` com `AbortController`, e nao `AbortSignal.timeout`: o timer do
+ * segundo e interno ao navegador, e os testes com timers falsos nao o alcancam.
  */
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  return send<T>(path, {
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  options: PostOptions = {},
+): Promise<T> {
+  const init: RequestInit = {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  })
+  }
+  const { timeoutMs } = options
+  if (timeoutMs === undefined) {
+    return send<T>(path, init)
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+  try {
+    return await send<T>(path, { ...init, signal: controller.signal })
+  } catch (cause) {
+    if (controller.signal.aborted) {
+      throw new ApiError('O servidor demorou demais para responder.', null, null, { cause })
+    }
+    throw cause
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Um evento do stream SSE, com o `data` ja desserializado. */

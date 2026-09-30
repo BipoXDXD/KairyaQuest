@@ -17,6 +17,7 @@ const question = (id: number, content: string, cmid: string): MessageRead => ({
   client_message_id: cmid,
   reply_to_id: null,
   error_code: null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:00Z',
   actions: [],
 })
@@ -34,6 +35,7 @@ const answer = (
   client_message_id: null,
   reply_to_id: replyTo,
   error_code: status === 'falhou' ? 'provedor_indisponivel' : null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:01Z',
   actions: [],
 })
@@ -112,7 +114,7 @@ describe('useTutorConversation: historico', () => {
 
     expect(result.current.history).toEqual({ status: 'loaded', messages: [q1, a1] })
     expect(result.current.messages).toEqual([q1, a1])
-    expect(result.current.send).toEqual({ status: 'idle', finished: false })
+    expect(result.current.send).toEqual({ status: 'idle', answer: null })
     expect(result.current.retryTarget).toBeNull()
   })
 
@@ -216,7 +218,10 @@ describe('useTutorConversation: historico', () => {
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(signal?.aborted).toBe(false)
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     expect(result.current.messages).toEqual([q10, a11])
   })
@@ -239,7 +244,7 @@ describe('useTutorConversation: historico', () => {
       result.current.submit()
     })
     expect(requestsTo(fetchMock, SEND)).toHaveLength(0)
-    expect(result.current.send).toEqual({ status: 'idle', finished: false })
+    expect(result.current.send).toEqual({ status: 'idle', answer: null })
   })
 })
 
@@ -344,7 +349,7 @@ describe('useTutorConversation: envio', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({ status: 'idle', answer: a11 })
     })
     expect(result.current.messages).toEqual([q1, a1, q10, a11])
     expect(result.current.messages.filter((m) => m.id === 10)).toHaveLength(1)
@@ -384,7 +389,10 @@ describe('useTutorConversation: envio', () => {
       result.current.retry()
     })
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     expect(result.current.messages).toEqual([q10, a11])
     expect(sent(fetchMock, 2).client_message_id).toBe(sent(fetchMock, 1).client_message_id)
@@ -443,6 +451,38 @@ describe('useTutorConversation: envio', () => {
       [11, 'falhou'],
       [12, 'completa'],
     ])
+  })
+
+  it('a recusa descarta o parcial: a resposta provisoria entra vazia (pendencia 120)', async () => {
+    const q10 = question(10, 'Pergunta recusada', 'x')
+    const { result } = await mountWith(
+      // A atualizacao silenciosa nunca chega: so a resposta provisoria conta.
+      (_init, call) => (call === 1 ? Response.json([]) : new Promise<Response>(() => undefined)),
+      () =>
+        streamResponse([
+          sseFrame('user_message', q10),
+          sseFrame('delta', { text: 'Comeco recusado' }),
+          sseFrame('error', { code: 'resposta_recusada' }),
+        ]),
+    )
+
+    act(() => {
+      result.current.setDraft('Pergunta recusada')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    await waitFor(() => {
+      expect(result.current.send.status).toBe('failed')
+    })
+    expect(result.current.messages.map((m) => [m.id, m.status, m.content])).toEqual([
+      [10, 'completa', 'Pergunta recusada'],
+      [-1, 'falhou', ''],
+    ])
+    expect(result.current.retryTarget).toEqual({
+      clientMessageId: ID_1,
+      content: 'Pergunta recusada',
+    })
   })
 
   it('o stream que acaba sem final e resultado desconhecido', async () => {
@@ -762,7 +802,10 @@ describe('useTutorConversation: envio', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     expect(result.current.messages).toEqual([q10, a11])
   })
@@ -788,7 +831,10 @@ describe('useTutorConversation: envio', () => {
     stream.push(sseFrame('done', a11))
     stream.close()
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     expect(result.current.messages).toEqual([a11])
   })
@@ -851,7 +897,10 @@ describe('useTutorConversation: envio', () => {
     stream.push(sseFrame('done', a11))
     stream.close()
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     // A lista recarregada e a fonte: o `done` nao a inventa.
     expect(result.current.history).toEqual({ status: 'loading' })
@@ -1095,7 +1144,10 @@ describe('useTutorConversation: envio', () => {
       result.current.retry()
     })
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     expect(result.current.messages.map((m) => m.id)).toEqual([10, -1, 12])
 
@@ -1207,7 +1259,10 @@ describe('useTutorConversation: envio', () => {
     stream.push(sseFrame('done', a11))
     stream.close()
     await waitFor(() => {
-      expect(result.current.send).toEqual({ status: 'idle', finished: true })
+      expect(result.current.send).toEqual({
+        status: 'idle',
+        answer: expect.objectContaining({ role: 'tutor' }),
+      })
     })
     await waitFor(() => {
       expect(result.current.history).toEqual({ status: 'loaded', messages: [q10, a11] })

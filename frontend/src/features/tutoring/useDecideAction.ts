@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { postJson } from '../../shared/api/client'
+import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
 import { describeActionFailure, type ActionFailure, type ActionRecovery } from './actionFailure'
 import type { ActionErrorCode, ActionRead, ConfirmRead, RejectRead } from './types'
 import type { ActionKeys } from './useActionKeys'
@@ -35,6 +35,10 @@ const RECORDED_FAILURE: Record<ActionRecovery, ActionErrorCode | null> = {
  * `falhou` antes do 422/409 (spec do 1b, "Confirmar e recusar"; F17 do F). A
  * tela espelha isso sem outra ida a rede.
  *
+ * Os dois POSTs tem prazo (`MUTATION_TIMEOUT_MS`): um pedido pendurado vira falha
+ * `retry`, e a chave da confirmacao FICA -- a confirmacao pode ter executado no
+ * servidor, e so a mesma chave torna o reenvio seguro.
+ *
  * `missionCreated` e chamado em toda confirmacao bem-sucedida, de qualquer
  * `kind`: significa "o quadro mudou" (F22). O nome ficou para nao mexer em
  * testes que nao mudam de comportamento.
@@ -54,9 +58,11 @@ export function useDecideAction(
   const confirm = useCallback(() => {
     const operationId = keys.operationIdFor(action.id)
     setState({ status: 'confirming' })
-    postJson<ConfirmRead>(`/tutoring/actions/${String(action.id)}/confirm`, {
-      operation_id: operationId,
-    })
+    postJson<ConfirmRead>(
+      `/tutoring/actions/${String(action.id)}/confirm`,
+      { operation_id: operationId },
+      { timeoutMs: MUTATION_TIMEOUT_MS },
+    )
       .then((result) => {
         keys.release(action.id)
         setState({ status: 'idle' })
@@ -78,7 +84,11 @@ export function useDecideAction(
 
   const reject = useCallback(() => {
     setState({ status: 'rejecting' })
-    postJson<RejectRead>(`/tutoring/actions/${String(action.id)}/reject`, {})
+    postJson<RejectRead>(
+      `/tutoring/actions/${String(action.id)}/reject`,
+      {},
+      { timeoutMs: MUTATION_TIMEOUT_MS },
+    )
       .then((result) => {
         setState({ status: 'idle' })
         changed(result.action)

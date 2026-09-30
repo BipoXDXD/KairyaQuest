@@ -115,6 +115,11 @@ export interface MessageRead {
   client_message_id: string | null
   reply_to_id: number | null
   error_code: string | null
+  /**
+   * O modelo substituto que serviu a resposta depois de uma recusa (fallback
+   * do servidor, pendencia 174); `null` quando foi o modelo pedido.
+   */
+  fallback_model: string | null
   created_at: string
   actions: ActionRead[]
 }
@@ -152,7 +157,8 @@ export type PreStreamErrorCode =
  * `src/focusquest/modules/tutoring/domain.py`, a mao (pendencia 32). Nao estao
  * no `CodigoDeErro` porque nao passam por handler HTTP.
  */
-export type StreamErrorCode = 'provedor_indisponivel' | 'tempo_esgotado' | 'proposta_invalida'
+export type StreamErrorCode =
+  'provedor_indisponivel' | 'tempo_esgotado' | 'proposta_invalida' | 'resposta_recusada'
 
 /**
  * Os `code` de confirmar e recusar uma proposta (spec, "Confirmar e recusar").

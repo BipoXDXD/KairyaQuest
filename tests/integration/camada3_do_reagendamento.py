@@ -133,6 +133,7 @@ def main() -> None:
         modelo=settings.tutor_model,
         max_tokens=settings.tutor_max_tokens,
         timeout_segundos=settings.tutor_timeout_seconds,
+        fallback=settings.tutor_fallback,
     )
     agora = datetime.now(UTC)
     try:

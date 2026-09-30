@@ -1,7 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
-import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
+import { MUTATION_TIMEOUT_MS } from '../../shared/api/client'
+import {
+  jsonBody,
+  pendingUntilAborted,
+  requestsTo,
+  routeFetch,
+  type Route,
+} from '../../test/fetchRoutes'
 import type { RescheduleDraft } from './types'
 import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
@@ -83,6 +90,7 @@ describe('useRescheduleMission', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -427,5 +435,54 @@ describe('useRescheduleMission', () => {
       expect(result.current.state.status).toBe('rescheduled')
     })
     expect(result.current.lastRescheduled).toEqual(segunda)
+  })
+
+  it('um Reagendar pendurado falha ao fim do prazo, com a acao de repetir', async () => {
+    vi.useFakeTimers()
+    routeFetch({ [ROTA]: pendingUntilAborted })
+    const { result } = renderReschedule()
+
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+    })
+    expect(result.current.state).toEqual({ status: 'submitting' })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+
+    expect(result.current.state).toMatchObject({
+      status: 'failed',
+      failure: { recovery: 'retry' },
+    })
+  })
+
+  it('depois do prazo, o "tentar de novo" reenvia a MESMA chave', async () => {
+    // O prazo pode ter mudado no servidor sem que a resposta chegasse: so a
+    // mesma chave torna o reenvio seguro (F13).
+    vi.useFakeTimers()
+    const fetchMock = routeFetch({
+      [ROTA]: (init, call) => (call === 1 ? pendingUntilAborted(init, call) : sucesso(init, call)),
+    })
+    const { result } = renderReschedule()
+
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS)
+    })
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(result.current.state).toEqual({ status: 'rescheduled', mission: reagendada })
+    expect(sentKeys(fetchMock)).toEqual([K1, K1])
   })
 })

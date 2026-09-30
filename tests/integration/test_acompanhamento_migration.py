@@ -259,7 +259,9 @@ def test_o_downgrade_falha_alto_com_historico_gravado(
             versao = conexao.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        assert versao == REVISAO
+        # O banco fica como estava: na head do script, e nao na 0006 -- que
+        # deixou de ser a head com a 0007 (o mesmo ajuste do teste da 0005).
+        assert versao == ScriptDirectory.from_config(cfg).get_current_head()
     finally:
         command.upgrade(cfg, "head")
 
@@ -318,7 +320,9 @@ def test_o_downgrade_falha_alto_com_acao_de_reagendar_gravada(
             versao = conexao.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        assert versao == REVISAO
+        # O banco fica como estava: na head do script, e nao na 0006 -- que
+        # deixou de ser a head com a 0007 (o mesmo ajuste do teste da 0005).
+        assert versao == ScriptDirectory.from_config(cfg).get_current_head()
     finally:
         command.upgrade(cfg, "head")
 

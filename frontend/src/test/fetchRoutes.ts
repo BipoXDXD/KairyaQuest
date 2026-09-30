@@ -45,3 +45,15 @@ export function requestsTo(mock: Mock, key: string): RequestInit[] {
 export function jsonBody(init: RequestInit): unknown {
   return JSON.parse(String(init.body))
 }
+
+/**
+ * Uma rota que nunca responde e obedece ao `signal` do pedido, como o `fetch` de
+ * verdade: o abort rejeita com `AbortError`. So o prazo do `postJson` a destrava.
+ * Sem `signal` no pedido, ela fica pendurada para sempre.
+ */
+export const pendingUntilAborted: Route = (init) =>
+  new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => {
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+    })
+  })

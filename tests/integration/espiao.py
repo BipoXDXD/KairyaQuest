@@ -7,7 +7,9 @@ descarta. Fica do lado do CLIENTE, em `tests/`: nao e um modo de captura em
 chamada real continua o padrao.
 """
 
+import json
 from collections.abc import Iterator
+from typing import Any
 
 import httpx2
 
@@ -31,14 +33,20 @@ class _Copia(httpx2.SyncByteStream):
 
 
 class Espiao(httpx2.BaseTransport):
-    """Guarda o corpo CRU e os cabecalhos da ultima resposta."""
+    """Guarda o corpo CRU e os cabecalhos da ultima resposta, e do ultimo
+    pedido so o corpo e o `anthropic-beta` (pendencia 174) -- nunca os
+    cabecalhos inteiros, que levam a chave."""
 
     def __init__(self, interno: httpx2.BaseTransport) -> None:
         self._interno = interno
         self._bruto = bytearray()
         self._cabecalhos: httpx2.Headers | None = None
+        self._corpo_do_pedido: bytes | None = None
+        self._beta_do_pedido = ""
 
     def handle_request(self, request: httpx2.Request) -> httpx2.Response:
+        self._corpo_do_pedido = request.read()
+        self._beta_do_pedido = request.headers.get("anthropic-beta", "")
         resposta = self._interno.handle_request(request)
         assert isinstance(resposta.stream, httpx2.SyncByteStream)
         self._bruto = bytearray()
@@ -52,6 +60,17 @@ class Espiao(httpx2.BaseTransport):
 
     def close(self) -> None:
         self._interno.close()
+
+    def corpo_do_pedido(self) -> dict[str, Any] | None:
+        """O JSON do ultimo pedido, ou `None` antes do primeiro."""
+        if self._corpo_do_pedido is None:
+            return None
+        corpo: dict[str, Any] = json.loads(self._corpo_do_pedido)
+        return corpo
+
+    def betas_do_pedido(self) -> list[str]:
+        """Os betas que o ultimo pedido declarou no `anthropic-beta`."""
+        return [b.strip() for b in self._beta_do_pedido.split(",") if b.strip()]
 
     def linhas(self) -> Iterator[str]:
         """As linhas do corpo DECODIFICADO: a copia e do transporte, antes do
@@ -70,6 +89,7 @@ def provedor_espionado(
     modelo: str,
     max_tokens: int,
     timeout_segundos: float,
+    fallback: bool,
 ) -> tuple[ProvedorAnthropic, Espiao]:
     """O `ProvedorAnthropic` de producao, com o `Espiao` no transporte e sem
     tentativas do SDK (`max_retries=0`), para a conta das chamadas pagas ser
@@ -80,6 +100,7 @@ def provedor_espionado(
         modelo=modelo,
         max_tokens=max_tokens,
         timeout_segundos=timeout_segundos,
+        fallback=fallback,
     )
     espiao = Espiao(httpx2.HTTPTransport())
     # O construtor de producao nao aceita cliente HTTP (e nao deve: a captura

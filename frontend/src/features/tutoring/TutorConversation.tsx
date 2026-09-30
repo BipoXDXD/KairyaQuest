@@ -1,4 +1,6 @@
 import { Fragment, useId, type ReactElement, type Ref } from 'react'
+import { unansweredNote } from './answerOutcome'
+import { latestAnswerTo } from './conversationHistory'
 import { UNKNOWN_RESULT } from './messageFailure'
 import type { ActionRead, MessageRead, MessageStatus } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
@@ -9,9 +11,6 @@ export const UNAVAILABLE_TEXT = 'A Tifa está fora do ar: falta configurar o pro
 
 const GREETING =
   'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
-
-const HISTORY_RETRY_NOTE =
-  'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
 
 /**
  * A marca de cada estado de mensagem, EXAUSTIVA sobre o tipo: um estado novo
@@ -59,10 +58,25 @@ function MessageItem({
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
       <Author role={message.role} />
-      <p className="whitespace-pre-wrap">{message.content}</p>
+      {/* Sem texto (a recusada, ou a falha antes do primeiro pedaco), a bolha
+          fica com o autor e a marca: um paragrafo vazio so abriria espaco. */}
+      {message.content !== '' && (
+        <p data-testid="tutor-message-content" className="whitespace-pre-wrap">
+          {message.content}
+        </p>
+      )}
       {mark !== null && (
         <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
           {mark}
+        </p>
+      )}
+      {/* Pendencia 174: outro modelo escreveu a resposta (o fallback do
+          servidor depois de uma recusa). Dentro do `li`, para o leitor de
+          tela ler junto com a mensagem; sem alarme e sem a categoria. */}
+      {message.fallback_model !== null && (
+        <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-slate-400">
+          Respondida por um modelo substituto ({message.fallback_model}), porque o modelo principal
+          não pôde responder a esta pergunta.
         </p>
       )}
       {message.actions.map((action) => (
@@ -197,7 +211,9 @@ function FailureNotice({
   if (send.status === 'idle' && retryTarget !== null && canRetry) {
     return (
       <div className="text-sm text-slate-300">
-        <p data-testid="tutor-history-retry-note">{HISTORY_RETRY_NOTE}</p>
+        <p data-testid="tutor-history-retry-note">
+          {unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId))}
+        </p>
         {retryButton}
       </div>
     )

@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
@@ -33,6 +33,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoInalteradoError,
 )
+from focusquest.modules.missions.cycle_service import ler_ciclo
 from focusquest.modules.missions.domain import (
     MissionState,
     OrigemDoReagendamento,
@@ -47,10 +48,11 @@ from focusquest.modules.missions.service import (
     reagendar_missao,
 )
 from focusquest.modules.progression.service import ler_progresso
-from focusquest.modules.tutoring.context import montar_turno
+from focusquest.modules.tutoring.context import montar_turno, tardias_do_ciclo
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
     REAGENDAMENTO_INVALIDO,
+    RESPOSTA_LONGA,
     CodigoDoStream,
     EstadoDaAcao,
     Papel,
@@ -62,6 +64,7 @@ from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.persona import PERSONA
 from focusquest.modules.tutoring.provider import (
     Delta,
+    Parada,
     Proposta,
     Provedor,
     ProvedorIndisponivelError,
@@ -239,6 +242,12 @@ def preparar_turno(
         ],
         progresso=ler_progresso(session, user_id),
         historico=_historico(session, user_id, tutoria.historico),
+        # O ciclo lido no MESMO instante do turno (pendencia 117): a
+        # conclusao tardia depende do relogio, e um segundo `clock()` poderia
+        # cair do outro lado de uma meia-noite.
+        tardias=tardias_do_ciclo(
+            ler_ciclo(session, user_id, clock=lambda: agora), agora
+        ),
     )
     return ParaGerar(pergunta=pergunta, resposta_id=resposta.id, turno=turno)
 
@@ -254,9 +263,14 @@ def transmitir(
 
     O `RespostaConcluida` sai depois do commit, e o `RespostaFalhou` depois de
     a falha estar gravada: o cliente nunca age sobre algo que o banco nao tem.
-    A mensagem do `RespostaConcluida` e `completa` ou, quando o teto de tokens
-    cortou a resposta (`Fim(cortada=True)`, pendencia 45), `interrompida`, com
-    o texto parcial e sem acao.
+    A mensagem do `RespostaConcluida` e `completa` ou, quando um limite de
+    tamanho cortou a resposta (`Parada.CORTADA`, pendencias 45 e 120),
+    `interrompida` com `error_code` `resposta_longa`, o texto parcial e sem
+    acao. A recusa (`Parada.RECUSADA`) e `falhou` com `resposta_recusada`,
+    sem o texto parcial e sem acao. A recusa que o fallback do servidor
+    resolveu (pendencia 174) nao e `RECUSADA`: o parcial e o comeco da
+    resposta, que o substituto continuou, e o modelo dele vai para
+    `fallback_model`.
 
     `close()` no meio -- o que a desconexao do cliente faz, pelo invoucro da
     rota -- grava `interrompida` com o texto parcial e SEM acao, e fecha o
@@ -274,7 +288,8 @@ def transmitir(
     partes: list[str] = []
     proposta: Proposta | None = None
     terminou = False
-    cortada = False
+    parada = Parada.TERMINOU
+    substituto: str | None = None
     codigo: CodigoDoStream | None = None
     try:
         yield PerguntaGravada(preparo.pergunta)
@@ -289,7 +304,8 @@ def transmitir(
                     proposta = evento
                 else:
                     terminou = True
-                    cortada = evento.cortada
+                    parada = evento.parada
+                    substituto = evento.substituto
                 # Limite TOTAL, pelo relogio injetavel.
                 if clock() - inicio > tutoria.limite:
                     raise TempoEsgotadoError("a resposta passou do limite total")
@@ -310,11 +326,21 @@ def transmitir(
     if codigo is None and not terminou:
         # O corte que o SDK nao denuncia: sem `Fim`, a resposta nao terminou.
         codigo = CodigoDoStream.PROVEDOR_INDISPONIVEL
+    cortada = parada is Parada.CORTADA
     if cortada:
-        # O teto de tokens cortou a resposta (pendencia 45): o texto parcial
-        # fica gravado e visivel, mas `interrompida`, e a proposta -- que pode
-        # ter chegado pela metade -- nao vira acao.
+        # Um limite de tamanho cortou a resposta (pendencias 45 e 120): o texto
+        # parcial fica gravado e visivel, mas `interrompida`, e a proposta --
+        # que pode ter chegado pela metade -- nao vira acao.
         proposta = None
+    if parada is Parada.RECUSADA:
+        # A recusa (pendencia 120): o parcial que veio antes dela nao e
+        # resposta, e a orientacao da API e descarta-lo. A resposta vai a
+        # `falhou`, com o motivo -- e, com `codigo`, a proposta nem e validada.
+        # A recusa VENCE um limite total estourado: com o `Fim` recebido, o
+        # limite so pode ter passado nesse ultimo evento, e o motivo
+        # verdadeiro e a recusa (o `Fim` e o ultimo evento do provedor).
+        texto = ""
+        codigo = CodigoDoStream.RESPOSTA_RECUSADA
     if codigo is None and proposta is not None:
         dados = _validar_proposta(proposta)
         if dados is None:
@@ -326,7 +352,10 @@ def transmitir(
         return
 
     status = StatusDaMensagem.INTERROMPIDA if cortada else StatusDaMensagem.COMPLETA
-    desfecho = _completar(fabrica, preparo.resposta_id, texto, dados, clock(), status)
+    motivo = RESPOSTA_LONGA if cortada else None
+    desfecho = _completar(
+        fabrica, preparo.resposta_id, texto, dados, clock(), status, motivo, substituto
+    )
     if isinstance(desfecho, _Recolhida):
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
         yield RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
@@ -593,12 +622,38 @@ def _historico(session: Session, user_id: int, quantas: int) -> list[TutorMessag
     """As ultimas `quantas` mensagens COMPLETAS, em ordem cronologica.
 
     As `interrompida` e `falhou` ficam fora: meio texto confunde o modelo.
+    Fica fora tambem a PERGUNTA cuja tentativa mais recente foi recusada
+    (`resposta_recusada`): sem isso, o texto que disparou a recusa voltaria ao
+    modelo em todo turno seguinte. Ela continua gravada e na tela; reenviada,
+    a tentativa mais recente passa a ser a nova, e ela volta ao contexto.
     """
+    tentativa = aliased(TutorMessage)
+    posterior = aliased(TutorMessage)
+    recusada_por_ultimo = (
+        select(tentativa.id)
+        .where(
+            tentativa.reply_to_id == TutorMessage.id,
+            tentativa.status == StatusDaMensagem.FALHOU,
+            tentativa.error_code == CodigoDoStream.RESPOSTA_RECUSADA,
+            ~select(posterior.id)
+            .where(
+                posterior.reply_to_id == TutorMessage.id,
+                posterior.id > tentativa.id,
+            )
+            # Dois niveis de subconsulta: sem isto, o SQLAlchemy poe
+            # `tutor_messages` no FROM da interna e ela deixa de olhar a
+            # pergunta de fora (medido no SQL compilado).
+            .correlate_except(posterior)
+            .exists(),
+        )
+        .exists()
+    )
     recentes = session.scalars(
         select(TutorMessage)
         .where(
             TutorMessage.user_id == user_id,
             TutorMessage.status == StatusDaMensagem.COMPLETA,
+            ~recusada_por_ultimo,
         )
         .order_by(TutorMessage.id.desc())
         .limit(quantas)
@@ -633,12 +688,20 @@ def _completar(
     dados: DadosDaProposta | None,
     agora: datetime,
     status: StatusDaMensagem,
+    motivo: str | None,
+    substituto: str | None,
 ) -> TutorMessage | _Recolhida | _PreCondicaoRecusada:
     """Grava a resposta que chegou ao `Fim` e a acao proposta, na MESMA transacao.
 
-    `status` e `completa`, ou `interrompida` quando o teto de tokens cortou a
-    resposta (nesse caso `dados` e sempre None: nenhuma proposta, de criacao
-    ou de reagendamento, vira acao).
+    `status` e `completa`, ou `interrompida` quando um limite de tamanho
+    cortou a resposta -- e entao `motivo` e `RESPOSTA_LONGA`, gravado no
+    `error_code`, e `dados` e sempre None: nenhuma proposta, de criacao ou de
+    reagendamento, vira acao.
+
+    `substituto` e o modelo que serviu a resposta depois de uma recusa
+    (fallback, pendencia 174), gravado em `fallback_model`; `None` quando foi
+    o modelo pedido. So aqui: a resposta que nao veio (`falhou`, inclusive a
+    cadeia esgotada) nao grava quem tentou.
 
     A trava na linha evita a corrida com o recolhimento de orfaos: se a linha
     ja nao esta `gerando`, ela foi recolhida, e nada e gravado.
@@ -681,6 +744,8 @@ def _completar(
                 )
             )
         resposta.status = status
+        resposta.error_code = motivo
+        resposta.fallback_model = substituto
         session.commit()
         session.refresh(resposta)
         return resposta
@@ -711,8 +776,18 @@ def _payload_do_reagendamento(
 
 
 def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
-    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`."""
-    acao = session.get(TutorAction, action_id, with_for_update=True)
+    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`.
+
+    `populate_existing` junto com a trava, pelo motivo de
+    `buscar_para_escrever`: sem ele, uma acao que ja estava no identity map
+    desta sessao NAO e sobrescrita pela linha travada, e a decisao seria
+    tomada sobre o estado de antes da espera -- uma proposta recusada por
+    outra conexao seria executada (provado por
+    `test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`).
+    """
+    acao = session.get(
+        TutorAction, action_id, with_for_update=True, populate_existing=True
+    )
     if acao is None:
         raise AcaoNaoEncontradaError(f"acao {action_id} nao existe")
     mensagem = session.get(TutorMessage, acao.message_id)

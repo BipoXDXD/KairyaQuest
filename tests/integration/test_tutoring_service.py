@@ -7,15 +7,24 @@ INSTANTE de cada evento.
 
 import threading
 from collections.abc import Callable, Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import MensagemEmAndamentoError, OperacaoReutilizadaError
+from focusquest.modules.missions.cycle_service import (
+    NovaDiaria,
+    NovaEspecial,
+    criar_plano,
+)
+from focusquest.modules.missions.domain import MissionType
+from focusquest.modules.missions.models import Mission
+from focusquest.modules.missions.service import concluir_missao, iniciar_missao
 from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.tutoring.domain import (
+    RESPOSTA_LONGA,
     CodigoDoStream,
     EstadoDaAcao,
     StatusDaMensagem,
@@ -39,8 +48,10 @@ from integration.conftest import Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
 )
 
@@ -565,17 +576,27 @@ def test_listar_traz_as_acoes_embutidas(session: Session) -> None:
 # --- O corte pelo teto de tokens (pendencia 45) ----------------------------
 
 
-def test_resposta_cortada_por_max_tokens_fica_interrompida(
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_resposta_cortada_fica_interrompida_com_o_motivo(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
+    stop_reason: MotivoDeParada,
 ) -> None:
-    """O `message_stop` chegou, mas por `max_tokens`: o texto e parcial. Ele
-    fica gravado e visivel, marcado `interrompida` -- e nao `completa`, que o
-    faria parecer inteiro para a tela e para o historico do turno seguinte."""
+    """O `message_stop` chegou, mas por um limite de tamanho -- o teto de
+    tokens ou a janela de contexto (pendencias 45 e 120): o texto e parcial.
+    Ele fica gravado e visivel, marcado `interrompida` -- e nao `completa`,
+    que o faria parecer inteiro para a tela e para o historico do turno
+    seguinte.
+
+    O `error_code` `resposta_longa` e o que separa este corte das outras
+    `interrompida` (desconexao, orfa), de resultado desconhecido: e por ele que
+    a tela diz que a resposta ficou longa demais e sugere pedir por partes
+    (pendencia 122). A expectativa de antes era `error_code` nulo; ela mudou
+    porque o contrato passou a trazer o motivo do corte."""
     falso.roteiro = Roteiro(
-        blocos=(Texto(("Comeco da ", "explica")),), stop_reason="max_tokens"
+        blocos=(Texto(("Comeco da ", "explica")),), stop_reason=stop_reason
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
@@ -583,31 +604,51 @@ def test_resposta_cortada_por_max_tokens_fica_interrompida(
     assert isinstance(final, RespostaConcluida)
     assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
     assert final.mensagem.content == "Comeco da explica"
+    assert final.mensagem.error_code == RESPOSTA_LONGA
     vista = _resposta(fabrica, preparo.resposta_id)
     assert (vista.status, vista.content, vista.error_code) == (
         StatusDaMensagem.INTERROMPIDA,
         "Comeco da explica",
-        None,
+        RESPOSTA_LONGA,
     )
 
 
-def test_proposta_cortada_por_max_tokens_nao_vira_acao(
+def test_resposta_completa_nao_tem_motivo_de_corte(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
+    """O `resposta_longa` so vai para a cortada: a `completa` continua sem
+    `error_code`."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Inteira.",)),))
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("inteira")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.error_code) == (StatusDaMensagem.COMPLETA, None)
+
+
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_proposta_cortada_nao_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+    stop_reason: MotivoDeParada,
+) -> None:
     """Com o corte, a entrada da ferramenta pode estar pela metade: nenhuma
     acao nasce dela, mesmo que o que chegou passe no `MissionCreate`.
 
-    O roteiro -- um bloco de ferramenta COMPLETO seguido de `max_tokens` -- e o
+    O roteiro -- um bloco de ferramenta COMPLETO seguido do corte -- e o
     pior caso escolhido de proposito, e nao o formato que a API real costuma
     mandar (nela o corte cai no meio do bloco, e um bloco fechado termina em
     `tool_use`). Com uma entrada que passa na validacao, so a guarda do corte
     impede a acao: e exatamente o que um JSON parcial valido faria."""
     falso.roteiro = Roteiro(
         blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
-        stop_reason="max_tokens",
+        stop_reason=stop_reason,
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("teto-acao")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
@@ -616,6 +657,144 @@ def test_proposta_cortada_por_max_tokens_nao_vira_acao(
     assert final.mensagem.status is StatusDaMensagem.INTERROMPIDA
     assert final.mensagem.actions == []
     assert _resposta(fabrica, preparo.resposta_id).actions == []
+
+
+# --- A recusa (pendencia 120) ----------------------------------------------
+
+
+def test_a_pergunta_recusada_fica_fora_do_contexto_dos_turnos_seguintes(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A resposta recusada ja ficava fora do historico (so `completa` entra);
+    a PERGUNTA dela, `completa` por natureza, nao. Sem excluir, o texto que
+    disparou a recusa voltaria ao modelo em todo turno seguinte, fundido com a
+    pergunta nova. A pergunta continua gravada e na tela; so nao vai ao
+    modelo enquanto a tentativa mais recente dela for a recusada."""
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("x"), "X")
+        )
+    )
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("y"), "Y")
+        )
+    )
+
+    assert falso.recebidas[-1].corpo["messages"] == [{"role": "user", "content": "Y"}]
+    with fabrica() as sessao:
+        conteudos = [m.content for m in listar_mensagens(sessao, ESTUDANTE)]
+    assert "X" in conteudos
+
+
+def test_a_recusada_reenviada_leva_a_pergunta_e_a_respondida_volta_ao_contexto(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """O "Tentar de novo" da recusada manda a PROPRIA pergunta ao modelo: a
+    tentativa mais recente dela passa a ser a nova, e nao a recusada. Depois
+    de respondida, ela entra no contexto como qualquer pergunta."""
+    cid = conversa.id("x")
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    list(_transmitir(fabrica, tutoria, _preparar(fabrica, tutoria, cid, "X")))
+
+    falso.roteiro = Roteiro(blocos=(Texto(("agora sim",)),))
+    list(_transmitir(fabrica, tutoria, _preparar(fabrica, tutoria, cid, "X")))
+    assert falso.recebidas[-1].corpo["messages"] == [{"role": "user", "content": "X"}]
+
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    list(
+        _transmitir(
+            fabrica, tutoria, _preparar(fabrica, tutoria, conversa.id("z"), "Z")
+        )
+    )
+    assert falso.recebidas[-1].corpo["messages"] == [
+        {"role": "user", "content": "X"},
+        {"role": "assistant", "content": "agora sim"},
+        {"role": "user", "content": "Z"},
+    ]
+
+
+def test_resposta_recusada_falha_sem_o_texto_parcial(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """`stop_reason: refusal` chega num 200, com `message_stop`, e pode vir
+    DEPOIS de texto (a recusa no meio do stream). A orientacao da API e
+    descartar esse parcial: ele nao e resposta. A resposta vai a `falhou`
+    com `resposta_recusada`, SEM o texto -- e o `error` so sai depois de a
+    falha estar gravada, como toda falha do stream."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ", "recusado")),), stop_reason="refusal"
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa")))
+    eventos = list(_transmitir(fabrica, tutoria, preparo))
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        CodigoDoStream.RESPOSTA_RECUSADA,
+    )
+
+
+def test_a_recusa_vence_o_limite_total_estourado_no_proprio_fim(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """Com o `Fim` da recusa ja recebido, o limite total so pode ter estourado
+    nesse ultimo evento: a resposta chegou ate o fim, e o motivo verdadeiro e
+    a recusa. O codigo e `resposta_recusada`, coerente com o texto descartado
+    (a tela descarta o parcial por esse codigo) -- e nao `tempo_esgotado`, que
+    diria "demorou demais" e mostraria o parcial recusado ate a recarga."""
+    falso.roteiro = Roteiro(blocos=(Texto(("nao",)),), stop_reason="refusal")
+    # Tres leituras: o inicio, depois do `Delta` e depois do `Fim`. So a ultima
+    # passa do limite de 60 s.
+    leituras = iter([AGORA, AGORA, AGORA + timedelta(seconds=61)])
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa-tempo")))
+    eventos = list(
+        _transmitir(fabrica, tutoria, preparo, relogio=lambda: next(leituras))
+    )
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        CodigoDoStream.RESPOSTA_RECUSADA,
+    )
+
+
+def test_proposta_recusada_nao_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A recusa descarta tambem a proposta, mesmo valida: o pior caso, como no
+    corte -- a ferramenta inteira antes do `refusal`."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
+        stop_reason="refusal",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("recusa-acao")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert final == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.actions) == (StatusDaMensagem.FALHOU, [])
 
 
 def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
@@ -640,3 +819,261 @@ def test_reenvio_depois_do_corte_por_max_tokens_gera_resposta_nova(
     assert isinstance(final, RespostaConcluida)
     assert final.mensagem.status is StatusDaMensagem.COMPLETA
     assert len(falso.recebidas) == 2
+
+
+# --- O fallback do servidor para a recusa (pendencia 174) ------------------
+
+SUBSTITUTO = "claude-opus-4-8"
+
+
+def test_resposta_substituida_fica_completa_com_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """A recusa no meio que o substituto resolveu: o parcial NAO e descartado
+    (o substituto o continua), a resposta e `completa` e grava quem serviu."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ",)), Texto(("e continuacao",))),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert final.mensagem.fallback_model == SUBSTITUTO
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code, vista.fallback_model) == (
+        StatusDaMensagem.COMPLETA,
+        "Comeco e continuacao",
+        None,
+        SUBSTITUTO,
+    )
+
+
+def test_resposta_sem_substituicao_tem_modelo_nulo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    falso.roteiro = Roteiro(blocos=(Texto(("Normal.",)),))
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("sem-troca")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    assert _resposta(fabrica, preparo.resposta_id).fallback_model is None
+
+
+def test_substituida_e_cortada_fica_interrompida_com_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """Os dois fatos ao mesmo tempo: o substituto serviu E o teto cortou. E o
+    motivo de a coluna ser propria, e nao o `error_code` (pendencia 170)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Longa",)),),
+        substituicao=Substituicao(SUBSTITUTO),
+        stop_reason="max_tokens",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca-teto")))
+    list(_transmitir(fabrica, tutoria, preparo))
+
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.error_code, vista.fallback_model) == (
+        StatusDaMensagem.INTERROMPIDA,
+        RESPOSTA_LONGA,
+        SUBSTITUTO,
+    )
+
+
+def test_cadeia_esgotada_segue_recusada_sem_texto_nem_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    """O substituto tambem recusou: a recusa de hoje, com o parcial descartado
+    e sem modelo gravado -- a resposta nao veio."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial",)),),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+        stop_reason="refusal",
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("esgotada")))
+    eventos = list(_transmitir(fabrica, tutoria, preparo))
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.RESPOSTA_RECUSADA)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.fallback_model) == (
+        StatusDaMensagem.FALHOU,
+        "",
+        None,
+    )
+
+
+def test_proposta_do_substituto_vira_acao(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+) -> None:
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Toma",)), ChamadaDeFerramenta(PROPOSTA_VALIDA)),
+        substituicao=Substituicao(SUBSTITUTO, apos_blocos=1),
+    )
+    preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("troca-acao")))
+    *_, final = _transmitir(fabrica, tutoria, preparo)
+
+    assert isinstance(final, RespostaConcluida)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert vista.fallback_model == SUBSTITUTO
+    assert [acao.state for acao in vista.actions] == [EstadoDaAcao.PROPOSTA]
+
+
+# --- Conclusao tardia do ciclo no contexto (F25, pendencia 117) -------------
+
+# Semana de 21/09/2026. A diaria de quarta (23/09) iniciada as 23:50 de SP;
+# a conversa acontece quinta 00:10 de SP, depois do prazo dela.
+_SEGUNDA = date(2026, 9, 21)
+_QUARTA = _SEGUNDA + timedelta(days=2)
+_QUARTA_23H50 = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+_TERCA = _SEGUNDA + timedelta(days=1)
+_TERCA_23H50 = datetime(2026, 9, 23, 2, 50, tzinfo=UTC)
+_QUARTA_00H10 = datetime(2026, 9, 23, 3, 10, tzinfo=UTC)
+_QUARTA_MEIO_DIA = datetime(2026, 9, 23, 15, 0, tzinfo=UTC)
+_QUINTA_00H10 = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+_SEXTA_00H00 = datetime(2026, 9, 25, 3, 0, tzinfo=UTC)
+
+
+def _diaria_iniciada(sessao: Session, dia: date, inicio: datetime) -> Mission:
+    """O plano da semana (criado uma vez por teste) e a diaria de `dia`
+    iniciada em `inicio`."""
+    if sessao.scalar(select(Mission.id).where(Mission.day == dia)) is None:
+        criar_plano(
+            sessao,
+            user_id=ESTUDANTE,
+            semana=_SEGUNDA,
+            diarias=[NovaDiaria(f"Diaria {i}", "c", 2, 30) for i in range(7)],
+            especial=NovaEspecial("Especial", "c", 60),
+            clock=lambda: datetime(2026, 9, 21, 15, tzinfo=UTC),
+        )
+    diaria = sessao.scalars(
+        select(Mission).where(
+            Mission.user_id == ESTUDANTE,
+            Mission.mission_type == MissionType.DIARIA,
+            Mission.day == dia,
+        )
+    ).one()
+    return iniciar_missao(
+        sessao, ESTUDANTE, diaria.id, f"op-tardia-i-{dia}", clock=lambda: inicio
+    )
+
+
+def _diaria_de_quarta_iniciada_a_tempo(sessao: Session) -> Mission:
+    return _diaria_iniciada(sessao, _QUARTA, _QUARTA_23H50)
+
+
+def _sistema_do_turno(
+    sessao: Session,
+    tutoria: Tutoria,
+    agora: datetime,
+    relogio: Callable[[], datetime] | None = None,
+) -> str:
+    preparo = preparar_turno(
+        sessao,
+        user_id=ESTUDANTE,
+        client_message_id=f"tardia-{agora.isoformat()}",
+        conteudo="oi",
+        tutoria=tutoria,
+        clock=relogio or (lambda: agora),
+    )
+    return _para_gerar(preparo).turno.sistema
+
+
+def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """Pendencia 117: o contexto le o ciclo (`ler_ciclo`) com o MESMO instante
+    do turno e leva a diaria de ontem, com o limite, fora da lista de
+    pendentes (a do reagendamento)."""
+    quarta = _diaria_de_quarta_iniciada_a_tempo(session)
+
+    sistema = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+
+    assert (
+        f"- diária de ontem: Diaria 2 (em andamento desde "
+        f"{_QUARTA_23H50.isoformat()}; pode ser concluída antes de "
+        f"{_SEXTA_00H00.isoformat()}, que é 2026-09-25T00:00:00-03:00 em "
+        "São Paulo)"
+    ) in sistema.splitlines()
+    assert f"#{quarta.id}" not in sistema
+
+
+def test_a_diaria_de_hoje_iniciada_nao_e_tardia(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """Antes da meia-noite a diaria de quarta e a de HOJE, nao a de ontem."""
+    _diaria_de_quarta_iniciada_a_tempo(session)
+
+    sistema = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+
+    # O titulo da secao, e nao so "conclusao tardia": a persona tambem fala
+    # dela.
+    assert "Missões do ciclo em conclusão tardia" not in sistema
+
+
+def test_a_diaria_de_ontem_concluida_com_atraso_nao_entra_no_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """A diaria de terca iniciada as 23:50 e concluida as 00:10 de quarta: ao
+    meio-dia de quarta ela ainda e a `diaria_de_ontem` do `ler_ciclo` (o
+    cartao da recompensa fica ate o limite), mas nao ha o que lembrar."""
+    terca = _diaria_iniciada(session, _TERCA, _TERCA_23H50)
+    concluir_missao(
+        session, ESTUDANTE, terca.id, "op-tardia-c", clock=lambda: _QUARTA_00H10
+    )
+
+    sistema = _sistema_do_turno(session, tutoria, _QUARTA_MEIO_DIA)
+
+    assert "Missões do ciclo em conclusão tardia" not in sistema
+
+
+def test_a_diaria_de_ontem_fora_do_limite_nao_entra_no_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """A diaria de terca iniciada as 23:50 e nunca concluida: dentro do limite
+    (quarta, 23:55) ela entra; na quinta 00:10 o limite (quinta 00:00) passou,
+    ela ja nao e de ontem, e o turno nao a lembra."""
+    _diaria_iniciada(session, _TERCA, _TERCA_23H50)
+
+    dentro = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+    fora = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+
+    assert "- diária de ontem: Diaria 1 (" in dentro
+    assert "Missões do ciclo em conclusão tardia" not in fora
+
+
+def test_o_ciclo_e_lido_no_mesmo_instante_do_turno(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """O comentario do `preparar_turno`: o turno le a hora UMA vez. Com um
+    relogio que anda a cada chamada, o instante do turno e o ultimo microssegundo
+    antes do limite da diaria de quarta, e a chamada seguinte ja cai depois
+    dele -- ler o ciclo com o relogio, e nao com o `agora`, perderia a
+    diaria."""
+    _diaria_de_quarta_iniciada_a_tempo(session)
+    instantes = iter([_SEXTA_00H00 - timedelta(microseconds=1)])
+    depois = _SEXTA_00H00 + timedelta(minutes=1)
+
+    sistema = _sistema_do_turno(
+        session,
+        tutoria,
+        _SEXTA_00H00 - timedelta(microseconds=1),
+        relogio=lambda: next(instantes, depois),
+    )
+
+    assert "- diária de ontem: Diaria 2 (" in sistema

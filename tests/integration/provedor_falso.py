@@ -20,54 +20,66 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import TracebackType
 from typing import Any, Literal
 
-from anthropic.types import (
-    InputJSONDelta,
-    Message,
-    RawContentBlockDeltaEvent,
-    RawContentBlockStartEvent,
-    RawContentBlockStopEvent,
-    RawMessageDeltaEvent,
-    RawMessageStartEvent,
-    RawMessageStopEvent,
-    RawMessageStreamEvent,
-    SignatureDelta,
-    TextBlock,
-    TextDelta,
-    ThinkingBlock,
-    ThinkingDelta,
-    ToolUseBlock,
-    Usage,
+# Os tipos do endpoint BETA, que e o que o adaptador chama (pendencia 174): o
+# `content_block_start` estavel nao aceita o bloco `fallback`, e o uso estavel
+# nao tem `iterations`. O fio de uma resposta sem troca e o mesmo nos dois.
+from anthropic.types.beta import (
+    BetaFallbackBlock,
+    BetaFallbackMessageIterationUsage,
+    BetaInputJSONDelta,
+    BetaMessage,
+    BetaMessageDeltaUsage,
+    BetaMessageIterationUsage,
+    BetaRawContentBlockDeltaEvent,
+    BetaRawContentBlockStartEvent,
+    BetaRawContentBlockStopEvent,
+    BetaRawMessageDeltaEvent,
+    BetaRawMessageStartEvent,
+    BetaRawMessageStopEvent,
+    BetaRawMessageStreamEvent,
+    BetaSignatureDelta,
+    BetaTextBlock,
+    BetaTextDelta,
+    BetaThinkingBlock,
+    BetaThinkingDelta,
+    BetaToolUseBlock,
+    BetaUsage,
 )
-from anthropic.types.message_delta_usage import MessageDeltaUsage
-from anthropic.types.raw_message_delta_event import Delta as DeltaDaMensagem
+from anthropic.types.beta.beta_raw_message_delta_event import Delta as DeltaDaMensagem
+
+# O modelo que o falso diz ter respondido, e o PEDIDO quando ha substituicao.
+MODELO_DO_FALSO = "claude-opus-5"
 
 # O texto do bloco de thinking que o falso emite. Exportado para um teste
 # provar que ele NUNCA chega ao dominio (`test_anthropic_provider.py`).
 PENSAMENTO = "raciocinio interno do falso, que a tela nunca mostra"
 
 
-def _eventos_do_pensamento() -> list[RawMessageStreamEvent]:
-    """O bloco de thinking, sempre o indice 0, na forma que a API real mandou
-    (referencia da camada 3, 1b-2): `content_block_start` de um `thinking`
-    vazio, um `thinking_delta`, um `signature_delta` e o `content_block_stop`.
+def _eventos_do_pensamento(indice: int = 0) -> list[BetaRawMessageStreamEvent]:
+    """O bloco de thinking na forma que a API real mandou (referencia da
+    camada 3, 1b-2): `content_block_start` de um `thinking` vazio, um
+    `thinking_delta`, um `signature_delta` e o `content_block_stop`. E o
+    indice 0, salvo quando a troca de modelo vem antes (pendencia 174).
     O `ping` que a API manda no meio fica de fora: o SDK o descarta."""
     return [
-        RawContentBlockStartEvent(
+        BetaRawContentBlockStartEvent(
             type="content_block_start",
-            index=0,
-            content_block=ThinkingBlock(type="thinking", thinking="", signature=""),
+            index=indice,
+            content_block=BetaThinkingBlock(type="thinking", thinking="", signature=""),
         ),
-        RawContentBlockDeltaEvent(
+        BetaRawContentBlockDeltaEvent(
             type="content_block_delta",
-            index=0,
-            delta=ThinkingDelta(type="thinking_delta", thinking=PENSAMENTO),
+            index=indice,
+            delta=BetaThinkingDelta(type="thinking_delta", thinking=PENSAMENTO),
         ),
-        RawContentBlockDeltaEvent(
+        BetaRawContentBlockDeltaEvent(
             type="content_block_delta",
-            index=0,
-            delta=SignatureDelta(type="signature_delta", signature="assinatura-falsa"),
+            index=indice,
+            delta=BetaSignatureDelta(
+                type="signature_delta", signature="assinatura-falsa"
+            ),
         ),
-        RawContentBlockStopEvent(type="content_block_stop", index=0),
+        BetaRawContentBlockStopEvent(type="content_block_stop", index=indice),
     ]
 
 
@@ -75,7 +87,9 @@ def _eventos_do_pensamento() -> list[RawMessageStreamEvent]:
 # (`cortar_apos_eventos`, `segurar_apos_eventos`, `atrasar_evento`) contam
 # TODOS os eventos: com o thinking ligado, "depois do primeiro pedaco de
 # texto" deixou de ser 3 (message_start, content_block_start, delta) e passou
-# a ser `EVENTOS_DO_PENSAMENTO + 3`.
+# a ser `EVENTOS_DO_PENSAMENTO + 3`. O bloco `fallback` de uma `Substituicao`
+# nao fixa tambem conta: sao `EVENTOS_DA_TROCA` eventos (start e stop, sem
+# delta).
 EVENTOS_DO_PENSAMENTO = len(_eventos_do_pensamento())
 
 # O indice do evento logo DEPOIS do primeiro pedaco de texto, com o roteiro
@@ -85,6 +99,17 @@ EVENTOS_DO_PENSAMENTO = len(_eventos_do_pensamento())
 # comprovadamente no meio". O E2E (TypeScript) nao importa Python e escreve o
 # mesmo numero literal, 7 (`frontend/tests/e2e/tutoring.spec.ts`).
 APOS_O_PRIMEIRO_PEDACO = EVENTOS_DO_PENSAMENTO + 3
+
+
+# Os motivos de parada que um roteiro pode escolher. `max_tokens` e
+# `model_context_window_exceeded` cortam a resposta; `refusal` e a recusa (os
+# classificadores ou o proprio modelo recusaram), que chega tambem num 200 com
+# `message_stop` (pendencia 120). `stop_sequence` e `pause_turn` ficam de fora:
+# a conversa nao manda `stop_sequences` nem ferramenta de servidor, e sem eles
+# a API nao os emite.
+MotivoDeParada = Literal[
+    "end_turn", "tool_use", "max_tokens", "model_context_window_exceeded", "refusal"
+]
 
 
 @dataclass(frozen=True)
@@ -100,6 +125,39 @@ class ChamadaDeFerramenta:
 
     entrada: dict[str, Any]
     nome: str = "create_mission"
+
+
+@dataclass(frozen=True)
+class Substituicao:
+    """A recusa do modelo pedido e a troca pelo substituto (fallback, beta).
+
+    - `modelo`: o substituto, que o servidor escolheu.
+    - `apos_blocos`: quantos blocos do roteiro o modelo PEDIDO entrega antes
+      de recusar. 0 e a recusa antes de qualquer saida: o `message_start` ja
+      nomeia o substituto e o bloco `fallback` e o primeiro.
+    - `fixa`: o roteamento fixo da API (sticky): sem bloco `fallback`, o
+      `message_start` ja com o substituto e so a `fallback_message` no uso.
+    O `stop_reason` do roteiro e o da tentativa FINAL: `refusal` com
+    substituicao e a cadeia esgotada.
+    """
+
+    modelo: str = "claude-opus-4-8"
+    apos_blocos: int = 0
+    fixa: bool = False
+
+
+# Quantos eventos o bloco `fallback` poe no stream: start e stop, sem delta.
+EVENTOS_DA_TROCA = 2
+
+
+@dataclass(frozen=True)
+class _Troca:
+    """O lugar do bloco `fallback` entre os blocos do roteiro."""
+
+
+@dataclass(frozen=True)
+class _Pensamento:
+    """O lugar do bloco de thinking entre os blocos do roteiro."""
 
 
 @dataclass(frozen=True)
@@ -120,7 +178,9 @@ class Roteiro:
       (decisao do dono no ponto de parada 3 do 1b-2).
     - `stop_reason`: o motivo de parada do `message_delta`. `None` (padrao)
       deriva do roteiro: `tool_use` com ferramenta, `end_turn` sem ela. Um
-      valor explicito (ex.: `max_tokens`) deixa o teste roteirizar a parada.
+      valor explicito (`max_tokens`, `model_context_window_exceeded`,
+      `refusal`) deixa o teste roteirizar a parada.
+    - `substituicao`: a troca de modelo depois de uma recusa (pendencia 174).
     """
 
     blocos: tuple[Texto | ChamadaDeFerramenta, ...] = ()
@@ -130,7 +190,8 @@ class Roteiro:
     atrasar_cabecalhos: float = 0.0
     segurar_apos_eventos: int | None = None
     pensar: bool = True
-    stop_reason: Literal["end_turn", "tool_use", "max_tokens"] | None = None
+    stop_reason: MotivoDeParada | None = None
+    substituicao: Substituicao | None = None
 
 
 @dataclass(frozen=True)
@@ -139,78 +200,151 @@ class Recebida:
     cabecalhos: dict[str, str]
 
 
-def eventos_do_roteiro(roteiro: Roteiro) -> list[RawMessageStreamEvent]:
+def _uso_da_troca(
+    substituicao: Substituicao | None,
+) -> list[BetaMessageIterationUsage | BetaFallbackMessageIterationUsage] | None:
+    """O `usage.iterations` do `message_delta`: `None` sem troca, como na
+    resposta normal da API; com ela, uma entrada por tentativa, e a do
+    substituto e a `fallback_message` que o adaptador le."""
+    if substituicao is None:
+        return None
+    substituto = BetaFallbackMessageIterationUsage(
+        type="fallback_message",
+        model=substituicao.modelo,
+        input_tokens=1,
+        output_tokens=1,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    if substituicao.fixa:
+        return [substituto]
+    pedido = BetaMessageIterationUsage(
+        type="message",
+        model=MODELO_DO_FALSO,
+        input_tokens=1,
+        output_tokens=0,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    return [pedido, substituto]
+
+
+def _itens(
+    roteiro: Roteiro,
+) -> list[Texto | ChamadaDeFerramenta | _Troca | _Pensamento]:
+    """Os blocos na ordem do stream, com o thinking e a troca no lugar."""
+    itens: list[Texto | ChamadaDeFerramenta | _Troca | _Pensamento] = list(
+        roteiro.blocos
+    )
+    substituicao = roteiro.substituicao
+    troca_primeiro = False
+    if substituicao is not None and not substituicao.fixa:
+        itens.insert(substituicao.apos_blocos, _Troca())
+        troca_primeiro = substituicao.apos_blocos == 0
+    if roteiro.pensar:
+        # Na troca antes da saida, quem pensa e o substituto, depois do bloco.
+        itens.insert(1 if troca_primeiro else 0, _Pensamento())
+    return itens
+
+
+def eventos_do_roteiro(roteiro: Roteiro) -> list[BetaRawMessageStreamEvent]:
     """A sequencia de eventos de uma resposta, na ordem da API."""
     tem_ferramenta = any(isinstance(b, ChamadaDeFerramenta) for b in roteiro.blocos)
-    eventos: list[RawMessageStreamEvent] = [
-        RawMessageStartEvent(
+    substituicao = roteiro.substituicao
+    abre_com_o_substituto = substituicao is not None and (
+        substituicao.fixa or substituicao.apos_blocos == 0
+    )
+    eventos: list[BetaRawMessageStreamEvent] = [
+        BetaRawMessageStartEvent(
             type="message_start",
-            message=Message(
+            message=BetaMessage(
                 id="msg_falso",
                 type="message",
                 role="assistant",
-                model="claude-opus-5",
+                model=substituicao.modelo
+                if substituicao is not None and abre_com_o_substituto
+                else MODELO_DO_FALSO,
                 content=[],
                 stop_reason=None,
                 stop_sequence=None,
-                usage=Usage(input_tokens=1, output_tokens=0),
+                usage=BetaUsage(input_tokens=1, output_tokens=0),
             ),
         )
     ]
-    if roteiro.pensar:
-        eventos.extend(_eventos_do_pensamento())
-    # Com o thinking no indice 0, os blocos do roteiro comecam no 1.
-    for indice, bloco in enumerate(roteiro.blocos, start=int(roteiro.pensar)):
-        if isinstance(bloco, Texto):
+    for indice, bloco in enumerate(_itens(roteiro)):
+        if isinstance(bloco, _Pensamento):
+            eventos.extend(_eventos_do_pensamento(indice))
+            continue
+        if isinstance(bloco, _Troca):
+            assert substituicao is not None
             eventos.append(
-                RawContentBlockStartEvent(
+                BetaRawContentBlockStartEvent(
                     type="content_block_start",
                     index=indice,
-                    content_block=TextBlock(type="text", text=""),
+                    # `model_validate` com o nome do fio (`from`): o
+                    # construtor por palavra-chave com `from_=` reprova.
+                    content_block=BetaFallbackBlock.model_validate(
+                        {
+                            "type": "fallback",
+                            "from": {"model": MODELO_DO_FALSO},
+                            "to": {"model": substituicao.modelo},
+                            "trigger": {"type": "refusal", "category": "cyber"},
+                        }
+                    ),
+                )
+            )
+        elif isinstance(bloco, Texto):
+            eventos.append(
+                BetaRawContentBlockStartEvent(
+                    type="content_block_start",
+                    index=indice,
+                    content_block=BetaTextBlock(type="text", text=""),
                 )
             )
             eventos.extend(
-                RawContentBlockDeltaEvent(
+                BetaRawContentBlockDeltaEvent(
                     type="content_block_delta",
                     index=indice,
-                    delta=TextDelta(type="text_delta", text=pedaco),
+                    delta=BetaTextDelta(type="text_delta", text=pedaco),
                 )
                 for pedaco in bloco.pedacos
             )
         else:
             eventos.append(
-                RawContentBlockStartEvent(
+                BetaRawContentBlockStartEvent(
                     type="content_block_start",
                     index=indice,
-                    content_block=ToolUseBlock(
+                    content_block=BetaToolUseBlock(
                         type="tool_use", id=f"toolu_{indice}", name=bloco.nome, input={}
                     ),
                 )
             )
             eventos.append(
-                RawContentBlockDeltaEvent(
+                BetaRawContentBlockDeltaEvent(
                     type="content_block_delta",
                     index=indice,
-                    delta=InputJSONDelta(
+                    delta=BetaInputJSONDelta(
                         type="input_json_delta", partial_json=json.dumps(bloco.entrada)
                     ),
                 )
             )
         eventos.append(
-            RawContentBlockStopEvent(type="content_block_stop", index=indice)
+            BetaRawContentBlockStopEvent(type="content_block_stop", index=indice)
         )
     eventos.append(
-        RawMessageDeltaEvent(
+        BetaRawMessageDeltaEvent(
             type="message_delta",
             delta=DeltaDaMensagem(
                 stop_reason=roteiro.stop_reason
                 or ("tool_use" if tem_ferramenta else "end_turn"),
                 stop_sequence=None,
             ),
-            usage=MessageDeltaUsage(output_tokens=1),
+            usage=BetaMessageDeltaUsage(
+                output_tokens=1, iterations=_uso_da_troca(substituicao)
+            ),
         )
     )
-    eventos.append(RawMessageStopEvent(type="message_stop"))
+    eventos.append(BetaRawMessageStopEvent(type="message_stop"))
     return eventos
 
 
@@ -264,9 +398,10 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
                 liberar.wait(timeout=30)
             if roteiro.atrasar_evento and roteiro.atrasar_evento[0] == indice:
                 time.sleep(roteiro.atrasar_evento[1])
-            self.wfile.write(
-                f"event: {evento.type}\ndata: {evento.model_dump_json()}\n\n".encode()
-            )
+            # `by_alias`: o bloco `fallback` sai com `from`, o nome do fio, e
+            # nao `from_`, o do Python (medido; os outros eventos nao mudam).
+            dados = evento.model_dump_json(by_alias=True)
+            self.wfile.write(f"event: {evento.type}\ndata: {dados}\n\n".encode())
             self.wfile.flush()
 
     def log_message(self, format: str, *args: Any) -> None:
