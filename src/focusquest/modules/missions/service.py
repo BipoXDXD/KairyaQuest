@@ -8,7 +8,7 @@ tornar tudo permanente para o dono da transacao.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -20,19 +20,28 @@ from focusquest.core.errors import (
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
+    PrazoDerivadoError,
+    PrazoExpiradoError,
+    PrazoInalteradoError,
 )
 from focusquest.modules.missions.cycle_domain import NAO_CONCLUIVEIS
 from focusquest.modules.missions.cycle_service import ler_missao
 from focusquest.modules.missions.domain import (
     MissionState,
     MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
+    ProblemaDoNovoPrazo,
     TipoDeOperacao,
+    problema_do_novo_prazo,
+    validar_reagendamento,
     validar_transicao,
 )
 from focusquest.modules.missions.models import (
     Mission,
     MissionEvidence,
     MissionOperation,
+    MissionReschedule,
 )
 from focusquest.modules.progression.service import registrar_conclusao
 
@@ -292,6 +301,98 @@ def iniciar_missao(
         MissionOperation(operation_id=operation_id, mission_id=missao.id, kind=INICIO)
     )
     _gravar_operacao(session, operation_id)
+    return missao
+
+
+def reagendar_missao(
+    session: Session,
+    user_id: int,
+    mission_id: int,
+    operation_id: str,
+    *,
+    novo_prazo: datetime,
+    motivo: MotivoDoReagendamento,
+    origem: OrigemDoReagendamento,
+    clock: Clock,
+) -> Mission:
+    """Troca o prazo e grava o elo do historico (F6-F13).
+
+    A ordem e a da conclusao (trava, relogio, ocultacao, reenvio), e TODAS as
+    recusas vem antes da primeira escrita: a confirmacao da Tifa (F17) grava a
+    falha da acao depois de uma recusa daqui, na mesma transacao, e nada desta
+    funcao pode ter ido ao banco antes dela.
+
+    O `novo_prazo` e normalizado para UTC na entrada, pelo mesmo motivo do
+    `MissionCreate.deadline`: com `expire_on_commit=False` a primeira resposta
+    serializaria o instante COM o offset que o cliente mandou (`-03:00`), e o
+    reenvio, lido do banco, o mesmo instante em `Z` -- o "mesmo corpo" (F13)
+    nao seria o mesmo. Normalizar aqui vale para a tela e para a Tifa.
+    """
+    novo_prazo = novo_prazo.astimezone(UTC)
+    missao = buscar_para_escrever(session, user_id, mission_id, travar=True)
+    agora = clock()
+    lida = ler_missao(session, missao, agora)
+
+    ja_feita = _operacao_gravada(session, operation_id)
+    if ja_feita is not None:
+        _exigir_mesma_operacao(ja_feita, mission_id, operation_id, REAGENDAMENTO)
+        gravado = session.scalars(
+            select(MissionReschedule).where(
+                MissionReschedule.operation_id == operation_id
+            )
+        ).one()
+        # Mesma chave, OUTRO pedido: chave gasta (F13). Instantes comparam
+        # como instantes.
+        if (gravado.new_deadline, gravado.reason) != (novo_prazo, motivo):
+            raise OperacaoReutilizadaError(_reuso(operation_id))
+        return missao
+
+    if missao.mission_type is not MissionType.AVULSA:
+        raise PrazoDerivadoError(
+            f"missao {mission_id} e {missao.mission_type.value}: o prazo vem do ciclo"
+        )
+    validar_reagendamento(missao.state)
+    problema = problema_do_novo_prazo(novo_prazo, lida.deadline, agora)
+    if problema is ProblemaDoNovoPrazo.NO_PASSADO:
+        raise PrazoExpiradoError("o novo prazo precisa estar no futuro")
+    if problema is ProblemaDoNovoPrazo.INALTERADO:
+        raise PrazoInalteradoError("o novo prazo e igual ao prazo atual")
+
+    # A operacao primeiro: a linha do historico tem FK para ela.
+    session.add(
+        MissionOperation(
+            operation_id=operation_id, mission_id=missao.id, kind=REAGENDAMENTO
+        )
+    )
+    _gravar_operacao(session, operation_id)
+    missao.reschedules.append(
+        MissionReschedule(
+            operation_id=operation_id,
+            previous_deadline=lida.deadline,
+            new_deadline=novo_prazo,
+            reason=motivo,
+            origin=origem,
+            rescheduled_at=agora,
+        )
+    )
+    missao.deadline = novo_prazo
+    session.flush()
+    return missao
+
+
+def missao_reagendavel(
+    session: Session, user_id: int, mission_id: int
+) -> Mission | None:
+    """A missao que a Tifa pode propor reagendar (F16), ou `None`. Sem trava:
+    e so a pre-condicao da PROPOSTA; a confirmacao revalida tudo com a trava."""
+    missao = session.get(Mission, mission_id)
+    if (
+        missao is None
+        or missao.user_id != user_id
+        or missao.mission_type is not MissionType.AVULSA
+        or missao.state is MissionState.CONCLUIDA
+    ):
+        return None
     return missao
 
 

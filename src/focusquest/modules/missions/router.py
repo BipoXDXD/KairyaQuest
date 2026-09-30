@@ -18,12 +18,14 @@ from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import SessaoDaRequisicao
 from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa, ler_missao
+from focusquest.modules.missions.domain import OrigemDoReagendamento
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
     MissionComplete,
     MissionCompletionRead,
     MissionCreate,
     MissionRead,
+    MissionRescheduleIn,
     MissionStart,
 )
 from focusquest.modules.missions.service import (
@@ -32,6 +34,7 @@ from focusquest.modules.missions.service import (
     criar_missao,
     iniciar_missao,
     listar_missoes,
+    reagendar_missao,
 )
 from focusquest.modules.progression.schemas import RewardRead
 from focusquest.modules.progression.service import recompensa_da_missao
@@ -139,6 +142,28 @@ def iniciar(
     que ja existia, e o reenvio da mesma chave devolve o mesmo corpo."""
     missao = iniciar_missao(
         session, USUARIO_UNICO, mission_id, dados.operation_id, clock=clock
+    )
+    session.commit()
+    return MissionRead.da_leitura(ler_missao(session, missao, clock()))
+
+
+@router.post("/{mission_id}/reschedule")
+def reagendar(
+    mission_id: IdDaMissao,
+    dados: MissionRescheduleIn,
+    session: SessaoDaRequisicao,
+    clock: Annotated[Clock, Depends(get_clock)],
+) -> MissionRead:
+    """Reagenda o prazo pela tela (F6), com `origin = usuario`."""
+    missao = reagendar_missao(
+        session,
+        USUARIO_UNICO,
+        mission_id,
+        dados.operation_id,
+        novo_prazo=dados.new_deadline,
+        motivo=dados.reason,
+        origem=OrigemDoReagendamento.USUARIO,
+        clock=clock,
     )
     session.commit()
     return MissionRead.da_leitura(ler_missao(session, missao, clock()))

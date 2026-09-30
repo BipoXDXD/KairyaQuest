@@ -59,7 +59,8 @@ class ProvedorNaoConfiguradoError(DomainError):
 
 
 class PrazoExpiradoError(DomainError):
-    """O prazo proposto pela Tifa ja passou na hora de confirmar."""
+    """O prazo proposto pela Tifa ja passou na hora de confirmar -- ou o novo
+    prazo de um reagendamento nao esta no futuro (F9): o mesmo `code` nos dois."""
 
 
 class NaoPertenceAoUsuarioError(DomainError):
@@ -113,3 +114,13 @@ class AvaliacaoEmAndamentoError(DomainError):
     tentativa que outro pedido ja retomou nao grava nada, e quem pediu fica
     sabendo que a avaliacao segue em outro pedido.
     """
+
+
+class PrazoInalteradoError(DomainError):
+    """O novo prazo e o prazo atual (F9): o pedido esta certo, mas nao muda
+    nada, e gravar um reagendamento vazio sujaria o historico."""
+
+
+class PrazoDerivadoError(DomainError):
+    """A diaria e a especial tem prazo DERIVADO do ciclo (C10), sem coluna para
+    mudar: nao se reagendam (F7)."""

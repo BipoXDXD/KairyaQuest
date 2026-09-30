@@ -33,13 +33,19 @@ from focusquest.modules.missions.domain import (
     FalhaDaAvaliacao,
     MissionState,
     MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
     Veredito,
     Verificacao,
     duracao_real,
     verificacao_da_missao,
     xp_da_missao,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+    MissionReschedule,
+)
 from focusquest.modules.progression.schemas import RewardRead
 
 # O teto da dificuldade aceita na ENTRADA. Escolhido em 5 por dois motivos que
@@ -253,6 +259,47 @@ class MissionStart(BaseModel):
     operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
 
 
+class MissionRescheduleIn(BaseModel):
+    """O corpo do reagendamento (F6): a chave, o novo prazo e o motivo.
+
+    `extra="forbid"`, como `EvidenceIn`: um campo a mais (uma `note` que ninguem
+    guardaria) seria ignorado em silencio, e quem o mandou acharia que foi
+    gravado. O motivo e um dos tres do README (F10); sem texto livre.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    new_deadline: PrazoComFuso
+    reason: MotivoDoReagendamento
+
+
+class RescheduleRead(BaseModel):
+    """Um elo do historico de prazos, como a API o publica (F12)."""
+
+    previous_deadline: datetime
+    new_deadline: datetime
+    reason: MotivoDoReagendamento
+    origin: OrigemDoReagendamento
+    rescheduled_at: datetime
+
+    @classmethod
+    def do_reagendamento(cls, linha: MissionReschedule) -> RescheduleRead:
+        return cls(
+            previous_deadline=linha.previous_deadline,
+            new_deadline=linha.new_deadline,
+            reason=linha.reason,
+            origin=linha.origin,
+            rescheduled_at=linha.rescheduled_at,
+        )
+
+
+def _historico_de_prazos(missao: Mission) -> list[RescheduleRead]:
+    """O historico em ordem de gravacao (a do relacionamento). Escrito uma vez,
+    porque os dois construtores de `MissionRead` o usam."""
+    return [RescheduleRead.do_reagendamento(r) for r in missao.reschedules]
+
+
 class MissionComplete(BaseModel):
     """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
 
@@ -300,6 +347,7 @@ class MissionRead(BaseModel):
     verification: Verificacao | None
     evidence: EvidenceRead | None
     evaluation: EvaluationSummaryRead | None
+    reschedules: list[RescheduleRead]
 
     @classmethod
     def da_leitura(cls, lida: MissaoLida) -> MissionRead:
@@ -318,6 +366,7 @@ class MissionRead(BaseModel):
             started_at=missao.started_at,
             completed_at=missao.completed_at,
             **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
         )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -375,5 +424,6 @@ class MissionCompletionRead(MissionRead):
             started_at=missao.started_at,
             completed_at=missao.completed_at,
             **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
             reward=recompensa,
         )
