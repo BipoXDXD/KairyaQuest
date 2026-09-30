@@ -718,8 +718,18 @@ def _payload_do_reagendamento(
 
 
 def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
-    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`."""
-    acao = session.get(TutorAction, action_id, with_for_update=True)
+    """A acao do usuario, travada (`FOR UPDATE`), ou `AcaoNaoEncontradaError`.
+
+    `populate_existing` junto com a trava, pelo motivo de
+    `buscar_para_escrever`: sem ele, uma acao que ja estava no identity map
+    desta sessao NAO e sobrescrita pela linha travada, e a decisao seria
+    tomada sobre o estado de antes da espera -- uma proposta recusada por
+    outra conexao seria executada (provado por
+    `test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`).
+    """
+    acao = session.get(
+        TutorAction, action_id, with_for_update=True, populate_existing=True
+    )
     if acao is None:
         raise AcaoNaoEncontradaError(f"acao {action_id} nao existe")
     mensagem = session.get(TutorMessage, acao.message_id)

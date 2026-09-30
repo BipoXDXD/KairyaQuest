@@ -174,8 +174,17 @@ def _corrente(
 
     Sem ocultacao nem dono: a tentativa so existe porque `abrir_tentativa` ja
     conferiu os dois, e o que muda entre as duas transacoes e so a avaliacao.
+
+    `populate_existing` com a trava, como em `buscar_para_escrever`: sem ele, a
+    missao (e a avaliacao dela) ja no identity map desta sessao voltaria com o
+    que era antes da trava, e o resultado atrasado gravaria `concluida` sobre a
+    tentativa que outra conexao encerrou (provado por
+    `test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`; a
+    avaliacao relida vem junto, medido).
     """
-    missao = session.get(Mission, tentativa.mission_id, with_for_update=True)
+    missao = session.get(
+        Mission, tentativa.mission_id, with_for_update=True, populate_existing=True
+    )
     if missao is None:
         raise MissaoNaoEncontradaError(f"missao {tentativa.mission_id} nao existe")
     avaliacao = missao.evaluation

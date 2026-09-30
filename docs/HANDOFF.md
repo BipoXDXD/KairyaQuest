@@ -4761,6 +4761,47 @@ ledger; nenhum é bug esquecido.
     altera a sequência da referência da conversa
     (`tests/integration/referencia_da_api_real.json`, não regravada). Medir
     exige chamada paga, que este lote não fez por instrução.
+181. ~~**`_buscar_acao` e `evaluation_records._corrente` travavam sem
+    `populate_existing`** (candidata da revisão da T7).~~ **Resolvida em
+    2026-09-29 (lote g-back, branch `wt/f-e2e`).** O risco é real para as
+    funções, embora nenhum caminho de produção o alcance hoje: a rota de
+    confirmar/recusar abre sessão nova e `_buscar_acao` é a primeira leitura
+    dela; a transação 2 de `avaliar_missao` também abre sessão nova e
+    `_corrente` é a primeira leitura. Mas `session.get(...,
+    with_for_update=True)` emite o `SELECT ... FOR UPDATE` e, sem
+    `populate_existing`, **não** sobrescreve um objeto já no identity map — o
+    mesmo M3 da T4 que `buscar_para_escrever` já corrigia. Medido com o objeto
+    carregado de propósito antes (RED visto nos dois): (a) a ação recusada por
+    outra conexão foi **executada** — `confirmar_acao` não levantou
+    `TransicaoIlegalError` e reagendou a missão por cima da recusa
+    (`test_a_acao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_tutoring_reagendamento.py`); (b) o resultado atrasado da avaliação
+    tentou gravar `concluida` sobre a tentativa que outra conexão encerrou como
+    `falhou` — só o CHECK `ck_mission_evaluations_falha_com_codigo` barrou, com
+    `IntegrityError` (500), porque o `error_code` já estava gravado; numa
+    tentativa retomada (sem `error_code`) nada barraria
+    (`test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava`, em
+    `test_evaluation_concorrencia.py`). Correção: `populate_existing=True`
+    junto com a trava nos dois. No `_corrente`, o `populate_existing` da missão
+    também traz a avaliação relida (o teste passa só com ele, medido).
+182. **`tutoring/service.py::_completar` trava a resposta sem
+    `populate_existing`.** Mesmo padrão da 181, mas numa sessão própria da
+    `fabrica` em que a trava é a primeira leitura: não há objeto no identity
+    map para ficar velho, e nenhum chamador passa sessão. Não corrigido nem
+    testado por isso; vira risco se `_completar` passar a receber uma sessão
+    já usada.
+183. **Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+    body vai para o titulo do cartao"** (`frontend/src/features/missions/
+    MissionList.test.tsx`). Visto reprovar **uma** vez, no `make check` do
+    hook de um commit do lote g-back (2026-09-29, worktree `f-e2e`), com o
+    `document.activeElement` ainda no `body`; o mesmo arquivo passou 5 de 5
+    rodado sozinho logo depois (91/91), e o gate inteiro passou nos outros
+    commits do lote. Suspeita, não medida: a asserção do foco vem logo depois
+    do `findByText('Missão iniciada.')`, e o foco é movido depois dessa
+    renderização — sob a carga do gate (pytest, Vitest e E2E de vários
+    worktrees ao mesmo tempo) a ordem pode inverter; um `waitFor` na asserção
+    resolveria se a suspeita estiver certa. Não corrigido aqui: é frontend,
+    fora deste lote, e mudar o teste sem reproduzir a falha seria adivinhar.
 130. **Revisar o runner fixado do CI em 2026-12-01** (lote de infraestrutura,
     2026-09-29; consequência da pendência 99). Os jobs rodam em
     `ubuntu-24.04`, fixado, e a fixação não se atualiza sozinha: alguém precisa

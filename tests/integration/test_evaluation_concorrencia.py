@@ -31,11 +31,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import AvaliacaoEmAndamentoError
 from focusquest.modules.evaluation.service import avaliar_missao
-from focusquest.modules.missions.domain import EstadoDaAvaliacao, Veredito
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    Veredito,
+)
 from focusquest.modules.missions.evaluation_records import (
     ResultadoGravado,
     Tentativa,
     abrir_tentativa,
+    registrar_falha,
     registrar_resultado,
 )
 from focusquest.modules.missions.models import Mission, MissionEvaluation
@@ -415,3 +420,58 @@ def test_a_resposta_atrasada_e_a_retomada_disputam_a_segunda_transacao(
         "claude-opus-5",
     )
     assert (avaliacao.verdict, avaliacao.feedback) == (Veredito.ATENDE, "de A")
+
+
+def test_a_avaliacao_ja_carregada_na_sessao_e_relida_depois_da_trava(
+    banco_migrado: Engine, missao_com_evidencia: int
+) -> None:
+    """Candidata da revisao da T7: `_corrente` travava a missao com `FOR
+    UPDATE` sem `populate_existing`. Com a missao E a avaliacao ja no identity
+    map, a transacao 2 decidia sobre a `avaliando` de ANTES da trava. Hoje
+    nenhum caminho de producao carrega as duas antes (`avaliar_missao` abre
+    sessao nova), entao o teste as carrega de proposito: outra conexao encerra
+    a tentativa como `falhou` e commita, e o resultado atrasado tem de ser
+    tentativa superada (`None`) -- e nao gravar `concluida` por cima da
+    falha."""
+    with Session(bind=banco_migrado, expire_on_commit=False) as abertura:
+        aberta = abrir_tentativa(
+            abertura,
+            ESTUDANTE,
+            missao_com_evidencia,
+            clock=lambda: AGORA,
+            modelo="claude-opus-5",
+            limite_do_orfao=timedelta(seconds=90),
+        )
+        abertura.commit()
+    assert isinstance(aberta, Tentativa)
+
+    with Session(bind=banco_migrado) as atrasada:
+        missao = atrasada.get(Mission, missao_com_evidencia)
+        assert missao is not None and missao.evaluation is not None
+        assert missao.evaluation.state is EstadoDaAvaliacao.AVALIANDO
+        with Session(bind=banco_migrado) as outra:
+            assert registrar_falha(
+                outra,
+                aberta,
+                falha=FalhaDaAvaliacao.TEMPO_ESGOTADO,
+                clock=lambda: AGORA,
+            )
+            outra.commit()
+        gravada = registrar_resultado(
+            atrasada,
+            aberta,
+            veredito=Veredito.ATENDE,
+            feedback="Bom resumo.",
+            clock=lambda: AGORA,
+        )
+        assert gravada is None
+        atrasada.commit()
+
+    with Session(bind=banco_migrado) as leitura:
+        avaliacao = leitura.scalars(
+            select(MissionEvaluation).where(
+                MissionEvaluation.mission_id == missao_com_evidencia
+            )
+        ).one()
+        assert avaliacao.state is EstadoDaAvaliacao.FALHOU
+        assert avaliacao.error_code is FalhaDaAvaliacao.TEMPO_ESGOTADO
