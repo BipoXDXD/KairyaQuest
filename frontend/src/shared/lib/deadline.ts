@@ -34,3 +34,20 @@ const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
 export function formatDeadline(iso: string): string {
   return deadlineFormatter.format(new Date(iso))
 }
+
+const civilDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * A data CIVIL ("2026-09-29") do instante em `America/Sao_Paulo`: o mesmo dia
+ * que o `cycle_domain.py` chama de `dia_de`. A localidade `en-CA` e escolhida
+ * so porque o formato curto dela e o ISO (`AAAA-MM-DD`); o texto nunca vai
+ * para a tela.
+ */
+export function saoPauloCivilDate(iso: string): string {
+  return civilDateFormatter.format(new Date(iso))
+}

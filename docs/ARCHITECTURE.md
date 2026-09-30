@@ -168,7 +168,7 @@ FocusQuest/
 │   │   │   │   ├── civilDate.test.ts      # (C, Task 2; movido de features/missions/, git mv, decisão K10)
 │   │   │   │   ├── civilDate.ts           # formatCivilDate; civilWeekday (o dia da semana, sem fuso) (C, Task 2)
 │   │   │   │   ├── deadline.test.ts
-│   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta
+│   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta; saoPauloCivilDate (o dia civil de SP do instante, F25)
 │   │   │   └── types/              # tipos compartilhados por mais de uma feature (C, docs/ARCHITECTURE.md §5)
 │   │   │       ├── mission.ts      # (E, Task 6: Verification, Verdict, EvaluationState, Evidence, EvaluationSummary e os campos verification/evidence/evaluation de Mission, sem bonus_xp, EM1) Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport)
 │   │   │       └── reward.ts       # Reward, UnlockedAchievement, MissionCompletion — o contrato do reward da conclusão, usado por features/missions (D, Task 7); reward é `Reward | null | undefined` de propósito (Ruling R6)
@@ -815,7 +815,7 @@ modelo×migração — os `UNIQUE`, o índice parcial e a FK composta não
 |---|---|---|
 | `POST /api/plans` | `201` com `PlanRead` | Cria o plano da semana: sete diárias e uma especial. Reenvio responde `409 plano_existente` — nunca duplica (README §6). |
 | `GET /api/plans/current` | `200` com `{"plan": PlanRead \| null}` | O plano da semana atual, na **mesma forma** do 201 acima (decisão P2) — "sem plano" é estado, não erro. |
-| `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco, a especial (se disponível, ou iniciada na janela e ainda em conclusão tardia) e `late_daily`, a diária de ontem iniciada a tempo que ainda pode ser concluída até o fim de hoje (F25, ou `null`). |
+| `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco, `special` e `late_daily`. `special` é a especial do marco mais recente enquanto a janela está aberta (disponível ou já concluída) e, depois do fim da janela, só se foi iniciada dentro dela: em conclusão tardia até o fim do dia seguinte ao fim da janela, disponível ou concluída com atraso (F25); fora disso, `null`. `late_daily` é a diária de ontem iniciada no dia dela: disponível enquanto pode ser concluída (até o fim de hoje) e, depois de concluída com atraso, **continua presente, concluída, até o fim de hoje**; `null` para a de ontem pendente, a concluída no dia ou a inexistente (F25). |
 
 **A forma da trilha (`PlanRead`)**: `{"week_start", "days": [{"day",
 "availability", "mission"} × 7], "special": {"availability", "progress",

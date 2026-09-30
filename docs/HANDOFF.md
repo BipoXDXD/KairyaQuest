@@ -4213,6 +4213,29 @@ ledger; nenhum é bug esquecido.
     `test_diaria_iniciada_no_dia_e_concluida_depois_da_meia_noite`, que fixa a
     regra nova — a mudança desse teste é a mudança principal do incremento.
     Nenhuma dependência nova.
+    **Correções da revisão (aprovada com ressalvas):** teste de integração do
+    marco aberto pela conclusão tardia (domingo anterior + seg–sex + sábado
+    iniciado às 23:50 e concluído no domingo: sem especial antes, especial
+    `disponivel` com prazo 28/09 00:00 depois, e ela conclui às 23:59 de
+    domingo); especial depois do limite → `409 missao_expirada`; reenvio da
+    conclusão tardia depois do limite → o mesmo sucesso; o limite em três dias
+    de horário de verão de 2018/2019 (um deles com 25 h). No Quartel-General, a
+    diária de ontem concluída com atraso troca o texto de "ainda pode ser
+    concluída" pelo de concluída, e a especial em conclusão tardia ganha o mesmo
+    motivo à vista (`saoPauloCivilDate`, em `shared/lib/deadline.ts`, compara o
+    dia civil do prazo com `today`).
+116. **Sem E2E da conclusão tardia (F25).** Iniciar às 23:50 e concluir depois
+    da meia-noite é provado por serviço, API e componente
+    (`test_iniciar_missao.py`, `test_cycle_service.py`, `test_cycle_api.py`,
+    `CycleSection.test.tsx`), mas nenhum cenário do Playwright atravessa a
+    meia-noite: o E2E usa o relógio real da API (`core/clock.py`, `system_now`), e simular a virada exigiria
+    um relógio controlável no ambiente do E2E, que não existe hoje.
+117. **A Tifa não sabe da conclusão tardia (F25).** o contexto da conversa
+    (`tutoring/service.py`, via `listar_missoes`) só traz avulsas não
+    concluídas, então não há texto errado no contexto; mas a
+    Tifa não vai lembrar a pessoa de que a diária de ontem, iniciada a tempo,
+    ainda pode ser concluída hoje. Liga-se à pendência 55 (a Tifa continua sem
+    ver o ciclo).
 
 ## Próximo incremento
 

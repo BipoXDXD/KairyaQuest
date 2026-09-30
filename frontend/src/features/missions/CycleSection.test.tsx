@@ -269,7 +269,7 @@ describe('CycleSection', () => {
         name: 'Diária de ontem — iniciada a tempo',
       }),
     ).toBeInTheDocument()
-    expect(secao).toHaveTextContent(
+    expect(within(secao).getByTestId('cycle-late-daily-reason')).toHaveTextContent(
       'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.',
     )
     expect(
@@ -283,6 +283,75 @@ describe('CycleSection', () => {
     await waitFor(() => {
       expect(requestsTo(fetchMock, 'POST /api/missions/30/complete')).toHaveLength(1)
     })
+  })
+
+  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida (m1)', async () => {
+    const concluidaComAtraso: Mission = {
+      ...diariaDeOntem,
+      state: 'concluida',
+      availability: 'concluida',
+      completed_at: '2026-09-23T03:10:00Z',
+    }
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ late_daily: concluidaComAtraso })),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    expect(within(secao).getByTestId('cycle-late-daily-reason')).toHaveTextContent(
+      'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.',
+    )
+    expect(secao).not.toHaveTextContent('ainda pode ser concluída')
+  })
+
+  it('a especial em conclusao tardia ganha o motivo a vista (m2)', async () => {
+    const especialTardia: Mission = {
+      ...especial,
+      state: 'em_andamento',
+      started_at: '2026-09-29T02:50:00Z',
+      deadline: '2026-09-29T00:00:00-03:00',
+    }
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ today: '2026-09-29', mission: null, special: especialTardia })),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
+      'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.',
+    )
+    expect(within(secao).getByTestId('mission-complete')).toBeInTheDocument()
+  })
+
+  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo (m2)', async () => {
+    const especialConcluidaTarde: Mission = {
+      ...especial,
+      state: 'concluida',
+      availability: 'concluida',
+      started_at: '2026-09-29T02:50:00Z',
+      completed_at: '2026-09-29T13:00:00Z',
+      deadline: '2026-09-29T00:00:00-03:00',
+    }
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(
+          ciclo({ today: '2026-09-29', mission: null, special: especialConcluidaTarde }),
+        ),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
+      'Concluída depois do fim da janela — você começou a tempo.',
+    )
+  })
+
+  it('a especial dentro da janela nao mostra motivo de atraso', async () => {
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+    })
+    render(<CycleSection />)
+    await screen.findByTestId('cycle-special')
+    expect(screen.queryByTestId('cycle-special-late-reason')).toBeNull()
   })
 
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {
