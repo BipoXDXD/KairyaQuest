@@ -4860,6 +4860,34 @@ ledger; nenhum é bug esquecido.
      a conversa" o cartão remonta e não repete o aviso (de propósito). Não
      coberto pelo axe do E2E, que só vê violações estáticas.
 
+**Criadas pelo lote f-prop (2026-09-30)**
+
+195. ~~**Teste intermitente no frontend: "depois de iniciar, o foco que caiu no
+     body vai para o titulo do cartao"** (a **183 do lote g-back**, registrada
+     no HANDOFF do worktree `f-e2e`; este item a resolve).~~ **Resolvida em
+     2026-09-30 (lote f-prop).** Defeito do **teste**, não do componente:
+     o `MissionCard` move o foco num `useEffect`, e a asserção corria antes
+     dele. O texto "Missão iniciada." nasce no mesmo commit que o estado
+     `started`, mas o efeito é **passivo** e o React o roda depois, num
+     agendamento próprio; o `findByText` (dentro do `asyncWrapper` do
+     Testing Library, com `IS_REACT_ACT_ENVIRONMENT` desligado) resolve pelo
+     `MutationObserver` assim que o texto aparece, e sob carga cai entre o
+     commit e o efeito — `document.activeElement` ainda é o `body`. Em
+     produção o efeito roda logo em seguida e o foco chega ao título (o
+     componente está certo). **Medido** (`vitest run ... -t`, 20 processos
+     ocupando os 10 núcleos): sem carga, 0/30 no teste isolado e 0/30 no
+     arquivo inteiro; sob carga, 4/90 (2/30 + 2/60). O irmão
+     "depois de concluir, o foco nao se perde para o body" tinha a mesma
+     forma (espera `evaluation-panel`, depois olha o foco) e reprovou 1/60.
+     **Correção:** os dois passaram a esperar o próprio foco com
+     `await waitFor(() => expect(document.activeElement).toBe(titulo))`;
+     as asserções são as mesmas, só a espera muda. Depois: 0/60 e 0/60 sob a
+     mesma carga. Mutação: trocar o `titleRef.current?.focus()` de cada efeito
+     por nada faz o respectivo teste reprovar (`activeElement` no `body`).
+     Os casos de "o foco não é roubado" não foram tocados: eles reprovam com
+     a guarda `document.activeElement === document.body` removida (3/3 sem
+     carga), e a corrida deles, se houver, dá falso verde, não falso vermelho.
+
 ## Próximo incremento
 
 **Ordem decidida pelo dono em 2026-09-18**, seguindo o README §14: **A → 1b →
