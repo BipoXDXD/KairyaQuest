@@ -184,6 +184,7 @@ describe('App', () => {
             verification: null,
             evidence: null,
             evaluation: null,
+            reschedules: [],
           },
         },
       ],

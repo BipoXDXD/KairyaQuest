@@ -450,4 +450,60 @@ describe('CycleSection', () => {
     expect(within(secao).getByTestId('mission-state')).toHaveTextContent('Concluída')
     expect(within(secao).queryByTestId('mission-complete')).toBeNull()
   })
+
+  describe('incremento F: o prazo da diaria e da especial vem do ciclo (F7)', () => {
+    it('a diaria e a especial NAO oferecem "Reagendar prazo" nem historico', async () => {
+      routeFetch({
+        'GET /api/cycle': () =>
+          Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      })
+      render(<CycleSection />)
+      await screen.findByTestId('cycle-special')
+      const cartoes = screen.getAllByTestId('mission-item')
+      expect(cartoes).toHaveLength(2)
+      for (const cartao of cartoes) {
+        expect(within(cartao).queryByTestId('reschedule-toggle')).toBeNull()
+        expect(within(cartao).queryByRole('button', { name: 'Reagendar prazo' })).toBeNull()
+        expect(within(cartao).queryByTestId('mission-reschedule-status')).toBeNull()
+      }
+    })
+
+    it('a diaria disponivel oferece Iniciar, e o inicio mostra "Em andamento" no cartao do ciclo', async () => {
+      const iniciada: Mission = {
+        ...diaria,
+        state: 'em_andamento',
+        started_at: '2026-09-23T15:00:00Z',
+      }
+      routeFetch({
+        'GET /api/cycle': () => Response.json(ciclo()),
+        'POST /api/missions/31/start': () => Response.json(iniciada),
+      })
+      render(<CycleSection />)
+      const cartao = await screen.findByTestId('mission-item')
+
+      fireEvent.click(within(cartao).getByTestId('mission-start'))
+
+      expect(await within(cartao).findByText('Missão iniciada.')).toBeInTheDocument()
+      expect(within(cartao).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+    })
+
+    it('a falha "refresh" do Iniciar oferece "Atualizar a missão de hoje", que recarrega o ciclo', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/cycle': () => Response.json(ciclo()),
+        'POST /api/missions/31/start': () =>
+          Response.json({ detail: 'x', code: 'missao_expirada' }, { status: 409 }),
+      })
+      render(<CycleSection />)
+      const cartao = await screen.findByTestId('mission-item')
+      fireEvent.click(within(cartao).getByTestId('mission-start'))
+
+      const atualizar = await within(cartao).findByTestId('mission-start-reload')
+      expect(atualizar).toHaveTextContent('Atualizar a missão de hoje')
+      fireEvent.click(atualizar)
+
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
+      })
+    })
+  })
 })
