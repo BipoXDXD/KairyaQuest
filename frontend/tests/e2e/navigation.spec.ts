@@ -19,6 +19,10 @@ const daily = (id: number, day: string): Mission => ({
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 })
 const oldCycle: Cycle = {
   today: '2026-10-04',
@@ -26,6 +30,7 @@ const oldCycle: Cycle = {
   streak: 3,
   days_to_milestone: 4,
   special: null,
+  late_daily: null,
 }
 const newCycle: Cycle = {
   today: '2026-10-05',
@@ -33,6 +38,7 @@ const newCycle: Cycle = {
   streak: 0,
   days_to_milestone: 7,
   special: null,
+  late_daily: null,
 }
 const oldPlan = {
   plan: {

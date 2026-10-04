@@ -405,3 +405,17 @@ def test_pergunta_com_identificador_unicode_no_teto_e_persistida_sem_trim(
         assert pergunta.client_message_id == identificador
         assert pergunta.content == "Oi"
     assert len(falso.recebidas) == 1
+
+
+@pytest.mark.parametrize("acao", ["start", "reschedule"])
+def test_chave_de_inicio_ou_reagendamento_com_nul_recusa_antes_de_efeitos(
+    cliente: TestClient, session: Session, acao: str
+) -> None:
+    """As operacoes do F preservam a mesma regra de idempotencia persistivel."""
+    corpo: dict[str, Any] = {"operation_id": "a\x00b"}
+    if acao == "reschedule":
+        corpo.update(new_deadline="2026-09-23T15:00:00Z", reason="falta_de_tempo")
+    antes = _contagens(session)
+    resposta = cliente.post(f"/api/missions/1/{acao}", json=corpo)
+    _recusa(resposta, ["operation_id"])
+    assert _contagens(session) == antes

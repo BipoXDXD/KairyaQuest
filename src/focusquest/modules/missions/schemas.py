@@ -13,14 +13,16 @@ banco. Um campo derivado que fosse armazenado seria mais um lugar para discordar
 da fonte -- e a fonte, aqui, e a dificuldade e o par de instantes.
 """
 
-from datetime import UTC, date, datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, TypedDict
 
 from pydantic import (
     AfterValidator,
     AwareDatetime,
     BaseModel,
+    ConfigDict,
     Field,
+    StringConstraints,
     computed_field,
 )
 
@@ -28,10 +30,23 @@ from focusquest.core.validation import TextoPersistivel
 from focusquest.modules.missions.cycle_domain import Availability
 from focusquest.modules.missions.cycle_service import MissaoLida
 from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
     MissionState,
     MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
+    Veredito,
+    Verificacao,
     duracao_real,
+    prazo_em_utc,
+    verificacao_da_missao,
     xp_da_missao,
+)
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+    MissionReschedule,
 )
 from focusquest.modules.progression.schemas import RewardRead
 
@@ -91,13 +106,15 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
     test_sessao_em_utc.py`).
     """
-    try:
-        prazo.astimezone(UTC)
-    except OverflowError as exc:
-        raise ValueError(
-            "prazo fora da faixa representavel quando convertido para UTC"
-        ) from exc
+    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica;
+    # o valor devolvido e o ORIGINAL, com o offset que o cliente mandou.
+    prazo_em_utc(prazo)
     return prazo
+
+
+# O instante com fuso e representavel em UTC: a regra do `deadline` da criacao,
+# com nome, porque o reagendamento (F9) e a proposta da Tifa (F15) usam a MESMA.
+PrazoComFuso = Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
 
 
 class MissionCreate(BaseModel):
@@ -128,7 +145,7 @@ class MissionCreate(BaseModel):
     completion_criterion: TextoPersistivel = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
-    deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
+    deadline: PrazoComFuso
 
 
 # Teto TECNICO de um identificador gerado pelo cliente (`operation_id` aqui e
@@ -138,17 +155,169 @@ class MissionCreate(BaseModel):
 TAMANHO_MAXIMO_DO_IDENTIFICADOR = 200
 
 
+TAMANHO_MAXIMO_DA_EVIDENCIA = 4000
+TAMANHO_MAXIMO_DO_LINK = 2000
+TAMANHO_MAXIMO_DO_FEEDBACK = 1500
+
+
+def _sem_nul(valor: str) -> str:
+    """Recusa o byte NUL: o PostgreSQL nao o guarda em `text`, e sem esta guarda
+    a entrega viraria um 500 em vez de um 422 que aponta o campo."""
+    if "\x00" in valor:
+        raise ValueError("o texto nao pode conter o caractere NUL")
+    return valor
+
+
+TextoDaEvidencia = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TAMANHO_MAXIMO_DA_EVIDENCIA
+    ),
+    AfterValidator(_sem_nul),
+]
+# `(?i)`: HTTPS:// colado de um celular e o mesmo endereco (EM2). `\S+`: um
+# espaco no meio nao e endereco nenhum. O backend NUNCA abre o link (E3).
+LinkDaEvidencia = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        max_length=TAMANHO_MAXIMO_DO_LINK,
+        pattern=r"(?i)^https?://\S+$",
+    ),
+    AfterValidator(_sem_nul),
+]
+
+
+class EvidenceIn(BaseModel):
+    """A evidencia de uma conclusao (E1, E3). `extra="forbid"`: um campo a mais
+    seria ignorado em silencio, e quem o mandou acharia que foi gravado."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: TextoDaEvidencia
+    link: LinkDaEvidencia | None = None
+
+
+class EvidenceRead(BaseModel):
+    """A evidencia como a API a publica."""
+
+    text: str
+    link: str | None
+
+
+class EvaluationSummaryRead(BaseModel):
+    """O resumo da avaliacao da Tifa que acompanha a missao (sem `bonus_xp`, EM1)."""
+
+    state: EstadoDaAvaliacao
+    verdict: Veredito | None
+    feedback: str | None
+    error_code: FalhaDaAvaliacao | None
+    model: str
+    finished_at: datetime | None
+
+    @classmethod
+    def da_avaliacao(cls, avaliacao: MissionEvaluation) -> EvaluationSummaryRead:
+        return cls(
+            state=avaliacao.state,
+            verdict=avaliacao.verdict,
+            feedback=avaliacao.feedback,
+            error_code=avaliacao.error_code,
+            model=avaliacao.model,
+            finished_at=avaliacao.finished_at,
+        )
+
+
+class _CamposDaEntrega(TypedDict):
+    """Os tres campos com o tipo real, para o mypy checar o `**` de quem os usa."""
+
+    verification: Verificacao | None
+    evidence: EvidenceRead | None
+    evaluation: EvaluationSummaryRead | None
+
+
+def _campos_da_entrega(
+    missao: Mission,
+) -> _CamposDaEntrega:
+    """Os tres campos novos de `MissionRead`, escritos uma vez so."""
+    return {
+        "verification": verificacao_da_missao(
+            missao.state, missao.evidence is not None
+        ),
+        "evidence": None
+        if missao.evidence is None
+        else EvidenceRead(text=missao.evidence.text, link=missao.evidence.link),
+        "evaluation": None
+        if missao.evaluation is None
+        else EvaluationSummaryRead.da_avaliacao(missao.evaluation),
+    }
+
+
+class MissionStart(BaseModel):
+    """O corpo do inicio: so a chave de idempotencia (F2)."""
+
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
+
+
+class MissionRescheduleIn(BaseModel):
+    """O corpo do reagendamento (F6): a chave, o novo prazo e o motivo.
+
+    `extra="forbid"`, como `EvidenceIn`: um campo a mais (uma `note` que ninguem
+    guardaria) seria ignorado em silencio, e quem o mandou acharia que foi
+    gravado. O motivo e um dos tres do README (F10); sem texto livre.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
+    new_deadline: PrazoComFuso
+    reason: MotivoDoReagendamento
+
+
+class RescheduleRead(BaseModel):
+    """Um elo do historico de prazos, como a API o publica (F12)."""
+
+    previous_deadline: datetime
+    new_deadline: datetime
+    reason: MotivoDoReagendamento
+    origin: OrigemDoReagendamento
+    rescheduled_at: datetime
+
+    @classmethod
+    def do_reagendamento(cls, linha: MissionReschedule) -> RescheduleRead:
+        return cls(
+            previous_deadline=linha.previous_deadline,
+            new_deadline=linha.new_deadline,
+            reason=linha.reason,
+            origin=linha.origin,
+            rescheduled_at=linha.rescheduled_at,
+        )
+
+
+def _historico_de_prazos(missao: Mission) -> list[RescheduleRead]:
+    """O historico em ordem de gravacao (a do relacionamento). Escrito uma vez,
+    porque os dois construtores de `MissionRead` o usam."""
+    return [RescheduleRead.do_reagendamento(r) for r in missao.reschedules]
+
+
 class MissionComplete(BaseModel):
-    """O identificador de operacao que torna a conclusao idempotente.
+    """O corpo da conclusao: o identificador de operacao e a evidencia opcional.
+
+    O identificador torna a conclusao idempotente.
 
     Quem o gera e o cliente, e e por isso que ele entra no corpo: o servidor
     nao tem como saber, sozinho, se a segunda requisicao e um reenvio da
-    primeira ou uma tentativa nova.
+    primeira ou uma tentativa nova. A `evidence`, quando vem, faz parte da
+    operacao: o mesmo identificador com outra evidencia e chave gasta.
     """
 
     operation_id: TextoPersistivel = Field(
         min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
     )
+    evidence: EvidenceIn | None = None
 
 
 class MissionRead(BaseModel):
@@ -180,6 +349,10 @@ class MissionRead(BaseModel):
     state: MissionState
     started_at: datetime | None
     completed_at: datetime | None
+    verification: Verificacao | None
+    evidence: EvidenceRead | None
+    evaluation: EvaluationSummaryRead | None
+    reschedules: list[RescheduleRead]
 
     @classmethod
     def da_leitura(cls, lida: MissaoLida) -> MissionRead:
@@ -197,6 +370,8 @@ class MissionRead(BaseModel):
             state=missao.state,
             started_at=missao.started_at,
             completed_at=missao.completed_at,
+            **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
         )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -253,5 +428,7 @@ class MissionCompletionRead(MissionRead):
             state=missao.state,
             started_at=missao.started_at,
             completed_at=missao.completed_at,
+            **_campos_da_entrega(missao),
+            reschedules=_historico_de_prazos(missao),
             reward=recompensa,
         )

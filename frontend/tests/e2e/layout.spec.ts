@@ -23,6 +23,10 @@ const mission: Mission = {
   completed_at: null,
   xp: 100,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 }
 const proposal: ActionRead = {
   id: 9200,
@@ -46,6 +50,7 @@ const message: MessageRead = {
   client_message_id: null,
   reply_to_id: 9299,
   error_code: null,
+  fallback_model: null,
   created_at: '2026-10-04T12:00:00Z',
   actions: [],
 }
@@ -67,6 +72,7 @@ async function layoutData(
       streak: 0,
       days_to_milestone: 7,
       special: null,
+      late_daily: null,
     },
     '/api/progress': {
       xp_total: 0,
@@ -227,6 +233,62 @@ for (const width of [320, 375]) {
       await page.screenshot({ path: testInfo.outputPath('proposal-long.png') })
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
+    })
+
+    test('evidência, avaliação e formulário de reagendamento cabem no cartão', async ({ page }) => {
+      await layoutData(page, [
+        mission,
+        {
+          ...mission,
+          id: 9101,
+          state: 'concluida',
+          availability: 'concluida',
+          completed_at: '2026-10-04T12:00:00Z',
+          verification: 'com_evidencia',
+          evidence: { text: LONG_TEXT, link: LONG_TEXT },
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: LONG_TEXT,
+            error_code: null,
+            model: 'modelo-teste',
+            finished_at: '2026-10-04T12:00:00Z',
+          },
+        },
+      ])
+      await page.goto('/')
+      await readableText(page.getByTestId('evaluation-evidence-text'), LONG_TEXT)
+      await readableText(page.getByTestId('evaluation-evidence-link'), LONG_TEXT)
+      await readableText(page.getByTestId('evaluation-feedback'), LONG_TEXT)
+      await page.getByTestId('reschedule-toggle').click()
+      await expect(page.getByTestId('reschedule-deadline')).toBeVisible()
+      await noHorizontalOverflow(page)
+      await accessible(page)
+    })
+
+    test('a proposta de reagendamento quebra a URL dentro da folha', async ({ page }) => {
+      const reschedule: ActionRead = {
+        id: 9201,
+        kind: 'reschedule_mission',
+        state: 'proposta',
+        payload: {
+          mission_id: mission.id,
+          instructions: LONG_TEXT,
+          previous_deadline: mission.deadline,
+          new_deadline: '2027-04-02T12:00:00Z',
+          reason: 'falta_de_tempo',
+        },
+        mission_id: null,
+        error_code: null,
+      }
+      await layoutData(page, [], [{ ...message, actions: [reschedule] }])
+      await page.goto('/')
+      await page.getByTestId('tutor-sheet-open').click()
+      await readableText(page.getByTestId('reschedule-instructions'), LONG_TEXT)
+      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+      await noHorizontalOverflow(page)
+      await accessible(page)
     })
 
     test('a conversa quebra a URL e preserva o rascunho ao fechar', async ({ page }, testInfo) => {

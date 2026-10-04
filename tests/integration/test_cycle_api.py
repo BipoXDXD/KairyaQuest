@@ -12,8 +12,12 @@ from sqlalchemy.orm import Session
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_session
 from focusquest.main import app
-from focusquest.modules.missions.domain import MissionType
-from focusquest.modules.missions.models import Mission
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    MissionType,
+)
+from focusquest.modules.missions.models import Mission, MissionEvaluation
 
 SEGUNDA = date(2026, 9, 21)
 QUARTA = SEGUNDA + timedelta(days=2)
@@ -326,6 +330,8 @@ def test_ciclo_sem_plano(client: TestClient, relogio: list[datetime]) -> None:
         "streak": 0,
         "days_to_milestone": 7,
         "special": None,
+        # F25: campo novo do contrato (aditivo), nulo sem diaria tardia.
+        "late_daily": None,
     }
 
 
@@ -403,6 +409,38 @@ def test_diaria_perdida_responde_409_missao_expirada(
     assert (resposta.status_code, resposta.json()["code"]) == (409, "missao_expirada")
 
 
+def test_diaria_iniciada_a_tempo_conclui_depois_da_meia_noite_pela_api(
+    client: TestClient, relogio: list[datetime], session: Session
+) -> None:
+    """F25 pela API: iniciada quarta 23:50, a diaria aparece em `late_daily`
+    na quinta 00:10 (a `mission` e a de quinta), e concluir responde 200 com a
+    duracao real e o XP normal da diaria -- e nao `409 missao_expirada`."""
+    client.post("/api/plans", json=_corpo())
+    mission_id = _id_da_diaria(session, QUARTA)
+    relogio[0] = datetime(2026, 9, 24, 2, 50, tzinfo=UTC)
+    iniciar = client.post(
+        f"/api/missions/{mission_id}/start", json={"operation_id": "op-api-i"}
+    )
+    assert iniciar.status_code == 200
+
+    relogio[0] = datetime(2026, 9, 24, 3, 10, tzinfo=UTC)
+    ciclo = client.get("/api/cycle").json()
+    assert ciclo["mission"]["day"] == "2026-09-24"
+    assert ciclo["late_daily"]["id"] == mission_id
+    assert ciclo["late_daily"]["availability"] == "disponivel"
+    assert ciclo["streak"] == 0
+
+    resposta = _concluir(client, mission_id, "op-api-c")
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["state"] == "concluida"
+    assert corpo["actual_duration_minutes"] == 20
+    assert corpo["reward"]["xp_awarded"] == 40  # dificuldade 2, o XP de sempre
+    depois = client.get("/api/cycle").json()
+    assert depois["late_daily"]["availability"] == "concluida"
+    assert depois["streak"] == 1
+
+
 def test_reenvio_depois_da_meia_noite_pela_api(
     client: TestClient, relogio: list[datetime], session: Session
 ) -> None:
@@ -474,3 +512,83 @@ def test_a_listagem_tem_so_avulsas_com_os_campos_novos(
         None,
         "disponivel",
     )
+
+
+def test_o_ciclo_e_a_trilha_publicam_verificacao_evidencia_e_avaliacao(
+    client: TestClient, relogio: list[datetime], session: Session
+) -> None:
+    """A diaria concluida com evidencia sai com os tres campos novos pelos
+    DOIS caminhos que montam `MissionRead` para o ciclo: `GET /api/cycle` e a
+    trilha `GET /api/plans/current`."""
+    client.post("/api/plans", json=_corpo())
+    missao = client.get("/api/cycle").json()["mission"]
+    assert (missao["verification"], missao["evidence"], missao["evaluation"]) == (
+        None,
+        None,
+        None,
+    )
+    resposta = client.post(
+        f"/api/missions/{missao['id']}/complete",
+        json={
+            "operation_id": "op-ciclo-evidencia",
+            "evidence": {"text": "Fiz tudo", "link": "https://exemplo.com/x"},
+        },
+    )
+    assert resposta.status_code == 200, resposta.text
+    session.add(
+        MissionEvaluation(
+            mission_id=missao["id"],
+            state=EstadoDaAvaliacao.FALHOU,
+            attempt=1,
+            error_code=FalhaDaAvaliacao.TEMPO_ESGOTADO,
+            model="modelo-x",
+            requested_at=relogio[0],
+            finished_at=relogio[0],
+        )
+    )
+    session.flush()
+    session.expire_all()
+
+    esperado_evidencia = {"text": "Fiz tudo", "link": "https://exemplo.com/x"}
+    esperado_avaliacao = {
+        "state": "falhou",
+        "verdict": None,
+        "feedback": None,
+        "error_code": "tempo_esgotado",
+        "model": "modelo-x",
+        "finished_at": "2026-09-23T15:00:00Z",
+    }
+    no_ciclo = client.get("/api/cycle").json()["mission"]
+    na_trilha = next(
+        d["mission"]
+        for d in client.get("/api/plans/current").json()["plan"]["days"]
+        if d["mission"] is not None and d["mission"]["id"] == missao["id"]
+    )
+    for lida in (no_ciclo, na_trilha):
+        assert lida["verification"] == "com_evidencia"
+        assert lida["evidence"] == esperado_evidencia
+        assert lida["evaluation"] == esperado_avaliacao
+
+
+def test_a_especial_concluida_com_evidencia_sai_com_os_campos_novos(
+    client: TestClient, relogio: list[datetime]
+) -> None:
+    relogio[0] = ao_meio_dia(SEGUNDA)
+    client.post("/api/plans", json=_corpo())
+    for i in range(7):
+        relogio[0] = ao_meio_dia(SEGUNDA + timedelta(days=i))
+        missao = client.get("/api/cycle").json()["mission"]
+        assert _concluir(client, missao["id"], f"op-{i}").status_code == 200
+    especial = client.get("/api/cycle").json()["special"]
+    assert (especial["verification"], especial["evidence"]) == (None, None)
+    resposta = client.post(
+        f"/api/missions/{especial['id']}/complete",
+        json={"operation_id": "op-esp-ev", "evidence": {"text": "Prova feita"}},
+    )
+    assert resposta.status_code == 200, resposta.text
+    no_ciclo = client.get("/api/cycle").json()["special"]
+    na_trilha = client.get("/api/plans/current").json()["plan"]["special"]["mission"]
+    for lida in (no_ciclo, na_trilha):
+        assert lida["verification"] == "com_evidencia"
+        assert lida["evidence"] == {"text": "Prova feita", "link": None}
+        assert lida["evaluation"] is None

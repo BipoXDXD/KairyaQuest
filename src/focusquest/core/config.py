@@ -1,10 +1,43 @@
 """Configuracao da aplicacao, lida do ambiente."""
 
-from pydantic import Field, SecretStr
+from typing import Annotated, Literal
+
+from pydantic import BeforeValidator, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Os nomes que o `logging` conhece, em caixa alta. `NOTSET` fica de fora: no
+# logger do app ele quer dizer "herde da raiz" (so WARNING ou acima), que e o
+# estado de antes de haver configuracao, e nao um nivel que se escolhe.
+NivelDeLog = Annotated[
+    Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    BeforeValidator(lambda valor: valor.upper() if isinstance(valor, str) else valor),
+]
 
-class Settings(BaseSettings):
+
+class ConfiguracaoDeLog(BaseSettings):
+    """O nivel de log, lido SEM exigir o resto da configuracao (pendencia 13).
+
+    Existe separada do `Settings` porque a partida configura o log antes de
+    qualquer coisa tocar no banco, e o `/health` responde sem configuracao de
+    banco: ler o nivel pelo `Settings` exigiria `FOCUSQUEST_DATABASE_URL`.
+
+    `extra="ignore"` e so desta classe: o .env tem as outras chaves do
+    projeto, e quem as recusa, se forem desconhecidas, e o `Settings` -- que
+    HERDA `log_level` daqui, para o campo ser declarado e validado num lugar
+    so (e para `FOCUSQUEST_LOG_LEVEL` no .env nao virar `extra_forbidden`).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="FOCUSQUEST_",
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    log_level: NivelDeLog = "INFO"
+
+
+class Settings(ConfiguracaoDeLog):
     """Configuracao da aplicacao.
 
     Nenhum campo tem valor padrao para credencial de BANCO: esquecer de
@@ -27,8 +60,14 @@ class Settings(BaseSettings):
     existe.
     """
 
+    # `extra="forbid"` escrito, e nao herdado do padrao: a classe-mae ignora
+    # chave desconhecida, e sem esta linha o `Settings` passaria a ignorar
+    # tambem.
     model_config = SettingsConfigDict(
-        env_prefix="FOCUSQUEST_", env_file=".env", env_ignore_empty=True
+        env_prefix="FOCUSQUEST_",
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="forbid",
     )
 
     database_url: str
@@ -51,6 +90,18 @@ class Settings(BaseSettings):
     # mandaria a conversa para outro endereco.
     anthropic_base_url: str = "https://api.anthropic.com"
     tutor_model: str = "claude-opus-5"
-    tutor_max_tokens: int = Field(default=1024, ge=1)
+    # O teto de SAIDA de uma resposta da Tifa. O `claude-opus-5` pensa por
+    # padrao (thinking adaptativo, sem `budget_tokens`: o adaptador nao manda
+    # `thinking`), e o thinking gasta deste mesmo teto -- com 1024, respostas
+    # comuns eram cortadas cedo. 2048 por decisao do dono (pendencia 173:
+    # primeiro 4096, depois 2048); a saida e cobrada pelo uso real, nao pelo
+    # teto.
+    tutor_max_tokens: int = Field(default=2048, ge=1)
     tutor_timeout_seconds: float = Field(default=60, gt=0)
     tutor_history_messages: int = Field(default=20, ge=1)
+    # O fallback do lado do servidor para a recusa (pendencia 174, beta): a API
+    # refaz a requisicao recusada no modelo que a Anthropic recomenda para a
+    # categoria da recusa. Ligado por decisao do dono (2026-09-29); desligar com
+    # FOCUSQUEST_TUTOR_FALLBACK=false se o beta mudar e a API passar a recusar a
+    # requisicao inteira (risco R1 do plano da pendencia 174).
+    tutor_fallback: bool = True

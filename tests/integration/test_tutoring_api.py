@@ -25,13 +25,16 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
+from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 from focusquest.modules.tutoring.schemas import TAMANHO_MAXIMO_DA_PERGUNTA
 from focusquest.modules.tutoring.service import Tutoria
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
+    Substituicao,
     Texto,
 )
 
@@ -55,7 +58,7 @@ def _sobrepor(chave: Any, valor: Any) -> None:
 def cliente(banco_migrado: Engine, tutoria: Tutoria) -> Iterator[TestClient]:
     """A tutoria contra o falso, o banco de teste e o relogio fixo.
 
-    Commita de verdade: o stream grava em sessoes proprias (M2). Quem usa este
+    Commita de verdade: o stream grava em sessoes proprias. Quem usa este
     cliente registra seus `client_message_id` na fixture `conversa`.
     """
     sobrepostos: dict[Callable[..., Any], Callable[..., Any]] = {
@@ -197,6 +200,63 @@ def test_o_stream_na_ordem_do_contrato(
     )
 
 
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "model_context_window_exceeded"])
+def test_resposta_cortada_chega_no_done_como_interrompida_com_o_motivo(
+    cliente: TestClient,
+    falso: ServidorAnthropicFalso,
+    conversa: Conversa,
+    stop_reason: MotivoDeParada,
+) -> None:
+    """Pendencias 45, 120 e 122, pelo contrato: o `done` traz a mensagem com
+    `status` `interrompida`, sem acao e com `error_code` `resposta_longa` --
+    e por ele que a tela sabe que a resposta ficou longa demais, e nao que o
+    resultado e desconhecido. A expectativa de antes era `error_code` nulo;
+    ela mudou porque o contrato passou a trazer o motivo do corte.
+
+    A ferramenta completa antes do corte e o pior caso de proposito
+    (ver `test_proposta_cortada_nao_vira_acao`)."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco",)), ChamadaDeFerramenta(PROPOSTA)),
+        stop_reason=stop_reason,
+    )
+    eventos = _eventos(_enviar(cliente, conversa.id("teto")).text)
+
+    assert [nome for nome, _ in eventos] == ["user_message", "delta", "done"]
+    final = eventos[-1][1]
+    assert (final["status"], final["content"], final["actions"]) == (
+        "interrompida",
+        "Comeco",
+        [],
+    )
+    assert final["error_code"] == "resposta_longa"
+    *_, gravada = cliente.get("/api/tutoring/messages").json()
+    assert (gravada["status"], gravada["error_code"]) == (
+        "interrompida",
+        "resposta_longa",
+    )
+
+
+def test_resposta_recusada_vira_evento_error_sem_o_parcial(
+    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+) -> None:
+    """Pendencia 120, pelo contrato: a recusa sai como `error`
+    `resposta_recusada`, depois do `delta` que ja tinha saido; o historico
+    traz a resposta `falhou` com o mesmo codigo e SEM o texto parcial."""
+    falso.roteiro = Roteiro(blocos=(Texto(("Comeco",)),), stop_reason="refusal")
+    eventos = _eventos(_enviar(cliente, conversa.id("recusa")).text)
+
+    assert eventos[1:] == [
+        ("delta", {"text": "Comeco"}),
+        ("error", {"code": "resposta_recusada"}),
+    ]
+    *_, gravada = cliente.get("/api/tutoring/messages").json()
+    assert (gravada["status"], gravada["content"], gravada["error_code"]) == (
+        "falhou",
+        "",
+        "resposta_recusada",
+    )
+
+
 def test_falha_do_provedor_vira_evento_error(
     cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
 ) -> None:
@@ -270,6 +330,30 @@ def test_corpo_invalido_responde_422_sem_code(
 
 
 # --- Listar ----------------------------------------------------------------
+
+
+def test_a_resposta_substituida_traz_o_modelo_no_done_e_no_historico(
+    cliente: TestClient, falso: ServidorAnthropicFalso, conversa: Conversa
+) -> None:
+    """Pendencia 174, pelo contrato: a chave `fallback_model` (em ingles,
+    aditiva) diz qual modelo serviu a resposta depois da recusa; nula na
+    pergunta e na resposta do modelo pedido."""
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("Comeco ",)), Texto(("e fim",))),
+        substituicao=Substituicao("claude-opus-4-8", apos_blocos=1),
+    )
+    eventos = _eventos(_enviar(cliente, conversa.id("troca")).text)
+    pergunta, final = eventos[0][1], eventos[-1][1]
+    assert (final["status"], final["content"], final["fallback_model"]) == (
+        "completa",
+        "Comeco e fim",
+        "claude-opus-4-8",
+    )
+    assert pergunta["fallback_model"] is None
+
+    historico = {m["id"]: m for m in cliente.get("/api/tutoring/messages").json()}
+    assert historico[final["id"]]["fallback_model"] == "claude-opus-4-8"
+    assert historico[pergunta["id"]]["fallback_model"] is None
 
 
 def test_listar_mensagens(cliente_na_sessao: TestClient, session: Session) -> None:
@@ -419,9 +503,11 @@ def test_a_chave_nao_aparece_na_resposta_nem_no_log(
                 modelo="claude-opus-5",
                 max_tokens=8,
                 timeout_segundos=1,
+                fallback=True,
             ),
             historico=20,
             limite=timedelta(seconds=60),
+            modelo="claude-opus-5",
         ),
     )
     resposta = _enviar(cliente, conversa.id("segredo"))
@@ -464,3 +550,51 @@ def test_get_tutoria_com_chave_monta_e_reaproveita(
     assert isinstance(primeira.provedor, ProvedorAnthropic)
     assert (primeira.historico, primeira.limite) == (7, timedelta(seconds=12))
     assert dependencias.get_tutoria() is primeira
+
+
+def test_get_tutoria_leva_o_modelo_configurado(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """O modelo que interpreta vai gravado em cada avaliacao (spec, `model`):
+    a tutoria o carrega do `Settings`, o mesmo que o adaptador usa."""
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_MODEL", "modelo-de-teste")
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    assert tutoria.modelo == "modelo-de-teste"
+
+
+@pytest.mark.parametrize(("valor", "pede"), [("false", False), ("true", True)])
+def test_get_tutoria_leva_o_fallback_configurado(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    falso: ServidorAnthropicFalso,
+    valor: str,
+    pede: bool,
+) -> None:
+    """`FOCUSQUEST_TUTOR_FALLBACK` chega a requisicao de verdade (pendencia
+    174): sem isto, o `false` de emergencia existiria so no `Settings`."""
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_BASE_URL", falso.url)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", valor)
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    list(
+        tutoria.provedor.responder(
+            Turno(sistema="S", mensagens=(MensagemDoTurno("user", "oi"),))
+        )
+    )
+    assert ("fallbacks" in falso.recebidas[0].corpo) is pede

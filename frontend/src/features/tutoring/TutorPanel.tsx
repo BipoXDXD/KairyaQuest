@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { announceAnswer } from './answerOutcome'
 import { readPanelOpen, writePanelOpen } from './panelPreference'
 import { ProposalCard } from './ProposalCard'
 import { TutorConversation } from './TutorConversation'
@@ -11,13 +12,14 @@ import { useTutorStatus } from './useTutorStatus'
  * O que a regiao viva anuncia: o INICIO e o FIM da resposta, e nao cada
  * palavra (spec, estado "Escrevendo"). Uma regiao que mudasse a cada `delta`
  * faria o leitor de tela recitar o texto aos pedacos, atropelando a si mesmo.
- * A falha e anunciada pelo `role="alert"` da propria conversa.
+ * A falha e anunciada pelo `role="alert"` da propria conversa; o fim de uma
+ * resposta cortada, com texto proprio (`announceAnswer`, pendencia 121).
  */
 function liveText(send: SendState): string {
   if (send.status === 'sending' || send.status === 'writing') {
     return 'Tifa está escrevendo…'
   }
-  return send.status === 'idle' && send.finished ? 'Tifa terminou de responder.' : ''
+  return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : ''
 }
 
 /** Retrato PLACEHOLDER: iniciais em verde, nenhum asset dos jogos (README §7). */

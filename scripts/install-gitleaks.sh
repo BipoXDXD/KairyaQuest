@@ -49,8 +49,8 @@ esac
 # Sem esta deteccao, em uma imagem slim o "shasum" ausente fazia a checagem
 # falhar e o script imprimia "checksum nao confere" -- acusando adulteracao
 # quando o problema era ferramenta que nao existe. Esse diagnostico
-# enganoso e exatamente o defeito que a Task 5 se deu ao trabalho de
-# eliminar em outros pontos do gate. Hoje o runner do GitHub tem shasum, e
+# enganoso e exatamente o defeito que o restante do gate ja evita
+# em outros pontos. Hoje o runner do GitHub tem shasum, e
 # por isso o defeito nunca apareceu; ele esperava a primeira imagem slim.
 if command -v shasum >/dev/null 2>&1; then
   verifica_sha256() { shasum -a 256 -c -; }

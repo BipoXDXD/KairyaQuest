@@ -8,6 +8,8 @@ aceita dar para um bloqueio previsto (README s8: "explique bloqueios").
 
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Annotated
 
@@ -15,37 +17,84 @@ from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from focusquest.core.database import get_engine
+from focusquest.core.config import ConfiguracaoDeLog
+from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
+    AvaliacaoEmAndamentoError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
     PlanoExistenteError,
+    PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoInalteradoError,
     ProvedorNaoConfiguradoError,
+    ReagendamentoInvalidoError,
     SemanaDistanteError,
     SemanaEncerradaError,
+    SemEvidenciaError,
 )
+from focusquest.core.log import configurar_logging
+from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
+from focusquest.modules.evaluation.router import router as evaluation_router
 from focusquest.modules.missions.cycle_router import router as cycle_router
-from focusquest.modules.missions.domain import TransicaoIlegalError
+from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
 from focusquest.modules.tutoring.router import router as tutoring_router
 
 _log = logging.getLogger(__name__)
 
-app = FastAPI(title="FocusQuest")
+
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
+    """Configura o log na partida, e nao na importacao deste modulo, e o
+    devolve como estava no desligamento.
+
+    Na partida porque o uvicorn aplica a configuracao de log DELE antes de
+    importar o app, e a do app vem depois e se soma a dela, sem desfaze-la; e
+    porque importar `focusquest.main` (os testes, o OpenAPI) nao deve mexer no
+    logging do processo de quem importa. Um nivel invalido derruba a partida
+    com `ValidationError`, que e onde um erro de configuracao deve aparecer.
+
+    O `finally` desfaz o que a partida fez -- o nivel do logger `focusquest` e
+    o handler que ela tenha posto na raiz. Sob o uvicorn o processo acaba
+    logo depois; e num processo que sobe o app mais de uma vez (a suite, com
+    `with TestClient(app)`), sem isso o nivel da partida ficaria valendo para
+    o resto do processo.
+
+    A linha registrada diz o nivel, e so ele: nenhum outro campo da
+    configuracao entra no log.
+    """
+    raiz = logging.getLogger()
+    app_logger = logging.getLogger("focusquest")
+    handlers_de_antes = raiz.handlers[:]
+    nivel_de_antes = app_logger.level
+    nivel = ConfiguracaoDeLog().log_level
+    configurar_logging(nivel)
+    _log.info("log configurado no nivel %s", nivel)
+    try:
+        yield
+    finally:
+        for handler in raiz.handlers[:]:
+            if handler not in handlers_de_antes:
+                raiz.removeHandler(handler)
+                handler.close()
+        app_logger.setLevel(nivel_de_antes)
+
+
+app = FastAPI(title="FocusQuest", lifespan=_ciclo_de_vida)
 app.include_router(missions_router)
 app.include_router(cycle_router)
 app.include_router(progression_router)
 app.include_router(tutoring_router)
+app.include_router(evaluation_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
 # proposito: ver `_nao_pertence`.
@@ -82,10 +131,21 @@ class CodigoDeErro(StrEnum):
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
+    PRAZO_DERIVADO = "prazo_derivado"
+    PRAZO_INALTERADO = "prazo_inalterado"
+    REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
     MISSAO_EXPIRADA = "missao_expirada"
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
     SEMANA_DISTANTE = "semana_distante"
+    SEM_EVIDENCIA = "sem_evidencia"
+    AVALIACAO_EM_ANDAMENTO = "avaliacao_em_andamento"
+    # Os dois seguintes tem o MESMO valor do `CodigoDoStream` da conversa
+    # (spec, "Erros"); `test_os_codigos_http_da_avaliacao_tem_o_valor_do_stream`
+    # confere que nao divergem.
+    PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
+    TEMPO_ESGOTADO = "tempo_esgotado"
+    AVALIACAO_INVALIDA = "avaliacao_invalida"
 
 
 @app.exception_handler(RequestValidationError)
@@ -232,10 +292,35 @@ def _acao_nao_encontrada(request: Request, exc: AcaoNaoEncontradaError) -> JSONR
 
 @app.exception_handler(PrazoExpiradoError)
 def _prazo_expirado(request: Request, exc: PrazoExpiradoError) -> JSONResponse:
-    """422: o pedido e valido, mas o conteudo da proposta (o prazo) nao pode
-    mais ser executado. A falha ja foi gravada na acao."""
+    """422: o pedido e valido, mas o prazo nao esta mais no futuro. Na
+    confirmacao de uma proposta a falha ja foi gravada na acao."""
     return _erro(
         status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PRAZO_EXPIRADO
+    )
+
+
+@app.exception_handler(PrazoDerivadoError)
+def _prazo_derivado(request: Request, exc: PrazoDerivadoError) -> JSONResponse:
+    """409: o tipo da missao recusa (o prazo vem do ciclo), nao a forma do
+    pedido."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PRAZO_DERIVADO)
+
+
+@app.exception_handler(PrazoInalteradoError)
+def _prazo_inalterado(request: Request, exc: PrazoInalteradoError) -> JSONResponse:
+    """409: o estado atual da missao recusa (o prazo ja e esse), nao a forma do
+    pedido."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.PRAZO_INALTERADO)
+
+
+@app.exception_handler(ReagendamentoInvalidoError)
+def _reagendamento_invalido(
+    request: Request, exc: ReagendamentoInvalidoError
+) -> JSONResponse:
+    """409: a missao mudou depois da proposta (F17). A falha ja foi gravada na
+    acao; a saida da tela e pedir outra proposta."""
+    return _erro(
+        status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.REAGENDAMENTO_INVALIDO
     )
 
 
@@ -264,6 +349,40 @@ def _semana_distante(request: Request, exc: SemanaDistanteError) -> JSONResponse
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEMANA_DISTANTE)
 
 
+@app.exception_handler(SemEvidenciaError)
+def _sem_evidencia(request: Request, exc: SemEvidenciaError) -> JSONResponse:
+    """409: a missao existe e e visivel; o estado dela (sem evidencia, ou nao
+    concluida) e que recusa a avaliacao."""
+    return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.SEM_EVIDENCIA)
+
+
+@app.exception_handler(AvaliacaoEmAndamentoError)
+def _avaliacao_em_andamento(
+    request: Request, exc: AvaliacaoEmAndamentoError
+) -> JSONResponse:
+    """409: outra tentativa esta avaliando esta missao. O cliente espera."""
+    return _erro(
+        status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.AVALIACAO_EM_ANDAMENTO
+    )
+
+
+# O status de cada falha da avaliacao (E13). 502 quando o problema esta do
+# outro lado (o provedor falhou, ou respondeu fora do esquema), 504 quando foi
+# o tempo. Os tres dizem ao cliente "nenhum bonus aconteceu" sem ler o corpo.
+_STATUS_DA_FALHA: dict[FalhaDaAvaliacao, int] = {
+    FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL: status.HTTP_502_BAD_GATEWAY,
+    FalhaDaAvaliacao.TEMPO_ESGOTADO: status.HTTP_504_GATEWAY_TIMEOUT,
+    FalhaDaAvaliacao.AVALIACAO_INVALIDA: status.HTTP_502_BAD_GATEWAY,
+}
+
+
+@app.exception_handler(AvaliacaoFalhouError)
+def _avaliacao_falhou(request: Request, exc: AvaliacaoFalhouError) -> JSONResponse:
+    """A falha ja gravada na avaliacao, com o `code` igual ao `error_code` da
+    linha: a tela traduz os dois pelo mesmo mapa."""
+    return _erro(_STATUS_DA_FALHA[exc.falha], str(exc), CodigoDeErro(exc.falha.value))
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness. NAO toca no banco: um liveness que consulta o banco derruba
@@ -271,22 +390,10 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def get_ready_engine() -> Engine | None:
-    """Readiness traduz configuracao invalida sem afrouxar os outros consumidores.
-
-    Resolver `Depends(get_engine)` antes da rota deixaria o ValidationError de
-    Settings fora da fronteira de indisponibilidade. A engine continua sendo
-    criada e cacheada por get_engine; erros inesperados continuam propagando.
-    """
-    try:
-        return get_engine()
-    except ValidationError:
-        return None
-
-
 @app.get("/ready")
 def ready(
-    engine: Annotated[Engine | None, Depends(get_ready_engine)], response: Response
+    engine: Annotated[Engine | None, Depends(get_engine_se_configurada)],
+    response: Response,
 ) -> dict[str, str]:
     """Readiness. Abre a `connection` e consulta de verdade: um readiness que
     nao consulta mente sobre estar pronto.
@@ -300,10 +407,14 @@ def ready(
     O corpo e em ingles de proposito. `/ready` e contrato de API, lido por
     orquestrador e por monitoramento; o texto em portugues que a pessoa le
     pertence ao frontend, que traduz o estado.
+
+    Sem configuracao de banco (`engine` None), tambem 503 -- nao pronto --,
+    com `not_configured` no lugar de `unavailable`: o corpo diz se o banco
+    esta fora do ar ou se a implantacao nem sabe onde ele esta (pendencia 28).
     """
     if engine is None:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unavailable", "database": "unavailable"}
+        return {"status": "unavailable", "database": "not_configured"}
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

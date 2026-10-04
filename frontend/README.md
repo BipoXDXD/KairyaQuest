@@ -85,5 +85,7 @@ substituem a inspeção visual de desktop/celular ou a validação num aparelho
 com teclado virtual.
 
 O retrato da Tifa permanece um placeholder original. Não há assets oficiais
-do jogo, tutoria simulada de produção, autenticação ou avaliação de entregas
-implementada; o roadmap e as limitações atuais estão no handoff.
+do jogo, tutoria simulada de produção ou autenticação implementada. A entrega
+com evidência e a avaliação da Tifa estão implementadas; a avaliação é
+interpretação do modelo, identificada na tela. O roadmap e as limitações
+atuais estão no handoff.

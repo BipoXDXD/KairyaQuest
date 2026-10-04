@@ -8,11 +8,14 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import Engine
 
-from focusquest import main
 from focusquest.core import database
 from focusquest.core.config import Settings
-from focusquest.core.database import create_engine_from_url, get_engine
-from focusquest.main import app, get_ready_engine
+from focusquest.core.database import (
+    create_engine_from_url,
+    get_engine,
+    get_engine_se_configurada,
+)
+from focusquest.main import app
 
 
 @pytest.fixture
@@ -28,10 +31,11 @@ def override_engine() -> Iterator[Callable[[Engine], None]]:
     """
 
     def _aplicar(engine: Engine) -> None:
+        # As DUAS portas por onde uma rota recebe a engine: `get_engine` (as
+        # rotas de negocio) e `get_engine_se_configurada` (o /ready, desde a
+        # pendencia 28). Substituir so uma deixaria o /ready no banco real.
         app.dependency_overrides[get_engine] = lambda: engine
-        # Readiness tem sua propria fronteira de configuracao; as outras
-        # rotas continuam consumindo get_engine diretamente.
-        app.dependency_overrides[get_ready_engine] = lambda: engine
+        app.dependency_overrides[get_engine_se_configurada] = lambda: engine
 
     yield _aplicar
     app.dependency_overrides.clear()
@@ -118,26 +122,6 @@ def test_health_responde_sem_configuracao_de_banco(
     assert resposta.json() == {"status": "ok"}
 
 
-def test_ready_indisponivel_sem_configuracao_de_banco(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Sem arquivo, ambiente ou cache, a resposta publica continua sanitizada."""
-    monkeypatch.setattr(database, "_engine", None)
-    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
-    monkeypatch.chdir(tmp_path)
-
-    with TestClient(app, raise_server_exceptions=False) as c:
-        resposta = c.get("/ready")
-
-    assert resposta.status_code == 503
-    assert resposta.json() == {"status": "unavailable", "database": "unavailable"}
-    assert database._engine is None
-    # O 503 local nao transforma a configuracao obrigatoria em opcional.
-    with pytest.raises(ValidationError):
-        Settings()
-
-
 def test_ready_confirma_o_banco(client: TestClient) -> None:
     resposta = client.get("/ready")
     assert resposta.status_code == 200
@@ -155,24 +139,106 @@ def test_ready_falha_quando_o_banco_nao_responde(
     assert resposta.json() == {"status": "unavailable", "database": "unavailable"}
 
 
-def test_ready_configuracao_invalida_nao_expoe_inputs(
+def test_ready_sem_configuracao_de_banco_responde_503(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Pendencia 28: sem configuracao, "nao pronto" e 503, como com o banco
+    fora do ar -- e nao o 500 do `ValidationError` estourando na resolucao da
+    dependencia. O corpo separa os dois casos: `not_configured` aqui,
+    `unavailable` quando o banco configurado nao responde.
+
+    Mesmo cenario do teste do /health sem configuracao: sem .env (o chdir) e
+    sem as variaveis no ambiente, `Settings()` falha.
+    """
     monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     monkeypatch.chdir(tmp_path)
-    # Valores exclusivamente ficticios: ValidationError carrega os inputs,
-    # mas a resposta publica nao pode reproduzi-los.
-    url = "postgresql+psycopg://teste:senha-ficticia@127.0.0.1:1/inexistente"
-    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", url)
-    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", url)
-    monkeypatch.setenv("FOCUSQUEST_TUTOR_MAX_TOKENS", "input-ficticio-invalido")
 
     with TestClient(app) as c:
         resposta = c.get("/ready")
 
     assert resposta.status_code == 503
-    assert resposta.json() == {"status": "unavailable", "database": "unavailable"}
-    assert database._engine is None
+    assert resposta.json() == {"status": "unavailable", "database": "not_configured"}
+
+
+@pytest.mark.parametrize(
+    ("variavel", "valor"),
+    [
+        # Um campo que nao e do banco, invalido, com a URL presente.
+        ("FOCUSQUEST_TUTOR_MAX_TOKENS", "0"),
+        # Falta so a URL de TESTE: tambem nao e "banco nao configurado".
+        ("FOCUSQUEST_TEST_DATABASE_URL", None),
+    ],
+)
+def test_ready_com_outra_configuracao_invalida_sobe_o_erro(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    settings: Settings,
+    variavel: str,
+    valor: str | None,
+) -> None:
+    """So a AUSENCIA da `database_url` vira `not_configured` (revisao I1).
+    Qualquer outro erro do `Settings` continua subindo como antes -- 500 com o
+    traceback que nomeia o campo --, em vez de um 503 que aponta o banco."""
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", settings.database_url)
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", settings.test_database_url)
+    if valor is None:
+        monkeypatch.delenv(variavel)
+    else:
+        monkeypatch.setenv(variavel, valor)
+
+    with TestClient(app) as c, pytest.raises(ValidationError) as erro:
+        c.get("/ready")
+
+    (falha,) = erro.value.errors()
+    assert falha["loc"] != ("database_url",)
+
+
+def test_get_engine_se_configurada_devolve_a_engine_compartilhada(
+    monkeypatch: pytest.MonkeyPatch, descartar_engines: list[Engine]
+) -> None:
+    """Com configuracao, a dependencia do /ready e a MESMA engine das rotas de
+    negocio: o /ready precisa provar o banco que a aplicacao usa, e nao outro."""
+    monkeypatch.setattr(database, "_engine", None)
+    engine = database.get_engine_se_configurada()
+    assert engine is not None
+    descartar_engines.append(engine)
+    assert engine is database.get_engine()
+
+
+def test_get_engine_cria_uma_vez_e_reaproveita(
+    monkeypatch: pytest.MonkeyPatch,
+    descartar_engines: list[Engine],
+    settings: Settings,
+) -> None:
+    """get_engine() e substituida nos testes de rota, entao o corpo dela
+    precisa de um teste proprio -- senao fica descoberto.
+
+    Substituir uma dependencia nos testes nao a testa. Aqui o modulo e
+    importado como objeto porque o cache vive em uma variavel global dele:
+    so com o modulo em maos da para zerar e restaurar esse estado. O
+    monkeypatch restaura no teardown, valendo a mesma regra da fixture
+    override_engine.
+
+    O modulo em questao e `core/database.py`, e nao `main.py`: a dependencia
+    mudou de casa quando ganhou um segundo consumidor (o router das
+    missoes) -- um router que importasse `main.py` de volta fecharia um ciclo de
+    imports. O cache global, e a corrida que ele permite, continuam identicos aos
+    de antes; so o arquivo e outro.
+    """
+    monkeypatch.setattr(database, "_engine", None)
+    primeira = database.get_engine()
+    descartar_engines.append(primeira)
+    segunda = database.get_engine()
+
+    assert primeira is segunda
+    # De qual URL a engine nasce faz parte do contrato: sem esta assercao,
+    # trocar database_url por test_database_url na implementacao -- apontar a
+    # aplicacao para o banco de teste -- passaria verde.
+    assert primeira.url.render_as_string(hide_password=False) == settings.database_url
 
 
 def test_ready_nao_oculta_erro_inesperado_na_resolucao(
@@ -181,7 +247,7 @@ def test_ready_nao_oculta_erro_inesperado_na_resolucao(
     def falhar() -> Engine:
         raise RuntimeError("defeito inesperado na engine")
 
-    monkeypatch.setattr(main, "get_engine", falhar)
+    monkeypatch.setattr(database, "get_engine", falhar)
     with TestClient(app) as c, pytest.raises(RuntimeError, match="defeito inesperado"):
         c.get("/ready")
 
@@ -228,35 +294,3 @@ def test_ready_resolve_engine_real_sem_override_e_reaproveita(
     finally:
         if database._engine is not None:
             descartar_engines.append(database._engine)
-
-
-def test_get_engine_cria_uma_vez_e_reaproveita(
-    monkeypatch: pytest.MonkeyPatch,
-    descartar_engines: list[Engine],
-    settings: Settings,
-) -> None:
-    """get_engine() e substituida nos testes de rota, entao o corpo dela
-    precisa de um teste proprio -- senao fica descoberto.
-
-    Substituir uma dependencia nos testes nao a testa. Aqui o modulo e
-    importado como objeto porque o cache vive em uma variavel global dele:
-    so com o modulo em maos da para zerar e restaurar esse estado. O
-    monkeypatch restaura no teardown, valendo a mesma regra da fixture
-    override_engine.
-
-    O modulo em questao e `core/database.py`, e nao `main.py`: a dependencia
-    mudou de casa na Task 9, quando ganhou um segundo consumidor (o router das
-    missoes) -- um router que importasse `main.py` de volta fecharia um ciclo de
-    imports. O cache global, e a corrida que ele permite, continuam identicos ao
-    que a Task 4 registrou; so o arquivo e outro.
-    """
-    monkeypatch.setattr(database, "_engine", None)
-    primeira = database.get_engine()
-    descartar_engines.append(primeira)
-    segunda = database.get_engine()
-
-    assert primeira is segunda
-    # De qual URL a engine nasce faz parte do contrato: sem esta assercao,
-    # trocar database_url por test_database_url na implementacao -- apontar a
-    # aplicacao para o banco de teste -- passaria verde.
-    assert primeira.url.render_as_string(hide_password=False) == settings.database_url

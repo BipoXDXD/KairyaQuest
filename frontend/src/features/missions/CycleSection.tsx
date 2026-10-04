@@ -8,7 +8,8 @@ import {
   type Ref,
 } from 'react'
 import { formatCivilDate } from '../../shared/lib/civilDate'
-import { DAYS_PER_MILESTONE } from '../../shared/types/mission'
+import { saoPauloCivilDate } from '../../shared/lib/deadline'
+import { DAYS_PER_MILESTONE, type Mission } from '../../shared/types/mission'
 import { MissionCard } from './MissionCard'
 import type { Cycle } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
@@ -24,6 +25,31 @@ function streakLabel(days: number): string {
   return days === 1 ? '1 dia seguido' : `${String(days)} dias seguidos`
 }
 
+/**
+ * F25: o motivo da diaria de ontem na tela. Depois de concluida com atraso ela
+ * continua no ciclo ate o fim de hoje (o `refresh` nao tira o cartao), e o
+ * texto de "ainda pode ser concluida" seria falso.
+ */
+function lateDailyReason(mission: Mission): string {
+  return mission.state === 'concluida'
+    ? 'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.'
+    : 'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.'
+}
+
+/**
+ * F25: a especial esta em conclusao tardia quando o prazo dela (a meia-noite
+ * que fecha a janela) ja abriu o dia de hoje -- o backend so a mantem no ciclo,
+ * depois disso, se ela foi iniciada na janela. `null` dentro da janela.
+ */
+function lateSpecialReason(special: Mission, today: string): string | null {
+  if (saoPauloCivilDate(special.deadline) > today) {
+    return null
+  }
+  return special.state === 'concluida'
+    ? 'Concluída depois do fim da janela — você começou a tempo.'
+    : 'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.'
+}
+
 /** "falta 1 dia" / "faltam 4 dias". */
 function remainingLabel(days: number): string {
   return days === 1 ? 'falta 1 dia' : `faltam ${String(days)} dias`
@@ -34,7 +60,13 @@ interface CardProps {
   onReload: () => void
   reloadWaiting: boolean
   onCompleted: () => void
-  /** m5: aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". */
+  /** O bonus da avaliacao: so avisa a pagina (a sequencia nao muda com ele). */
+  onRewarded?: () => void
+  /**
+   * Aqui o botao de recuperacao recarrega o CICLO, e nao um "quadro". Este e o
+   * rotulo do cartao da missao de hoje; os da diaria de ontem e da especial
+   * trocam o proprio, porque "a missao de hoje" seria falso neles.
+   */
   reloadLabel: string
 }
 
@@ -46,7 +78,7 @@ interface CardProps {
  * da diaria segue as mesmas regras de chave e reenvio. O `onCompleted` faz o
  * `refresh` silencioso do PROPRIO ciclo (decisao P9): a sequencia muda sem
  * desmontar o cartao; e ainda avisa `onMissionCompleted`, da PAGINA, que
- * usa o aviso para atualizar o painel de progresso (Task 8, incremento D).
+ * usa o aviso para atualizar o painel de progresso.
  */
 function CycleLoaded({
   cycle,
@@ -59,6 +91,8 @@ function CycleLoaded({
   refreshFailed: boolean
   card: CardProps
 }) {
+  const specialReason =
+    cycle.special === null ? null : lateSpecialReason(cycle.special, cycle.today)
   return (
     <div className="flex flex-col gap-3">
       <p data-testid="cycle-today" className="text-sm text-slate-400">
@@ -71,7 +105,7 @@ function CycleLoaded({
         </p>
       ) : (
         <ul key={cycle.mission.id} ref={dailyRef} role="list" className="flex flex-col gap-3">
-          {/* m1: a chave pela ID da missao, e nao pela POSICAO. Sem ela, um
+          {/* A chave pela ID da missao, e nao pela POSICAO. Sem ela, um
               `refresh` que devolve outra missao (a diaria de amanha, se a
               conclusao caiu perto da meia-noite e a resposta chegou depois)
               mantem a MESMA instancia do cartao -- e ela continua presa no
@@ -80,7 +114,32 @@ function CycleLoaded({
           <MissionCard key={cycle.mission.id} mission={cycle.mission} {...card} />
         </ul>
       )}
-      {/* m4: `role="status"` desde o primeiro render do estado carregado -- um
+      {/* F25: a diaria de ontem iniciada a tempo. Fica numa secao propria, com
+          o motivo a vista: o prazo impresso no cartao ja passou, e sem o texto
+          o Concluir pareceria um erro. */}
+      {cycle.late_daily !== null && (
+        <div data-testid="cycle-late-daily">
+          <h3 className="mb-1 text-base font-semibold text-amber-200">
+            Diária de ontem — iniciada a tempo
+          </h3>
+          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-slate-300">
+            {lateDailyReason(cycle.late_daily)}
+          </p>
+          <ul role="list" className="flex flex-col gap-3">
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. O
+                rotulo de recarga e o do PROPRIO cartao: "a missao de hoje"
+                num cartao titulado "Diaria de ontem" seria falso. */}
+            <MissionCard
+              key={cycle.late_daily.id}
+              mission={cycle.late_daily}
+              {...card}
+              reloadLabel="Atualizar a diária de ontem"
+              titleLevel={4}
+            />
+          </ul>
+        </div>
+      )}
+      {/* `role="status"` desde o primeiro render do estado carregado -- um
           leitor de tela so anuncia mudanca numa regiao viva que ja estava no
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
           diaria) nem o texto que muda quando ela chega ao marco eram
@@ -98,9 +157,23 @@ function CycleLoaded({
           <h3 className="mb-2 text-base font-semibold text-emerald-200">
             Missão especial — bônus da sequência
           </h3>
+          {/* F25: depois do fim da janela, o prazo impresso no
+              cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
+          {specialReason !== null && (
+            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">
+              {specialReason}
+            </p>
+          )}
           <ul role="list" className="flex flex-col gap-3">
-            {/* m1: mesma chave pela ID, pelo mesmo motivo do cartao de hoje. */}
-            <MissionCard key={cycle.special.id} mission={cycle.special} {...card} titleLevel={4} />
+            {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje, e o
+                rotulo de recarga tambem e o do proprio cartao. */}
+            <MissionCard
+              key={cycle.special.id}
+              mission={cycle.special}
+              {...card}
+              reloadLabel="Atualizar a missão especial"
+              titleLevel={4}
+            />
           </ul>
         </div>
       )}
@@ -179,7 +252,7 @@ function CycleContent({
  *
  * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao
  * feita aqui (a diaria ou a especial) -- hoje, para atualizar o painel de
- * progresso com `refresh()` silencioso (Task 8, incremento D).
+ * progresso com `refresh()` silencioso.
  */
 export function CycleSection({
   onMissionCompleted,
@@ -223,7 +296,7 @@ export function CycleSection({
   useEffect(() => {
     if (state.status === 'loaded' && !state.refreshFailed) {
       registry.reconcileCompleted(
-        [state.cycle.mission, state.cycle.special].flatMap((mission) =>
+        [state.cycle.mission, state.cycle.late_daily, state.cycle.special].flatMap((mission) =>
           mission !== null && mission.state === 'concluida' ? [mission.id] : [],
         ),
       )
@@ -237,6 +310,7 @@ export function CycleSection({
       refresh()
       onMissionCompleted?.()
     },
+    onRewarded: onMissionCompleted,
     reloadLabel: 'Atualizar a missão de hoje',
   }
   return (

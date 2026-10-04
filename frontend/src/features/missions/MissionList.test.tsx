@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createRef, StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { formatDeadline } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
 import * as completionRegistryHook from './useCompletionRegistry'
 import type { CompletionRegistry } from './useCompletionRegistry'
@@ -23,6 +24,10 @@ const pendente: Mission = {
   completed_at: null,
   xp: 100,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 }
 
 const concluida: Mission = {
@@ -40,6 +45,10 @@ const concluida: Mission = {
   completed_at: '2026-09-19T13:10:00Z',
   xp: 220,
   actual_duration_minutes: 70,
+  verification: 'autodeclarada',
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 }
 
 const emAndamento: Mission = { ...pendente, id: 9, state: 'em_andamento' }
@@ -366,7 +375,12 @@ describe('MissionList -- concluir', () => {
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
     // O rotulo sai da missao que a API DEVOLVEU, e nao de um palpite da tela.
-    const statusDepois = await screen.findByTestId('mission-completion-status')
+    // Espera o TEXTO final, e nao o elemento: a regiao ja estava na tela antes
+    // do clique, entao `findByTestId` a achava na hora e a assercao rodava com
+    // "Concluindo a missão…", antes de a resposta chegar (intermitente sob
+    // carga).
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
     expect(statusDepois).toBe(statusAntes)
     expect(statusDepois).toHaveAttribute('role', 'status')
     expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
@@ -439,7 +453,7 @@ describe('MissionList -- concluir', () => {
   })
 
   it('avisa a página quando uma avulsa é concluída', async () => {
-    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // A PAGINA usa este aviso para atualizar o painel de progresso
     // (`refreshProgress`, em `Headquarters.tsx`) -- o quadro de avulsas nao
     // tem `refresh` proprio (ao contrario de `CycleSection`), entao aqui so
     // importa que o callback e chamado depois do sucesso.
@@ -510,7 +524,8 @@ describe('MissionList -- concluir', () => {
 
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveTextContent('Não foi possível registrar esta tentativa. Tente de novo.')
-    // O botao continua oferecido: e M12 que faz o "Tentar de novo" sumir aqui.
+    // O botao continua oferecido, agora como "Tentar de novo": a recuperacao
+    // `retry-with-new-operation` nao tira o Concluir do cartao.
     const tentarDeNovo = screen.getByRole('button', {
       name: 'Tentar de novo a missão: Ler o capitulo 3 de algoritmos',
     })
@@ -582,9 +597,9 @@ describe('MissionList -- concluir', () => {
 })
 
 describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
-  // A e B, as duas missoes do cenario medido pela revisao final (pendencia 35
-  // do HANDOFF): A tem a conclusao em voo, B recebe `transicao_ilegal` e e dela
-  // que sai o "Atualizar o quadro".
+  // A e B, as duas missoes do cenario da pendencia 35 do HANDOFF: A tem a
+  // conclusao em voo, B recebe `transicao_ilegal` e e dela que sai o
+  // "Atualizar o quadro".
   const missaoA: Mission = pendente
   const missaoB: Mission = {
     ...pendente,
@@ -604,8 +619,8 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
   const K2 = '00000000-0000-4000-8000-000000000002'
   const K3 = '00000000-0000-4000-8000-000000000003'
 
-  const ESPERA_BOTAO = 'Aguardando a conclusão em andamento…'
-  const ESPERA_ANUNCIO = 'Aguardando a conclusão em andamento para atualizar o quadro.'
+  const ESPERA_BOTAO = 'Aguardando o pedido em andamento…'
+  const ESPERA_ANUNCIO = 'Aguardando o pedido em andamento para atualizar o quadro.'
 
   type Reply = () => Promise<Response>
 
@@ -766,7 +781,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     expect(listGets(fetchMock)).toBe(2)
   })
 
-  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o novo Concluir manda a MESMA chave', async () => {
+  it('T2: depois de uma falha de rede em A, o reload remonta o cartao e o Tentar de novo manda a MESMA chave', async () => {
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
       posts: {
@@ -784,12 +799,14 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
 
     // Nada em voo: o reload e imediato.
     expect(listGets(fetchMock)).toBe(2)
-    // O cartao de A REMONTOU: voltou a "Concluir", e nao ao "Tentar de novo".
+    // O cartao de A REMONTOU: o aviso da falha sumiu, mas a chave continua
+    // retida no registro, entao o botao segue dizendo "Tentar de novo" --
+    // "Concluir" sugeriria um envio novo, e ele reenvia a MESMA chave.
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
     })
     const concluirA = within(card(7)).getByTestId('mission-complete')
-    expect(concluirA).toHaveTextContent('Concluir')
+    expect(concluirA).toHaveTextContent('Tentar de novo')
     expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
 
     fireEvent.click(concluirA)
@@ -802,7 +819,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     ])
   })
 
-  it('T3: o cenario medido pela revisao final -- /7 em voo, /8 ilegal, Atualizar, e /7 de novo com a PRIMEIRA chave', async () => {
+  it('T3: com /7 em voo, /8 ilegal, Atualizar, e /7 de novo com a PRIMEIRA chave', async () => {
     const postA = deferred()
     const fetchMock = routedFetch({
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoBConcluida])],
@@ -931,7 +948,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     // `finally` que chama `settled()` tambem nao -- o contador do registro
     // ficava em 1 para sempre, e o cartao de A ficava preso em "Concluindo...".
     // Medido com um teste temporario, sobre a ordem antiga:
-    // {gets: 1, reload: "Aguardando a conclusão em andamento…",
+    // {gets: 1, reload: "Aguardando o pedido em andamento…",
     //  A: "Concluindo… a missão: A"}.
     vi.spyOn(crypto, 'randomUUID')
       .mockReset()
@@ -990,7 +1007,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
   it('o reload pelo ref recarrega o quadro, e espera a conclusao em voo', async () => {
     // O ref e como a PAGINA pede a recarga depois de a Tifa criar uma missao.
     // Ele passa pelo mesmo `requestReload` do "Atualizar o quadro": com uma
-    // conclusao em voo, espera (Incremento A, Task 6).
+    // conclusao em voo, espera.
     let resolver!: (response: Response) => void
     const post = new Promise<Response>((resolve) => {
       resolver = resolve
@@ -1012,7 +1029,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
     // Um GET so: a recarga pedida de fora esperou o POST em voo.
     expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
-      'Aguardando a conclusão em andamento para atualizar o quadro.',
+      'Aguardando o pedido em andamento para atualizar o quadro.',
     )
 
     await act(async () => {
@@ -1027,6 +1044,1363 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
       expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
     })
     expect(screen.getByTestId('missions-reload-status')).toBeEmptyDOMElement()
+  })
+})
+
+describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
+  const B: Mission = { ...pendente, id: 8, instructions: 'Revisar as anotacoes de grafos' }
+  const pendenteComEvidencia: Mission = {
+    ...pendente,
+    state: 'concluida',
+    availability: 'concluida',
+    completed_at: '2026-09-18T15:00:00Z',
+    verification: 'com_evidencia',
+    evidence: { text: 'Resumo entregue no caderno.', link: 'https://x.dev/resumo' },
+  }
+  const bonus: Reward = { ...recompensaPadrao, xp_awarded: 50 }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function card(id: number): HTMLElement {
+    const item = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === String(id))
+    if (item === undefined) {
+      throw new Error(`cartao ${String(id)} fora da tela`)
+    }
+    return item
+  }
+
+  function preencher(id: number, draft: { text?: string; link?: string }) {
+    const alvo = within(card(id))
+    if (alvo.queryByLabelText('O que você fez') === null) {
+      fireEvent.click(alvo.getByRole('button', { name: 'Entregar com evidência (opcional)' }))
+    }
+    if (draft.text !== undefined) {
+      fireEvent.change(alvo.getByLabelText('O que você fez'), { target: { value: draft.text } })
+    }
+    if (draft.link !== undefined) {
+      fireEvent.change(alvo.getByLabelText('Link (opcional)'), { target: { value: draft.link } })
+    }
+  }
+
+  function corpos(fetchMock: Mock, id: number): unknown[] {
+    return requestsTo(fetchMock, `POST /api/missions/${String(id)}/complete`).map(
+      (init) => JSON.parse(String(init.body)) as unknown,
+    )
+  }
+
+  it('o formulario de evidencia aparece so na missao nao concluida', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente, concluida]) })
+
+    render(<MissionList />)
+
+    await screen.findByTestId('missions-list')
+    expect(within(card(7)).getByTestId('evidence-toggle')).toBeInTheDocument()
+    expect(within(card(8)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+    // A concluida tem o painel, com o selo.
+    expect(within(card(8)).getByTestId('evaluation-verification')).toHaveTextContent(
+      'Autodeclarada',
+    )
+    expect(within(card(7)).queryByTestId('evaluation-panel')).not.toBeInTheDocument()
+  })
+
+  it('Concluir com rascunho preenchido manda a evidencia (sem espacos nas pontas)', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: '  Resumo entregue no caderno. ', link: 'https://x.dev/resumo' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(corpo).toMatchObject({
+      evidence: { text: 'Resumo entregue no caderno.', link: 'https://x.dev/resumo' },
+    })
+  })
+
+  it('Concluir sem texto manda a conclusao de sempre, sem a chave evidence', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () =>
+        Response.json(comRecompensa({ ...pendenteComEvidencia, evidence: null })),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: '   ' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(Object.keys(corpo as object)).toEqual(['operation_id'])
+  })
+
+  it('Concluir fica desabilitado com link ruim, e com link sem texto', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    const concluir = within(card(7)).getByTestId('mission-complete')
+
+    preencher(7, { text: 'Fiz', link: 'ftp://x' })
+    expect(concluir).toBeDisabled()
+
+    preencher(7, { link: 'https://x.dev' })
+    expect(concluir).toBeEnabled()
+
+    preencher(7, { text: '' })
+    expect(concluir).toBeDisabled()
+
+    preencher(7, { link: '' })
+    expect(concluir).toBeEnabled()
+  })
+
+  it('durante o envio, os campos da evidencia ficam desabilitados', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => new Promise<Response>(() => {}),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Fiz' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    expect(within(card(7)).getByLabelText('O que você fez')).toBeDisabled()
+    expect(within(card(7)).getByLabelText('Link (opcional)')).toBeDisabled()
+  })
+
+  it('o rascunho sobrevive a uma falha de rede, e o Tentar de novo manda a MESMA evidencia', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': (_init, call) =>
+        call === 1
+          ? Promise.reject(new TypeError('Failed to fetch'))
+          : Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    await within(card(7)).findByTestId('mission-completion-error')
+    expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue(
+      'Resumo entregue no caderno.',
+    )
+    fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [primeiro, segundo] = corpos(fetchMock, 7)
+    expect(segundo).toEqual(primeiro)
+  })
+
+  it('num 422 a tela diz que a evidencia nao foi aceita, mantem o rascunho editavel e usa chave nova', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': (_init, call) =>
+        call === 1
+          ? Response.json({ detail: [{ msg: 'x' }] }, { status: 422 })
+          : Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    expect(await within(card(7)).findByTestId('mission-completion-error')).toHaveTextContent(
+      'A evidência não foi aceita. Revise o texto e o link.',
+    )
+    const campo = within(card(7)).getByLabelText('O que você fez')
+    expect(campo).toHaveValue('Resumo entregue no caderno.')
+    expect(campo).toBeEnabled()
+
+    fireEvent.change(campo, { target: { value: 'Resumo revisado.' } })
+    fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+    await within(card(7)).findByText('Missão concluída.')
+    const [primeiro, segundo] = corpos(fetchMock, 7) as { operation_id: string }[]
+    expect(segundo?.operation_id).not.toBe(primeiro?.operation_id)
+    expect(segundo).toMatchObject({ evidence: { text: 'Resumo revisado.' } })
+  })
+
+  describe('retry pendente: a chave esta retida, entao a evidencia nao muda', () => {
+    const AVISO = 'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.'
+
+    async function falharDeRede(depois: (call: number) => Response | Promise<Response>) {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/complete': (_init, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : depois(call),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencher(7, { text: 'Resumo entregue no caderno.', link: 'https://x.dev/a' })
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+      await within(card(7)).findByTestId('mission-completion-error')
+      return fetchMock
+    }
+
+    it('depois de uma falha retry, os campos ficam desabilitados, com o aviso ligado', async () => {
+      await falharDeRede(() => Response.json(comRecompensa(pendenteComEvidencia)))
+
+      const aviso = within(card(7)).getByTestId('evidence-retry-notice')
+      expect(aviso).toHaveTextContent(AVISO)
+      for (const rotulo of ['O que você fez', 'Link (opcional)']) {
+        const campo = within(card(7)).getByLabelText(rotulo)
+        expect(campo).toHaveAttribute('readonly')
+        expect(campo).toHaveAttribute('aria-readonly', 'true')
+        expect(campo.getAttribute('aria-describedby')?.split(' ')).toContain(aviso.id)
+      }
+      // O rascunho continua la, congelado, e o Tentar de novo esta a mao.
+      expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue(
+        'Resumo entregue no caderno.',
+      )
+      expect(within(card(7)).getByRole('button', { name: /Tentar de novo/ })).toBeEnabled()
+    })
+
+    it('o retry com sucesso mostra o painel, sem formulario e sem aviso', async () => {
+      const fetchMock = await falharDeRede(() => Response.json(comRecompensa(pendenteComEvidencia)))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await within(card(7)).findByTestId('evaluation-panel')
+      expect(within(card(7)).queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+      expect(within(card(7)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+      const [primeiro, segundo] = corpos(fetchMock, 7)
+      expect(segundo).toEqual(primeiro)
+    })
+
+    it('o retry que falha por outro motivo (422) libera os campos de novo', async () => {
+      await falharDeRede(() => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await waitFor(() => {
+        expect(within(card(7)).getByLabelText('O que você fez')).not.toHaveAttribute('readonly')
+      })
+      expect(within(card(7)).getByLabelText('Link (opcional)')).not.toHaveAttribute('readonly')
+      expect(within(card(7)).queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
+    })
+
+    it('o retry que falha DE NOVO por rede continua travado', async () => {
+      await falharDeRede(() => Promise.reject(new TypeError('Failed to fetch')))
+
+      fireEvent.click(within(card(7)).getByRole('button', { name: /Tentar de novo/ }))
+
+      await waitFor(() => {
+        expect(within(card(7)).getByRole('button', { name: /Tentar de novo/ })).toBeEnabled()
+      })
+      expect(within(card(7)).getByLabelText('O que você fez')).toHaveAttribute('readonly')
+      expect(within(card(7)).getByTestId('evidence-retry-notice')).toHaveTextContent(AVISO)
+    })
+
+    it('o recarregamento do quadro remonta o cartao e a trava e o aviso CONTINUAM', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente, B]),
+        'POST /api/missions/7/complete': () => Promise.reject(new TypeError('Failed to fetch')),
+        'POST /api/missions/8/complete': () =>
+          Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencher(7, { text: 'Resumo entregue no caderno.' })
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+      await within(card(7)).findByTestId('mission-completion-error')
+      const campoAntes = within(card(7)).getByLabelText('O que você fez')
+      fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+      fireEvent.click(await within(card(8)).findByTestId('mission-reload'))
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+
+      await waitFor(() => {
+        expect(within(card(7)).getByLabelText('O que você fez')).not.toBe(campoAntes)
+      })
+      // O cartao remontou (idle, sem a mensagem de falha), e a chave retida
+      // continua valendo: editar de novo perderia a entrega.
+      expect(within(card(7)).queryByTestId('mission-completion-error')).not.toBeInTheDocument()
+      expect(within(card(7)).getByLabelText('O que você fez')).toHaveAttribute('readonly')
+      expect(within(card(7)).getByLabelText('Link (opcional)')).toHaveAttribute('readonly')
+      expect(within(card(7)).getByTestId('evidence-retry-notice')).toHaveTextContent(AVISO)
+    })
+  })
+
+  it('os rascunhos de dois cartoes sao independentes: digitar, concluir e falhar em um nao mexe no outro', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 1
+            ? [pendente, B]
+            : [{ ...pendente, state: 'concluida', verification: 'autodeclarada' }, B],
+        ),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Texto do sete', link: 'https://x.dev/sete' })
+    preencher(8, { text: 'Texto do oito' })
+
+    expect(within(card(7)).getByLabelText('O que você fez')).toHaveValue('Texto do sete')
+    expect(within(card(8)).getByLabelText('O que você fez')).toHaveValue('Texto do oito')
+    expect(within(card(8)).getByLabelText('Link (opcional)')).toHaveValue('')
+
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    await within(card(7)).findByText('Missão concluída.')
+
+    // Concluir o 7 nao limpou nem alterou o rascunho do 8 (na tela, e no
+    // registro: o remonte do cartao 8 abaixo le dele).
+    expect(within(card(8)).getByLabelText('O que você fez')).toHaveValue('Texto do oito')
+    const [corpo] = corpos(fetchMock, 7)
+    expect(corpo).toMatchObject({ evidence: { text: 'Texto do sete' } })
+    expect(corpos(fetchMock, 8)).toHaveLength(0)
+  })
+
+  it('o rascunho do 8 vem do registro quando o quadro recarrega depois de o 7 concluir', async () => {
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 1
+            ? [pendente, B]
+            : [{ ...pendente, state: 'concluida', verification: 'autodeclarada' }, B],
+        ),
+      'POST /api/missions/7/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Texto do sete' })
+    preencher(8, { text: 'Texto do oito' })
+    const campoAntes = within(card(8)).getByLabelText('O que você fez')
+
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    fireEvent.click(await within(card(7)).findByTestId('mission-reload'))
+
+    await waitFor(() => {
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    const campoDepois = within(card(8)).getByLabelText('O que você fez')
+    expect(campoDepois).not.toBe(campoAntes)
+    expect(campoDepois).toHaveValue('Texto do oito')
+  })
+
+  it('o botao de recarga da avaliacao espera a conclusao em voo, como o da conclusao', async () => {
+    let terminar: (resposta: Response) => void = () => undefined
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([{ ...pendenteComEvidencia }, B]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+      'POST /api/missions/8/complete': () =>
+        new Promise<Response>((resolve) => {
+          terminar = resolve
+        }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    // A conclusao de 8 fica em voo; a avaliacao de 7 falha pedindo atualizar.
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    fireEvent.click(within(card(7)).getByTestId('evaluation-request'))
+
+    // O quadro so "espera" depois do pedido de recarga com algo em voo.
+    fireEvent.click(await within(card(7)).findByTestId('evaluation-reload'))
+    const recarga = within(card(7)).getByTestId('evaluation-reload')
+    expect(recarga).toBeDisabled()
+    expect(recarga).toHaveTextContent('Aguardando o pedido em andamento…')
+
+    await act(async () => {
+      terminar(Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }))
+      await Promise.resolve()
+    })
+    // A conclusao terminou: a recarga esperada acontece e remonta os cartoes.
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    expect(within(card(7)).queryByTestId('evaluation-reload')).not.toBeInTheDocument()
+  })
+
+  it('depois de concluir, o foco nao se perde para o body: vai para o titulo do cartao', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    concluir.focus()
+    expect(document.activeElement).toBe(concluir)
+
+    fireEvent.click(concluir)
+
+    await within(card(7)).findByTestId('evaluation-panel')
+    expect(concluir).not.toBeInTheDocument()
+    // O painel aparece no commit; o foco vem do useEffect, que o React roda
+    // DEPOIS (passivo, fora do act de `findBy*`). Esperar so o painel deixava a
+    // assercao correr antes do efeito, sob carga -- por isso espera o foco.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+    })
+  })
+
+  it('se o foco ja esta em outro lugar quando a conclusao chega, ele nao e roubado', async () => {
+    let resolver: (r: Response) => void = () => {}
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente, B]),
+      'POST /api/missions/7/complete': () =>
+        new Promise<Response>((resolve) => {
+          resolver = resolve
+        }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    const outroBotao = within(card(8)).getByTestId('mission-complete')
+    outroBotao.focus()
+
+    await act(async () => {
+      resolver(Response.json(comRecompensa(pendenteComEvidencia)))
+      await Promise.resolve()
+    })
+    await within(card(7)).findByTestId('evaluation-panel')
+
+    expect(document.activeElement).toBe(outroBotao)
+  })
+
+  it('o cartao que ja vem concluido do quadro nao rouba o foco', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([concluida]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('o rascunho sobrevive a "Atualizar o quadro": o cartao remonta e o texto continua', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'concluida' }]),
+      'POST /api/missions/8/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Metade do resumo', link: 'https://x.dev/a' })
+    const campoAntes = within(card(7)).getByLabelText('O que você fez')
+
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    fireEvent.click(await within(card(8)).findByTestId('mission-reload'))
+
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+    await waitFor(() => {
+      expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    const campoDepois = within(card(7)).getByLabelText('O que você fez')
+    // REMONTOU (outro elemento), e o texto veio do registro do quadro.
+    expect(campoDepois).not.toBe(campoAntes)
+    expect(campoDepois).toHaveValue('Metade do resumo')
+    expect(within(card(7)).getByLabelText('Link (opcional)')).toHaveValue('https://x.dev/a')
+  })
+
+  it('depois do sucesso, o cartao mostra o painel da avaliacao e some o formulario', async () => {
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    preencher(7, { text: 'Resumo entregue no caderno.' })
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+    const painel = await within(card(7)).findByTestId('evaluation-panel')
+    expect(within(painel).getByTestId('evaluation-verification')).toHaveTextContent('Com evidência')
+    expect(
+      within(painel).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).toBeInTheDocument()
+    expect(within(card(7)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
+  })
+
+  it('o bonus da avaliacao avisa a pagina pelo mesmo onMissionCompleted', async () => {
+    const onMissionCompleted = vi.fn()
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendenteComEvidencia]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: 'Cobre o criterio.',
+            error_code: null,
+            model: 'modelo-x',
+            finished_at: '2026-09-18T16:00:00Z',
+          },
+          reward: bonus,
+        }),
+    })
+    render(<MissionList onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+
+    expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+50 XP de bônus')
+    expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('com o formulario RECOLHIDO e rascunho invalido, o motivo do Concluir desabilitado fica a vista e ligado', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    preencher(7, { text: 'Fiz', link: 'ftp://x' })
+
+    fireEvent.click(
+      within(card(7)).getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    )
+
+    expect(within(card(7)).queryByLabelText('Link (opcional)')).not.toBeInTheDocument()
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    expect(concluir).toBeDisabled()
+    const motivo = within(card(7)).getByTestId('mission-complete-blocked')
+    expect(motivo).toBeVisible()
+    expect(motivo).toHaveTextContent('Corrija o link da evidência para concluir.')
+    expect(concluir.getAttribute('aria-describedby')).toContain(motivo.id)
+  })
+
+  it('o motivo cobre o link sem texto e o texto acima do limite, e some com o rascunho valido', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    const concluir = within(card(7)).getByTestId('mission-complete')
+    expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
+    expect(concluir).not.toHaveAttribute('aria-describedby')
+
+    preencher(7, { link: 'https://x.dev' })
+    expect(within(card(7)).getByTestId('mission-complete-blocked')).toHaveTextContent(
+      'Conte o que você fez para concluir com o link.',
+    )
+
+    preencher(7, { text: 'a'.repeat(4001) })
+    expect(within(card(7)).getByTestId('mission-complete-blocked')).toHaveTextContent(
+      'Encurte o texto da evidência para concluir: o limite é de 4000 caracteres.',
+    )
+
+    preencher(7, { text: 'Fiz' })
+    expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
+  })
+
+  it('a falha refresh da avaliacao oferece "Atualizar o quadro", que recarrega', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json([pendenteComEvidencia]),
+      'POST /api/missions/7/evaluation': () =>
+        Response.json({ detail: 'x', code: 'sem_evidencia' }, { status: 409 }),
+    })
+    render(<MissionList />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar o quadro' }))
+
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+  })
+
+  it('o toggle e o pedir avaliacao sao descritos pelo titulo da missao', async () => {
+    const outra: Mission = { ...pendenteComEvidencia, id: 9, instructions: 'Revisar grafos' }
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente, outra]) })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    expect(
+      within(card(7)).getByRole('button', { name: 'Entregar com evidência (opcional)' }),
+    ).toHaveAccessibleDescription(pendente.instructions)
+    expect(
+      within(card(9)).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+    ).toHaveAccessibleDescription('Revisar grafos')
+  })
+})
+
+describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)', () => {
+  const B: Mission = { ...pendente, id: 8, instructions: 'Revisar as anotacoes de grafos' }
+  const iniciada: Mission = {
+    ...pendente,
+    state: 'em_andamento',
+    started_at: '2026-09-23T15:00:00Z',
+  }
+  const reagendamento = {
+    previous_deadline: pendente.deadline,
+    new_deadline: '2026-10-05T21:00:00Z',
+    reason: 'falta_de_tempo' as const,
+    origin: 'usuario' as const,
+    rescheduled_at: '2026-09-23T16:00:00Z',
+  }
+  const reagendada: Mission = {
+    ...pendente,
+    deadline: '2026-10-05T21:00:00Z',
+    reschedules: [reagendamento],
+  }
+
+  const K1 = '00000000-0000-4000-8000-000000000001'
+  const K2 = '00000000-0000-4000-8000-000000000002'
+  const K3 = '00000000-0000-4000-8000-000000000003'
+
+  const conflito = (code: string, status = 409) => Response.json({ detail: 'x', code }, { status })
+
+  function deferred() {
+    let resolve: (response: Response) => void = () => undefined
+    const promise = new Promise<Response>((res) => {
+      resolve = res
+    })
+    return { promise, resolve }
+  }
+
+  function card(id: number): HTMLElement {
+    const item = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === String(id))
+    if (item === undefined) {
+      throw new Error(`cartao ${String(id)} fora da tela`)
+    }
+    return item
+  }
+
+  function chaves(fetchMock: Mock, key: string): string[] {
+    return requestsTo(fetchMock, key).map(
+      (init) => (jsonBody(init) as { operation_id: string }).operation_id,
+    )
+  }
+
+  /** Abre o disclosure do cartao, escreve o prazo e escolhe o motivo. */
+  function preencherReagendamento(id: number, civil: string, motivo: string) {
+    const alvo = within(card(id))
+    fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
+    fireEvent.change(alvo.getByLabelText('Novo prazo (horário de Brasília)'), {
+      target: { value: civil },
+    })
+    fireEvent.click(alvo.getByLabelText(motivo))
+  }
+
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(K1)
+      .mockReturnValueOnce(K2)
+      .mockReturnValueOnce(K3)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  describe('iniciar', () => {
+    it('oferece Iniciar so na pendente disponivel, com o nome dizendo QUAL missao', async () => {
+      const perdida: Mission = { ...pendente, id: 10, availability: 'perdida' }
+      const expirada: Mission = { ...pendente, id: 11, availability: 'expirada' }
+      routeFetch({
+        'GET /api/missions': () =>
+          Response.json([pendente, perdida, expirada, { ...iniciada, id: 12 }, concluida]),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+
+      const iniciar = within(card(7)).getByTestId('mission-start')
+      expect(iniciar).toHaveAccessibleName(`Iniciar a missão: ${pendente.instructions}`)
+      expect(iniciar).toBeEnabled()
+      for (const id of [10, 11, 12, 8]) {
+        expect(within(card(id)).queryByTestId('mission-start')).not.toBeInTheDocument()
+      }
+    })
+
+    it('a regiao viva do inicio ja existe, vazia, antes do clique', async () => {
+      routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const regiao = within(card(7)).getByTestId('mission-start-status')
+      expect(regiao).toHaveAttribute('role', 'status')
+      expect(regiao).toBeEmptyDOMElement()
+    })
+
+    it('em voo diz "Iniciando…" desabilitado; no sucesso anuncia, mostra "Em andamento" e "Iniciada em"', async () => {
+      const post = deferred()
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => post.promise,
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      const iniciar = within(card(7)).getByTestId('mission-start')
+      expect(iniciar).toHaveTextContent('Iniciando…')
+      expect(iniciar).toBeDisabled()
+      // Um envio de cada vez no cartao: o Concluir espera o Iniciar.
+      expect(within(card(7)).getByTestId('mission-complete')).toBeDisabled()
+      fireEvent.click(iniciar)
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/start')).toHaveLength(1)
+      expect(jsonBody(requestsTo(fetchMock, 'POST /api/missions/7/start')[0])).toEqual({
+        operation_id: K1,
+      })
+
+      await act(async () => {
+        post.resolve(Response.json(iniciada))
+        await post.promise
+      })
+
+      expect(within(card(7)).getByTestId('mission-start-status')).toHaveTextContent(
+        'Missão iniciada.',
+      )
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      const linha = within(card(7)).getByTestId('mission-started-at')
+      expect(linha).toHaveTextContent(`Iniciada em ${formatDeadline(iniciada.started_at ?? '')}`)
+      expect(within(linha).getByText(formatDeadline(iniciada.started_at ?? ''))).toHaveAttribute(
+        'dateTime',
+        iniciada.started_at,
+      )
+      expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
+      // O Concluir continua ali, em andamento.
+      expect(within(card(7)).getByTestId('mission-complete')).toBeEnabled()
+    })
+
+    it('a missao em andamento vinda do quadro ja mostra "Iniciada em"; a pendente e a concluida nao', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }, concluida]),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      expect(within(card(12)).getByTestId('mission-started-at')).toBeInTheDocument()
+      expect(within(card(7)).queryByTestId('mission-started-at')).not.toBeInTheDocument()
+      expect(within(card(8)).queryByTestId('mission-started-at')).not.toBeInTheDocument()
+    })
+
+    it('sem botao nem aviso (em andamento), o bloco do Iniciar nao reserva espaco: so a regiao vazia', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }]),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const vazio = within(card(12)).getByTestId('mission-start-status').parentElement
+      expect(vazio).not.toHaveClass('mt-3')
+      expect(within(card(7)).getByTestId('mission-start-status').parentElement).toHaveClass('mt-3')
+    })
+
+    it('durante uma conclusao em voo, o Iniciar fica desabilitado', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+      expect(within(card(7)).getByTestId('mission-start')).toBeDisabled()
+    })
+
+    it('depois de iniciar, concluir mostra a Duracao real que a API devolveu', async () => {
+      const concluidaComDuracao: Mission = {
+        ...iniciada,
+        state: 'concluida',
+        availability: 'concluida',
+        completed_at: '2026-09-23T15:25:00Z',
+        actual_duration_minutes: 25,
+        verification: 'autodeclarada',
+      }
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => Response.json(iniciada),
+        'POST /api/missions/7/complete': () => Response.json(comRecompensa(concluidaComDuracao)),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await within(card(7)).findByText('Missão iniciada.')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+      expect(await within(card(7)).findByText('Missão concluída.')).toBeInTheDocument()
+      expect(within(card(7)).getByTestId('mission-actual-duration')).toHaveTextContent('25 min')
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+
+    it('falha "refresh" (ja iniciada): a mensagem e "Atualizar o quadro" no lugar do Iniciar, que recarrega', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) => Response.json(call === 1 ? [pendente] : [iniciada]),
+        'POST /api/missions/7/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      const erro = await within(card(7)).findByTestId('mission-start-error')
+      expect(erro).toHaveAttribute('role', 'alert')
+      expect(erro).toHaveTextContent(
+        'Esta missão já foi iniciada ou concluída. Atualize para ver o estado atual.',
+      )
+      expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
+      const atualizar = within(card(7)).getByTestId('mission-start-reload')
+      expect(atualizar).toHaveTextContent('Atualizar o quadro')
+
+      fireEvent.click(atualizar)
+
+      await waitFor(() => {
+        expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+    })
+
+    it('falha "retry" (rede): avisa, e "Tentar de novo" manda a MESMA chave', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(iniciada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      expect(await within(card(7)).findByTestId('mission-start-error')).toHaveTextContent(
+        'Não foi possível confirmar o início. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+      )
+      const repetir = within(card(7)).getByTestId('mission-start')
+      expect(repetir).toHaveTextContent('Tentar de novo')
+      expect(repetir).toHaveAccessibleName(`Tentar de novo a missão: ${pendente.instructions}`)
+
+      fireEvent.click(repetir)
+
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(within(card(7)).queryByTestId('mission-start-error')).not.toBeInTheDocument()
+      expect(chaves(fetchMock, 'POST /api/missions/7/start')).toEqual([K1, K1])
+    })
+
+    it('falha "retry-with-new-operation": "Tentar de novo" manda uma chave NOVA', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': (_, call) =>
+          call === 1 ? conflito('operacao_reutilizada') : Response.json(iniciada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await within(card(7)).findByTestId('mission-start-error')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(chaves(fetchMock, 'POST /api/missions/7/start')).toEqual([K1, K2])
+    })
+
+    it('depois de iniciar, o foco que caiu no body vai para o titulo do cartao', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => Response.json(iniciada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const iniciar = within(card(7)).getByTestId('mission-start')
+      iniciar.focus()
+
+      fireEvent.click(iniciar)
+
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(iniciar).not.toBeInTheDocument()
+      // O texto aparece no commit; o foco vem do useEffect, que o React roda
+      // DEPOIS (passivo, fora do act de `findBy*`). Sob carga a assercao
+      // corria antes do efeito e via o `body` (pendencia 183) -- por isso
+      // espera o foco, e nao so o texto.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(within(card(7)).getByTestId('mission-instructions'))
+      })
+    })
+
+    it('depois de iniciar, o foco que ja estava em outro lugar nao e roubado', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente, B]),
+        'POST /api/missions/7/start': () => Response.json(iniciada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      const outro = within(card(8)).getByTestId('mission-start')
+      outro.focus()
+
+      await within(card(7)).findByText('Missão iniciada.')
+
+      expect(document.activeElement).toBe(outro)
+    })
+  })
+
+  describe('reagendar', () => {
+    it('o disclosure aparece na avulsa pendente e em andamento, e nao na concluida', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }, concluida]),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      for (const id of [7, 12]) {
+        const toggle = within(card(id)).getByRole('button', { name: 'Reagendar prazo' })
+        expect(toggle).toHaveAttribute('aria-expanded', 'false')
+        expect(toggle).toHaveAccessibleDescription(
+          id === 7 ? pendente.instructions : iniciada.instructions,
+        )
+      }
+      expect(within(card(8)).queryByTestId('reschedule-toggle')).not.toBeInTheDocument()
+    })
+
+    it('salvar manda o instante em UTC e o motivo; o prazo muda, o disclosure fecha, anuncia e mostra o historico', async () => {
+      const post = deferred()
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': () => post.promise,
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const regiao = within(card(7)).getByTestId('mission-reschedule-status')
+      expect(regiao).toHaveAttribute('role', 'status')
+      expect(regiao).toBeEmptyDOMElement()
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      const salvar = within(card(7)).getByTestId('reschedule-submit')
+      salvar.focus()
+
+      fireEvent.click(salvar)
+
+      expect(salvar).toBeDisabled()
+      expect(within(card(7)).getByTestId('mission-start')).toBeDisabled()
+      expect(within(card(7)).getByTestId('mission-complete')).toBeDisabled()
+      expect(jsonBody(requestsTo(fetchMock, 'POST /api/missions/7/reschedule')[0])).toEqual({
+        operation_id: K1,
+        new_deadline: '2026-10-05T21:00:00.000Z',
+        reason: 'falta_de_tempo',
+      })
+
+      await act(async () => {
+        post.resolve(Response.json(reagendada))
+        await post.promise
+      })
+
+      const prazo = within(card(7)).getByTestId('mission-deadline')
+      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline))
+      expect(prazo).toHaveAttribute('dateTime', reagendada.deadline)
+      const toggle = within(card(7)).getByRole('button', { name: 'Reagendar prazo' })
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(document.activeElement).toBe(toggle)
+      expect(regiao).toHaveTextContent('Prazo reagendado.')
+      expect(within(card(7)).getByTestId('mission-reschedule-count')).toHaveTextContent(
+        'Reagendada 1 vez',
+      )
+      expect(within(card(7)).getByTestId('mission-reschedule-entry')).toHaveTextContent(
+        `${formatDeadline(pendente.deadline)} → ${formatDeadline(reagendada.deadline)} · Falta de tempo · por você`,
+      )
+    })
+
+    it('falha "edit": a mensagem com role=alert, e o formulario fica com o que foi digitado', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? conflito('prazo_expirado', 422) : Response.json(reagendada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-09-01T08:00', 'Dificuldade')
+
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      const erro = await within(card(7)).findByTestId('reschedule-error')
+      expect(erro).toHaveAttribute('role', 'alert')
+      expect(erro).toHaveTextContent('O novo prazo precisa estar no futuro.')
+      const alvo = within(card(7))
+      expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toHaveValue(
+        '2026-09-01T08:00',
+      )
+      expect(alvo.getByLabelText('Dificuldade')).toBeChecked()
+
+      // Corrigir e salvar: a chave foi liberada, o segundo envio usa outra.
+      fireEvent.change(alvo.getByLabelText('Novo prazo (horário de Brasília)'), {
+        target: { value: '2026-10-05T18:00' },
+      })
+      fireEvent.click(alvo.getByTestId('reschedule-submit'))
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(chaves(fetchMock, 'POST /api/missions/7/reschedule')).toEqual([K1, K2])
+    })
+
+    it('falha "retry": "Tentar de novo" reenvia o MESMO rascunho com a MESMA chave', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      const repetir = within(card(7)).getByTestId('reschedule-submit')
+      expect(repetir).toHaveTextContent('Tentar de novo')
+      fireEvent.click(repetir)
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      const corpos = requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)
+      expect(corpos).toHaveLength(2)
+      expect(corpos[1]).toEqual(corpos[0])
+      expect(corpos[0]).toEqual({
+        operation_id: K1,
+        new_deadline: '2026-10-05T21:00:00.000Z',
+        reason: 'falta_de_tempo',
+      })
+    })
+
+    it('falha "retry" e a pessoa muda o motivo: o envio sai com chave NOVA, sem 409 evitavel', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      fireEvent.click(within(card(7)).getByLabelText('Dificuldade'))
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      const corpos = requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)
+      expect(corpos).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
+        { operation_id: K2, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'dificuldade' },
+      ])
+    })
+
+    it('falha "retry" e a pessoa muda SO a data: o envio sai com chave NOVA', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      fireEvent.change(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)'), {
+        target: { value: '2026-10-06T18:00' },
+      })
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      const corpos = requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)
+      expect(corpos).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
+        { operation_id: K2, new_deadline: '2026-10-06T21:00:00.000Z', reason: 'falta_de_tempo' },
+      ])
+    })
+
+    it('com o Iniciar em voo, o formulario de reagendar fica travado', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => new Promise<Response>(() => undefined),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeEnabled()
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      expect(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')).toBeDisabled()
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+    })
+
+    it('com o Concluir em voo, o formulario de reagendar fica travado', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+
+      expect(within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')).toBeDisabled()
+      expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+    })
+
+    describe('um SEGUNDO reagendamento no mesmo cartao', () => {
+      /** Primeiro reagendamento com sucesso e o segundo aberto com outra data. */
+      async function segundoReagendamento(segundo: Parameters<typeof routeFetch>[0][string]) {
+        const fetchMock = routeFetch({
+          'GET /api/missions': () => Response.json([pendente]),
+          'POST /api/missions/7/reschedule': (init, call) =>
+            call === 1 ? Response.json(reagendada) : segundo(init, call),
+        })
+        render(<MissionList />)
+        await screen.findByTestId('missions-list')
+        preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+        fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+        await within(card(7)).findByText('Prazo reagendado.')
+        preencherReagendamento(7, '2026-09-01T08:00', 'Dificuldade')
+        fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+        return fetchMock
+      }
+
+      /** O cartao continua no resultado do PRIMEIRO, com o disclosure aberto. */
+      function continuaNoPrimeiro() {
+        const alvo = within(card(7))
+        expect(alvo.getByTestId('mission-deadline')).toHaveAttribute(
+          'dateTime',
+          reagendada.deadline,
+        )
+        expect(alvo.getByTestId('mission-reschedule-count')).toHaveTextContent('Reagendada 1 vez')
+        expect(alvo.getByRole('button', { name: 'Reagendar prazo' })).toHaveAttribute(
+          'aria-expanded',
+          'true',
+        )
+        expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toHaveValue(
+          '2026-09-01T08:00',
+        )
+      }
+
+      it('em voo: o prazo e o historico do primeiro ficam, e o formulario continua aberto', async () => {
+        await segundoReagendamento(() => new Promise<Response>(() => undefined))
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByTestId('reschedule-submit')).toBeDisabled()
+      })
+
+      it('falha "edit": o prazo do primeiro fica, e a mensagem aparece com o que foi digitado', async () => {
+        await segundoReagendamento(() => conflito('prazo_expirado', 422))
+        expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
+          'O novo prazo precisa estar no futuro.',
+        )
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByLabelText('Dificuldade')).toBeChecked()
+      })
+
+      it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
+        await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
+        expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
+          'Não foi possível confirmar o reagendamento.',
+        )
+        continuaNoPrimeiro()
+        expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')
+      })
+    })
+
+    it('falha "refresh": o formulario sai, a mensagem fica e "Atualizar o quadro" recarrega', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) => Response.json(call === 1 ? [pendente] : [concluida]),
+        'POST /api/missions/7/reschedule': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      const erro = await within(card(7)).findByTestId('mission-reschedule-error')
+      expect(erro).toHaveAttribute('role', 'alert')
+      expect(erro).toHaveTextContent(
+        'Esta missão já foi concluída e não pode ser reagendada. Atualize para ver o estado atual.',
+      )
+      expect(within(card(7)).queryByTestId('reschedule-toggle')).not.toBeInTheDocument()
+      fireEvent.click(within(card(7)).getByTestId('mission-reschedule-reload'))
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+    })
+
+    it('iniciar e depois reagendar: o cartao fica em andamento E com o prazo novo', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/start': () => Response.json(iniciada),
+        'POST /api/missions/7/reschedule': () =>
+          Response.json({ ...reagendada, state: 'em_andamento', started_at: iniciada.started_at }),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await within(card(7)).findByText('Missão iniciada.')
+
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      expect(within(card(7)).getByTestId('mission-deadline')).toHaveAttribute(
+        'dateTime',
+        reagendada.deadline,
+      )
+    })
+
+    it('reagendar e depois iniciar: o cartao mostra a resposta do inicio, que ja traz o historico', async () => {
+      routeFetch({
+        'GET /api/missions': () => Response.json([pendente]),
+        'POST /api/missions/7/reschedule': () => Response.json(reagendada),
+        'POST /api/missions/7/start': () =>
+          Response.json({ ...reagendada, state: 'em_andamento', started_at: iniciada.started_at }),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByText('Prazo reagendado.')
+
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      expect(within(card(7)).getByTestId('mission-reschedule-count')).toHaveTextContent(
+        'Reagendada 1 vez',
+      )
+    })
+  })
+
+  describe('historico', () => {
+    it('com dois reagendamentos vindos do quadro, conta e lista os dois, com a origem', async () => {
+      const duas: Mission = {
+        ...reagendada,
+        deadline: '2026-10-07T21:00:00Z',
+        reschedules: [
+          reagendamento,
+          {
+            ...reagendamento,
+            previous_deadline: reagendamento.new_deadline,
+            new_deadline: '2026-10-07T21:00:00Z',
+            origin: 'tifa',
+          },
+        ],
+      }
+      routeFetch({ 'GET /api/missions': () => Response.json([duas, pendente]) })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      expect(within(card(7)).getByTestId('mission-reschedule-count')).toHaveTextContent(
+        'Reagendada 2 vezes',
+      )
+      const linhas = within(card(7)).getAllByTestId('mission-reschedule-entry')
+      expect(linhas[0]).toHaveTextContent('· Falta de tempo · por você')
+      expect(linhas[1]).toHaveTextContent('· Falta de tempo · proposto pela Tifa')
+    })
+
+    it('sem reagendamento, nada de historico', async () => {
+      routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      expect(within(card(7)).queryByTestId('mission-reschedule-count')).not.toBeInTheDocument()
+      expect(within(card(7)).queryByTestId('mission-reschedule-history')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('a recarga espera o Iniciar e o Reagendar', () => {
+    it('com o Iniciar de A em voo, "Atualizar o quadro" espera e recarrega quando ele termina', async () => {
+      const postA = deferred()
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [iniciada, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/start': () => postA.promise,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      const atualizar = await within(card(8)).findByTestId('mission-start-reload')
+
+      fireEvent.click(atualizar)
+
+      expect(atualizar).toBeDisabled()
+      expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
+        'Aguardando o pedido em andamento para atualizar o quadro.',
+      )
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
+
+      await act(async () => {
+        postA.resolve(Response.json(iniciada))
+        await postA.promise
+      })
+
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+    })
+
+    it('com o Reagendar de A em voo, a espera nao fala em conclusao e a recarga sai quando ele termina', async () => {
+      const postA = deferred()
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [reagendada, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/reschedule': () => postA.promise,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      const atualizar = await within(card(8)).findByTestId('mission-start-reload')
+
+      fireEvent.click(atualizar)
+
+      expect(atualizar).toBeDisabled()
+      expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(atualizar).not.toHaveTextContent('conclusão')
+      expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
+        'Aguardando o pedido em andamento para atualizar o quadro.',
+      )
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(1)
+
+      await act(async () => {
+        postA.resolve(Response.json(reagendada))
+        await postA.promise
+      })
+
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+    })
+
+    it('a chave do Iniciar com falha "retry" sobrevive a remontagem: o clique depois da recarga manda a MESMA', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/start': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(iniciada),
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await within(card(7)).findByTestId('mission-start-error')
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+
+      fireEvent.click(await within(card(8)).findByTestId('mission-start-reload'))
+
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+      // O cartao de A remontou: o aviso sumiu, mas a chave ficou no registro.
+      expect(within(card(7)).queryByTestId('mission-start-error')).not.toBeInTheDocument()
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(chaves(fetchMock, 'POST /api/missions/7/start')).toEqual([K1, K1])
+      expect(chaves(fetchMock, 'POST /api/missions/8/start')).toEqual([K2])
+    })
   })
 })
 

@@ -24,12 +24,17 @@ const diaria: Mission = {
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 }
 const diariaConcluida: Mission = {
   ...diaria,
   state: 'concluida',
   availability: 'concluida',
   completed_at: '2026-09-23T15:00:00Z',
+  verification: 'autodeclarada',
 }
 const especial: Mission = {
   ...diaria,
@@ -66,8 +71,21 @@ const ciclo = (ajustes: Partial<Cycle> = {}): Cycle => ({
   streak: 3,
   days_to_milestone: 4,
   special: null,
+  late_daily: null,
   ...ajustes,
 })
+
+/** F25: a diaria de ontem, iniciada as 23:50, ainda concluivel hoje. */
+const diariaDeOntem: Mission = {
+  ...diaria,
+  id: 30,
+  instructions: 'Revisar a lista de ontem',
+  day: '2026-09-22',
+  deadline: '2026-09-23T00:00:00-03:00',
+  state: 'em_andamento',
+  availability: 'disponivel',
+  started_at: '2026-09-23T02:50:00Z',
+}
 
 describe('CycleSection', () => {
   afterEach(() => {
@@ -107,7 +125,7 @@ describe('CycleSection', () => {
     expect(within(cartao).getByTestId('mission-instructions')).toHaveTextContent(
       diaria.instructions,
     )
-    // m3: o titulo do cartao da missao de hoje e h3 por padrao, como sempre foi.
+    // O titulo do cartao da missao de hoje e h3 por padrao, como sempre foi.
     expect(
       within(cartao).getByRole('heading', { level: 3, name: diaria.instructions }),
     ).toBeInTheDocument()
@@ -147,7 +165,12 @@ describe('CycleSection', () => {
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
 
-    const statusDepois = await screen.findByTestId('mission-completion-status')
+    // Espera o TEXTO final, e nao o elemento: a regiao ja estava na tela antes
+    // do clique, entao `findByTestId` a achava na hora e a assercao podia rodar
+    // antes de a resposta chegar (intermitente sob carga; mesmo conserto do
+    // MissionList.test.tsx).
+    expect(await screen.findByText('Missão concluída.')).toBeInTheDocument()
+    const statusDepois = screen.getByTestId('mission-completion-status')
     expect(statusDepois).toBe(statusAntes)
     expect(within(statusDepois).getByTestId('mission-completion-text')).toHaveTextContent(
       'Missão concluída.',
@@ -162,7 +185,7 @@ describe('CycleSection', () => {
   })
 
   it('avisa a página quando a missão de hoje é concluída', async () => {
-    // Task 8: a PAGINA usa este aviso para atualizar o painel de progresso
+    // A PAGINA usa este aviso para atualizar o painel de progresso
     // (`refreshProgress`, em `Headquarters.tsx`) -- aqui so importa que o
     // callback e chamado, e que o refresh do PROPRIO ciclo continua
     // acontecendo do mesmo jeito (o segundo GET /api/cycle).
@@ -190,6 +213,156 @@ describe('CycleSection', () => {
     })
   })
 
+  it('o bonus da avaliacao da diaria chega ao onMissionCompleted da pagina', async () => {
+    const onMissionCompleted = vi.fn()
+    const comEvidencia: Mission = {
+      ...diariaConcluida,
+      verification: 'com_evidencia',
+      evidence: { text: 'Cinco exercicios feitos.', link: null },
+    }
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ mission: comEvidencia })),
+      'POST /api/missions/31/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'atende',
+            feedback: 'Cobre o criterio.',
+            error_code: null,
+            model: 'modelo-x',
+            finished_at: '2026-09-23T16:00:00Z',
+          },
+          reward: { ...recompensaPadrao, xp_awarded: 20 },
+        }),
+    })
+    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+
+    expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+20 XP de bônus')
+    expect(onMissionCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('a diaria concluida autodeclarada mostra o selo no cartao', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
+    render(<CycleSection />)
+    expect(await screen.findByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
+  })
+
+  it('sem diaria de ontem em conclusao tardia, nao mostra a secao dela', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
+    render(<CycleSection />)
+    await screen.findByTestId('mission-item')
+    expect(screen.queryByTestId('cycle-late-daily')).toBeNull()
+  })
+
+  it('a diaria de ontem iniciada a tempo aparece com Concluir e o limite (F25)', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ streak: 0, late_daily: diariaDeOntem })),
+      'POST /api/missions/30/complete': () =>
+        Response.json(
+          comRecompensa({
+            ...diariaDeOntem,
+            state: 'concluida',
+            availability: 'concluida',
+            completed_at: '2026-09-23T03:10:00Z',
+            actual_duration_minutes: 20,
+          }),
+        ),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    expect(
+      within(secao).getByRole('heading', {
+        level: 3,
+        name: 'Diária de ontem — iniciada a tempo',
+      }),
+    ).toBeInTheDocument()
+    expect(within(secao).getByTestId('cycle-late-daily-reason')).toHaveTextContent(
+      'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.',
+    )
+    expect(
+      within(secao).getByRole('heading', { level: 4, name: diariaDeOntem.instructions }),
+    ).toBeInTheDocument()
+    // A missao de hoje continua no lugar dela, fora da secao.
+    expect(within(secao).queryByText(diaria.instructions)).toBeNull()
+    expect(screen.getAllByTestId('mission-item')).toHaveLength(2)
+
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, 'POST /api/missions/30/complete')).toHaveLength(1)
+    })
+  })
+
+  it('a diaria de ontem concluida com atraso troca o texto do prazo pelo de concluida', async () => {
+    const concluidaComAtraso: Mission = {
+      ...diariaDeOntem,
+      state: 'concluida',
+      availability: 'concluida',
+      completed_at: '2026-09-23T03:10:00Z',
+    }
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ late_daily: concluidaComAtraso })),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    expect(within(secao).getByTestId('cycle-late-daily-reason')).toHaveTextContent(
+      'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.',
+    )
+    expect(secao).not.toHaveTextContent('ainda pode ser concluída')
+  })
+
+  it('a especial em conclusao tardia ganha o motivo a vista', async () => {
+    const especialTardia: Mission = {
+      ...especial,
+      state: 'em_andamento',
+      started_at: '2026-09-29T02:50:00Z',
+      deadline: '2026-09-29T00:00:00-03:00',
+    }
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ today: '2026-09-29', mission: null, special: especialTardia })),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
+      'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.',
+    )
+    expect(within(secao).getByTestId('mission-complete')).toBeInTheDocument()
+  })
+
+  it('a especial concluida com atraso diz que foi concluida, sem oferecer prazo', async () => {
+    const especialConcluidaTarde: Mission = {
+      ...especial,
+      state: 'concluida',
+      availability: 'concluida',
+      started_at: '2026-09-29T02:50:00Z',
+      completed_at: '2026-09-29T13:00:00Z',
+      deadline: '2026-09-29T00:00:00-03:00',
+    }
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(
+          ciclo({ today: '2026-09-29', mission: null, special: especialConcluidaTarde }),
+        ),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
+      'Concluída depois do fim da janela — você começou a tempo.',
+    )
+  })
+
+  it('a especial dentro da janela nao mostra motivo de atraso', async () => {
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+    })
+    render(<CycleSection />)
+    await screen.findByTestId('cycle-special')
+    expect(screen.queryByTestId('cycle-special-late-reason')).toBeNull()
+  })
+
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
     render(<CycleSection />)
@@ -204,7 +377,7 @@ describe('CycleSection', () => {
     })
     render(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
-    // m3: o titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
+    // O titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
     // (`titleLevel={4}`, em CycleSection.tsx) -- por isso os dois cabem na
     // mesma secao sem colidir no mesmo nivel. Antes do conserto os dois eram
     // h3, e so o `name` desambiguava a consulta abaixo.
@@ -221,6 +394,41 @@ describe('CycleSection', () => {
     expect(screen.queryByTestId('cycle-progress')).toBeNull()
   })
 
+  it('a diaria e a especial tem rascunhos independentes, e concluir a diaria nao mexe no da especial', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
+    })
+    render(<CycleSection />)
+    const secaoEspecial = await screen.findByTestId('cycle-special')
+    const cartaoDiaria = screen
+      .getAllByTestId('mission-item')
+      .find((el) => el.getAttribute('data-mission-id') === '31') as HTMLElement
+    const preencher = (cartao: HTMLElement, texto: string) => {
+      fireEvent.click(within(cartao).getByRole('button', { name: /Entregar com evidência/ }))
+      fireEvent.change(within(cartao).getByLabelText('O que você fez'), {
+        target: { value: texto },
+      })
+    }
+
+    preencher(cartaoDiaria, 'Feito da diaria')
+    preencher(secaoEspecial, 'Feito da especial')
+
+    expect(within(cartaoDiaria).getByLabelText('O que você fez')).toHaveValue('Feito da diaria')
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+
+    fireEvent.click(within(cartaoDiaria).getByTestId('mission-complete'))
+    await within(cartaoDiaria).findByText('Missão concluída.')
+
+    expect(within(secaoEspecial).getByLabelText('O que você fez')).toHaveValue('Feito da especial')
+    const [corpo] = requestsTo(fetchMock, 'POST /api/missions/31/complete').map(
+      (init) => JSON.parse(String(init.body)) as unknown,
+    )
+    expect(corpo).toMatchObject({ evidence: { text: 'Feito da diaria' } })
+    expect(requestsTo(fetchMock, 'POST /api/missions/38/complete')).toHaveLength(0)
+  })
+
   it('o erro de carregamento oferece Tentar novamente', async () => {
     routeFetch({
       'GET /api/cycle': (_init, call) =>
@@ -233,8 +441,8 @@ describe('CycleSection', () => {
     expect(await screen.findByTestId('mission-item')).toBeInTheDocument()
   })
 
-  it('I1: a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
-    // O cenario medido pela revisao final: o `focus` chega enquanto a carga
+  it('a janela que recebe foco durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+    // O cenario: o `focus` chega enquanto a carga
     // inicial esta em voo, o `refresh` dele falha, e a carga inicial so
     // assenta DEPOIS (e e descartada, por ser mais velha). Antes do conserto
     // a secao ficava em "Consultando o ciclo..." para sempre, sem botao.
@@ -295,7 +503,7 @@ describe('CycleSection', () => {
     expect(screen.queryByTestId('cycle-stale')).toBeNull()
   })
 
-  it('m4: a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
+  it('a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
     render(<CycleSection />)
     // O ATRIBUTO, e nao so `getByRole('status')`: o `<p>` nao tem role
@@ -303,7 +511,7 @@ describe('CycleSection', () => {
     expect(await screen.findByTestId('cycle-streak')).toHaveAttribute('role', 'status')
   })
 
-  it('m5: o botao de recuperacao do cartao do ciclo diz "Atualizar a missão de hoje", nao "Atualizar o quadro"', async () => {
+  it('o botao de recuperacao do cartao do ciclo diz "Atualizar a missão de hoje", nao "Atualizar o quadro"', async () => {
     routeFetch({
       'GET /api/cycle': () => Response.json(ciclo()),
       'POST /api/missions/31/complete': () =>
@@ -322,8 +530,42 @@ describe('CycleSection', () => {
     expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
   })
 
-  it('m1: se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
-    // O cenario da revisao: a diaria 31 e concluida perto da meia-noite, e a
+  it('o botao de recuperacao da diaria de ontem diz "Atualizar a diária de ontem", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () => Response.json(ciclo({ streak: 0, late_daily: diariaDeOntem })),
+      'POST /api/missions/30/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-late-daily')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a diária de ontem' }),
+    ).toBeInTheDocument()
+    // O rotulo da missao de hoje, num cartao que nao e a de hoje, mentiria.
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+  })
+
+  it('o botao de recuperacao da especial diz "Atualizar a missão especial", nao o da missao de hoje', async () => {
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      'POST /api/missions/38/complete': () =>
+        Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    render(<CycleSection />)
+    const secao = await screen.findByTestId('cycle-special')
+    fireEvent.click(within(secao).getByTestId('mission-complete'))
+
+    expect(
+      await within(secao).findByRole('button', { name: 'Atualizar a missão especial' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+  })
+
+  it('se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
+    // O cenario: a diaria 31 e concluida perto da meia-noite, e a
     // resposta do refresh ja e a diaria 32 de amanha. Sem `key={mission.id}`
     // em CycleSection.tsx, o MESMO MissionCard continua montado, preso em
     // `completion.status === 'completed'` da missao 31 -- a tela mostraria a
@@ -360,7 +602,7 @@ describe('CycleSection', () => {
     expect(within(cartao).getByTestId('mission-complete')).toBeInTheDocument()
   })
 
-  it('m7: a especial CONCLUIDA dentro da janela mostra "Concluída" e nao oferece Concluir', async () => {
+  it('a especial CONCLUIDA dentro da janela mostra "Concluída" e nao oferece Concluir', async () => {
     const especialConcluida: Mission = {
       ...especial,
       state: 'concluida',
@@ -376,6 +618,62 @@ describe('CycleSection', () => {
     const secao = await screen.findByTestId('cycle-special')
     expect(within(secao).getByTestId('mission-state')).toHaveTextContent('Concluída')
     expect(within(secao).queryByTestId('mission-complete')).toBeNull()
+  })
+
+  describe('incremento F: o prazo da diaria e da especial vem do ciclo (F7)', () => {
+    it('a diaria e a especial NAO oferecem "Reagendar prazo" nem historico', async () => {
+      routeFetch({
+        'GET /api/cycle': () =>
+          Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
+      })
+      render(<CycleSection />)
+      await screen.findByTestId('cycle-special')
+      const cartoes = screen.getAllByTestId('mission-item')
+      expect(cartoes).toHaveLength(2)
+      for (const cartao of cartoes) {
+        expect(within(cartao).queryByTestId('reschedule-toggle')).toBeNull()
+        expect(within(cartao).queryByRole('button', { name: 'Reagendar prazo' })).toBeNull()
+        expect(within(cartao).queryByTestId('mission-reschedule-status')).toBeNull()
+      }
+    })
+
+    it('a diaria disponivel oferece Iniciar, e o inicio mostra "Em andamento" no cartao do ciclo', async () => {
+      const iniciada: Mission = {
+        ...diaria,
+        state: 'em_andamento',
+        started_at: '2026-09-23T15:00:00Z',
+      }
+      routeFetch({
+        'GET /api/cycle': () => Response.json(ciclo()),
+        'POST /api/missions/31/start': () => Response.json(iniciada),
+      })
+      render(<CycleSection />)
+      const cartao = await screen.findByTestId('mission-item')
+
+      fireEvent.click(within(cartao).getByTestId('mission-start'))
+
+      expect(await within(cartao).findByText('Missão iniciada.')).toBeInTheDocument()
+      expect(within(cartao).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+    })
+
+    it('a falha "refresh" do Iniciar oferece "Atualizar a missão de hoje", que recarrega o ciclo', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/cycle': () => Response.json(ciclo()),
+        'POST /api/missions/31/start': () =>
+          Response.json({ detail: 'x', code: 'missao_expirada' }, { status: 409 }),
+      })
+      render(<CycleSection />)
+      const cartao = await screen.findByTestId('mission-item')
+      fireEvent.click(within(cartao).getByTestId('mission-start'))
+
+      const atualizar = await within(cartao).findByTestId('mission-start-reload')
+      expect(atualizar).toHaveTextContent('Atualizar a missão de hoje')
+      fireEvent.click(atualizar)
+
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
+      })
+    })
   })
 
   it('o handle atualiza o ciclo em silêncio e permanece estável sem remontar', async () => {
@@ -865,7 +1163,7 @@ describe('limites da reconciliacao no ciclo', () => {
     expect(registry().operationIdFor(38)).toBe(key)
     await act(async () => ref.current!.refresh())
     fireEvent.click(
-      screen.getByRole('button', { name: `Concluir a missão: ${especial.instructions}` }),
+      screen.getByRole('button', { name: `Tentar de novo a missão: ${especial.instructions}` }),
     )
     await screen.findByTestId('mission-completion-error')
     expect(
@@ -984,4 +1282,42 @@ describe('limites da reconciliacao no ciclo', () => {
     expect(registry().operationIdFor(31)).toBe(keys[2])
     expect(registry().operationIdFor(38)).toBe(keys[3])
   })
+})
+
+it('a leitura terminal da diária tardia libera sua chave, sem inventar recompensa', async () => {
+  const k1 = '00000000-0000-4000-8000-000000000001'
+  const k2 = '00000000-0000-4000-8000-000000000002'
+  vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(k1).mockReturnValueOnce(k2)
+  const registry = observeRegistry()
+  const late: Mission = {
+    ...diaria,
+    id: 30,
+    day: '2026-09-22',
+    state: 'em_andamento',
+    started_at: '2026-09-22T12:00:00Z',
+  }
+  routeFetch({
+    'GET /api/cycle': (_init, call) =>
+      Response.json(
+        ciclo({
+          late_daily:
+            call === 1
+              ? late
+              : { ...late, state: 'concluida', completed_at: '2026-09-23T12:00:00Z' },
+        }),
+      ),
+    'POST /api/missions/30/complete': () => Promise.reject(new TypeError('resposta perdida')),
+  })
+  const ref = createRef<CycleSectionHandle>()
+  render(<CycleSection ref={ref} />)
+  const card = within(await screen.findByTestId('cycle-late-daily'))
+  fireEvent.click(card.getByTestId('mission-complete'))
+  await card.findByTestId('mission-completion-error')
+  expect(registry().operationIdFor(30)).toBe(k1)
+  await act(async () => ref.current!.refresh())
+  expect(card.getByTestId('mission-state')).toHaveTextContent('Concluída')
+  expect(screen.queryByTestId('reward-announcement')).toBeNull()
+  expect(registry().operationIdFor(30)).toBe(k2)
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })

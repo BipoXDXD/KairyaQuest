@@ -18,10 +18,19 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from focusquest.core.base import Base
-from focusquest.modules.missions.domain import MissionState, MissionType
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    FalhaDaAvaliacao,
+    MissionState,
+    MissionType,
+    MotivoDoReagendamento,
+    OrigemDoReagendamento,
+    TipoDeOperacao,
+    Veredito,
+)
 
 # Ao contrario da migracao -- que congelou a lista de estados de proposito,
 # porque migracao e historico --, o modelo DESCREVE a tabela de hoje, e por
@@ -35,6 +44,17 @@ _ESTADOS_SQL = ", ".join(f"'{estado.value}'" for estado in MissionState)
 # Mesmo motivo de _ESTADOS_SQL: o modelo DESCREVE a tabela de hoje, e por isso
 # deriva do enum -- o CHECK que vive no banco so muda por migracao a mao.
 _TIPOS_SQL = ", ".join(f"'{tipo.value}'" for tipo in MissionType)
+
+# Mesmo motivo de _ESTADOS_SQL para os tres enums da avaliacao: o modelo
+# deriva do enum, e o CHECK do banco so muda por migracao escrita a mao.
+_ESTADOS_DA_AVALIACAO_SQL = ", ".join(f"'{e.value}'" for e in EstadoDaAvaliacao)
+_VEREDITOS_SQL = ", ".join(f"'{v.value}'" for v in Veredito)
+_FALHAS_SQL = ", ".join(f"'{f.value}'" for f in FalhaDaAvaliacao)
+
+# Mesmo motivo, para o historico de reagendamentos e o `kind` das operacoes.
+_MOTIVOS_SQL = ", ".join(f"'{m.value}'" for m in MotivoDoReagendamento)
+_ORIGENS_SQL = ", ".join(f"'{o.value}'" for o in OrigemDoReagendamento)
+_TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
 
 
 class MissionStateText(TypeDecorator[MissionState]):
@@ -76,6 +96,62 @@ class MissionTypeText(TypeDecorator[MissionType]):
         return MissionType(value)
 
 
+class EstadoDaAvaliacaoText(TypeDecorator[EstadoDaAvaliacao]):
+    """TEXT no banco, EstadoDaAvaliacao no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> EstadoDaAvaliacao:
+        return EstadoDaAvaliacao(value)
+
+
+class VereditoText(TypeDecorator[Veredito]):
+    """TEXT no banco, Veredito no Python. A coluna e nulavel: None volta None."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> Veredito | None:
+        return None if value is None else Veredito(value)
+
+
+class FalhaDaAvaliacaoText(TypeDecorator[FalhaDaAvaliacao]):
+    """TEXT no banco, FalhaDaAvaliacao no Python. Nulavel, como VereditoText."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> FalhaDaAvaliacao | None:
+        return None if value is None else FalhaDaAvaliacao(value)
+
+
+class MotivoDoReagendamentoText(TypeDecorator[MotivoDoReagendamento]):
+    """TEXT no banco, MotivoDoReagendamento no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> MotivoDoReagendamento:
+        return MotivoDoReagendamento(value)
+
+
+class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
+    """TEXT no banco, OrigemDoReagendamento no Python (como MissionStateText)."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(
+        self, value: Any, dialect: Dialect
+    ) -> OrigemDoReagendamento:
+        return OrigemDoReagendamento(value)
+
+
 class WeeklyPlan(Base):
     """O plano de uma semana: 7 diarias e 1 especial (spec, C3).
 
@@ -108,7 +184,7 @@ class WeeklyPlan(Base):
 class User(Base):
     """Usuario dono das missoes.
 
-    Nao faz parte do brief da tarefa, e existe por uma razao estrutural:
+    Existe por uma razao estrutural, e nao de negocio:
     `Mission.user_id` e `ForeignKey("users.id")`, e o SQLAlchemy resolve esse
     alvo procurando a tabela em `Base.metadata`. Sem `users` registrada, a
     configuracao dos mappers levanta NoReferencedTableError no primeiro uso
@@ -162,6 +238,22 @@ class Mission(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    # Um-para-um (PK/UNIQUE em mission_id). `lazy="select"` para a leitura de
+    # UMA missao (conclusao, avaliacao), onde carregar sob demanda e o certo.
+    # A listagem, que le as duas de todas as missoes, pede `selectinload` na
+    # propria consulta (`listar_missoes`, pendencia 96).
+    evidence: Mapped[MissionEvidence | None] = relationship(
+        cascade="all, delete-orphan", lazy="select"
+    )
+    evaluation: Mapped[MissionEvaluation | None] = relationship(
+        cascade="all, delete-orphan", lazy="select"
+    )
+    # Em ordem de gravacao (F12). `lazy="select"` pelo mesmo motivo da evidencia
+    # e da avaliacao; a listagem pede `selectinload` (pendencia 96).
+    reschedules: Mapped[list[MissionReschedule]] = relationship(
+        order_by="MissionReschedule.id", cascade="all, delete-orphan", lazy="select"
+    )
+
     # As restricoes sao repetidas aqui porque o modelo precisa DESCREVER a
     # tabela que a migracao criou, com os mesmos nomes. Nao e o modelo que
     # cria o esquema -- as migracoes criam --, mas um modelo que omite as
@@ -200,6 +292,14 @@ class Mission(Base):
             ["weekly_plans.id", "weekly_plans.user_id"],
             name="fk_missions_plano_do_usuario",
         ),
+        CheckConstraint(
+            "state <> 'em_andamento' OR started_at IS NOT NULL",
+            name="ck_missions_em_andamento_iniciada",
+        ),
+        CheckConstraint(
+            "started_at IS NULL OR completed_at IS NULL OR started_at <= completed_at",
+            name="ck_missions_inicio_antes_da_conclusao",
+        ),
         UniqueConstraint("plan_id", "day", name="uq_missions_plan_id_day"),
         Index(
             "uq_missions_especial_por_plano",
@@ -229,4 +329,120 @@ class MissionOperation(Base):
     # por ele que um `DROP CONSTRAINT` futuro vai chamar a restricao.
     __table_args__ = (
         UniqueConstraint("operation_id", name="uq_mission_operations_operation_id"),
+        CheckConstraint(
+            f"kind IN ({_TIPOS_DE_OPERACAO_SQL})", name="ck_mission_operations_kind"
+        ),
+    )
+
+
+class MissionReschedule(Base):
+    """Um reagendamento do prazo (F12). So de insercao: o servico nunca faz
+    UPDATE nem DELETE aqui -- e o historico que nao se reescreve (README s8)."""
+
+    __tablename__ = "mission_reschedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE")
+    )
+    # A operacao que o gravou (F13): o reenvio acha a linha por aqui.
+    operation_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("mission_operations.operation_id", ondelete="CASCADE")
+    )
+    previous_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    new_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[MotivoDoReagendamento] = mapped_column(MotivoDoReagendamentoText)
+    origin: Mapped[OrigemDoReagendamento] = mapped_column(OrigemDoReagendamentoText)
+    rescheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("operation_id", name="uq_mission_reschedules_operation_id"),
+        CheckConstraint(
+            f"reason IN ({_MOTIVOS_SQL})", name="ck_mission_reschedules_reason"
+        ),
+        CheckConstraint(
+            f"origin IN ({_ORIGENS_SQL})", name="ck_mission_reschedules_origin"
+        ),
+        CheckConstraint(
+            "new_deadline <> previous_deadline",
+            name="ck_mission_reschedules_prazo_mudou",
+        ),
+        Index("ix_mission_reschedules_mission_id", "mission_id"),
+    )
+
+
+class MissionEvidence(Base):
+    """A evidencia entregue ao concluir a missao (uma por missao)."""
+
+    __tablename__ = "mission_evidence"
+
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), primary_key=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(Text, default=None)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(text) BETWEEN 1 AND 4000", name="ck_mission_evidence_text"
+        ),
+        CheckConstraint(
+            "link IS NULL OR (link ~* '^https?://\\S+$' AND char_length(link) <= 2000)",
+            name="ck_mission_evidence_link",
+        ),
+    )
+
+
+class MissionEvaluation(Base):
+    """A avaliacao da Tifa sobre a evidencia (uma por missao, E9)."""
+
+    __tablename__ = "mission_evaluations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE")
+    )
+    state: Mapped[EstadoDaAvaliacao] = mapped_column(EstadoDaAvaliacaoText)
+    attempt: Mapped[int] = mapped_column(Integer)
+    verdict: Mapped[Veredito | None] = mapped_column(VereditoText, default=None)
+    feedback: Mapped[str | None] = mapped_column(Text, default=None)
+    error_code: Mapped[FalhaDaAvaliacao | None] = mapped_column(
+        FalhaDaAvaliacaoText, default=None
+    )
+    model: Mapped[str] = mapped_column(Text)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    __table_args__ = (
+        UniqueConstraint("mission_id", name="uq_mission_evaluations_mission_id"),
+        CheckConstraint(
+            f"state IN ({_ESTADOS_DA_AVALIACAO_SQL})",
+            name="ck_mission_evaluations_state",
+        ),
+        CheckConstraint("attempt >= 1", name="ck_mission_evaluations_attempt"),
+        CheckConstraint(
+            f"verdict IN ({_VEREDITOS_SQL})", name="ck_mission_evaluations_verdict"
+        ),
+        CheckConstraint(
+            f"error_code IN ({_FALHAS_SQL})", name="ck_mission_evaluations_error_code"
+        ),
+        CheckConstraint(
+            "char_length(feedback) BETWEEN 1 AND 1500",
+            name="ck_mission_evaluations_feedback",
+        ),
+        CheckConstraint(
+            "(state = 'concluida') = (verdict IS NOT NULL AND feedback IS NOT NULL)",
+            name="ck_mission_evaluations_concluida_com_veredito",
+        ),
+        CheckConstraint(
+            "(state = 'falhou') = (error_code IS NOT NULL)",
+            name="ck_mission_evaluations_falha_com_codigo",
+        ),
+        CheckConstraint(
+            "(state = 'avaliando') = (finished_at IS NULL)",
+            name="ck_mission_evaluations_avaliando_sem_fim",
+        ),
     )

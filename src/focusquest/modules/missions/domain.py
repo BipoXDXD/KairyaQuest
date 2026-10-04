@@ -1,6 +1,6 @@
 """Regras da missao, independentes de framework e de persistencia."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 
@@ -109,3 +109,160 @@ def xp_da_missao(tipo: MissionType, dificuldade: int) -> int:
     if tipo is MissionType.ESPECIAL:
         return xp * MULTIPLICADOR_DA_ESPECIAL
     return xp
+
+
+class Veredito(StrEnum):
+    """O nivel da rubrica fixa da avaliacao (E6). Dado, nao texto de tela."""
+
+    ATENDE = "atende"
+    PARCIAL = "parcial"
+    NAO_ATENDE = "nao_atende"
+
+
+class EstadoDaAvaliacao(StrEnum):
+    """O ciclo de vida de uma avaliacao (E9): gravada `avaliando` antes de
+    chamar o modelo, e so anunciada depois de `concluida` ou `falhou`."""
+
+    AVALIANDO = "avaliando"
+    CONCLUIDA = "concluida"
+    FALHOU = "falhou"
+
+
+class FalhaDaAvaliacao(StrEnum):
+    """O `error_code` de uma tentativa que falhou (E13). Os dois primeiros tem
+    o mesmo valor dos codigos do stream da conversa (`CodigoDoStream`)."""
+
+    PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
+    TEMPO_ESGOTADO = "tempo_esgotado"
+    AVALIACAO_INVALIDA = "avaliacao_invalida"
+
+
+class Verificacao(StrEnum):
+    """Como a conclusao foi verificada (E4). DERIVADA, nunca gravada. A
+    avaliacao da Tifa nao e um terceiro valor aqui: ela e mostrada a parte,
+    como interpretacao do modelo, sobre uma conclusao `com_evidencia`."""
+
+    AUTODECLARADA = "autodeclarada"
+    COM_EVIDENCIA = "com_evidencia"
+
+
+def verificacao_da_missao(
+    estado: MissionState, tem_evidencia: bool
+) -> Verificacao | None:
+    """`None` enquanto a missao nao foi concluida: nao ha o que verificar."""
+    if estado is not MissionState.CONCLUIDA:
+        if tem_evidencia:
+            raise ValueError("evidencia gravada numa missao nao concluida")
+        return None
+    return Verificacao.COM_EVIDENCIA if tem_evidencia else Verificacao.AUTODECLARADA
+
+
+# CONCLUIDA e terminal (E8): uma avaliacao concluida por missao, para sempre.
+# FALHOU volta a AVALIANDO numa tentativa nova; a orfa passa por FALHOU antes.
+_TRANSICOES_DA_AVALIACAO: dict[EstadoDaAvaliacao, frozenset[EstadoDaAvaliacao]] = {
+    EstadoDaAvaliacao.AVALIANDO: frozenset(
+        {EstadoDaAvaliacao.CONCLUIDA, EstadoDaAvaliacao.FALHOU}
+    ),
+    EstadoDaAvaliacao.FALHOU: frozenset({EstadoDaAvaliacao.AVALIANDO}),
+    EstadoDaAvaliacao.CONCLUIDA: frozenset(),
+}
+
+
+def validar_transicao_da_avaliacao(
+    atual: EstadoDaAvaliacao, destino: EstadoDaAvaliacao
+) -> None:
+    """Mesmo erro e mesma forma de mensagem da missao (`transicao_ilegal`)."""
+    if destino not in _TRANSICOES_DA_AVALIACAO[atual]:
+        permitidos = sorted(e.value for e in _TRANSICOES_DA_AVALIACAO[atual])
+        alvo = ", ".join(permitidos) if permitidos else "nenhum estado"
+        raise TransicaoIlegalError(
+            f"nao e possivel ir de '{atual.value}' para '{destino.value}'; "
+            f"a partir de '{atual.value}' so se pode ir para: {alvo}"
+        )
+
+
+class TipoDeOperacao(StrEnum):
+    """O `kind` de `mission_operations`: QUAL operacao a chave nomeou. A
+    UNIQUE e sobre `operation_id` sozinho, entao uma chave gasta num tipo esta
+    gasta nos outros (ver `CONCLUSAO` em service.py)."""
+
+    CONCLUSAO = "complete"
+    INICIO = "start"
+    REAGENDAMENTO = "reschedule"
+
+
+class MotivoDoReagendamento(StrEnum):
+    """Por que o prazo mudou (README s5). Fechado de proposito (F10): a maquina
+    distingue, e texto livre seria mais um dado nao confiavel no prompt."""
+
+    DIFICULDADE = "dificuldade"
+    FALTA_DE_TEMPO = "falta_de_tempo"
+    MUDANCA_DE_PRIORIDADE = "mudanca_de_prioridade"
+
+
+class OrigemDoReagendamento(StrEnum):
+    """Quem pediu: a pessoa pela tela, ou a Tifa por proposta confirmada."""
+
+    USUARIO = "usuario"
+    TIFA = "tifa"
+
+
+class ProblemaDoNovoPrazo(StrEnum):
+    """Por que um novo prazo nao serve. O servico traduz cada um no erro dele."""
+
+    NO_PASSADO = "no_passado"
+    INALTERADO = "inalterado"
+
+
+def prazo_em_utc(prazo: datetime) -> datetime:
+    """O mesmo instante em UTC, ou `ValueError` se ele nao for um instante UTC
+    representavel (F9).
+
+    Duas recusas, e nenhuma pode ficar para o `astimezone` sozinho:
+
+    - **sem fuso**: `astimezone` NAO falha num `datetime` sem fuso -- assume o
+      fuso da maquina. O mesmo 10:00 viraria 13:00Z num Mac em -03:00 e 10:00Z
+      num container em UTC, sem erro.
+    - **fora da faixa**: a data local cabe no `datetime`, o instante em UTC nao
+      (`9999-12-31T23:59:59-03:00`); o `OverflowError` cru viraria 500.
+
+    A borda (`PrazoComFuso`, em `schemas.py`) usa esta mesma funcao; o servico
+    tambem a chama porque a Tifa chega a ele sem passar pela borda.
+    """
+    if prazo.utcoffset() is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    try:
+        return prazo.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError(
+            "prazo fora da faixa representavel quando convertido para UTC"
+        ) from exc
+
+
+def problema_do_novo_prazo(
+    novo: datetime, atual: datetime, agora: datetime
+) -> ProblemaDoNovoPrazo | None:
+    """O que impede `novo` de ser o prazo, ou `None` (F9).
+
+    O passado vem primeiro: um prazo vencido igual ao atual e, antes de tudo,
+    um prazo vencido -- e a mensagem que ajuda a pessoa. Antecipar e permitido.
+    Instantes comparam como instantes: o mesmo momento em `Z` e em `-03:00` e
+    o mesmo prazo.
+    """
+    if novo.tzinfo is None or atual.tzinfo is None or agora.tzinfo is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    if novo <= agora:
+        return ProblemaDoNovoPrazo.NO_PASSADO
+    if novo == atual:
+        return ProblemaDoNovoPrazo.INALTERADO
+    return None
+
+
+def validar_reagendamento(estado: MissionState) -> None:
+    """Reagendar vale em `pendente` e `em_andamento` (F8); a concluida nao tem
+    mais prazo a cumprir. Mesmo erro (e mesmo `code`) da transicao ilegal."""
+    if estado is MissionState.CONCLUIDA:
+        raise TransicaoIlegalError(
+            "nao e possivel reagendar uma missao 'concluida'; "
+            "so se reagenda o que ainda nao foi feito"
+        )

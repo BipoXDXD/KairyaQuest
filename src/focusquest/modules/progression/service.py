@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from focusquest.modules.missions.cycle_service import carregar_historico
-from focusquest.modules.missions.domain import MissionState, xp_da_missao
+from focusquest.modules.missions.domain import MissionState, Veredito, xp_da_missao
 from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.progression.domain import (
     CATALOGO,
@@ -21,12 +21,14 @@ from focusquest.modules.progression.domain import (
     Conquista,
     FaixaDoNivel,
     FatosDoUsuario,
+    bonus_da_avaliacao,
     conquistas_satisfeitas,
     faixa_do_nivel,
     maior_sequencia,
     nivel_do_saldo,
 )
 from focusquest.modules.progression.models import (
+    FONTE_BONUS,
     FONTE_CONCLUSAO,
     UserAchievement,
     XpEntry,
@@ -145,13 +147,11 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
     atual.
     """
     entrada = session.scalars(
-        select(XpEntry).where(XpEntry.mission_id == missao.id)
-    ).one()
-    antes = session.scalar(
-        select(func.coalesce(func.sum(XpEntry.amount), 0)).where(
-            XpEntry.user_id == entrada.user_id, XpEntry.id < entrada.id
+        select(XpEntry).where(
+            XpEntry.mission_id == missao.id, XpEntry.source == FONTE_CONCLUSAO
         )
-    )
+    ).one()
+    antes = _saldo_antes(session, entrada)
     codigos = set(
         session.scalars(
             select(UserAchievement.code).where(
@@ -159,14 +159,73 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
             )
         )
     )
-    total = (antes or 0) + entrada.amount
+    total = antes + entrada.amount
     return Recompensa(
         xp_awarded=entrada.amount,
         xp_total=total,
-        level_before=nivel_do_saldo(antes or 0),
+        level_before=nivel_do_saldo(antes),
         level_after=nivel_do_saldo(total),
         achievements_unlocked=tuple(c for c in CATALOGO if c.codigo.value in codigos),
     )
+
+
+def registrar_bonus(
+    session: Session, missao: Mission, veredito: Veredito, agora: datetime
+) -> None:
+    """O bonus da avaliacao (E7), na transacao que grava o veredito, com a
+    missao ja travada; trava o usuario depois dela (D12). Nao avalia conquistas:
+    nenhum fato do catalogo muda com o bonus (E15)."""
+    valor = bonus_da_avaliacao(
+        veredito, xp_da_missao(missao.mission_type, missao.difficulty)
+    )
+    if valor == 0:
+        return
+    _travar_usuario(session, missao.user_id)
+    session.add(
+        XpEntry(
+            user_id=missao.user_id,
+            mission_id=missao.id,
+            amount=valor,
+            source=FONTE_BONUS,
+            credited_at=agora,
+        )
+    )
+    session.flush()
+
+
+def recompensa_do_bonus(session: Session, missao: Mission) -> Recompensa | None:
+    """O bonus reconstruido do banco (o desenho da D10), ou None sem bonus.
+
+    Como `recompensa_da_missao`: o `xp_total` e o saldo DAQUELE momento, e o
+    pedido repetido devolve o mesmo corpo por construcao. Sem conquistas: o
+    bonus nao destrava nenhuma (E15).
+    """
+    entrada = session.scalars(
+        select(XpEntry).where(
+            XpEntry.mission_id == missao.id, XpEntry.source == FONTE_BONUS
+        )
+    ).one_or_none()
+    if entrada is None:
+        return None
+    antes = _saldo_antes(session, entrada)
+    total = antes + entrada.amount
+    return Recompensa(
+        xp_awarded=entrada.amount,
+        xp_total=total,
+        level_before=nivel_do_saldo(antes),
+        level_after=nivel_do_saldo(total),
+        achievements_unlocked=(),
+    )
+
+
+def _saldo_antes(session: Session, entrada: XpEntry) -> int:
+    """A soma dos lancamentos do usuario anteriores a `entrada` (por `id`)."""
+    antes = session.scalar(
+        select(func.coalesce(func.sum(XpEntry.amount), 0)).where(
+            XpEntry.user_id == entrada.user_id, XpEntry.id < entrada.id
+        )
+    )
+    return antes or 0
 
 
 def ler_progresso(session: Session, user_id: int) -> Progresso:

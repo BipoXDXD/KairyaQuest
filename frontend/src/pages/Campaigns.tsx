@@ -8,10 +8,11 @@ import { CAMPAIGNS_HEADING_ID } from './headings'
  * A pagina COMPOE, como o Quartel-General: o `main`, o titulo e a trilha da
  * semana -- `<CampaignTrail />`, de `features/campaigns/CampaignTrail.tsx`,
  * com titulos a partir do `h2`. `onOpenHeadquarters` e opcional e so
- * atravessa (Ruling R5 do controlador do C): quem decide a navegacao e o
- * `App`, nao esta pagina; Campanhas repassa o callback, e a trilha decide
- * mostrar o botao "Ir ao Quartel-General" so quando ele existe. Com isso,
- * Campanhas deixa de ser sem props (K11 relaxado por R5).
+ * atravessa: quem decide a navegacao e o `App`, nao esta pagina; Campanhas
+ * repassa o callback, e a trilha decide mostrar o botao "Ir ao
+ * Quartel-General" so quando ele existe. Por isso Campanhas recebe uma prop,
+ * e a fronteira da pagina (so compoe o `main`, o titulo e a trilha) continua
+ * a mesma.
  */
 export function Campaigns({
   onOpenHeadquarters,

@@ -29,6 +29,7 @@ from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.service import (
     Executada,
     PrazoExpirado,
+    ResultadoDaConfirmacao,
     confirmar_acao,
     rejeitar_acao,
 )
@@ -90,7 +91,7 @@ def _proposta(
     return acao
 
 
-def _confirmar(session: Session, acao_id: int, op: str) -> Executada | PrazoExpirado:
+def _confirmar(session: Session, acao_id: int, op: str) -> ResultadoDaConfirmacao:
     return confirmar_acao(session, ESTUDANTE, acao_id, op, clock=lambda: AGORA)
 
 
@@ -231,7 +232,7 @@ def test_violacao_que_nao_e_do_operation_id_nao_vira_reuso(session: Session) -> 
     invalida adicionada direto por `session.add` antes da chamada estouraria
     ali -- fora do `try/except` de `confirmar_acao` -- e o teste passaria
     sem nunca exercitar a guarda que distingue a UNIQUE de qualquer outra
-    violacao (a que a Mutacao 4 do brief cobre).
+    violacao, que e a guarda sob prova.
 
     Por isso a linha invalida entra por um `before_flush`: ele so dispara
     quando ja HA algo pendente para flushar por outro motivo -- e isso so
@@ -453,8 +454,7 @@ def test_confirmar_trava_a_linha_da_acao(
     este teste reprovar; quem prova essa trava especifica e a corrida real
     de `test_dois_confirmar_com_chaves_diferentes_um_vence` e, para o
     caminho do recusar -- que nao grava nenhuma coluna indexada --,
-    `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence`. Ver
-    task-6-report.md, "Fix round 1", para a medicao completa.)
+    `test_confirmar_e_recusar_em_paralelo_uma_decisao_vence`.)
 
     O que este teste prova, deterministicamente: que `confirmar_acao`
     esbarra numa `FOR KEY SHARE` alheia -- o mecanismo de espera de fato

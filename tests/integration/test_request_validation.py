@@ -18,7 +18,12 @@ from focusquest.core.config import Settings
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import app
 from focusquest.modules.missions.cycle_schemas import PlanCreate
-from focusquest.modules.missions.schemas import MissionComplete, MissionCreate
+from focusquest.modules.missions.schemas import (
+    MissionComplete,
+    MissionCreate,
+    MissionRescheduleIn,
+    MissionStart,
+)
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.schemas import ActionConfirm, MessageCreate
 from focusquest.modules.tutoring.service import Tutoria
@@ -78,6 +83,18 @@ def _casos_invalidos() -> list[tuple[str, type[BaseModel], dict[str, Any]]]:
             )
         casos.append(
             ("/api/missions/1/complete", MissionComplete, {"operation_id": texto})
+        )
+        casos.append(("/api/missions/1/start", MissionStart, {"operation_id": texto}))
+        casos.append(
+            (
+                "/api/missions/1/reschedule",
+                MissionRescheduleIn,
+                {
+                    "operation_id": texto,
+                    "new_deadline": "2026-10-11T12:00:00Z",
+                    "reason": "falta_de_tempo",
+                },
+            )
         )
         casos.append(
             ("/api/tutoring/actions/1/confirm", ActionConfirm, {"operation_id": texto})

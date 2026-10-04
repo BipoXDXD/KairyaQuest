@@ -9,6 +9,9 @@ from pydantic import SecretStr, ValidationError
 
 from focusquest.core.config import Settings
 
+# A raiz do repositorio, onde mora o `.env.example`.
+RAIZ = Path(__file__).resolve().parents[2]
+
 
 def test_le_a_url_do_banco_do_ambiente(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -32,7 +35,7 @@ def test_falha_quando_a_url_do_banco_nao_esta_no_ambiente(
     monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
     monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     # O Settings le ".env" (caminho relativo) do diretorio de trabalho. Sem
-    # o chdir, o .env real do repositorio (README s4/Step 9) esconderia a
+    # o chdir, o .env real do repositorio (README s4) esconderia a
     # falta de configuracao e o teste pararia de testar o que promete.
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError):
@@ -84,7 +87,7 @@ def _settings_do_arquivo(
     aqui leria o valor do processo, nao o do .env que este teste acabou de
     escrever. O `pre-push` (scripts/check-push.sh + scripts/push-env.sh)
     exporta para o ambiente do gate toda `FOCUSQUEST_*` do .env do clone -- e
-    o `.env` copiado do `.env.example` tem `FOCUSQUEST_TUTOR_MAX_TOKENS=1024`
+    o `.env` copiado do `.env.example` tem `FOCUSQUEST_TUTOR_MAX_TOKENS=2048`
     etc., nao zero. Sem este delenv, `test_limites_da_tutoria_recusam_zero`
     passava em `make check` isolado e reprovava so sob o `pre-push`: o .env
     de teste escrevia "=0", mas a variavel de ambiente exportada (nao-zero)
@@ -139,6 +142,18 @@ def test_a_chave_nao_aparece_na_representacao(
     assert "sk-ant-segredo" not in str(settings)
 
 
+def test_o_nivel_de_log_e_campo_declarado_do_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`FOCUSQUEST_LOG_LEVEL` no .env nao pode derrubar o `Settings` com
+    `extra_forbidden`: o campo vem de `ConfiguracaoDeLog`, que o `Settings`
+    herda -- um lugar so onde o nivel e declarado e validado."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, "FOCUSQUEST_LOG_LEVEL=warning\n"
+    )
+    assert settings.log_level == "WARNING"
+
+
 def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Os padroes da spec -- e o endereco da API escrito por extenso.
 
@@ -149,9 +164,61 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     settings = _settings_do_arquivo(monkeypatch, tmp_path, "")
     assert settings.anthropic_base_url == "https://api.anthropic.com"
     assert settings.tutor_model == "claude-opus-5"
-    assert settings.tutor_max_tokens == 1024
+    assert settings.tutor_max_tokens == 2048
     assert settings.tutor_timeout_seconds == 60
     assert settings.tutor_history_messages == 20
+    # O fallback da recusa vem LIGADO por decisao do dono (pendencia 174).
+    assert settings.tutor_fallback is True
+
+
+@pytest.mark.parametrize(("valor", "esperado"), [("false", False), ("true", True)])
+def test_o_fallback_da_recusa_desliga_pelo_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str, esperado: bool
+) -> None:
+    """`FOCUSQUEST_TUTOR_FALLBACK=false` e a saida de emergencia se o beta do
+    fallback mudar e a API passar a recusar a requisicao (pendencia 174)."""
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, f"FOCUSQUEST_TUTOR_FALLBACK={valor}\n"
+    )
+    assert settings.tutor_fallback is esperado
+
+
+def test_o_fallback_da_recusa_recusa_valor_que_nao_e_booleano(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Um `talvez` nao liga nem desliga: e erro na partida, e nao um padrao
+    escolhido em silencio."""
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(
+            monkeypatch, tmp_path, "FOCUSQUEST_TUTOR_FALLBACK=talvez\n"
+        )
+    assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
+        (("tutor_fallback",), "bool_parsing")
+    ]
+
+
+def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
+    """O `.env` nasce copiado do `.env.example`, e o arquivo VENCE o padrao do
+    `Settings`: um numero velho no exemplo anularia a mudanca do padrao para
+    quem copiar. Por isso os dois andam juntos (pendencia 173: o teto subiu
+    de 1024 para 4096 e o exemplo tinha 1024; depois desceu para 2048)."""
+    linhas = dict(
+        linha.split("=", 1)
+        for linha in (RAIZ / ".env.example").read_text().splitlines()
+        if linha.startswith("FOCUSQUEST_TUTOR_")
+    )
+    campos = Settings.model_fields
+    assert linhas == {
+        "FOCUSQUEST_TUTOR_MODEL": str(campos["tutor_model"].default),
+        "FOCUSQUEST_TUTOR_MAX_TOKENS": str(campos["tutor_max_tokens"].default),
+        "FOCUSQUEST_TUTOR_TIMEOUT_SECONDS": str(
+            int(campos["tutor_timeout_seconds"].default)
+        ),
+        "FOCUSQUEST_TUTOR_HISTORY_MESSAGES": str(
+            campos["tutor_history_messages"].default
+        ),
+        "FOCUSQUEST_TUTOR_FALLBACK": str(campos["tutor_fallback"].default).lower(),
+    }
 
 
 @pytest.mark.parametrize(
@@ -186,8 +253,8 @@ def test_a_suite_nunca_aponta_para_a_anthropic() -> None:
 def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais
-    (Task 8 do 1b-2). Um `make check` rodado num shell que a exportou herda a
+    """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais.
+    Um `make check` rodado num shell que a exportou herda a
     variavel: o provedor da suite tem de continuar numa porta fechada."""
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-api03-parece-de-verdade")
     settings = Settings()

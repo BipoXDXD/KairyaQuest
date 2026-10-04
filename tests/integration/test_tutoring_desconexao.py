@@ -1,14 +1,14 @@
 """A desconexao do cliente no meio da resposta, com uvicorn DE VERDADE.
 
-O `TestClient` bufferiza a resposta inteira (medicao M9) e nao desconecta.
-So um servidor real reproduz cenario da medicao M1: gerador sincrono cru no
+O `TestClient` bufferiza a resposta inteira e nao desconecta.
+So um servidor real reproduz o cenario: gerador sincrono cru no
 `StreamingResponse`, cliente desconecta, resposta fica pendurada.
 
 **O que este teste PROVA:** ponta a ponta, com um cliente real se
 desconectando no meio do stream, a resposta termina gravada como
 `interrompida` -- nunca fica presa em `gerando` para sempre.
 
-**O que este teste NAO PROVA (fix round 1/5 e 2/5 da Task 7):** ele nao
+**O que este teste NAO PROVA:** ele nao
 isola QUAL guarda fecha a cadeia. Medido e instrumentado: nesta maquina, a
 resposta termina `interrompida` mesmo com o invoucro `fechando_ao_cancelar`
 e o `finally: eventos.close()` de `_em_sse` removidos ao mesmo tempo -- so
@@ -27,7 +27,7 @@ do SO nem do escalonador), esta em outro lugar:
 
 - o invoucro `fechando_ao_cancelar`:
   `tests/unit/test_tutoring_sse.py::test_cancelar_o_consumo_fecha_o_gerador`
-  (a mutacao 2 do brief -- apagar o `close()` -- o faz reprovar);
+  (apagar o `close()` de dentro dele o faz reprovar);
 - o `finally: eventos.close()` de `_em_sse`:
   `tests/unit/test_tutoring_router_sse.py::test_fechar_o_em_sse_fecha_o_gerador_de_eventos`
   (apagar o `finally` o faz reprovar).

@@ -21,6 +21,10 @@ async function fixtures(page: Page, available = true, history: unknown[] = []) {
         completed_at: null,
         xp: 10,
         actual_duration_minutes: null,
+        verification: null,
+        evidence: null,
+        evaluation: null,
+        reschedules: [],
       },
     ],
     '/api/tutoring/status': { available },
@@ -32,6 +36,7 @@ async function fixtures(page: Page, available = true, history: unknown[] = []) {
       streak: 0,
       days_to_milestone: 7,
       special: null,
+      late_daily: null,
     },
     '/api/progress': {
       xp_total: 0,
@@ -317,8 +322,16 @@ test('fechar, backdrop e link do quadro liberam o teclado do fundo', async ({ pa
     await expect(page.getByRole('dialog', { name: 'Tifa' })).toHaveCount(0)
     if (close === 'board') {
       await expect(page).toHaveURL(/#missions-heading$/)
+      // O quadro atual tem controles E/F antes de Concluir: a folha
+      // fechada deve liberar toda a sequência, sem pular nem conter o foco.
+      await page.keyboard.press('Tab')
+      await expect(page.getByTestId('evidence-toggle')).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(page.getByTestId('mission-start')).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(page.getByTestId('mission-complete')).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(page.getByTestId('reschedule-toggle')).toBeFocused()
     } else {
       await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
     }

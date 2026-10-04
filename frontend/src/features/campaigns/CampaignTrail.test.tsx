@@ -22,6 +22,10 @@ function diaria(id: number, day: string, ajustes: Partial<Mission> = {}): Missio
     completed_at: null,
     xp: 40,
     actual_duration_minutes: null,
+    verification: null,
+    evidence: null,
+    evaluation: null,
+    reschedules: [],
     ...ajustes,
   }
 }
@@ -130,7 +134,7 @@ describe('CampaignTrail', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('I1: a aba que volta durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
+  it('a aba que volta durante a carga inicial, com o GET falhando, termina no erro com Tentar novamente -- nao fica presa em Consultando', async () => {
     let resolverInicial: (resposta: Response) => void = () => undefined
     routeFetch({
       'GET /api/plans/current': (_init, call) => {
@@ -392,7 +396,7 @@ describe('CampaignTrail', () => {
   })
 
   it('a aba que volta a ficar visivel atualiza a trilha em silencio; se o GET falhar, ela continua na tela com o aviso trail-stale', async () => {
-    // O caminho REAL da Task 5 (fecha a pendencia da Task 3): antes, o unico
+    // O caminho REAL: antes, o unico
     // jeito de exercitar `refreshFailed` era dar o estado pronto direto a
     // `TrailContent`, porque nada chamava `refresh()`. Agora `useRefreshOnReturn`
     // liga o evento real, e este teste dispara o MESMO evento que o navegador

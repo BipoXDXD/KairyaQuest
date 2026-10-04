@@ -19,7 +19,12 @@ from focusquest.modules.progression.models import UserAchievement, XpEntry
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.domain import CodigoDoStream, Papel, StatusDaMensagem
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
-from focusquest.modules.tutoring.provider import EventoDoProvedor, Provedor, Turno
+from focusquest.modules.tutoring.provider import (
+    EventoDoProvedor,
+    Ferramenta,
+    Provedor,
+    Turno,
+)
 from focusquest.modules.tutoring.service import (
     ParaGerar,
     PerguntaGravada,
@@ -71,6 +76,9 @@ class ProvedorObservado:
         gerador = observar()
         self.geradores.append(gerador)
         return gerador
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        return self.provedor.avaliar(turno, ferramenta)
 
 
 @pytest.fixture

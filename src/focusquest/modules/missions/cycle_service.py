@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import Text, select, type_coerce
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,7 @@ from focusquest.modules.missions.cycle_domain import (
     Availability,
     DiaDoPlano,
     Historico,
+    com_inicio_a_tempo,
     dia_de,
     dias_da_semana,
     dias_para_o_marco,
@@ -41,15 +42,22 @@ from focusquest.modules.missions.cycle_domain import (
     fim_do_dia,
     marco_da_semana,
     marco_mais_recente,
+    na_conclusao_tardia,
     segunda_da_semana,
     sequencia,
 )
 from focusquest.modules.missions.domain import (
     DIFICULDADE_DA_ESPECIAL,
+    EstadoDaAvaliacao,
     MissionState,
     MissionType,
 )
-from focusquest.modules.missions.models import Mission, WeeklyPlan
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+    MissionEvidence,
+    WeeklyPlan,
+)
 
 # O nome da restricao do plano repetido: reconhece QUAL IntegrityError e o
 # 409, pelo mesmo motivo de `UNICIDADE_DA_OPERACAO` em service.py.
@@ -114,6 +122,9 @@ class CicloLido:
     sequencia: int
     dias_para_o_marco: int
     especial: MissaoLida | None
+    # F25: a diaria de ontem, iniciada a tempo, enquanto pode ser concluida
+    # com atraso (e, depois de concluida com atraso, ate o limite).
+    diaria_de_ontem: MissaoLida | None
 
 
 def dia_da_diaria(missao: Mission) -> date:
@@ -165,7 +176,8 @@ def _plano_da_missao(session: Session, missao: Mission) -> WeeklyPlan:
     ).one()
 
 
-def _ler_diaria(missao: Mission, plano: WeeklyPlan, hoje: date) -> MissaoLida:
+def _ler_diaria(missao: Mission, plano: WeeklyPlan, agora: datetime) -> MissaoLida:
+    hoje = dia_de(agora)
     dia = dia_da_diaria(missao)
     if dia > hoje:
         raise MissaoNaoEncontradaError(
@@ -175,17 +187,31 @@ def _ler_diaria(missao: Mission, plano: WeeklyPlan, hoje: date) -> MissaoLida:
         concluida=missao.state is MissionState.CONCLUIDA,
         plano_criado_em=dia_de(plano.created_at),
     )
+    prazo = fim_do_dia(dia)
     return MissaoLida(
-        missao, fim_do_dia(dia), disponibilidade_da_diaria(dia, estado, hoje)
+        missao,
+        prazo,
+        com_inicio_a_tempo(
+            disponibilidade_da_diaria(dia, estado, hoje),
+            prazo,
+            missao.started_at,
+            agora,
+        ),
     )
 
 
 def _ler_especial(missao: Mission, marco: date, agora: datetime) -> MissaoLida:
+    prazo = fim_da_janela_da_especial(marco)
     return MissaoLida(
         missao,
-        fim_da_janela_da_especial(marco),
-        disponibilidade_da_especial(
-            marco, missao.state is MissionState.CONCLUIDA, agora
+        prazo,
+        com_inicio_a_tempo(
+            disponibilidade_da_especial(
+                marco, missao.state is MissionState.CONCLUIDA, agora
+            ),
+            prazo,
+            missao.started_at,
+            agora,
         ),
     )
 
@@ -202,7 +228,7 @@ def ler_missao(session: Session, missao: Mission, agora: datetime) -> MissaoLida
         return leitura_da_avulsa(missao)
     plano = _plano_da_missao(session, missao)
     if missao.mission_type is MissionType.DIARIA:
-        return _ler_diaria(missao, plano, dia_de(agora))
+        return _ler_diaria(missao, plano, agora)
     marco = marco_da_semana(
         carregar_historico(session, missao.user_id), plano.week_start
     )
@@ -304,7 +330,7 @@ def _ler_plano(session: Session, plano: WeeklyPlan, agora: datetime) -> PlanoLid
         if dia > hoje:
             dias.append(DiaLido(dia, Availability.BLOQUEADA, None))
             continue
-        lida = _ler_diaria(diarias[dia], plano, hoje)
+        lida = _ler_diaria(diarias[dia], plano, agora)
         dias.append(DiaLido(dia, lida.availability, lida))
 
     historico = carregar_historico(session, plano.user_id)
@@ -343,13 +369,44 @@ def ler_plano_atual(
 def _especial_vigente(
     especiais: dict[date, Mission], historico: Historico, agora: datetime
 ) -> MissaoLida | None:
-    """A especial do marco mais recente, enquanto a janela dela estiver aberta
-    (spec, "A especial no Quartel-General"). Usa o mesmo snapshot das diarias.
+    """A especial vigente, incluindo a conclusao tardia da F25.
+
+    Usa o mesmo snapshot das diarias. O limite da F25 ainda cabe na semana
+    consultada por `marco_mais_recente`.
     """
     marco = marco_mais_recente(historico, dia_de(agora))
-    if marco is None or agora >= fim_da_janela_da_especial(marco):
+    if marco is None:
         return None
-    return _ler_especial(especiais[segunda_da_semana(marco)], marco, agora)
+    lida = _ler_especial(especiais[segunda_da_semana(marco)], marco, agora)
+    return lida if agora < lida.deadline or _tardia(lida, agora) else None
+
+
+def _tardia(lida: MissaoLida, agora: datetime) -> bool:
+    return na_conclusao_tardia(
+        lida.deadline, lida.availability, lida.missao.completed_at, agora
+    )
+
+
+def _diaria_de_ontem(
+    diarias: dict[date, Mission], historico: Historico, hoje: date, agora: datetime
+) -> MissaoLida | None:
+    """F25: a diaria de ontem em conclusao tardia, no mesmo snapshot."""
+    dia = hoje - timedelta(days=1)
+    de_ontem = diarias.get(dia)
+    if de_ontem is None:
+        return None
+    prazo = fim_do_dia(dia)
+    lida = MissaoLida(
+        de_ontem,
+        prazo,
+        com_inicio_a_tempo(
+            disponibilidade_da_diaria(dia, historico[dia], hoje),
+            prazo,
+            de_ontem.started_at,
+            agora,
+        ),
+    )
+    return lida if _tardia(lida, agora) else None
 
 
 def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
@@ -362,8 +419,14 @@ def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
     locks ou mudanca de isolamento. Se o chamador desabilitar autoflush, deve
     fazer flush das alteracoes que deseja incluir neste snapshot.
 
-    Inclui todas as semanas (o historico precisa delas) e as oito missoes de
-    cada plano, sem filtros prematuros de especiais por janela.
+    Inclui todas as semanas, sem filtros prematuros de especiais por janela,
+    e preserva a diaria de ontem e a especial em conclusao tardia (F25).
+    Evidencia e avaliacao (E) sao copiadas no mesmo comando por LEFT JOINs
+    um-para-um: nem lazy loading posterior nem identidade ORM antiga.
+    O estado da avaliacao e lido como TEXT no LEFT JOIN, pois o decorador
+    NOT NULL do modelo nao aceita o NULL sintetico de uma linha ausente;
+    o enum so e restaurado quando a avaliacao existe.
+    Reagendamentos nao pertencem a diarias/especiais (F6).
     """
     agora = clock()
     hoje = dia_de(agora)
@@ -371,10 +434,23 @@ def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
         session.execute(
             select(
                 Mission.__table__,
+                *(
+                    coluna.label(f"evidence_{coluna.key}")
+                    for coluna in MissionEvidence.__table__.columns
+                ),
+                *(
+                    (
+                        type_coerce(coluna, Text) if coluna.key == "state" else coluna
+                    ).label(f"evaluation_{coluna.key}")
+                    for coluna in MissionEvaluation.__table__.columns
+                ),
                 WeeklyPlan.created_at.label("plano_criado_em"),
                 WeeklyPlan.week_start.label("semana"),
             )
+            .select_from(Mission)
             .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
+            .outerjoin(MissionEvidence, MissionEvidence.mission_id == Mission.id)
+            .outerjoin(MissionEvaluation, MissionEvaluation.mission_id == Mission.id)
             .where(
                 Mission.user_id == user_id,
                 Mission.mission_type.in_((MissionType.DIARIA, MissionType.ESPECIAL)),
@@ -391,6 +467,22 @@ def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
         missao = Mission(
             **{coluna.key: linha[coluna.key] for coluna in Mission.__table__.columns}
         )
+        if linha["evidence_mission_id"] is not None:
+            missao.evidence = MissionEvidence(
+                **{
+                    coluna.key: linha[f"evidence_{coluna.key}"]
+                    for coluna in MissionEvidence.__table__.columns
+                }
+            )
+        if linha["evaluation_id"] is not None:
+            missao.evaluation = MissionEvaluation(
+                **{
+                    coluna.key: EstadoDaAvaliacao(linha["evaluation_state"])
+                    if coluna.key == "state"
+                    else linha[f"evaluation_{coluna.key}"]
+                    for coluna in MissionEvaluation.__table__.columns
+                }
+            )
         if missao.mission_type is MissionType.DIARIA:
             dia = dia_da_diaria(missao)
             diarias[dia] = missao
@@ -415,4 +507,5 @@ def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
         sequencia=atual,
         dias_para_o_marco=dias_para_o_marco(atual),
         especial=_especial_vigente(especiais, historico, agora),
+        diaria_de_ontem=_diaria_de_ontem(diarias, historico, hoje, agora),
     )

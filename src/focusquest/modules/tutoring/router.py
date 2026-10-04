@@ -6,13 +6,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from focusquest.core.clock import Clock, get_clock
-from focusquest.core.database import get_engine, get_session
-from focusquest.core.errors import PrazoExpiradoError, ProvedorNaoConfiguradoError
+from focusquest.core.database import SessaoDaRequisicao, get_engine
+from focusquest.core.errors import (
+    PrazoExpiradoError,
+    ProvedorNaoConfiguradoError,
+    ReagendamentoInvalidoError,
+)
+from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
-from focusquest.modules.missions.router import USUARIO_UNICO
 from focusquest.modules.missions.schemas import MAIOR_INTEIRO_DA_COLUNA, MissionRead
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.schemas import (
@@ -30,6 +34,7 @@ from focusquest.modules.tutoring.service import (
     EventoDoTurno,
     PerguntaGravada,
     PrazoExpirado,
+    ReagendamentoInvalido,
     RespostaConcluida,
     RespostaFalhou,
     Tutoria,
@@ -43,7 +48,6 @@ from focusquest.modules.tutoring.sse import evento_sse, fechando_ao_cancelar
 
 router = APIRouter(prefix="/api/tutoring", tags=["tutoring"])
 
-SessaoDaRequisicao = Annotated[Session, Depends(get_session)]
 TutoriaConfigurada = Annotated[Tutoria | None, Depends(get_tutoria)]
 Relogio = Annotated[Clock, Depends(get_clock)]
 IdDaAcao = Annotated[int, Path(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)]
@@ -72,7 +76,7 @@ def enviar(
 
     Os erros da preparacao (sem chave, 409) saem como JSON comum, antes de
     qualquer byte do stream, e nada foi gravado. A transmissao usa sessoes
-    proprias, nunca a da requisicao (medicao M2).
+    proprias, nunca a da requisicao (a dela fecha antes do `finally` do gerador).
     """
     if tutoria is None:
         raise ProvedorNaoConfiguradoError("a Tifa esta sem provedor configurado")
@@ -133,14 +137,19 @@ def confirmar(
     session: SessaoDaRequisicao,
     clock: Relogio,
 ) -> ConfirmRead:
-    """Confirma a proposta. O prazo expirado e GRAVADO e so depois vira 422:
-    o commit vem antes de levantar, ou a falha morreria com a transacao."""
+    """Confirma a proposta. O prazo expirado e o reagendamento que nao vale
+    mais (F17) sao GRAVADOS e so depois viram 422/409: o commit vem antes de
+    levantar, ou a falha morreria com a transacao."""
     resultado = confirmar_acao(
         session, USUARIO_UNICO, action_id, dados.operation_id, clock=clock
     )
     session.commit()
     if isinstance(resultado, PrazoExpirado):
         raise PrazoExpiradoError("o prazo proposto ja passou; peca outra proposta")
+    if isinstance(resultado, ReagendamentoInvalido):
+        raise ReagendamentoInvalidoError(
+            "a missao mudou depois da proposta; peca outra proposta"
+        )
     return ConfirmRead(
         action=ActionRead.model_validate(resultado.acao),
         mission=MissionRead.da_leitura(leitura_da_avulsa(resultado.missao)),

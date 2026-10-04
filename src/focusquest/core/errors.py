@@ -59,13 +59,14 @@ class ProvedorNaoConfiguradoError(DomainError):
 
 
 class PrazoExpiradoError(DomainError):
-    """O prazo proposto pela Tifa ja passou na hora de confirmar."""
+    """O prazo proposto pela Tifa ja passou na hora de confirmar -- ou o novo
+    prazo de um reagendamento nao esta no futuro (F9): o mesmo `code` nos dois."""
 
 
 class NaoPertenceAoUsuarioError(DomainError):
     """A missao existe, mas e de outro usuario.
 
-    E um erro DIFERENTE de MissaoNaoEncontradaError mesmo que a Task 9 traduza
+    E um erro DIFERENTE de MissaoNaoEncontradaError mesmo que a camada web traduza
     os dois para o mesmo status HTTP. Nao sao a mesma pergunta: quem le o log
     precisa saber se o identificador nao existe ou se existe e foi negado --
     um aponta para bug no cliente, o outro para tentativa de acesso indevido.
@@ -96,3 +97,36 @@ class SemanaDistanteError(DomainError):
     Alem de reduzir o que da para esconder, e o que impede o 500 de uma semana
     no ano 9999, em que o fim do domingo estouraria o `datetime`.
     """
+
+
+class SemEvidenciaError(DomainError):
+    """A missao nao tem evidencia para a Tifa avaliar (inclui a nao concluida).
+
+    O pedido esta certo; o estado da missao e que recusa -- 409, como a
+    transicao ilegal. Autodeclarar nao da direito a avaliacao (E4).
+    """
+
+
+class AvaliacaoEmAndamentoError(DomainError):
+    """Ja ha uma tentativa de avaliacao `avaliando`, e ela nao e orfa (E9).
+
+    Tambem e o erro da tentativa SUPERADA (E10): a resposta atrasada de uma
+    tentativa que outro pedido ja retomou nao grava nada, e quem pediu fica
+    sabendo que a avaliacao segue em outro pedido.
+    """
+
+
+class PrazoInalteradoError(DomainError):
+    """O novo prazo e o prazo atual (F9): o pedido esta certo, mas nao muda
+    nada, e gravar um reagendamento vazio sujaria o historico."""
+
+
+class PrazoDerivadoError(DomainError):
+    """A diaria e a especial tem prazo DERIVADO do ciclo (C10), sem coluna para
+    mudar: nao se reagendam (F7)."""
+
+
+class ReagendamentoInvalidoError(DomainError):
+    """A proposta de reagendamento nao vale mais: a missao sumiu, foi concluida
+    ou ja tem aquele prazo (F17). A acao foi GRAVADA como `falhou` antes deste
+    erro subir -- a rota commita e so entao levanta."""

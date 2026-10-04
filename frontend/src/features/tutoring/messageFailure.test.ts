@@ -76,6 +76,16 @@ describe('describeStreamFailure', () => {
     expect(describeStreamFailure(code)).toEqual({ message, recovery: 'retry' })
   })
 
+  it('a recusa orienta a perguntar de outro jeito e descarta o parcial (pendencia 120)', () => {
+    // A orientacao da API: o texto que veio antes da recusa nao e resposta.
+    expect(describeStreamFailure('resposta_recusada')).toEqual({
+      message:
+        'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      recovery: 'retry',
+      discardsPartial: true,
+    })
+  })
+
   it.each(['code_novo', 'constructor'])('%s cai no resultado desconhecido', (code) => {
     expect(describeStreamFailure(code)).toBe(UNKNOWN_RESULT)
   })

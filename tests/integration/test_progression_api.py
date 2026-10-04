@@ -176,8 +176,9 @@ def test_concluir_devolve_reward(client: TestClient) -> None:
     assert corpo["started_at"] == criada["started_at"]
     assert corpo["completed_at"] is not None
     assert corpo["xp"] == criada["xp"]
-    # Sem caso de uso de INICIAR no incremento (ver test_missions_api.py):
-    # `started_at` continua nulo, e a duracao real e None por definicao.
+    # Concluida direto de `pendente`, sem iniciar (F4): `started_at` continua
+    # nulo, e a duracao real e None. A duracao real de uma missao iniciada e
+    # provada em `test_iniciar_missao.py`.
     assert corpo["actual_duration_minutes"] is None
 
     assert corpo["reward"] == {
@@ -196,7 +197,7 @@ def test_concluir_devolve_reward(client: TestClient) -> None:
 
 
 def test_reenvio_devolve_o_mesmo_corpo_com_reward(client: TestClient) -> None:
-    """Review Focus 1: reenvio antigo depois de outras conclusoes.
+    """Reenvio antigo depois de outras conclusoes.
 
     Conclui A (fica no nivel 2), cria e conclui B (nivel 3), e o reenvio de A
     tem de devolver EXATAMENTE o corpo do primeiro envio de A -- inclusive o

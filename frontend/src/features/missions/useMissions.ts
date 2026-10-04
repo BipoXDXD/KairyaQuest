@@ -69,7 +69,7 @@ export function useMissions(): UseMissionsResult {
 
     requestJson<Mission[]>('/missions', controller.signal)
       .then((missions) => {
-        if (requestId.current !== id) {
+        if (controller.signal.aborted || requestId.current !== id) {
           return
         }
         setState(

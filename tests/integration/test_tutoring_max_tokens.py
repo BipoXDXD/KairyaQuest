@@ -1,4 +1,9 @@
-"""Limite de tokens no SDK real nao conclui a resposta truncada."""
+"""Limite de tokens preserva o parcial como interrompido, sem proposta.
+
+O contrato atual (pendencias 45 e 120) usa done/interrompida/resposta_longa,
+nao error/falhou. As garantias locais de commit, fechamento, texto seguro e
+proposta descartada continuam verificadas contra o SDK e o banco reais.
+"""
 
 import json
 from collections.abc import Callable, Generator, Iterator
@@ -8,7 +13,6 @@ from typing import Any
 
 import anthropic
 import pytest
-from anthropic.types import StopReason
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,22 +24,23 @@ from focusquest.modules.missions.models import Mission, MissionOperation, Weekly
 from focusquest.modules.progression.models import UserAchievement, XpEntry
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.dependencies import get_tutoria
-from focusquest.modules.tutoring.domain import CodigoDoStream, Papel, StatusDaMensagem
+from focusquest.modules.tutoring.domain import Papel, StatusDaMensagem
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.provider import (
     Delta,
     EventoDoProvedor,
+    Ferramenta,
     Fim,
     MensagemDoTurno,
+    Parada,
     Proposta,
     Provedor,
-    ProvedorIndisponivelError,
     Turno,
 )
 from focusquest.modules.tutoring.service import (
     ParaGerar,
     PerguntaGravada,
-    RespostaFalhou,
+    RespostaConcluida,
     Trecho,
     Tutoria,
     preparar_turno,
@@ -44,6 +49,7 @@ from focusquest.modules.tutoring.service import (
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
+    MotivoDeParada,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
@@ -84,6 +90,9 @@ class ProvedorObservado:
         gerador = observar()
         self.geradores.append(gerador)
         return gerador
+
+    def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
+        return self.provedor.avaliar(turno, ferramenta)
 
 
 @pytest.fixture
@@ -134,7 +143,7 @@ def _roteiro(prefixo: str) -> Roteiro:
     return Roteiro(blocos=blocos, stop_reason="max_tokens")
 
 
-def _resposta_falhou(
+def _resposta_interrompida(
     fabrica: sessionmaker[Session], cid: str, prefixo: str
 ) -> tuple[int, int]:
     with fabrica() as sessao:
@@ -148,8 +157,8 @@ def _resposta_falhou(
         resposta = respostas[0]
         assert pergunta.role is Papel.USUARIO
         assert pergunta.content == "Uma missão?"
-        assert resposta.status is StatusDaMensagem.FALHOU
-        assert resposta.error_code == "provedor_indisponivel"
+        assert resposta.status is StatusDaMensagem.INTERROMPIDA
+        assert resposta.error_code == "resposta_longa"
         assert resposta.content == prefixo
         assert resposta.actions == []
         return pergunta.id, resposta.id
@@ -163,7 +172,7 @@ def _fechado(observado: ProvedorObservado) -> None:
 
 
 @pytest.mark.parametrize("prefixo", [PREFIXO, ""], ids=["com-prefixo", "sem-prefixo"])
-def test_max_tokens_termina_sse_em_erro_sem_concluir_ou_gravar_proposta(
+def test_max_tokens_termina_sse_interrompida_sem_gravar_proposta(
     cliente: TestClient,
     fabrica: sessionmaker[Session],
     falso: ServidorAnthropicFalso,
@@ -185,20 +194,23 @@ def test_max_tokens_termina_sse_em_erro_sem_concluir_ou_gravar_proposta(
     assert [nome for nome, _ in eventos] == [
         "user_message",
         *(["delta"] if prefixo else []),
-        "error",
+        "done",
     ]
-    assert eventos[-1] == ("error", {"code": "provedor_indisponivel"})
+    assert eventos[-1][1]["status"] == "interrompida"
+    assert eventos[-1][1]["error_code"] == "resposta_longa"
+    assert eventos[-1][1]["content"] == prefixo
+    assert eventos[-1][1]["actions"] == []
     assert [dados["text"] for nome, dados in eventos if nome == "delta"] == (
         [prefixo] if prefixo else []
     )
-    _resposta_falhou(fabrica, cid, prefixo)
+    _resposta_interrompida(fabrica, cid, prefixo)
     assert _contagens(fabrica) == antes
     _fechado(observado)
     assert len(falso.recebidas) == 1
 
 
 @pytest.mark.parametrize("prefixo", [PREFIXO, ""], ids=["com-prefixo", "sem-prefixo"])
-def test_erro_max_tokens_so_e_emitido_depois_de_falha_commitada_e_provedor_fechado(
+def test_max_tokens_so_e_emitido_depois_de_interrupcao_commitada_e_provedor_fechado(
     fabrica: sessionmaker[Session],
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
@@ -225,21 +237,22 @@ def test_erro_max_tokens_so_e_emitido_depois_de_falha_commitada_e_provedor_fecha
     try:
         for evento in gerador:
             eventos.append(evento)
-            if isinstance(evento, RespostaFalhou):
-                assert evento.codigo is CodigoDoStream.PROVEDOR_INDISPONIVEL
-                _resposta_falhou(fabrica, cid, prefixo)
+            if isinstance(evento, RespostaConcluida):
+                assert evento.mensagem.status is StatusDaMensagem.INTERROMPIDA
+                assert evento.mensagem.error_code == "resposta_longa"
+                assert evento.mensagem.content == prefixo
+                assert evento.mensagem.actions == []
+                _resposta_interrompida(fabrica, cid, prefixo)
                 assert _contagens(fabrica) == antes
                 _fechado(observado)
     finally:
         gerador.close()
     assert isinstance(eventos[0], PerguntaGravada)
-    assert eventos[1:] == [
-        *([Trecho(prefixo)] if prefixo else []),
-        RespostaFalhou(CodigoDoStream.PROVEDOR_INDISPONIVEL),
-    ]
+    assert eventos[1:-1] == ([Trecho(prefixo)] if prefixo else [])
+    assert isinstance(eventos[-1], RespostaConcluida)
 
 
-def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_falha(
+def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_interrupcao(
     cliente: TestClient,
     fabrica: sessionmaker[Session],
     falso: ServidorAnthropicFalso,
@@ -252,8 +265,10 @@ def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_falha(
     antes = _contagens(fabrica)
     falso.roteiro = _roteiro(PREFIXO)
     primeira = _eventos(cliente.post("/api/tutoring/messages", json=corpo).text)
-    assert primeira and primeira[-1] == ("error", {"code": "provedor_indisponivel"})
-    pergunta_id, falha_id = _resposta_falhou(fabrica, cid, PREFIXO)
+    assert primeira and primeira[-1][0] == "done"
+    assert primeira[-1][1]["status"] == "interrompida"
+    assert primeira[-1][1]["error_code"] == "resposta_longa"
+    pergunta_id, falha_id = _resposta_interrompida(fabrica, cid, PREFIXO)
     falso.roteiro = Roteiro(blocos=(Texto(("Resposta válida 🗡️\n漢字",)),))
     reenvio = cliente.post("/api/tutoring/messages", json=corpo)
     assert reenvio.status_code == 200
@@ -273,7 +288,7 @@ def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_falha(
         ).all()
         assert len(respostas) == 2
         assert respostas[0].id == falha_id
-        assert respostas[0].status is StatusDaMensagem.FALHOU
+        assert respostas[0].status is StatusDaMensagem.INTERROMPIDA
         assert respostas[0].content == PREFIXO
         assert respostas[1].status is StatusDaMensagem.COMPLETA
         assert respostas[1].content == "Resposta válida 🗡️\n漢字"
@@ -289,7 +304,7 @@ def test_encerramentos_validos_continuam_completos_e_propoem_acao(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
     tutoria_observada: tuple[Tutoria, ProvedorObservado],
-    motivo: StopReason,
+    motivo: MotivoDeParada,
 ) -> None:
     _, observado = tutoria_observada
     falso.roteiro = Roteiro(
@@ -356,7 +371,7 @@ def test_sdk_enriquece_message_stop_com_motivo_e_proposta_completa(
     assert len(falso.recebidas) == 1
 
 
-def test_adaptador_recusa_max_tokens_depois_da_proposta_sem_emitir_fim(
+def test_adaptador_classifica_max_tokens_depois_da_proposta_como_corte(
     falso: ServidorAnthropicFalso,
 ) -> None:
     falso.roteiro = _roteiro(PREFIXO)
@@ -366,17 +381,20 @@ def test_adaptador_recusa_max_tokens_depois_da_proposta_sem_emitir_fim(
         modelo="claude-opus-5",
         max_tokens=256,
         timeout_segundos=1.0,
+        fallback=False,
     )
     turno = Turno(sistema="Teste", mensagens=(MensagemDoTurno("user", "Uma missão?"),))
     eventos: list[EventoDoProvedor] = []
     gerador = provedor.responder(turno)
     try:
-        with pytest.raises(ProvedorIndisponivelError):
-            eventos.extend(gerador)
+        eventos.extend(gerador)
     finally:
         gerador.close()
-    assert eventos == [Delta(PREFIXO), Proposta(PROPOSTA)]
-    assert not any(isinstance(evento, Fim) for evento in eventos)
+    assert eventos == [
+        Delta(PREFIXO),
+        Proposta("create_mission", PROPOSTA),
+        Fim(Parada.CORTADA),
+    ]
     with pytest.raises(StopIteration):
         next(gerador)
     assert len(falso.recebidas) == 1

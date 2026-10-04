@@ -1,8 +1,19 @@
+import { useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
-import { MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { MAX_DIFFICULTY, MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
+import { EvaluationPanel } from './EvaluationPanel'
+import { EvidenceForm } from './EvidenceForm'
+import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
+import { RELOAD_WAITING_LABEL } from './reloadWaiting'
+import { sameDraft } from './rescheduleDraft'
+import { RescheduleForm } from './RescheduleForm'
+import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
+import type { EvidenceDraft, RescheduleDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
+import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
+import { useStartMission, type StartState } from './useStartMission'
 
 const CARD_CLASS =
   'min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
@@ -18,15 +29,18 @@ const RELOAD_BUTTON_CLASS =
   'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none ' +
   'disabled:cursor-not-allowed disabled:opacity-60'
 
-/** O texto do "Atualizar o quadro" enquanto espera uma conclusao em voo. */
-const RELOAD_WAITING_LABEL = 'Aguardando a conclusão em andamento…'
-
-/** O texto do botao de concluir em cada estado em que ele aparece. */
-function completeLabel(completion: CompletionState): string {
+/**
+ * O texto do botao de concluir em cada estado em que ele aparece.
+ *
+ * `retryPending` vem do REGISTRO, nao do estado do cartao: o reload remonta o
+ * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
+ * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete.
+ */
+function completeLabel(completion: CompletionState, retryPending: boolean): string {
   if (completion.status === 'submitting') {
     return 'Concluindo…'
   }
-  return completion.status === 'failed' ? 'Tentar de novo' : 'Concluir'
+  return completion.status === 'failed' || retryPending ? 'Tentar de novo' : 'Concluir'
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo. */
@@ -35,6 +49,27 @@ function statusText(completion: CompletionState): string {
     return 'Concluindo a missão…'
   }
   return completion.status === 'completed' ? 'Missão concluída.' : ''
+}
+
+/**
+ * Por que o rascunho em uso nao pode sair, ou `null` se pode (ou nao ha
+ * rascunho). O texto mora JUNTO do Concluir, fora do disclosure: com o
+ * formulario recolhido, o botao desabilitado continua com o motivo a vista e
+ * ligado por `aria-describedby`.
+ */
+function blockedReason(draft: EvidenceDraft): string | null {
+  const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
+  const described = describeEvidence(draft)
+  if (!inUse || described.sendable) {
+    return null
+  }
+  if (described.linkError !== null) {
+    return `Corrija o link da evidência para concluir. ${described.linkError}`
+  }
+  if (stripEnds(draft.text) === '') {
+    return 'Conte o que você fez para concluir com o link.'
+  }
+  return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
 }
 
 /**
@@ -56,11 +91,11 @@ function statusText(completion: CompletionState): string {
  *   `reloadLabel` no lugar do Concluir. Repetir so daria o mesmo erro;
  *   recarregar mostra o estado de verdade. O rotulo e "Atualizar o quadro" por
  *   padrao, mas quem usa o cartao FORA do quadro de avulsas pode pedir outro
- *   (m5): a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
+ *   a `CycleSection` passa "Atualizar a missão de hoje", porque o clique
  *   ali nao atualiza um "quadro" -- recarrega o ciclo.
- * - **esperando o quadro**: o `reloadLabel` pedido com outra conclusao em voo
- *   fica desabilitado e diz "Aguardando a conclusão em andamento…"; o quadro
- *   recarrega sozinho quando ela termina (`useCompletionRegistry`). Quem
+ * - **esperando o quadro**: o `reloadLabel` pedido com outro pedido em voo
+ *   (conclusao, Iniciar ou Reagendar) fica desabilitado e diz "Aguardando o
+ *   pedido em andamento…"; o quadro recarrega sozinho quando ele termina (`useCompletionRegistry`). Quem
  *   anuncia a espera e a regiao viva do QUADRO, e nao a deste cartao: a espera
  *   e do quadro inteiro, e varios cartoes com o botao anunciariam o mesmo
  *   texto varias vezes.
@@ -78,17 +113,27 @@ function CompletionControls({
   mission,
   completion,
   onComplete,
+  blocked,
+  retryPending,
   onReload,
   reloadWaiting,
   reloadLabel,
+  otherInFlight,
 }: {
   mission: Mission
   completion: CompletionState
   onComplete: () => void
+  /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
+  blocked: string | null
+  /** A chave desta missao esta retida no registro (falha que se repete). */
+  retryPending: boolean
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
+  /** Um Iniciar ou Reagendar deste cartao esta em voo: um envio de cada vez. */
+  otherInFlight: boolean
 }) {
+  const blockedId = useId()
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
   // rotulo de estado ja diz "Concluída".
   if (mission.state === 'concluida' && completion.status === 'idle') {
@@ -104,13 +149,19 @@ function CompletionControls({
         <button
           type="button"
           data-testid="mission-complete"
-          disabled={completion.status === 'submitting'}
+          disabled={completion.status === 'submitting' || otherInFlight || blocked !== null}
+          aria-describedby={blocked === null ? undefined : blockedId}
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
-          {completeLabel(completion)}{' '}
+          {completeLabel(completion, retryPending)}{' '}
           <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
+      )}
+      {canComplete && blocked !== null && (
+        <p id={blockedId} data-testid="mission-complete-blocked" className="text-sm text-amber-200">
+          {blocked}
+        </p>
       )}
       {failure?.recovery === 'refresh' && (
         <button
@@ -147,12 +198,170 @@ function CompletionControls({
   )
 }
 
+/** O texto do botao Iniciar em cada estado em que ele aparece. */
+function startLabel(start: StartState): string {
+  if (start.status === 'submitting') {
+    return 'Iniciando…'
+  }
+  return start.status === 'failed' ? 'Tentar de novo' : 'Iniciar'
+}
+
+/** O que a regiao viva do Iniciar anuncia. */
+function startStatusText(start: StartState): string {
+  if (start.status === 'submitting') {
+    return 'Iniciando a missão…'
+  }
+  return start.status === 'started' ? 'Missão iniciada.' : ''
+}
+
+/** O que a regiao viva do Reagendar anuncia. */
+function rescheduleStatusText(reschedule: RescheduleState): string {
+  if (reschedule.status === 'submitting') {
+    return 'Salvando o novo prazo…'
+  }
+  return reschedule.status === 'rescheduled' ? 'Prazo reagendado.' : ''
+}
+
+/**
+ * A missao mais recente que o Iniciar ou o Reagendar devolveu, ou `null`.
+ *
+ * Com os dois feitos no mesmo cartao, a resposta mais nova e a que ja contem a
+ * outra: um reagendamento DEPOIS do inicio volta com o `started_at`; um inicio
+ * DEPOIS do reagendamento volta com o historico, e o reagendamento guardado
+ * (anterior) tem `started_at` nulo. Decidir pelo conteudo que o servidor
+ * devolveu dispensa guardar a ordem dos cliques.
+ *
+ * `rescheduled` e o ultimo reagendamento que DEU CERTO (`lastRescheduled` do
+ * hook), e nao o estado da tentativa corrente: com um segundo reagendamento em
+ * voo ou recusado, o cartao continua no resultado do primeiro.
+ */
+function latestFromActions(start: StartState, rescheduled: Mission | null): Mission | null {
+  const started = start.status === 'started' ? start.mission : null
+  if (rescheduled !== null && (started === null || rescheduled.started_at !== null)) {
+    return rescheduled
+  }
+  return started
+}
+
+/** A falha que pede atualizar, com o botao de recarga do cartao. */
+function RefreshNotice({
+  message,
+  testId,
+  onReload,
+  reloadWaiting,
+  reloadLabel,
+}: {
+  message: string
+  testId: string
+  onReload: () => void
+  reloadWaiting: boolean
+  reloadLabel: string
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        data-testid={`${testId}-reload`}
+        disabled={reloadWaiting}
+        onClick={onReload}
+        className={RELOAD_BUTTON_CLASS}
+      >
+        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+      </button>
+      <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
+        {message}
+      </p>
+    </>
+  )
+}
+
+/**
+ * O botao Iniciar (F1, F20) e o que a tela diz durante e depois do inicio. O
+ * desenho e o do Concluir:
+ *
+ * - so na pendente DISPONIVEL: a perdida, a expirada, a em andamento e a
+ *   concluida nao se iniciam (a regra e do servidor; a tela so nao oferece);
+ * - em voo, "Iniciando…" desabilitado;
+ * - no sucesso o botao some (a missao ja esta em andamento) e a regiao viva
+ *   anuncia "Missão iniciada.";
+ * - falha que se repete: o aviso e "Tentar de novo" (a chave, quem decide e o
+ *   hook); falha que pede atualizar: o aviso e o botao de recarga no lugar.
+ *
+ * A regiao viva existe desde o primeiro render de todo cartao nao concluido,
+ * vazia, pelo mesmo motivo da regiao do Concluir.
+ */
+function StartControls({
+  mission,
+  start,
+  onStart,
+  otherInFlight,
+  onReload,
+  reloadWaiting,
+  reloadLabel,
+}: {
+  mission: Mission
+  start: StartState
+  onStart: () => void
+  otherInFlight: boolean
+  onReload: () => void
+  reloadWaiting: boolean
+  reloadLabel: string
+}) {
+  const failure = start.status === 'failed' ? start.failure : null
+  const startable =
+    (mission.state === 'pendente' && mission.availability === 'disponivel') ||
+    start.status === 'submitting'
+  // Sem botao, sem aviso e sem anuncio (a missao ja veio em andamento), o
+  // bloco e so a regiao viva vazia: sem a margem, que viraria folga sem nada.
+  const shown = startable || start.status !== 'idle'
+  return (
+    <div className={`${shown ? 'mt-3 ' : ''}flex flex-wrap items-center gap-3`}>
+      {failure?.recovery === 'refresh' ? (
+        <RefreshNotice
+          message={failure.message}
+          testId="mission-start"
+          onReload={onReload}
+          reloadWaiting={reloadWaiting}
+          reloadLabel={reloadLabel}
+        />
+      ) : (
+        <>
+          {startable && (
+            <button
+              type="button"
+              data-testid="mission-start"
+              disabled={start.status === 'submitting' || otherInFlight}
+              onClick={onStart}
+              className={COMPLETE_BUTTON_CLASS}
+            >
+              {startLabel(start)} <span className="sr-only">a missão: {mission.instructions}</span>
+            </button>
+          )}
+          {failure !== null && (
+            <p
+              role="alert"
+              data-testid="mission-start-error"
+              className="w-full text-sm text-red-300"
+            >
+              {failure.message}
+            </p>
+          )}
+        </>
+      )}
+      <p role="status" data-testid="mission-start-status" className="text-sm text-emerald-300">
+        {startStatusText(start)}
+      </p>
+    </div>
+  )
+}
+
 export function MissionCard({
   mission: listed,
   registry,
   onReload,
   reloadWaiting,
   onCompleted,
+  onRewarded,
   titleLevel = 3,
   reloadLabel = 'Atualizar o quadro',
 }: {
@@ -162,7 +371,13 @@ export function MissionCard({
   reloadWaiting: boolean
   onCompleted?: () => void
   /**
-   * O nivel do titulo do cartao (m3). Padrao `3` (`<h3>`), como sempre foi no
+   * O bonus da avaliacao da Tifa foi creditado. Quem usa o cartao liga ao
+   * MESMO aviso da conclusao (P3 do D): o saldo mudou, o painel de progresso
+   * atualiza.
+   */
+  onRewarded?: () => void
+  /**
+   * O nivel do titulo do cartao. Padrao `3` (`<h3>`), como sempre foi no
    * quadro de avulsas. A `CycleSection` pede `4` para o cartao DENTRO da
    * especial: sem isso, o `<h3>` do titulo da secao ("Missão especial — bônus
    * da sequência") e o `<h3>` do titulo do cartao colidiam no mesmo nivel,
@@ -170,24 +385,116 @@ export function MissionCard({
    */
   titleLevel?: 3 | 4
   /**
-   * O texto do botao de recuperacao (m5). Padrao "Atualizar o quadro", como
+   * O texto do botao de recuperacao. Padrao "Atualizar o quadro", como
    * sempre foi. Ver o comentario de `CompletionControls` acima.
    */
   reloadLabel?: string
 }) {
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
+  const { state: start, start: startMission } = useStartMission(listed.id, registry)
+  const {
+    state: reschedule,
+    reschedule: rescheduleMission,
+    lastRescheduled,
+  } = useRescheduleMission(listed.id, registry)
+  // O ultimo rascunho de reagendamento enviado. Ref, e nao estado: so e lido no
+  // clique, e mudar nao deve renderizar nada.
+  const lastSentReschedule = useRef<RescheduleDraft | null>(null)
+  const submitReschedule = (draft: RescheduleDraft) => {
+    // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
+    // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
+    // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
+    // evitavel. Sem mudanca, a mesma chave reenvia.
+    const previous = lastSentReschedule.current
+    if (
+      reschedule.status === 'failed' &&
+      reschedule.failure.recovery === 'retry' &&
+      previous !== null &&
+      !sameDraft(previous, draft)
+    ) {
+      registry.releaseActionKey(listed.id, 'reschedule')
+    }
+    lastSentReschedule.current = draft
+    rescheduleMission(draft)
+  }
+  // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
+  // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
+  // texto morreria com eles, como a chave de operacao morria (pendencia 35).
+  // O `useState` fica porque o registro e um `useRef` -- mudar o rascunho la
+  // nao renderiza nada.
+  const [draft, setDraft] = useState<EvidenceDraft>(() => registry.draftFor(listed.id))
+  const changeDraft = (next: EvidenceDraft) => {
+    setDraft(next)
+    registry.saveDraft(listed.id, next)
+  }
+  // Rascunho em uso (texto OU link) que nao pode sair barra o Concluir:
+  // concluir sem ele trocaria a entrega que a pessoa quis dar. Sem
+  // texto nenhum, sai a conclusao de sempre, sem a chave `evidence`.
+  const draftInUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
+  const titleId = useId()
+  const titleRef = useRef<HTMLHeadingElement>(null)
   // Depois do sucesso, o cartao mostra a missao que a API DEVOLVEU. Ela nao
   // fica velha: `concluida` e terminal (A5), e a proxima leitura do quadro --
   // o "Atualizar", ou o "Tentar novamente" da lista -- monta cartoes novos.
-  const mission = completion.status === 'completed' ? completion.mission : listed
+  // Sem conclusao, vale a ultima devolvida pelo Iniciar ou pelo Reagendar
+  // (incremento F), e so entao a listada.
+  const mission =
+    completion.status === 'completed'
+      ? completion.mission
+      : (latestFromActions(start, lastRescheduled) ?? listed)
+  // Um envio de cada vez no cartao: com o Iniciar em voo, um Concluir chegaria
+  // ao servidor numa ordem que a tela nao controla (e vice-versa).
+  const completing = completion.status === 'submitting'
+  const starting = start.status === 'submitting'
+  const rescheduling = reschedule.status === 'submitting'
   const HeadingTag = titleLevel === 4 ? 'h4' : 'h3'
+  // Ao concluir, o Concluir (e o formulario) saem do documento, e o foco que
+  // estava neles cairia no `body`: quem navega pelo teclado ou por leitor de
+  // tela recomecaria a pagina do topo. Vai para o titulo do cartao -- o painel
+  // que aparece esta logo abaixo dele. So se o foco REALMENTE se perdeu: se a
+  // pessoa ja foi para outro lugar enquanto o pedido voava, nao se rouba.
+  const completed = completion.status === 'completed'
+  useEffect(() => {
+    if (completed && document.activeElement === document.body) {
+      titleRef.current?.focus()
+    }
+  }, [completed])
+  // O mesmo para o Iniciar: no sucesso, o botao sai do documento.
+  const started = start.status === 'started'
+  useEffect(() => {
+    if (started && document.activeElement === document.body) {
+      titleRef.current?.focus()
+    }
+  }, [started])
+  // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
+  // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
+  const retryPending = registry.isRetryPending(listed.id)
+  const completionStale =
+    completion.status === 'failed' && completion.failure.recovery === 'refresh'
+  const offersEvidence = mission.state !== 'concluida' && !completionStale
+  // O reagendamento e so da avulsa (F7: o prazo da diaria e da especial vem do
+  // ciclo) e so enquanto nao concluida (F8). Uma falha que pede atualizar -- a
+  // do reagendamento ou a do Concluir -- tira o formulario: a missao ja mudou.
+  const rescheduleFailure = reschedule.status === 'failed' ? reschedule.failure : null
+  const offersReschedule =
+    mission.mission_type === 'avulsa' &&
+    mission.state !== 'concluida' &&
+    !completionStale &&
+    rescheduleFailure?.recovery !== 'refresh'
+  // As regioes vivas nascem com o cartao e so no que tem o que anunciar: a
+  // missao listada nao concluida (a do Reagendar, so na avulsa).
+  const liveStart = listed.state !== 'concluida'
+  const liveReschedule = liveStart && listed.mission_type === 'avulsa'
 
   return (
     <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-4">
         <HeadingTag
+          id={titleId}
+          ref={titleRef}
+          tabIndex={-1}
           data-testid="mission-instructions"
-          className="min-w-0 text-base font-semibold text-slate-100"
+          className="min-w-0 text-base font-semibold text-slate-100 focus:outline-none"
         >
           {mission.instructions}
         </HeadingTag>
@@ -215,13 +522,11 @@ export function MissionCard({
         </dd>
 
         <dt className="text-slate-400">Dificuldade</dt>
-        {/* O "5" espelha `DIFICULDADE_MAXIMA`, em
-            src/focusquest/modules/missions/schemas.py. Nada amarra os dois
-            automaticamente (isso pediria gerar o tipo a partir do OpenAPI):
-            quem mudar um tem de mudar o outro, e `types.ts` repete o teto. A
-            terceira copia e a do cartao de proposta da Tifa
-            (`features/tutoring/ProposalCard.tsx`). */}
-        <dd data-testid="mission-difficulty">{mission.difficulty} de 5</dd>
+        {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
+            espelha `DIFICULDADE_MAXIMA` do backend a mao. */}
+        <dd data-testid="mission-difficulty">
+          {mission.difficulty} de {MAX_DIFFICULTY}
+        </dd>
 
         <dt className="text-slate-400">Estimativa</dt>
         <dd data-testid="mission-estimated-minutes">{mission.estimated_minutes} min</dd>
@@ -241,14 +546,92 @@ export function MissionCard({
         )}
       </dl>
 
+      {/* "Iniciada em" so em andamento; concluida, o que conta e a duracao real. */}
+      {mission.state === 'em_andamento' && mission.started_at !== null && (
+        <p data-testid="mission-started-at" className="mt-2 text-sm text-slate-300">
+          <span className="text-slate-400">Iniciada em </span>
+          <time dateTime={mission.started_at}>{formatDeadline(mission.started_at)}</time>
+        </p>
+      )}
+
+      <RescheduleHistory reschedules={mission.reschedules} />
+
+      {offersEvidence && (
+        <EvidenceForm
+          draft={draft}
+          onChange={changeDraft}
+          disabled={completion.status === 'submitting'}
+          retryPending={retryPending}
+          describedBy={titleId}
+        />
+      )}
+
+      {liveStart && !completed && (
+        <StartControls
+          mission={mission}
+          start={start}
+          onStart={startMission}
+          otherInFlight={completing || rescheduling}
+          onReload={onReload}
+          reloadWaiting={reloadWaiting}
+          reloadLabel={reloadLabel}
+        />
+      )}
+
       <CompletionControls
         mission={mission}
         completion={completion}
-        onComplete={complete}
+        onComplete={() => {
+          complete(draftInUse ? draft : undefined)
+        }}
+        blocked={blockedReason(draft)}
+        retryPending={retryPending}
         onReload={onReload}
         reloadWaiting={reloadWaiting}
         reloadLabel={reloadLabel}
+        otherInFlight={starting || rescheduling}
       />
+
+      {offersReschedule && (
+        <RescheduleForm
+          mission={mission}
+          disabled={completing || starting || rescheduling}
+          failure={rescheduleFailure}
+          onSubmit={submitReschedule}
+          describedBy={titleId}
+        />
+      )}
+      {rescheduleFailure?.recovery === 'refresh' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <RefreshNotice
+            message={rescheduleFailure.message}
+            testId="mission-reschedule"
+            onReload={onReload}
+            reloadWaiting={reloadWaiting}
+            reloadLabel={reloadLabel}
+          />
+        </div>
+      )}
+      {liveReschedule && (
+        <p
+          role="status"
+          data-testid="mission-reschedule-status"
+          className="mt-2 text-sm text-emerald-300"
+        >
+          {rescheduleStatusText(reschedule)}
+        </p>
+      )}
+
+      {mission.state === 'concluida' && (
+        <EvaluationPanel
+          mission={mission}
+          onRewarded={onRewarded}
+          onReload={onReload}
+          reloadLabel={reloadLabel}
+          reloadWaiting={reloadWaiting}
+          describedBy={titleId}
+        />
+      )}
     </li>
   )
 }

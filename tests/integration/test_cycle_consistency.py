@@ -25,7 +25,7 @@ from focusquest.modules.missions.models import (
     User,
     WeeklyPlan,
 )
-from focusquest.modules.missions.service import concluir_missao
+from focusquest.modules.missions.service import NovaEvidencia, concluir_missao
 from focusquest.modules.progression.models import UserAchievement, XpEntry
 
 SEGUNDA = date(2026, 9, 21)
@@ -225,7 +225,14 @@ def test_conclusao_entre_leituras_nao_mistura_missao_sequencia_e_especial(
                 assert leitura_efetuada.wait(SEGUNDOS_LIMITE), (
                     "leitor nao estabeleceu snapshot"
                 )
-                _concluir(escritor, usuario_commitado, hoje)
+                concluir_missao(
+                    escritor,
+                    usuario_commitado,
+                    mission_id,
+                    f"ciclo-consistencia-{mission_id}",
+                    clock=lambda: agora,
+                    evidencia=NovaEvidencia("Entrega commitada com a conclusao", None),
+                )
                 escritor.commit()
                 return pid
         finally:
@@ -267,6 +274,9 @@ def test_conclusao_entre_leituras_nao_mistura_missao_sequencia_e_especial(
             ler_ciclo(verificacao, usuario_commitado, clock=lambda: agora)
         )
     assert depois.mission is not None
+    assert depois.mission.evidence is not None
+    assert depois.mission.evidence.text == "Entrega commitada com a conclusao"
+    assert depois.mission.evaluation is None
     assert (
         depois.mission.state,
         depois.mission.completed_at,
@@ -313,7 +323,12 @@ def test_ciclo_nao_revela_plano_futuro_nem_avulsa_e_le_clock_uma_vez(
 
     ciclo = CycleRead.da_leitura(ler_ciclo(session, 1, clock=clock))
     assert ciclo == CycleRead(
-        today=SEGUNDA, mission=None, streak=0, days_to_milestone=7, special=None
+        today=SEGUNDA,
+        mission=None,
+        streak=0,
+        days_to_milestone=7,
+        special=None,
+        late_daily=None,
     )
     assert chamadas == 1
     assert not session.new and not session.dirty and not session.deleted
@@ -468,3 +483,93 @@ def test_snapshot_inclui_alteracoes_proprias_sem_commit_e_nao_muda_com_refresh(
                 UserAchievement.user_id == usuario_commitado
             )
         ).all()
+
+
+@pytest.mark.parametrize("campo", ["mission", "late_daily", "special"])
+def test_snapshot_preserva_entrega_e_avaliacao_das_missoes_do_ciclo(
+    session: Session, campo: str
+) -> None:
+    """As copias devem conservar os dados do E, incluindo a tardia da F25.
+
+    A leitura e um unico comando mesmo com entrega/avaliacao. Atualizar as
+    identidades originais nao pode modificar o snapshot ja devolvido.
+    """
+    from focusquest.modules.missions.cycle_service import ler_missao
+    from focusquest.modules.missions.domain import EstadoDaAvaliacao, Veredito
+    from focusquest.modules.missions.models import MissionEvaluation
+    from focusquest.modules.missions.schemas import MissionRead
+    from focusquest.modules.missions.service import iniciar_missao
+
+    _plano(session, 1)
+    agora = _meio_dia(SEGUNDA)
+    missao = _diaria(session, 1, SEGUNDA)
+    if campo == "late_daily":
+        iniciar_missao(session, 1, missao.id, "inicio-tardia", clock=lambda: agora)
+        agora += timedelta(days=1)
+    elif campo == "special":
+        for indice in range(7):
+            _concluir(session, 1, SEGUNDA + timedelta(days=indice))
+        agora += timedelta(days=6)
+        missao = session.scalars(
+            select(Mission).where(Mission.mission_type == MissionType.ESPECIAL)
+        ).one()
+    concluir_missao(
+        session,
+        1,
+        missao.id,
+        f"com-evidencia-{missao.id}",
+        clock=lambda: agora,
+        evidencia=NovaEvidencia("Entrega original 🗡️", "https://example.com/evidencia"),
+    )
+    avaliacao = MissionEvaluation(
+        mission_id=missao.id,
+        state=EstadoDaAvaliacao.CONCLUIDA,
+        attempt=1,
+        verdict=Veredito.ATENDE,
+        feedback="A entrega cumpre o criterio.",
+        model="modelo-falso",
+        requested_at=agora,
+        finished_at=agora,
+    )
+    session.add(avaliacao)
+    session.flush()
+    session.expire(missao, ["evaluation"])
+    esperado = MissionRead.da_leitura(ler_missao(session, missao, agora))
+    assert esperado.evidence is not None and esperado.evaluation is not None
+
+    comandos: list[str] = []
+
+    def registrar(
+        conexao: Connection,
+        cursor: Any,
+        statement: str,
+        parameters: Any,
+        context: ExecutionContext,
+        executemany: bool,
+    ) -> None:
+        comandos.append(statement)
+
+    conexao = session.connection()
+    event.listen(conexao, "after_cursor_execute", registrar)
+    try:
+        lido = ler_ciclo(session, 1, clock=lambda: agora)
+        leitura = CycleRead.da_leitura(lido)
+    finally:
+        event.remove(conexao, "after_cursor_execute", registrar)
+    assert len(comandos) == 1
+    assert getattr(leitura, campo) == esperado
+    assert not session.new and not session.dirty and not session.deleted
+
+    assert missao.evidence is not None
+    missao.evidence.text = "Entrega posteriormente modificada"
+    avaliacao.feedback = "Feedback posteriormente modificado"
+    session.flush()
+    session.expire_all()
+    assert CycleRead.da_leitura(lido) == leitura
+    atual = getattr(
+        CycleRead.da_leitura(ler_ciclo(session, 1, clock=lambda: agora)), campo
+    )
+    assert atual is not None and atual.evidence is not None
+    assert atual.evidence.text == "Entrega posteriormente modificada"
+    assert atual.evaluation is not None
+    assert atual.evaluation.feedback == "Feedback posteriormente modificado"

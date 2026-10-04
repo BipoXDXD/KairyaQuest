@@ -3,6 +3,8 @@ import { postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
+import { describeEvidence } from './evidenceLimit'
+import type { EvidenceDraft } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
 /**
@@ -26,8 +28,13 @@ export type CompletionState =
 
 export interface UseCompleteMissionResult {
   state: CompletionState
-  /** Envia a conclusao. Depois de uma falha, e tambem o "tentar de novo". */
-  complete: () => void
+  /**
+   * Envia a conclusao, com evidencia se houver rascunho. Depois de uma falha,
+   * e tambem o "tentar de novo". Um rascunho que nao pode ser enviado (texto
+   * vazio, link ruim) nao envia nada: a tela ja o barra no botao, e mandar a
+   * conclusao SEM a evidencia que a pessoa quis dar seria trocar a entrega.
+   */
+  complete: (evidence?: EvidenceDraft) => void
 }
 
 /**
@@ -49,13 +56,21 @@ export interface UseCompleteMissionResult {
  * Quando a chave sai do registro, este hook decide pelo resultado:
  *
  * - **falha que se repete com a mesma chave** (`recovery: 'retry'` -- rede,
- *   5xx, 422, `code` desconhecido): a chave FICA. Nao se sabe se o servidor
+ *   5xx, `code` desconhecido): a chave FICA, e o registro marca o retry
+ *   pendente (a tela trava a edicao da evidencia). Nao se sabe se o servidor
  *   concluiu, e so a mesma chave torna o reenvio seguro;
+ * - **422** (evidencia recusada): a chave SAI. O servidor leu o pedido e
+ *   recusou, nada foi gravado, e repetir daria o mesmo 422;
  * - **`operacao_reutilizada`**: a chave sai, e o proximo envio gera outra. Com
  *   ela, toda tentativa seria recusada, e trocar e seguro porque a missao nao
  *   foi concluida por ela;
- * - **sucesso, `transicao_ilegal`, `missao_nao_encontrada`**: a chave sai,
- *   porque nao tem mais uso. Mante-la so faria o registro crescer.
+ * - **sucesso, `transicao_ilegal`, `missao_nao_encontrada`,
+ *   `missao_expirada`**: a chave sai, porque nao tem mais uso. Mante-la so
+ *   faria o registro crescer.
+ *
+ * A chave e o rascunho saem por caminhos diferentes: so o SUCESSO apaga o
+ * rascunho da evidencia (a entrega foi feita). Qualquer falha o deixa, para a
+ * pessoa nao perder o que escreveu (E17).
  *
  * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que
  * faz o "Atualizar o quadro" esperar a conclusao em andamento.
@@ -71,49 +86,66 @@ export function useCompleteMission(
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
   const inFlight = useRef(false)
 
-  const complete = useCallback(() => {
-    // A ref bloqueia no mesmo tick e sobrevive ao rerender; estado/disabled
-    // continuam sendo o feedback da tela, sem decidir a exclusao do voo.
-    if (inFlight.current) return
-    // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
-    // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
-    // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
-    // que nunca vai settle. Antes desta ordem, uma excecao aqui deixava o
-    // contador do registro preso em 1 para sempre (regressao medida na
-    // revisao da Task 6).
-    const operationId = registry.operationIdFor(missionId)
-    inFlight.current = true
-    setState({ status: 'submitting' })
-    // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
-    // ja encontra esta conclusao em voo.
-    registry.started()
+  const complete = useCallback(
+    (evidence?: EvidenceDraft) => {
+      if (inFlight.current) return
+      const described = evidence === undefined ? undefined : describeEvidence(evidence)
+      if (described !== undefined && described.body === null) {
+        return
+      }
 
-    postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
-      operation_id: operationId,
-    })
-      .then((completion) => {
-        registry.release(missionId)
-        const { reward, ...mission } = completion
-        setState({ status: 'completed', mission, reward })
-        onCompleted?.()
+      // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
+      // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
+      // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
+      // que nunca vai settle. Com a ordem inversa, uma excecao aqui deixaria o
+      // contador do registro preso em 1 para sempre.
+      const operationId = registry.operationIdFor(missionId)
+      inFlight.current = true
+      setState({ status: 'submitting' })
+      // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
+      // ja encontra esta conclusao em voo.
+      registry.started()
+
+      postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
+        operation_id: operationId,
+        ...(described === undefined ? {} : { evidence: described.body }),
       })
-      .catch((error: unknown) => {
-        const failure = describeCompletionFailure(error)
-        if (failure.recovery !== 'retry') {
+        .then((completion) => {
+          // So o sucesso apaga o rascunho: a entrega foi feita.
           registry.release(missionId)
-        }
-        setState({ status: 'failed', failure })
-      })
-      .finally(() => {
-        // Por ultimo, depois do estado final: se havia recarga esperando, ela
-        // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
-        try {
-          registry.settled()
-        } finally {
-          inFlight.current = false
-        }
-      })
-  }, [missionId, registry, onCompleted])
+          registry.discardDraft(missionId)
+          const { reward, ...mission } = completion
+          setState({ status: 'completed', mission, reward })
+          // A conclusao ja esta gravada no servidor e no estado: um callback do
+          // chamador que lance nao pode cair no `.catch` abaixo e virar
+          // "falhou". Fica registrado, sem mexer no estado.
+          try {
+            onCompleted?.()
+          } catch (error) {
+            console.error('onCompleted lancou depois da conclusao:', error)
+          }
+        })
+        .catch((error: unknown) => {
+          const failure = describeCompletionFailure(error)
+          if (failure.recovery === 'retry') {
+            registry.markRetryPending(missionId)
+          } else {
+            registry.release(missionId)
+          }
+          setState({ status: 'failed', failure })
+        })
+        .finally(() => {
+          // Por ultimo, depois do estado final: se havia recarga esperando, ela
+          // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
+          try {
+            registry.settled()
+          } finally {
+            inFlight.current = false
+          }
+        })
+    },
+    [missionId, registry, onCompleted],
+  )
 
   return { state, complete }
 }

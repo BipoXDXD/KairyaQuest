@@ -41,7 +41,7 @@ def test_fks_de_xp_entries_correspondem_ao_modelo(banco_migrado: Engine) -> None
 
 
 def test_unique_de_xp_entries_corresponde_ao_modelo(banco_migrado: Engine) -> None:
-    """Nome explicito e colunas: o UNIQUE da missao tem significado proprio."""
+    """UNIQUE atual (missao, fonte): conclusao e bonus da avaliacao coexistem."""
     tabela = XpEntry.metadata.tables[TABELA]
     with banco_migrado.connect() as conexao:
         uniques_do_banco = {

@@ -13,6 +13,7 @@ from focusquest.modules.missions.cycle_domain import (
     NAO_CONCLUIVEIS,
     Availability,
     DiaDoPlano,
+    com_inicio_a_tempo,
     dia_de,
     dias_da_semana,
     dias_para_o_marco,
@@ -21,8 +22,10 @@ from focusquest.modules.missions.cycle_domain import (
     fim_da_janela_da_especial,
     fim_do_dia,
     inicio_do_dia,
+    limite_da_conclusao_tardia,
     marco_da_semana,
     marco_mais_recente,
+    na_conclusao_tardia,
     segunda_da_semana,
     sequencia,
     sequencia_ate,
@@ -252,6 +255,144 @@ def test_especial_concluida_continua_concluida_depois_da_janela() -> None:
 )
 def test_especial_na_borda_da_janela(agora: datetime, esperado: Availability) -> None:
     assert disponibilidade_da_especial(DOMINGO, False, agora) is esperado
+
+
+# --- F25: a missao iniciada a tempo pode ser concluida depois do prazo -------
+
+PRAZO_DA_QUARTA = fim_do_dia(QUARTA)  # quinta 00:00 em SP
+INICIO_A_TEMPO = PRAZO_DA_QUARTA - timedelta(minutes=10)  # quarta 23:50
+
+
+def test_o_limite_da_conclusao_tardia_e_o_fim_do_dia_seguinte_ao_prazo() -> None:
+    # Prazo da diaria de quarta: quinta 00:00; limite: sexta 00:00 (SP).
+    assert limite_da_conclusao_tardia(PRAZO_DA_QUARTA) == fim_do_dia(QUINTA)
+    assert limite_da_conclusao_tardia(PRAZO_DA_QUARTA) == datetime(
+        2026, 9, 25, 3, tzinfo=UTC
+    )
+    # Especial do marco no domingo: janela ate terca 00:00, limite quarta 00:00.
+    assert limite_da_conclusao_tardia(fim_da_janela_da_especial(DOMINGO)) == fim_do_dia(
+        DOMINGO + timedelta(days=2)
+    )
+
+
+@pytest.mark.parametrize("vencida", [Availability.PERDIDA, Availability.EXPIRADA])
+@pytest.mark.parametrize(
+    ("iniciada_em", "agora", "esperado"),
+    [
+        # Iniciada as 23:50, concluida as 00:10: ainda disponivel.
+        (INICIO_A_TEMPO, PRAZO_DA_QUARTA + timedelta(minutes=10), "disponivel"),
+        # Ate o ultimo instante do dia seguinte.
+        (
+            INICIO_A_TEMPO,
+            fim_do_dia(QUINTA) - timedelta(microseconds=1),
+            "disponivel",
+        ),
+        # No limite (semiaberto), ja passou.
+        (INICIO_A_TEMPO, fim_do_dia(QUINTA), "vencida"),
+        # Nunca iniciada: continua vencida (pendente depois do prazo).
+        (None, PRAZO_DA_QUARTA + timedelta(minutes=10), "vencida"),
+        # Iniciada no proprio prazo (ou depois) nao e "a tempo".
+        (PRAZO_DA_QUARTA, PRAZO_DA_QUARTA + timedelta(minutes=10), "vencida"),
+    ],
+)
+def test_com_inicio_a_tempo_reabre_so_a_vencida_iniciada_antes_do_prazo(
+    vencida: Availability,
+    iniciada_em: datetime | None,
+    agora: datetime,
+    esperado: str,
+) -> None:
+    resultado = com_inicio_a_tempo(vencida, PRAZO_DA_QUARTA, iniciada_em, agora)
+    assert resultado is (
+        Availability.DISPONIVEL if esperado == "disponivel" else vencida
+    )
+
+
+@pytest.mark.parametrize(
+    "outra",
+    [
+        Availability.FORA_DO_PLANO,
+        Availability.BLOQUEADA,
+        Availability.DISPONIVEL,
+        Availability.CONCLUIDA,
+    ],
+)
+def test_com_inicio_a_tempo_nao_mexe_no_que_nao_venceu(outra: Availability) -> None:
+    """Fora do plano nunca pode ser iniciada; o resto nao e prazo vencido."""
+    agora = PRAZO_DA_QUARTA + timedelta(minutes=10)
+    assert com_inicio_a_tempo(outra, PRAZO_DA_QUARTA, INICIO_A_TEMPO, agora) is outra
+
+
+_DEPOIS = PRAZO_DA_QUARTA + timedelta(minutes=10)
+_LIMITE = fim_do_dia(QUINTA)
+
+
+@pytest.mark.parametrize(
+    ("agora", "disponibilidade", "concluida_em", "esperado"),
+    [
+        # Antes do prazo nao e tardia: e a missao de sempre.
+        (
+            PRAZO_DA_QUARTA - timedelta(microseconds=1),
+            Availability.DISPONIVEL,
+            None,
+            False,
+        ),
+        # Depois do prazo, reaberta pela F25.
+        (_DEPOIS, Availability.DISPONIVEL, None, True),
+        # Vencida sem inicio: nao aparece.
+        (_DEPOIS, Availability.PERDIDA, None, False),
+        # Concluida com atraso: continua a vista ate o limite.
+        (_DEPOIS, Availability.CONCLUIDA, _DEPOIS, True),
+        (_LIMITE - timedelta(microseconds=1), Availability.CONCLUIDA, _DEPOIS, True),
+        (_LIMITE, Availability.CONCLUIDA, _DEPOIS, False),
+        # Concluida exatamente no prazo ja e atraso (o intervalo e semiaberto).
+        (_DEPOIS, Availability.CONCLUIDA, PRAZO_DA_QUARTA, True),
+        # Concluida a tempo: nao e tardia.
+        (
+            _DEPOIS,
+            Availability.CONCLUIDA,
+            PRAZO_DA_QUARTA - timedelta(microseconds=1),
+            False,
+        ),
+    ],
+)
+def test_na_conclusao_tardia(
+    agora: datetime,
+    disponibilidade: Availability,
+    concluida_em: datetime | None,
+    esperado: bool,
+) -> None:
+    assert (
+        na_conclusao_tardia(PRAZO_DA_QUARTA, disponibilidade, concluida_em, agora)
+        is esperado
+    )
+
+
+@pytest.mark.parametrize(
+    ("dia", "limite_utc", "horas_reais"),
+    [
+        # Em pleno horario de verao (SP em -02:00): meia-noite de 12/12 = 02:00 UTC.
+        (date(2018, 12, 10), datetime(2018, 12, 12, 2, tzinfo=UTC), 24),
+        # Fim do horario de verao na virada de 16 para 17/02/2019: o dia seguinte
+        # ao prazo tem 25 h, e o limite e a meia-noite CIVIL (03:00 UTC), nao
+        # 24 h corridas.
+        (date(2019, 2, 15), datetime(2019, 2, 17, 3, tzinfo=UTC), 25),
+        # Inicio do horario de verao em 04/11/2018: a meia-noite de 04/11 nao
+        # existiu (00:00 pulou para 01:00 -02:00); o dia comeca as 03:00 UTC.
+        (date(2018, 11, 2), datetime(2018, 11, 4, 3, tzinfo=UTC), 24),
+    ],
+)
+def test_o_limite_da_conclusao_tardia_no_horario_de_verao(
+    dia: date, limite_utc: datetime, horas_reais: int
+) -> None:
+    prazo = fim_do_dia(dia)
+    limite = limite_da_conclusao_tardia(prazo)
+    # Em UTC: a meia-noite de 04/11/2018 cai no buraco do horario de verao, e
+    # um instante no buraco nunca e `==` a outro de fuso diferente (PEP 495),
+    # embora `<` -- a unica comparacao que a regra faz -- funcione.
+    assert limite.astimezone(UTC) == limite_utc
+    assert limite.astimezone(UTC) - prazo.astimezone(UTC) == timedelta(
+        hours=horas_reais
+    )
 
 
 # --- XP da especial ----------------------------------------------------------

@@ -6,7 +6,12 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from focusquest.modules.missions.cycle_schemas import BonusCreate, DailyCreate
-from focusquest.modules.missions.schemas import MissionComplete, MissionCreate
+from focusquest.modules.missions.schemas import (
+    MissionComplete,
+    MissionCreate,
+    MissionRescheduleIn,
+    MissionStart,
+)
 from focusquest.modules.tutoring.schemas import ActionConfirm, MessageCreate
 
 MISSAO: dict[str, Any] = {
@@ -26,6 +31,16 @@ CONTRATOS = [
     (BonusCreate, ESPECIAL, "instructions"),
     (BonusCreate, ESPECIAL, "completion_criterion"),
     (MissionComplete, {"operation_id": "op"}, "operation_id"),
+    (MissionStart, {"operation_id": "op"}, "operation_id"),
+    (
+        MissionRescheduleIn,
+        {
+            "operation_id": "op",
+            "new_deadline": "2026-09-23T15:00:00Z",
+            "reason": "falta_de_tempo",
+        },
+        "operation_id",
+    ),
     (MessageCreate, {"content": "Oi", "client_message_id": "msg"}, "content"),
     (MessageCreate, {"content": "Oi", "client_message_id": "msg"}, "client_message_id"),
     (ActionConfirm, {"operation_id": "op"}, "operation_id"),

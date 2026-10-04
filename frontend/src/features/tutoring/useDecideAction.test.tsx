@@ -1,6 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
+import { MUTATION_TIMEOUT_MS } from '../../shared/api/client'
+import {
+  jsonBody,
+  pendingUntilAborted,
+  requestsTo,
+  routeFetch,
+  type Route,
+} from '../../test/fetchRoutes'
 import type { ActionRead } from './types'
 import { useActionKeys } from './useActionKeys'
 import { useDecideAction } from './useDecideAction'
@@ -70,6 +77,7 @@ describe('useDecideAction', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -272,6 +280,95 @@ describe('useDecideAction', () => {
 
     // O registro nao cresce sem limite, como no A: a acao decidida sai dele.
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
+  })
+
+  it('D10 reagendamento_invalido marca a acao como falhou com esse code, e solta a chave', async () => {
+    const fetchMock = routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
+    const { changed, missionCreated, result } = mount()
+
+    act(() => {
+      result.current.decision.confirm()
+    })
+    await waitFor(() => {
+      expect(result.current.decision.state.status).toBe('failed')
+    })
+
+    expect(changed).toHaveBeenCalledExactlyOnceWith({
+      ...proposta(5),
+      state: 'falhou',
+      error_code: 'reagendamento_invalido',
+    })
+    expect(missionCreated).not.toHaveBeenCalled()
+    expect(result.current.decision.state).toMatchObject({
+      failure: { recovery: 'invalidated' },
+      attempted: 'confirm',
+    })
+    expect(result.current.keys.operationIdFor(5)).toBe(K2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('D11 uma confirmacao pendurada falha ao fim do prazo e o reenvio usa a MESMA chave', async () => {
+    // A confirmacao pode ter executado no servidor sem que a resposta chegasse.
+    vi.useFakeTimers()
+    const fetchMock = routeFetch({
+      [CONFIRM]: (init, call) =>
+        call === 1 ? pendingUntilAborted(init, call) : confirmed(init, call),
+    })
+    const { changed, missionCreated, result } = mount()
+
+    act(() => {
+      result.current.decision.confirm()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+    })
+    expect(result.current.decision.state).toEqual({ status: 'confirming' })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(result.current.decision.state).toMatchObject({
+      status: 'failed',
+      failure: { recovery: 'retry' },
+      attempted: 'confirm',
+    })
+    expect(missionCreated).not.toHaveBeenCalled()
+    expect(changed).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.decision.confirm()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(missionCreated).toHaveBeenCalledTimes(1)
+    expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }, { operation_id: K1 }])
+  })
+
+  it('D12 uma recusa pendurada falha ao fim do prazo e oferece repetir', async () => {
+    vi.useFakeTimers()
+    routeFetch({ [REJECT]: pendingUntilAborted })
+    const { changed, result } = mount()
+
+    act(() => {
+      result.current.decision.reject()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+    })
+    expect(result.current.decision.state).toEqual({ status: 'rejecting' })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+
+    expect(result.current.decision.state).toMatchObject({
+      status: 'failed',
+      failure: { recovery: 'retry' },
+      attempted: 'reject',
+    })
+    expect(changed).not.toHaveBeenCalled()
   })
 })
 

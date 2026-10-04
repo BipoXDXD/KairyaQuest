@@ -1,5 +1,11 @@
 # Incremento E — brief de decisões para retomada
 
+> Registro do checkout anterior à descoberta da `main` em `469e149`.
+> E/F/G já estão implementados nessa revisão remota. A conciliação atual
+> está no topo de `docs/HANDOFF.md`; decisões do E vigentes estão na spec
+> `docs/superpowers/specs/2026-09-28-incremento-e-entrega-avaliacao-design.md`.
+> Não usar pendências deste registro para reimplementar esses incrementos.
+
 Status: proposta provisória para decisão humana; nenhum desenho E aprovado ou implementado nesta tarefa.
 Documento local para preparar decisões do dono; não autoriza implementação, novas regras de recompensa ou publicação.
 Fontes: [README](../../../README.md) §§5/6/8/10/14 (autoridade), [ARCHITECTURE](../../ARCHITECTURE.md) contratos de missões/tutoria/progressão, [HANDOFF](../../HANDOFF.md) “Próximo incremento” e pendências, spec D de 2026-09-25.

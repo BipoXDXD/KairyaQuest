@@ -1,4 +1,5 @@
-import type { Mission } from '../../shared/types/mission'
+import type { EvaluationSummary, Mission, RescheduleReason } from '../../shared/types/mission'
+import type { Reward } from '../../shared/types/reward'
 
 /**
  * O contrato de missao como a API o publica.
@@ -24,6 +25,11 @@ export interface Cycle {
   streak: number
   days_to_milestone: number
   special: Mission | null
+  /**
+   * F25: a diaria de ONTEM, iniciada no dia dela, que ainda pode ser concluida
+   * ate o fim de hoje (e, concluida com atraso, continua aqui ate la).
+   */
+  late_daily: Mission | null
 }
 
 /**
@@ -37,3 +43,67 @@ export interface Cycle {
  */
 export type MissionErrorCode =
   'missao_nao_encontrada' | 'transicao_ilegal' | 'operacao_reutilizada' | 'missao_expirada'
+
+/**
+ * Os `code` de erro que `POST /api/missions/{id}/evaluation` devolve (spec do
+ * incremento E, secao "API"). Espelha `CodigoDeErro`, em
+ * src/focusquest/main.py, a mao: um code novo entra aqui, e entao o `tsc`
+ * exige a traducao dele em `evaluationFailure.ts`.
+ */
+export type EvaluationErrorCode =
+  | 'sem_evidencia'
+  | 'avaliacao_em_andamento'
+  | 'provedor_nao_configurado'
+  | 'provedor_indisponivel'
+  | 'tempo_esgotado'
+  | 'avaliacao_invalida'
+  | 'missao_nao_encontrada'
+
+/** A resposta do pedido de avaliacao: o resumo e o bonus, se concedido agora. */
+export interface EvaluationResult {
+  evaluation: EvaluationSummary
+  /**
+   * `reward` pode faltar (deploy defasado ou contrato violado) ou vir `null`
+   * (sem bonus): quem le usa `!= null`, como o `useCompleteMission` faz.
+   */
+  reward?: Reward | null
+}
+
+/** O rascunho da evidencia, guardado por missao no registro de conclusoes. */
+export interface EvidenceDraft {
+  text: string
+  link: string
+}
+
+/**
+ * Os `code` de erro que `POST /api/missions/{id}/start` devolve (spec do
+ * incremento F, tabela de erros). Espelha `CodigoDeErro`, em
+ * src/focusquest/main.py, a mao: um code novo entra aqui, e entao o `tsc`
+ * exige a traducao dele em `startFailure.ts`.
+ */
+export type StartErrorCode =
+  'missao_nao_encontrada' | 'transicao_ilegal' | 'operacao_reutilizada' | 'missao_expirada'
+
+/**
+ * Os `code` de erro que `POST /api/missions/{id}/reschedule` devolve (spec do
+ * incremento F). Espelha `CodigoDeErro` a mao, como `StartErrorCode`; a
+ * traducao esta em `rescheduleFailure.ts`. `prazo_derivado` e
+ * `prazo_inalterado` sao os dois codes novos do F.
+ */
+export type RescheduleErrorCode =
+  | 'missao_nao_encontrada'
+  | 'transicao_ilegal'
+  | 'operacao_reutilizada'
+  | 'prazo_expirado'
+  | 'prazo_inalterado'
+  | 'prazo_derivado'
+
+/**
+ * O rascunho do reagendamento, como o formulario o entrega ao hook: a hora
+ * civil de Sao Paulo (`datetime-local`, `YYYY-MM-DDTHH:mm`) e o motivo, que so
+ * e `null` enquanto a pessoa nao escolheu (nenhum vem marcado).
+ */
+export interface RescheduleDraft {
+  civil: string
+  reason: RescheduleReason | null
+}

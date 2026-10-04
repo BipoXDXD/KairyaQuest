@@ -17,7 +17,7 @@ function progressBody(xp: number, level = 1, floor = 0, next = 100): Progress {
 
 /**
  * A pagina busca cinco recursos na montagem: ciclo, missoes, status e
- * historico da Tifa, e o progresso (Task 8, incremento D).
+ * historico da Tifa, e o progresso.
  */
 function stubPage() {
   stubViewport('desktop')
@@ -29,6 +29,7 @@ function stubPage() {
         streak: 0,
         days_to_milestone: 7,
         special: null,
+        late_daily: null,
       }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -198,6 +199,10 @@ describe('Headquarters', () => {
       completed_at: null,
       xp: 80,
       actual_duration_minutes: null,
+      verification: null,
+      evidence: null,
+      evaluation: null,
+      reschedules: [],
     }
     const recompensa: Reward = {
       xp_awarded: 80,
@@ -211,6 +216,7 @@ describe('Headquarters', () => {
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-24T10:00:00Z',
+      verification: 'autodeclarada',
       reward: recompensa,
     }
     stubViewport('desktop')
@@ -233,6 +239,7 @@ describe('Headquarters', () => {
           streak: 0,
           days_to_milestone: 7,
           special: null,
+          late_daily: null,
         }),
       'GET /api/missions': () => Response.json([avulsa]),
       'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -288,12 +295,17 @@ describe('Headquarters', () => {
       completed_at: null,
       xp: 40,
       actual_duration_minutes: null,
+      verification: null,
+      evidence: null,
+      evaluation: null,
+      reschedules: [],
     }
     const diariaConcluida: Mission = {
       ...diaria,
       state: 'concluida',
       availability: 'concluida',
       completed_at: '2026-09-23T15:00:00Z',
+      verification: 'autodeclarada',
     }
     const recompensa: Reward = {
       xp_awarded: 40,
@@ -314,6 +326,7 @@ describe('Headquarters', () => {
                 streak: 0,
                 days_to_milestone: 7,
                 special: null,
+                late_daily: null,
               }
             : {
                 today: '2026-09-23',
@@ -321,6 +334,7 @@ describe('Headquarters', () => {
                 streak: 1,
                 days_to_milestone: 6,
                 special: null,
+                late_daily: null,
               },
         ),
       'GET /api/missions': () => Response.json([]),
@@ -377,6 +391,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
       client_message_id: 'c1',
       reply_to_id: null,
       error_code: null,
+      fallback_model: null,
       created_at: '2026-09-22T12:00:00Z',
       actions: [],
     },
@@ -388,6 +403,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
       client_message_id: null,
       reply_to_id: 1,
       error_code: null,
+      fallback_model: null,
       created_at: '2026-09-22T12:00:01Z',
       actions: [proposal],
     },
@@ -408,6 +424,10 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     completed_at: null,
     xp: 100,
     actual_duration_minutes: null,
+    verification: null,
+    evidence: null,
+    evaluation: null,
+    reschedules: [],
   }
 
   const confirmed: Route = () =>
@@ -461,11 +481,11 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     await screen.findByTestId('proposal-created')
     expect(requestsTo(fetchMock, MISSIONS)).toHaveLength(1)
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
-      'Aguardando a conclusão em andamento para atualizar o quadro.',
+      'Aguardando o pedido em andamento para atualizar o quadro.',
     )
 
     await act(async () => {
-      resolver(Response.json({ ...pendente, state: 'concluida' }))
+      resolver(Response.json({ ...pendente, state: 'concluida', verification: 'autodeclarada' }))
       await post
     })
 

@@ -60,6 +60,7 @@ export function settleInterrupted(
     client_message_id: null,
     reply_to_id: question.id,
     error_code: null,
+    fallback_model: null,
     created_at: question.created_at,
     actions: [],
   })
@@ -92,4 +93,19 @@ export function pendingFromHistory(messages: MessageRead[]): PendingQuestion | n
     (m) => m.reply_to_id === last.id && (m.status === 'completa' || m.status === 'gerando'),
   )
   return settled ? null : { clientMessageId: last.client_message_id, content: last.content }
+}
+
+/**
+ * A resposta mais recente da pergunta de `clientMessageId`, ou `undefined` se
+ * a pergunta nao esta na lista ou nao tem resposta. E a tentativa que diz POR
+ * QUE a pergunta ficou sem resposta completa (pendencia 122).
+ */
+export function latestAnswerTo(
+  messages: MessageRead[],
+  clientMessageId: string,
+): MessageRead | undefined {
+  const question = messages.findLast((m) => m.client_message_id === clientMessageId)
+  return question === undefined
+    ? undefined
+    : messages.findLast((m) => m.reply_to_id === question.id)
 }

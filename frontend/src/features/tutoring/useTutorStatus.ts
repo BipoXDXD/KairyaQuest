@@ -33,7 +33,7 @@ export function useTutorStatus(): { state: TutorStatus; reload: () => void } {
     const controller = new AbortController()
     requestJson<StatusRead>('/tutoring/status', controller.signal)
       .then((status) => {
-        if (requestId.current !== id) {
+        if (controller.signal.aborted || requestId.current !== id) {
           return
         }
         setState({ status: status.available ? 'available' : 'unavailable' })

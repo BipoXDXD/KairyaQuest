@@ -21,6 +21,11 @@ const GREETING =
   'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
 const HISTORY_RETRY_NOTE =
   'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
+const LONG_NOTE =
+  'A última resposta ficou longa demais e foi cortada. Tente pedir por partes, um tópico de cada vez. Tentar de novo refaz a mesma pergunta e pode cortar outra vez.'
+// Os `error_code` escritos a mao, como o backend os grava (pendencia 32).
+const LONG = 'resposta_longa'
+const REFUSED = 'resposta_recusada'
 
 const question = (id: number, content: string, cmid: string): MessageRead => ({
   id,
@@ -30,6 +35,7 @@ const question = (id: number, content: string, cmid: string): MessageRead => ({
   client_message_id: cmid,
   reply_to_id: null,
   error_code: null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:00Z',
   actions: [],
 })
@@ -47,6 +53,7 @@ const answer = (
   client_message_id: null,
   reply_to_id: replyTo,
   error_code: status === 'falhou' ? 'provedor_indisponivel' : null,
+  fallback_model: null,
   created_at: '2026-09-22T12:00:01Z',
   actions: [],
 })
@@ -544,6 +551,130 @@ describe('TutorPanel: o envio', () => {
     })
   })
 
+  it('P33 resposta cortada por tamanho: marcada, anunciada como cortada, com a nota de pedir por partes', async () => {
+    // Pendencias 45, 121 e 122: o backend grava a resposta cortada pelo teto
+    // de tokens (ou pela janela de contexto) como `interrompida`, com
+    // `error_code` `resposta_longa`, e a entrega no `done`. A regiao viva nao
+    // diz "terminou", e a nota orienta a pedir por partes. Antes o `done`
+    // deste teste vinha sem `error_code` e a nota era a geral; a expectativa
+    // mudou porque o contrato passou a trazer o motivo do corte.
+    const q1 = question(1, 'Me explica recursao', 'c1')
+    const cortada = { ...answer(2, 1, 'Recursao e quando', 'interrompida'), error_code: LONG }
+    const { fetchMock } = mountPanel({
+      [SEND]: (_init, call) =>
+        call === 1
+          ? streamResponse([
+              sseFrame('user_message', q1),
+              sseFrame('delta', { text: 'Recursao e quando' }),
+              sseFrame('done', cortada),
+            ])
+          : streamResponse([
+              sseFrame('user_message', q1),
+              sseFrame('done', answer(3, 1, 'Resposta inteira')),
+            ]),
+    })
+
+    await typeAndSend('Me explica recursao')
+
+    const bolha = await waitFor(() => messageWith('Recursao e quando'))
+    expect(within(bolha).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta interrompida',
+    )
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent(
+      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+    )
+    expect(screen.getByTestId('tutor-history-retry-note')).toHaveTextContent(LONG_NOTE)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    await waitFor(() => {
+      expect(messageWith('Resposta inteira')).toBeInTheDocument()
+    })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: 'c1', content: 'Me explica recursao' })
+    expect(screen.queryByTestId('tutor-history-retry-note')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+  })
+
+  it('P34 depois de recarregar, a cortada por tamanho mostra a nota de pedir por partes', async () => {
+    const q10 = question(10, 'Pergunta longa', 'c10')
+    mountPanel({
+      [HISTORY]: () =>
+        Response.json([q10, { ...answer(11, 10, 'meio', 'interrompida'), error_code: LONG }]),
+    })
+    await ready()
+
+    expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(LONG_NOTE)
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P35 recusa no stream: alerta proprio, sem o parcial, e Tentar de novo', async () => {
+    // Pendencia 120: o texto que veio antes da recusa nao fica na conversa.
+    const q1 = question(1, 'Pergunta recusada', 'c1')
+    const recusada = { ...answer(2, 1, '', 'falhou'), error_code: REFUSED }
+    mountPanel({
+      [HISTORY]: (_init, call) => Response.json(call === 1 ? [] : [q1, recusada]),
+      [SEND]: () =>
+        streamResponse([
+          sseFrame('user_message', q1),
+          sseFrame('delta', { text: 'Comeco recusado' }),
+          sseFrame('error', { code: REFUSED }),
+        ]),
+    })
+
+    await typeAndSend('Pergunta recusada')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    )
+    expect(screen.queryByText('Comeco recusado')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+  })
+
+  it('P37 a resposta servida pelo modelo substituto traz a nota com o modelo; a do pedido, nao', async () => {
+    // Pendencia 174: o fallback do servidor refez a resposta noutro modelo.
+    const history = [
+      question(10, 'Pergunta', 'c10'),
+      { ...answer(11, 10, 'Resposta do substituto'), fallback_model: 'claude-opus-4-8' },
+      question(12, 'Outra', 'c12'),
+      answer(13, 12, 'Resposta normal'),
+    ]
+    mountPanel({ [HISTORY]: () => Response.json(history) })
+    await ready()
+
+    const bolha = (id: string) =>
+      screen.getAllByTestId('tutor-message').find((li) => li.dataset.messageId === id)!
+    expect(within(bolha('11')).getByTestId('tutor-message-fallback')).toHaveTextContent(
+      'Respondida por um modelo substituto (claude-opus-4-8), porque o modelo principal não pôde responder a esta pergunta.',
+    )
+    expect(within(bolha('13')).queryByTestId('tutor-message-fallback')).not.toBeInTheDocument()
+    expect(within(bolha('10')).queryByTestId('tutor-message-fallback')).not.toBeInTheDocument()
+  })
+
+  it('P36 depois de recarregar, a recusada mostra a nota de perguntar de outro jeito', async () => {
+    const q10 = question(10, 'Pergunta recusada', 'c10')
+    mountPanel({
+      [HISTORY]: () =>
+        Response.json([q10, { ...answer(11, 10, '', 'falhou'), error_code: REFUSED }]),
+    })
+    await ready()
+
+    expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(
+      'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    )
+    // A recusada e gravada sem texto: a bolha mostra o autor e a marca, sem
+    // um paragrafo vazio no meio.
+    const recusada = screen
+      .getAllByTestId('tutor-message')
+      .find((li) => li.dataset.messageId === '11')!
+    expect(within(recusada).getByTestId('tutor-message-mark')).toHaveTextContent(
+      'Resposta com falha',
+    )
+    expect(within(recusada).queryByTestId('tutor-message-content')).not.toBeInTheDocument()
+    expect(
+      within(messageWith('Pergunta recusada')).getByTestId('tutor-message-content'),
+    ).toHaveTextContent('Pergunta recusada')
+  })
+
   it('P18 contador: aparece perto do limite, some longe dele, e liga ao campo', async () => {
     mountPanel({})
     await ready()
@@ -909,6 +1040,22 @@ describe('TutorPanel: a proposta de missao', () => {
     expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('P38 a proposta que cai ao confirmar e anunciada dentro do painel', async () => {
+    // O cartao continua montado quando a acao vira `falhou` (a chave da lista e
+    // o id da acao): e isso que deixa o alerta nascer no lugar certo.
+    mountPanel({
+      [HISTORY]: historyWith(proposal),
+      [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),
+    })
+
+    const card = await screen.findByTestId('tutor-proposal')
+    fireEvent.click(within(card).getByTestId('proposal-confirm'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('O prazo desta proposta já passou.')
+    expect(within(messageWith('Proponho esta missão.')).getByRole('alert')).toBe(alert)
+  })
+
   it('P34 o link executado entra no ciclo na ordem do documento', async () => {
     mountPanel(
       { [HISTORY]: historyWith(executed), [STATUS]: () => Response.json({ available: false }) },
@@ -958,6 +1105,81 @@ describe('TutorPanel: a proposta de missao', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
+  })
+})
+
+describe('TutorPanel: o cartao escolhido pelo kind', () => {
+  const creation: ActionRead = {
+    id: 5,
+    kind: 'create_mission',
+    state: 'proposta',
+    payload: {
+      instructions: 'Estudar grafos por 40 minutos',
+      completion_criterion: 'Resumo de uma pagina',
+      difficulty: 2,
+      estimated_minutes: 40,
+      deadline: '2027-02-15T21:00:00-03:00',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+  const reschedule: ActionRead = {
+    id: 6,
+    kind: 'reschedule_mission',
+    state: 'proposta',
+    payload: {
+      mission_id: 12,
+      new_deadline: '2026-10-05T21:00:00Z',
+      reason: 'falta_de_tempo',
+      instructions: 'Resumir o capítulo 3',
+      previous_deadline: '2026-10-02T21:00:00Z',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+
+  const historyWith = (actions: unknown[]) => () =>
+    Response.json([
+      question(1, 'Me ajuda com o prazo', 'c1'),
+      { ...answer(2, 1, 'Duas propostas.'), actions },
+    ])
+
+  it('P30 uma mensagem com as duas acoes mostra um cartao de cada tipo', async () => {
+    mountPanel({ [HISTORY]: historyWith([creation, reschedule]) })
+
+    const message = await waitFor(() => messageWith('Duas propostas.'))
+    const creationCard = within(message).getByTestId('tutor-proposal')
+    const rescheduleCard = within(message).getByTestId('tutor-reschedule-proposal')
+    expect(creationCard).toHaveAttribute('data-action-id', '5')
+    expect(rescheduleCard).toHaveAttribute('data-action-id', '6')
+    expect(
+      within(creationCard).getByRole('heading', { name: 'Proposta de missão' }),
+    ).toBeInTheDocument()
+    expect(
+      within(rescheduleCard).getByRole('heading', { name: 'Proposta de reagendamento' }),
+    ).toBeInTheDocument()
+    // Cada cartao so tem o que e dele.
+    expect(within(rescheduleCard).queryByText(/Critério de conclusão/)).not.toBeInTheDocument()
+    expect(within(creationCard).queryByText(/Prazo proposto/)).not.toBeInTheDocument()
+  })
+
+  it('P31 um kind que esta versao nao conhece nao quebra a conversa', async () => {
+    // Uma API mais nova pode mandar um tipo de acao que este cliente nao sabe
+    // desenhar. O valor esta FORA do tipo: por isso o `unknown`.
+    const future = { ...creation, id: 7, kind: 'split_mission', payload: { steps: 3 } }
+    mountPanel({ [HISTORY]: historyWith([future, reschedule]) })
+
+    const message = await waitFor(() => messageWith('Duas propostas.'))
+    const unknown = within(message).getByTestId('tutor-proposal-unknown')
+    expect(unknown).toHaveTextContent('Proposta que esta versão não sabe mostrar.')
+    expect(unknown).toHaveAttribute('data-action-id', '7')
+    // O `kind` cru nao vai para a tela, e nada ali pode ser decidido.
+    expect(unknown).not.toHaveTextContent('split_mission')
+    expect(within(unknown).queryByRole('button')).not.toBeInTheDocument()
+    // O resto da conversa continua: a outra acao tem o seu cartao, e o campo funciona.
+    expect(within(message).getByTestId('tutor-reschedule-proposal')).toBeInTheDocument()
+    await ready()
+    expect(input()).toBeEnabled()
   })
 })
 

@@ -340,3 +340,27 @@ Critério de fechamento: gate completo da combinação, bytes estáveis e
 recuperação do novo checkpoint, preservando os anteriores. Comandos e
 resultados finais são registrados no ledger e nos manifestos de
 `evidence/continuacao-pos-reinicio/`.
+
+## Conciliação pós-publicação do PR #6
+
+O pedido de continuar depois do commit assinado `891eda0` e do PR draft #6
+inclui resolver os conflitos com `origin/main` em `469e149`. O resultado deve
+preservar E/F/G e os vinte incrementos locais compatíveis, sem reescrever o
+commit publicado ou integrar o PR na `main`.
+
+- [x] Conferir base remota e CI antigo; preservar checkpoints e worktrees.
+- [x] Conciliar frontend em worktree próprio, com gate web e E2E isolados.
+- [x] Revisar backend e frontend independentemente, sem achados C/I/M.
+- [x] Integrar os patches revisados com verificação byte a byte.
+- [x] Adaptar o oráculo da migração antiga e os testes de teclado às regras E/F/G.
+- [x] Aprovar o rerun completo de `check-api` no backend conciliado.
+- [x] Aprovar `make check` no resultado combinado e concluir revisão documental.
+- [ ] Conferir índice; finalizar commit assinado na branch do PR com hooks.
+- [ ] Push de uma ref e atualização do PR; conferir CI e ausência de conflitos.
+
+Checklist registrado antes do commit de publicação; as referências e o
+resultado posterior ficam no ledger e no PR. Gate combinado EXIT 0:
+1436 Python, 990 frontend, 59 E2E e 100%, fontes/HEAD/índice preservados.
+
+As evidências e o andamento estão em `progress.md`, com novas capturas em
+`evidence/conciliacao-pr6/`; nenhum checkpoint anterior será sobrescrito.

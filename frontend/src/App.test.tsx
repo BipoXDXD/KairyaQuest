@@ -10,7 +10,7 @@ import { stubViewport } from './test/viewport'
 
 /**
  * O que o Quartel-General busca na montagem: ciclo, missoes, status,
- * historico da Tifa e progresso (Task 8, incremento D); e o que Campanhas
+ * historico da Tifa e progresso; e o que Campanhas
  * busca ao abrir: a trilha da semana (`GET /api/plans/current`). O `plan` e
  * parametrizavel porque um teste precisa de um dia `disponivel` na trilha
  * (o botao "Ir ao Quartel-General"); os demais usam o padrao `null` ("sem
@@ -26,6 +26,7 @@ function stubPage(plan: unknown = null) {
         streak: 0,
         days_to_milestone: 7,
         special: null,
+        late_daily: null,
       }),
     'GET /api/missions': () => Response.json([]),
     'GET /api/tutoring/status': () => Response.json({ available: true }),
@@ -65,6 +66,22 @@ describe('App', () => {
     await settleHeadquarters()
   })
 
+  it('so a raiz do App pinta o fundo e fixa a altura minima; a do Quartel-General so organiza o layout', async () => {
+    stubPage()
+
+    const { container } = render(<App />)
+
+    const raizDoApp = container.firstElementChild
+    const raizDoQuartel = screen.getByTestId('headquarters').parentElement
+    expect(raizDoApp).toHaveClass('min-h-screen', 'bg-slate-950', 'text-slate-100')
+    // Duplicar `min-h-screen` na pagina soma a altura da navegacao no celular:
+    // a tela curta ganha uma rolagem sem conteudo (medido: 905px contra 844px).
+    for (const classe of ['min-h-screen', 'bg-slate-950', 'text-slate-100']) {
+      expect(raizDoQuartel).not.toHaveClass(classe)
+    }
+    await settleHeadquarters()
+  })
+
   it('abre no Quartel-General, marcado como area atual na navegacao', async () => {
     stubPage()
 
@@ -92,7 +109,7 @@ describe('App', () => {
     expect(screen.getByTestId('nav-headquarters')).not.toHaveAttribute('aria-current')
     // Aguarda o `GET /api/plans/current` que a trilha fez ao montar: sem
     // isto, a resposta assenta depois do fim do teste e o React avisa
-    // "not wrapped in act(...)" (achado m2 da revisao final do C).
+    // "not wrapped in act(...)".
     await screen.findByTestId('trail-no-plan')
   })
 
@@ -192,6 +209,10 @@ describe('App', () => {
             completed_at: null,
             xp: 40,
             actual_duration_minutes: null,
+            verification: null,
+            evidence: null,
+            evaluation: null,
+            reschedules: [],
           },
         },
       ],
@@ -235,6 +256,10 @@ const daily = (id: number, day: string): Mission => ({
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 })
 const oldCycle: Cycle = {
   today: '2026-10-04',
@@ -242,6 +267,7 @@ const oldCycle: Cycle = {
   streak: 3,
   days_to_milestone: 4,
   special: null,
+  late_daily: null,
 }
 const newCycle: Cycle = {
   today: '2026-10-05',
@@ -249,6 +275,7 @@ const newCycle: Cycle = {
   streak: 0,
   days_to_milestone: 7,
   special: null,
+  late_daily: null,
 }
 const oldPlan = {
   plan: {
@@ -395,6 +422,7 @@ describe('App: retorno ao Quartel-General', () => {
       client_message_id: 'c800',
       reply_to_id: null,
       error_code: null,
+      fallback_model: null,
       created_at: '2026-10-04T23:59:00-03:00',
       actions: [],
     }

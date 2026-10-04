@@ -60,8 +60,19 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-# APIs obsoletas do SQLAlchemy usadas pela aplicacao reprovam o gate.
-filterwarnings = ["error::sqlalchemy.exc.SADeprecationWarning:focusquest[.]"]
+# APIs obsoletas do SQLAlchemy da aplicacao tambem reprovam o gate.
+# Guarda estreita, nao um "error" geral (pendencia 15). As duas
+# DeprecationWarning que o starlette.testclient emitia -- o alias
+# `anyio.abc.BlockingPortal` e o uso do `httpx` no lugar do `httpx2` -- foram
+# CORRIGIDAS na origem (starlette 1.7.0 no uv.lock; `httpx2` e dependencia
+# direta). Estas duas linhas so impedem que elas voltem em silencio, por
+# exemplo num `uv lock` que regrida o starlette. Qualquer outro aviso continua
+# sendo so aviso, salvo a guarda de SQLAlchemy da aplicacao indicada acima.
+filterwarnings = [
+    "error::sqlalchemy.exc.SADeprecationWarning:focusquest[.]",
+    "error:The anyio\\.abc\\.BlockingPortal alias is deprecated",
+    "error:Using `httpx` with `starlette\\.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 branch = true

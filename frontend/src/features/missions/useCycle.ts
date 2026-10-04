@@ -49,7 +49,7 @@ export function useCycle(): UseCycleResult {
    * a RESPOSTA). Sem esta guarda, a resposta mais VELHA que chegasse por
    * ULTIMO sobrescreveria o estado com dado desatualizado -- inclusive
    * `refreshFailed`, que ligaria ou desligaria pela ordem de CHEGADA, e nao
-   * pela ordem de PEDIDO (achado da revisao da Task 5).
+   * pela ordem de PEDIDO.
    *
    * Um `reload` tambem invalida um `refresh` em voo: `reload` incrementa a
    * sequencia na hora (antes mesmo do efeito rodar), entao a resposta de um
@@ -102,8 +102,7 @@ export function useCycle(): UseCycleResult {
         // desatualizado. Com a tela ainda em "carregando", este refresh
         // invalidou a carga inicial (a resposta dela sera descartada pela
         // checagem de `id`), entao ninguem mais tiraria a tela dali: vira
-        // ERRO, com o "Tentar novamente" (achado I1 da revisao final do
-        // Incremento C, Ruling R12 -- antes, o QG ficava em "Consultando..."
+        // ERRO, com o "Tentar novamente" (antes, o QG ficava em "Consultando..."
         // para sempre). Um reload que comecou depois deste refresh ja teria
         // voltado na checagem de `id` acima.
         setState((atual) =>
@@ -117,8 +116,8 @@ export function useCycle(): UseCycleResult {
   }, [])
 
   // A aba que volta a ficar visivel, ou a janela que recebe foco, atualiza o
-  // ciclo em silencio -- fecha o achado "a aba aberta na virada do dia mostra
-  // o dia anterior ate recarregar" (Task 5 do Incremento C).
+  // ciclo em silencio: sem isso, a aba aberta na virada do dia mostraria o
+  // dia anterior ate recarregar.
   useRefreshOnReturn(refresh)
 
   return { state, reload, refresh }

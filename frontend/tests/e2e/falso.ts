@@ -1,19 +1,30 @@
 import { FALSO_URL } from './servers'
 
 /**
- * O controle do servidor falso, para os cenarios da tutoria.
+ * O controle do servidor falso, para os cenarios da tutoria e da avaliacao.
  *
  * Contrato em `tests/integration/falso_do_e2e.py` (e provado do lado Python
  * por `tests/integration/test_falso_do_e2e.py`). `fetch` do Node, e nao o
  * `request` do Playwright: o controle nao passa pelo navegador nem pelo proxy.
  */
-export type Bloco = { text: string[] } | { tool_input: Record<string, unknown> }
+export type Bloco =
+  | { text: string[] }
+  | { tool_input: Record<string, unknown> }
+  | { tool_input: Record<string, unknown>; tool_name: string }
 
 export interface RoteiroDoFalso {
   blocks: Bloco[]
   http_status?: number
   cut_after_events?: number
   hold_after_events?: number
+  /** O motivo de parada; sem ele, o falso deriva do roteiro (pendencia 120). */
+  stop_reason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'model_context_window_exceeded' | 'refusal'
+  /**
+   * A troca de modelo depois de uma recusa (fallback do servidor, pendencia
+   * 174): `after_blocks` blocos do modelo pedido antes da troca (0 = antes de
+   * qualquer saida); `sticky` e o roteamento fixo, sem bloco `fallback`.
+   */
+  fallback?: { model?: string; after_blocks?: number; sticky?: boolean }
 }
 
 async function exigir(resposta: Response, esperado: number): Promise<Response> {

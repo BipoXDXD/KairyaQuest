@@ -18,6 +18,10 @@ const daily: Mission = {
   completed_at: null,
   xp: 40,
   actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
 }
 const nextDaily: Mission = {
   ...daily,
@@ -32,6 +36,7 @@ const cycle = (mission: Mission | null, today = '2026-10-04'): Cycle => ({
   streak: 3,
   days_to_milestone: 4,
   special: null,
+  late_daily: null,
 })
 
 // Fixtures de leitura: nenhuma escrita, persistência ou virada real do banco.
@@ -106,11 +111,21 @@ for (const noPlan of [false, true]) {
     else await expect(page.getByText(nextDaily.instructions, { exact: true })).toBeVisible()
     await expect(heading).toBeFocused()
     await page.keyboard.press('Tab')
-    await expect(
-      noPlan
-        ? page.getByTestId('tutor-panel-toggle')
-        : page.getByRole('button', { name: `Concluir a missão: ${nextDaily.instructions}` }),
-    ).toBeFocused()
+    if (noPlan) {
+      await expect(page.getByTestId('tutor-panel-toggle')).toBeFocused()
+    } else {
+      // E/F acrescentaram Evidência e Iniciar antes de Concluir. O foco
+      // recuperado alcança todos os controles da diária ATUAL pelo teclado.
+      await expect(page.getByTestId('evidence-toggle')).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(
+        page.getByRole('button', { name: `Iniciar a missão: ${nextDaily.instructions}` }),
+      ).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(
+        page.getByRole('button', { name: `Concluir a missão: ${nextDaily.instructions}` }),
+      ).toBeFocused()
+    }
     expect(calls()).toBe(2)
     expect(unexpected).toEqual([])
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])

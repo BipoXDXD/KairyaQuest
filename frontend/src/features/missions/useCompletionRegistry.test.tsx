@@ -5,6 +5,8 @@ import { useCompletionRegistry } from './useCompletionRegistry'
 const K1 = '00000000-0000-4000-8000-000000000001'
 const K2 = '00000000-0000-4000-8000-000000000002'
 const K3 = '00000000-0000-4000-8000-000000000003'
+const K4 = '00000000-0000-4000-8000-000000000004'
+const K5 = '00000000-0000-4000-8000-000000000005'
 
 function renderRegistry() {
   const reload = vi.fn()
@@ -147,6 +149,197 @@ describe('useCompletionRegistry -- a recarga', () => {
   })
 })
 
+describe('useCompletionRegistry -- o rascunho da evidencia', () => {
+  it('draftFor devolve o rascunho vazio para missao sem rascunho', () => {
+    const { result } = renderRegistry()
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
+  })
+
+  it('o rascunho vazio e imutavel: mutar o de uma missao nao contamina o das outras', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    // O cast tira o `Readonly` do tipo de proposito: o teste precisa TENTAR
+    // escrever para provar que o objeto e congelado em tempo de execucao, e o
+    // compilador recusaria a escrita num tipo somente-leitura.
+    const vazio = registry.draftFor(7) as { text: string; link: string }
+
+    // Modulo ESM roda em strict mode: escrever num objeto congelado lanca.
+    expect(() => {
+      vazio.text = 'contaminado'
+    }).toThrow(TypeError)
+
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+    expect(Object.isFrozen(registry.draftFor(9))).toBe(true)
+  })
+
+  it('saveDraft guarda por missao e draftFor devolve o que foi guardado', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    registry.saveDraft(7, { text: 'Feito', link: 'https://x.com' })
+
+    expect(registry.draftFor(7)).toEqual({ text: 'Feito', link: 'https://x.com' })
+    expect(registry.draftFor(8)).toEqual({ text: '', link: '' })
+  })
+
+  it('o rascunho sobrevive ao reload do quadro', () => {
+    const { result } = renderRegistry()
+    result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+    act(() => {
+      result.current.reload()
+    })
+
+    expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+  })
+
+  // E17/§7: a chave e o rascunho saem por caminhos DIFERENTES. A falha sem
+  // retry libera a chave, mas o rascunho so sai no sucesso.
+  it('release apaga SO a chave da missao; o rascunho fica', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.saveDraft(7, { text: 'Feito', link: '' })
+
+    registry.release(7)
+
+    expect(registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+    expect(registry.operationIdFor(7)).toBe(K2)
+    vi.restoreAllMocks()
+  })
+
+  it('discardDraft apaga SO o rascunho da missao, e so dela; a chave fica', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(K1).mockReturnValueOnce(K2)
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.saveDraft(7, { text: 'Feito', link: '' })
+    registry.saveDraft(8, { text: 'Outra', link: '' })
+
+    registry.discardDraft(7)
+
+    expect(registry.draftFor(7)).toEqual({ text: '', link: '' })
+    expect(registry.draftFor(8)).toEqual({ text: 'Outra', link: '' })
+    expect(registry.operationIdFor(7)).toBe(K1)
+    vi.restoreAllMocks()
+  })
+})
+
+describe('useCompletionRegistry -- retry pendente', () => {
+  it('comeca sem retry pendente, e marca e desmarca por missao', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.isRetryPending(7)).toBe(false)
+    registry.markRetryPending(7)
+
+    expect(registry.isRetryPending(7)).toBe(true)
+    expect(registry.isRetryPending(8)).toBe(false)
+  })
+
+  it('release limpa o retry pendente da missao (a chave saiu), e so dela', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.markRetryPending(7)
+    registry.markRetryPending(8)
+
+    registry.release(7)
+
+    expect(registry.isRetryPending(7)).toBe(false)
+    expect(registry.isRetryPending(8)).toBe(true)
+  })
+})
+
+describe('useCompletionRegistry -- as chaves de iniciar e reagendar', () => {
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(K1)
+      .mockReturnValueOnce(K2)
+      .mockReturnValueOnce(K3)
+      .mockReturnValueOnce(K4)
+      .mockReturnValueOnce(K5)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('devolve a MESMA chave a cada pedido da mesma acao da mesma missao', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.actionKeyFor(7, 'start')).toBe(K1)
+    expect(registry.actionKeyFor(7, 'start')).toBe(K1)
+    expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+  })
+
+  it('cada tipo de operacao tem a sua chave: Concluir, Iniciar e Reagendar nunca a dividem', () => {
+    // A UNIQUE do banco e sobre a chave, seja qual for a operacao (F2): a chave
+    // do Concluir gasta num Iniciar faria o Concluir falhar com
+    // `operacao_reutilizada`. Por isso as tres chaves da mesma missao sao tres.
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    const concluir = registry.operationIdFor(7)
+    const iniciar = registry.actionKeyFor(7, 'start')
+    const reagendar = registry.actionKeyFor(7, 'reschedule')
+
+    expect([concluir, iniciar, reagendar]).toEqual([K1, K2, K3])
+  })
+
+  it('cada missao tem a sua chave de cada acao', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.actionKeyFor(7, 'start')).toBe(K1)
+    expect(registry.actionKeyFor(8, 'start')).toBe(K2)
+    expect(registry.actionKeyFor(7, 'start')).toBe(K1)
+  })
+
+  it('releaseActionKey troca SO a chave daquela acao daquela missao', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.actionKeyFor(7, 'start')
+    registry.actionKeyFor(7, 'reschedule')
+    registry.actionKeyFor(8, 'start')
+
+    registry.releaseActionKey(7, 'start')
+
+    expect(registry.actionKeyFor(7, 'start')).toBe(K5)
+    // As outras tres ficam.
+    expect(registry.operationIdFor(7)).toBe(K1)
+    expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+    expect(registry.actionKeyFor(8, 'start')).toBe(K4)
+  })
+
+  it('o release do Concluir nao toca as chaves de iniciar e reagendar', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.actionKeyFor(7, 'start')
+    registry.actionKeyFor(7, 'reschedule')
+
+    registry.release(7)
+
+    expect(registry.actionKeyFor(7, 'start')).toBe(K2)
+    expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+  })
+
+  it('as chaves de acao sobrevivem ao reload: o registro e o mesmo objeto', () => {
+    const { result } = renderRegistry()
+    result.current.registry.actionKeyFor(7, 'reschedule')
+
+    act(() => {
+      result.current.reload()
+    })
+
+    expect(result.current.registry.actionKeyFor(7, 'reschedule')).toBe(K1)
+  })
+})
+
 describe('reconciliacao de terminais explicitamente lidas', () => {
   beforeEach(() => {
     vi.spyOn(crypto, 'randomUUID')
@@ -247,4 +440,29 @@ describe('reconciliacao de terminais explicitamente lidas', () => {
     expect(registry.operationIdFor(8)).toBe(K2)
     expect(registry.operationIdFor(7)).toBe(K3)
   })
+})
+
+it('a leitura terminal libera retry de concluir, preservando o rascunho e as chaves do F', () => {
+  vi.spyOn(crypto, 'randomUUID')
+    .mockReturnValueOnce(K1)
+    .mockReturnValueOnce(K2)
+    .mockReturnValueOnce(K3)
+    .mockReturnValueOnce(K4)
+  const { result } = renderRegistry()
+  const { registry } = result.current
+  registry.operationIdFor(7)
+  registry.markRetryPending(7)
+  registry.saveDraft(7, { text: 'Minha entrega preservada', link: 'https://exemplo.test' })
+  expect(registry.actionKeyFor(7, 'start')).toBe(K2)
+  expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+  registry.reconcileCompleted([7])
+  expect(registry.operationIdFor(7)).toBe(K4)
+  expect(registry.isRetryPending(7)).toBe(false)
+  expect(registry.draftFor(7)).toEqual({
+    text: 'Minha entrega preservada',
+    link: 'https://exemplo.test',
+  })
+  expect(registry.actionKeyFor(7, 'start')).toBe(K2)
+  expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+  vi.restoreAllMocks()
 })

@@ -126,6 +126,8 @@ class CycleRead(BaseModel):
     streak: int
     days_to_milestone: int
     special: MissionRead | None
+    # F25: a diaria de ontem, iniciada a tempo, na conclusao tardia.
+    late_daily: MissionRead | None
 
     @classmethod
     def da_leitura(cls, lido: CicloLido) -> CycleRead:
@@ -139,4 +141,7 @@ class CycleRead(BaseModel):
             special=None
             if lido.especial is None
             else MissionRead.da_leitura(lido.especial),
+            late_daily=None
+            if lido.diaria_de_ontem is None
+            else MissionRead.da_leitura(lido.diaria_de_ontem),
         )

@@ -22,15 +22,20 @@ def get_tutoria() -> Tutoria | None:
         settings = Settings()
         if settings.anthropic_api_key is None:
             return None
+        # Uma leitura so, para o adaptador e para a tutoria: o modelo que
+        # chama e o que se grava como quem interpretou nao podem divergir.
+        modelo = settings.tutor_model
         _tutoria = Tutoria(
             provedor=ProvedorAnthropic(
                 chave=settings.anthropic_api_key.get_secret_value(),
                 base_url=settings.anthropic_base_url,
-                modelo=settings.tutor_model,
+                modelo=modelo,
                 max_tokens=settings.tutor_max_tokens,
                 timeout_segundos=settings.tutor_timeout_seconds,
+                fallback=settings.tutor_fallback,
             ),
             historico=settings.tutor_history_messages,
             limite=timedelta(seconds=settings.tutor_timeout_seconds),
+            modelo=modelo,
         )
     return _tutoria

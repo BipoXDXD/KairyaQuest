@@ -28,7 +28,7 @@ import { useEffect, useRef } from 'react'
  * pedido. Isso NAO e "uma chamada de rede a mais" e mais nada: duas chamadas
  * concorrentes de `refresh` sem nenhuma guarda deixariam a resposta mais
  * VELHA, se chegasse por ULTIMO, sobrescrever a mais nova com dado
- * desatualizado (achado da revisao da Task 5). Quem fecha esse risco e
+ * desatualizado. Quem fecha esse risco e
  * `useCycle` e `useCurrentPlan`, e nao este gancho: os dois tem uma
  * sequencia de pedidos (`requestId`) que so deixa a resposta do pedido mais
  * RECENTE mexer no estado, entao chamar `refresh` duas vezes aqui e seguro
