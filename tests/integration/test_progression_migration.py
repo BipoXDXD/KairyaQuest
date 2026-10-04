@@ -908,3 +908,84 @@ def test_o_check_da_migracao_aceita_cada_codigo_do_dominio(
         select(UserAchievement.code).where(UserAchievement.user_id == SO_DO_CHECK)
     ).one()
     assert guardado == codigo.value
+
+
+def _dados_legados(conexao: Connection) -> dict[str, list[tuple[Any, ...]]]:
+    return {
+        tabela: [
+            tuple(linha)
+            for linha in conexao.execute(text(f"SELECT * FROM {tabela} ORDER BY id"))
+        ]
+        for tabela in (
+            "missions",
+            "weekly_plans",
+            "tutor_messages",
+            "tutor_actions",
+            "mission_operations",
+        )
+    }
+
+
+def _progressao_sem_ids(conexao: Connection) -> dict[str, list[tuple[Any, ...]]]:
+    return {
+        "xp": [
+            tuple(linha)
+            for linha in conexao.execute(
+                text(
+                    "SELECT mission_id, user_id, amount, source, credited_at "
+                    "FROM xp_entries ORDER BY mission_id"
+                )
+            )
+        ],
+        "conquistas": [
+            tuple(linha)
+            for linha in conexao.execute(
+                text(
+                    "SELECT ua.user_id, ua.code, ua.unlocked_at, xe.mission_id "
+                    "FROM user_achievements ua "
+                    "JOIN xp_entries xe ON xe.id = ua.xp_entry_id "
+                    "ORDER BY ua.user_id, ua.code"
+                )
+            )
+        ],
+    }
+
+
+def test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao(
+    banco_migrado: Engine, cenario: dict[str, Any]
+) -> None:
+    # A fixture historica nao tem operacoes: incluir uma prova sua preservacao.
+    with banco_migrado.begin() as conexao:
+        operacao_id = conexao.execute(
+            text(
+                "INSERT INTO mission_operations "
+                "(operation_id, mission_id, kind, created_at) "
+                "VALUES ('roundtrip-0004', :missao, 'complete', :quando) RETURNING id"
+            ),
+            {"missao": cenario["avulsa1"], "quando": AVULSA1_CONCLUIDA},
+        ).scalar_one()
+        legado = _dados_legados(conexao)
+        progressao = _progressao_sem_ids(conexao)
+    try:
+        assert all(legado.values())
+        assert progressao["xp"] and progressao["conquistas"]
+        pendentes = {cenario["pendente"], cenario["dia_perdido"]}
+        assert not pendentes & {linha[0] for linha in progressao["xp"]}
+        assert not pendentes & {linha[3] for linha in progressao["conquistas"]}
+        command.downgrade(alembic_config(), "0003")
+        assert not {"xp_entries", "user_achievements"} & set(
+            inspect(banco_migrado).get_table_names()
+        )
+        with banco_migrado.connect() as conexao:
+            assert _dados_legados(conexao) == legado
+        command.upgrade(alembic_config(), "head")
+        with banco_migrado.connect() as conexao:
+            assert _dados_legados(conexao) == legado
+            reconstruida = _progressao_sem_ids(conexao)
+            assert reconstruida == progressao
+            assert not pendentes & {linha[0] for linha in reconstruida["xp"]}
+            assert not pendentes & {linha[3] for linha in reconstruida["conquistas"]}
+    finally:
+        command.upgrade(alembic_config(), "head")
+        with banco_migrado.begin() as conexao:
+            _apagar(conexao, "mission_operations", [operacao_id])

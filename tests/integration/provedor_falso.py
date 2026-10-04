@@ -31,6 +31,7 @@ from anthropic.types import (
     RawMessageStopEvent,
     RawMessageStreamEvent,
     SignatureDelta,
+    StopReason,
     TextBlock,
     TextDelta,
     ThinkingBlock,
@@ -114,6 +115,8 @@ class Roteiro:
     - `segurar_apos_eventos`: depois de N eventos, espera `liberar` antes de
       continuar. E o que deixa um teste desconectar o cliente com a resposta
       comprovadamente no meio.
+    - `stop_reason`: sobrescreve o motivo final, mantendo o padrao automatico
+      (tool_use com ferramenta, end_turn sem ela) quando ausente.
     - `pensar`: emite, antes dos `blocos`, o bloco de thinking que a API real
       manda (`EVENTOS_DO_PENSAMENTO` eventos, que entram nas contagens
       acima). Ligado por padrao, para o falso se parecer com a API real
@@ -127,6 +130,7 @@ class Roteiro:
     atrasar_cabecalhos: float = 0.0
     segurar_apos_eventos: int | None = None
     pensar: bool = True
+    stop_reason: StopReason | None = None
 
 
 @dataclass(frozen=True)
@@ -199,8 +203,9 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[RawMessageStreamEvent]:
         RawMessageDeltaEvent(
             type="message_delta",
             delta=DeltaDaMensagem(
-                stop_reason="tool_use" if tem_ferramenta else "end_turn",
-                stop_sequence=None,
+                stop_reason=roteiro.stop_reason
+                or ("tool_use" if tem_ferramenta else "end_turn"),
+                stop_sequence="FIM" if roteiro.stop_reason == "stop_sequence" else None,
             ),
             usage=MessageDeltaUsage(output_tokens=1),
         )

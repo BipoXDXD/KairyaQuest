@@ -1,0 +1,253 @@
+import { AxeBuilder } from '@axe-core/playwright'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import type { CurrentPlan } from '../../src/features/campaigns/types'
+import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
+import type { Mission } from '../../src/shared/types/mission'
+
+// Estes cenários isolam a apresentação com respostas GET determinísticas.
+// Persistência/ações reais são verificadas nas outras specs; aqui o tamanho
+// e o conteúdo dos dados não dependem da ordem dos cenários do banco.
+const LONG_TEXT = `https://exemplo.test/${'transações'.repeat(60)}`
+const mission: Mission = {
+  id: 9100,
+  instructions: 'Estudar transações no PostgreSQL',
+  completion_criterion: 'Explicar o resultado com evidências.',
+  difficulty: 3,
+  estimated_minutes: 45,
+  mission_type: 'avulsa',
+  day: null,
+  deadline: '2027-04-01T12:00:00Z',
+  state: 'pendente',
+  availability: 'disponivel',
+  started_at: null,
+  completed_at: null,
+  xp: 100,
+  actual_duration_minutes: null,
+}
+const proposal: ActionRead = {
+  id: 9200,
+  kind: 'create_mission',
+  state: 'proposta',
+  payload: {
+    instructions: LONG_TEXT,
+    completion_criterion: LONG_TEXT,
+    difficulty: mission.difficulty,
+    estimated_minutes: mission.estimated_minutes,
+    deadline: mission.deadline,
+  },
+  mission_id: null,
+  error_code: null,
+}
+const message: MessageRead = {
+  id: 9300,
+  role: 'tutor',
+  content: 'Uma explicação com texto normal.',
+  status: 'completa',
+  client_message_id: null,
+  reply_to_id: 9299,
+  error_code: null,
+  created_at: '2026-10-04T12:00:00Z',
+  actions: [],
+}
+
+async function layoutData(
+  page: Page,
+  missions: Mission[] = [],
+  history: MessageRead[] = [],
+  plan: CurrentPlan = { plan: null },
+) {
+  const responses: Record<string, unknown> = {
+    '/api/missions': missions,
+    '/api/tutoring/status': { available: true },
+    '/api/tutoring/messages': history,
+    '/api/plans/current': plan,
+    '/api/cycle': {
+      today: '2026-10-04',
+      mission: null,
+      streak: 0,
+      days_to_milestone: 7,
+      special: null,
+    },
+    '/api/progress': {
+      xp_total: 0,
+      level: 1,
+      level_floor_xp: 0,
+      next_level_xp: 100,
+      achievements: [],
+    },
+  }
+  await page.route('**/api/**', (route) => {
+    const pathname = new URL(route.request().url()).pathname
+    if (route.request().method() === 'GET' && pathname in responses) {
+      return route.fulfill({ json: responses[pathname] })
+    }
+    return route.continue()
+  })
+}
+
+async function noHorizontalOverflow(page: Page) {
+  expect(
+    await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    })),
+  ).toEqual({ width: page.viewportSize()!.width, content: page.viewportSize()!.width })
+}
+
+async function readableText(locator: Locator, text: string) {
+  await expect(locator).toContainText(text)
+  const metrics = await locator.evaluate((node) => {
+    const element = node as HTMLElement
+    const style = getComputedStyle(element)
+    return {
+      width: element.clientWidth,
+      content: element.scrollWidth,
+      ellipsis: style.textOverflow,
+      overflow: style.overflowX,
+    }
+  })
+  expect(metrics.content).toBeLessThanOrEqual(metrics.width + 1)
+  expect(metrics.ellipsis).not.toBe('ellipsis')
+  expect(['hidden', 'clip']).not.toContain(metrics.overflow)
+}
+
+async function accessible(page: Page) {
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+}
+
+for (const width of [1440, 1024]) {
+  test(`desktop ${String(width)}: o controle recolhido cabe no painel e abre pelo teclado`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await layoutData(page, [mission])
+    await page.goto('/')
+    await expect(page.getByTestId('tutor-greeting')).toBeVisible()
+    const toggle = page.getByTestId('tutor-panel-toggle')
+    await toggle.focus()
+    await page.keyboard.press('Enter')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(toggle).toHaveAccessibleName('Abrir o painel da Tifa')
+    await expect(toggle).toBeFocused()
+    const panel = await page.getByTestId('tutor-panel').boundingBox()
+    const control = await toggle.boundingBox()
+    expect(panel).not.toBeNull()
+    expect(control).not.toBeNull()
+    expect(control!.x).toBeGreaterThanOrEqual(panel!.x)
+    expect(control!.x + control!.width).toBeLessThanOrEqual(panel!.x + panel!.width)
+    expect(control!.width).toBeGreaterThanOrEqual(24)
+    expect(control!.height).toBeGreaterThanOrEqual(24)
+    await noHorizontalOverflow(page)
+    await expect(toggle).toHaveAttribute('title', 'Abrir o painel da Tifa')
+    await accessible(page)
+    await page.screenshot({ path: testInfo.outputPath('collapsed.png'), fullPage: true })
+    await page.keyboard.press('Space')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(toggle).toHaveAccessibleName('Recolher o painel da Tifa')
+    await expect(page.getByTestId('tutor-greeting')).toBeVisible()
+    await expect(toggle).toBeFocused()
+  })
+}
+
+for (const width of [320, 375]) {
+  test.describe(`celular ${String(width)} com texto sem espaços`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+      reducedMotion: 'reduce',
+    })
+
+    test('missão e critério permanecem inteiros sem rolagem horizontal', async ({
+      page,
+    }, testInfo) => {
+      await layoutData(page, [
+        { ...mission, instructions: LONG_TEXT, completion_criterion: LONG_TEXT },
+      ])
+      await page.goto('/')
+      const card = page.getByTestId('mission-item')
+      await readableText(card.getByTestId('mission-instructions'), LONG_TEXT)
+      await readableText(card.getByTestId('mission-completion-criterion'), LONG_TEXT)
+      await expect(card.getByTestId('mission-state')).toHaveText('Pendente')
+      await noHorizontalOverflow(page)
+      await accessible(page)
+      await page.screenshot({ path: testInfo.outputPath('mission-long.png'), fullPage: true })
+    })
+
+    test('a trilha mantém instruções e critério completos e a navegação operável', async ({
+      page,
+    }, testInfo) => {
+      const daily: Mission = {
+        ...mission,
+        mission_type: 'diaria',
+        day: '2026-10-04',
+        instructions: LONG_TEXT,
+        completion_criterion: LONG_TEXT,
+      }
+      const plan: CurrentPlan = {
+        plan: {
+          week_start: '2026-09-28',
+          days: Array.from({ length: 7 }, (_, index) => ({
+            day: index < 3 ? `2026-09-${String(28 + index)}` : `2026-10-0${String(index - 2)}`,
+            availability: index === 6 ? 'disponivel' : 'fora_do_plano',
+            mission: index === 6 ? daily : null,
+          })),
+          special: { availability: 'bloqueada', progress: 0, mission: null },
+        },
+      }
+      await layoutData(page, [], [], plan)
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Campanhas', exact: true }).click()
+      const content = page.getByTestId('trail-mission')
+      await readableText(content.locator('p').nth(0), LONG_TEXT)
+      await readableText(content.locator('p').nth(1), LONG_TEXT)
+      await noHorizontalOverflow(page)
+      await accessible(page)
+      await page.screenshot({ path: testInfo.outputPath('trail-long.png'), fullPage: true })
+      await page.getByTestId('trail-go-headquarters').focus()
+      await page.keyboard.press('Enter')
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Quartel-General — seu painel de estudos' }),
+      ).toBeFocused()
+    })
+
+    test('a proposta mostra os dois textos completos dentro da folha', async ({
+      page,
+    }, testInfo) => {
+      await layoutData(page, [], [{ ...message, actions: [proposal] }])
+      await page.goto('/')
+      await page.getByTestId('tutor-sheet-open').click()
+      const card = page.getByTestId('tutor-proposal')
+      await readableText(card.getByTestId('proposal-instructions'), LONG_TEXT)
+      await readableText(card.locator('p').filter({ hasText: 'Critério de conclusão:' }), LONG_TEXT)
+      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+      await noHorizontalOverflow(page)
+      await accessible(page)
+      await page.screenshot({ path: testInfo.outputPath('proposal-long.png') })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
+    })
+
+    test('a conversa quebra a URL e preserva o rascunho ao fechar', async ({ page }, testInfo) => {
+      await layoutData(page, [], [{ ...message, content: LONG_TEXT }])
+      await page.goto('/')
+      await page.getByTestId('tutor-sheet-open').click()
+      await readableText(page.getByTestId('tutor-message').locator('p').nth(1), LONG_TEXT)
+      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+      await noHorizontalOverflow(page)
+      await accessible(page)
+      await page
+        .getByLabel('Sua mensagem para a Tifa')
+        .fill('Rascunho com acentos: ação e conclusão.')
+      await page.screenshot({ path: testInfo.outputPath('conversation-long.png') })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue(
+        'Rascunho com acentos: ação e conclusão.',
+      )
+    })
+  })
+}

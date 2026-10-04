@@ -1231,3 +1231,413 @@ describe('useTutorConversation: envio', () => {
     expect(requestsTo(fetchMock, SEND)).toHaveLength(0)
   })
 })
+
+/** GET deliberadamente atrasado: o teste controla a ordem sem relógio. */
+function delayedHistory() {
+  let release!: (response: Response) => void
+  const promise = new Promise<Response>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
+
+const proposedAction: ActionRead = {
+  id: 5,
+  kind: 'create_mission',
+  state: 'proposta',
+  payload: {
+    instructions: 'Revisar transações',
+    completion_criterion: 'Explicar uma transação',
+    difficulty: 2,
+    estimated_minutes: 30,
+    deadline: '2027-01-10T13:00:00Z',
+  },
+  mission_id: null,
+  error_code: null,
+}
+const decidedActions: ActionRead[] = [
+  { ...proposedAction, state: 'executada', mission_id: 42 },
+  { ...proposedAction, state: 'recusada' },
+  { ...proposedAction, state: 'falhou', error_code: 'prazo_expirado' },
+]
+
+const proposalQuestion = question(1, 'Me passa uma missão', 'c1')
+const proposalAnswer = { ...answer(2, 1, 'Proponho esta.'), actions: [proposedAction] }
+const failedQuestion = question(10, 'Outra pergunta', ID_1)
+const failedAnswer = answer(11, 10, 'Prefixo seguro', 'falhou')
+
+function failedActionTurn() {
+  return streamResponse([
+    sseFrame('user_message', failedQuestion),
+    sseFrame('delta', { text: 'Prefixo seguro' }),
+    sseFrame('error', { code: 'provedor_indisponivel' }),
+  ])
+}
+
+describe('useTutorConversation: decisões durante a leitura do histórico', () => {
+  it.each(decidedActions)(
+    'preserva $state quando o GET silencioso anterior chega por último',
+    async (decided) => {
+      // Sem reconciliar o callback posterior, a resposta antiga reabre a proposta.
+      const delayed = delayedHistory()
+      const otherAction = { ...proposedAction, id: 6 }
+      const original = { ...proposalAnswer, actions: [proposedAction, otherAction] }
+      const { result, fetchMock } = await mountWith(
+        (_init, call) =>
+          call === 1 ? Response.json([proposalQuestion, original]) : delayed.promise,
+        failedActionTurn,
+      )
+      act(() => {
+        result.current.setDraft('Outra pergunta')
+      })
+      act(() => {
+        result.current.submit()
+      })
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+      })
+      act(() => {
+        result.current.updateAction(decided)
+        result.current.setDraft('Próximo rascunho')
+      })
+      expect(result.current.messages[1]?.actions).toEqual([decided, otherAction])
+      act(() => {
+        delayed.release(Response.json([proposalQuestion, original, failedQuestion, failedAnswer]))
+      })
+      await flushPromises()
+      expect(result.current.history).toEqual({
+        status: 'loaded',
+        messages: [
+          proposalQuestion,
+          { ...original, actions: [decided, otherAction] },
+          failedQuestion,
+          failedAnswer,
+        ],
+      })
+      expect(result.current.messages.map((message) => message.id)).toEqual([1, 2, 10, 11])
+      expect(result.current.draft).toBe('Próximo rascunho')
+      expect(result.current.send.status).toBe('failed')
+      expect(result.current.retryTarget).toEqual({
+        clientMessageId: ID_1,
+        content: 'Outra pergunta',
+      })
+      expect(requestsTo(fetchMock, SEND)).toHaveLength(1)
+    },
+  )
+
+  it('a recarga em voo termina loaded com todas as decisões posteriores e sem duplicar mensagens', async () => {
+    const delayed = delayedHistory()
+    const second = { ...proposedAction, id: 6 }
+    const third = { ...proposedAction, id: 7 }
+    const original = { ...proposalAnswer, actions: [proposedAction, second, third] }
+    const { result } = await mountWith(
+      (_init, call) => (call === 1 ? Response.json([proposalQuestion, original]) : delayed.promise),
+      NO_SEND,
+    )
+    act(() => {
+      result.current.setDraft('Rascunho preservado')
+    })
+    act(() => {
+      result.current.reloadHistory()
+    })
+    expect(result.current.history).toEqual({ status: 'loading' })
+    const executed = { ...proposedAction, state: 'executada' as const, mission_id: 42 }
+    const rejected = { ...second, state: 'recusada' as const }
+    act(() => {
+      result.current.updateAction(proposedAction)
+      result.current.updateAction(executed)
+      result.current.updateAction(rejected)
+    })
+    expect(result.current.history).toEqual({ status: 'loading' })
+    act(() => {
+      delayed.release(Response.json([proposalQuestion, original, failedQuestion, failedAnswer]))
+    })
+    await flushPromises()
+    expect(result.current.history).toEqual({
+      status: 'loaded',
+      messages: [
+        proposalQuestion,
+        { ...original, actions: [executed, rejected, third] },
+        failedQuestion,
+        failedAnswer,
+      ],
+    })
+    expect(result.current.draft).toBe('Rascunho preservado')
+    expect(result.current.canSubmit).toBe(true)
+  })
+
+  it('a decisão anterior à recarga permite que a leitura posterior atualize a ação normalmente', async () => {
+    const delayed = delayedHistory()
+    const executed = { ...proposedAction, state: 'executada' as const, mission_id: 42 }
+    const authoritative = {
+      ...executed,
+      payload: { ...executed.payload, instructions: 'Dados posteriores' },
+    }
+    const { result } = await mountWith(
+      (_init, call) =>
+        call === 1 ? Response.json([proposalQuestion, proposalAnswer]) : delayed.promise,
+      NO_SEND,
+    )
+    act(() => {
+      result.current.updateAction(executed)
+    })
+    act(() => {
+      result.current.reloadHistory()
+    })
+    act(() => {
+      delayed.release(
+        Response.json([proposalQuestion, { ...proposalAnswer, actions: [authoritative] }]),
+      )
+    })
+    await flushPromises()
+    expect(result.current.messages).toEqual([
+      proposalQuestion,
+      { ...proposalAnswer, actions: [authoritative] },
+    ])
+    expect(result.current.history.status).toBe('loaded')
+  })
+
+  it('o GET silencioso posterior é autoritativo e não mantém override da decisão indefinidamente', async () => {
+    const first = delayedHistory()
+    const second = delayedHistory()
+    const decided = decidedActions[0]!
+    const authoritative = {
+      ...decided,
+      payload: { ...decided.payload, instructions: 'Dados posteriores' },
+    }
+    const { result, fetchMock } = await mountWith(
+      (_init, call) =>
+        call === 1
+          ? Response.json([proposalQuestion, proposalAnswer])
+          : call === 2
+            ? first.promise
+            : second.promise,
+      failedActionTurn,
+    )
+    act(() => {
+      result.current.setDraft('Outra pergunta')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+    })
+    act(() => {
+      result.current.updateAction(decided)
+    })
+    act(() => {
+      first.release(Response.json([proposalQuestion, proposalAnswer, failedQuestion, failedAnswer]))
+    })
+    await flushPromises()
+    expect(result.current.messages[1]?.actions).toEqual([decided])
+    act(() => {
+      result.current.retry()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
+    })
+    act(() => {
+      second.release(
+        Response.json([
+          proposalQuestion,
+          { ...proposalAnswer, actions: [authoritative] },
+          failedQuestion,
+          failedAnswer,
+        ]),
+      )
+    })
+    await flushPromises()
+    expect(result.current.messages).toEqual([
+      proposalQuestion,
+      { ...proposalAnswer, actions: [authoritative] },
+      failedQuestion,
+      failedAnswer,
+    ])
+  })
+
+  it('a falha do GET silencioso anterior conserva a decisão e o parcial marcado', async () => {
+    const delayed = delayedHistory()
+    const decided = decidedActions[2]!
+    const { result, fetchMock } = await mountWith(
+      (_init, call) =>
+        call === 1 ? Response.json([proposalQuestion, proposalAnswer]) : delayed.promise,
+      failedActionTurn,
+    )
+    act(() => {
+      result.current.setDraft('Outra pergunta')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+    })
+    act(() => {
+      result.current.updateAction(decided)
+    })
+    act(() => {
+      delayed.release(Response.json({}, { status: 500 }))
+    })
+    await flushPromises()
+    expect(result.current.history.status).toBe('loaded')
+    expect(result.current.messages).toEqual([
+      proposalQuestion,
+      { ...proposalAnswer, actions: [decided] },
+      failedQuestion,
+      expect.objectContaining({ id: -1, status: 'falhou', content: 'Prefixo seguro' }),
+    ])
+  })
+
+  it('a rejeição da recarga anterior ao done não apaga o histórico e a decisão já carregados', async () => {
+    const delayed = delayedHistory()
+    const stream = controlledStream()
+    const complete = answer(11, 10, 'Resposta completa')
+    const executed = decidedActions[0]!
+    const { result, fetchMock } = await mountWith(
+      (_init, call) =>
+        call === 1
+          ? Response.json([proposalQuestion, proposalAnswer])
+          : call === 2
+            ? delayed.promise
+            : Response.json([
+                proposalQuestion,
+                { ...proposalAnswer, actions: [executed] },
+                failedQuestion,
+                complete,
+              ]),
+      () => stream.response,
+    )
+    act(() => {
+      result.current.setDraft('Outra pergunta')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    stream.push(sseFrame('user_message', failedQuestion))
+    await waitFor(() => {
+      expect(result.current.send.status).toBe('writing')
+    })
+    act(() => {
+      result.current.reloadHistory()
+    })
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
+    })
+    act(() => {
+      result.current.updateAction(executed)
+    })
+    stream.push(sseFrame('done', complete))
+    stream.close()
+    await waitFor(() => {
+      expect(result.current.history.status).toBe('loaded')
+    })
+    act(() => {
+      delayed.release(Response.json({}, { status: 500 }))
+    })
+    await flushPromises()
+    expect(result.current.history).toEqual({
+      status: 'loaded',
+      messages: [
+        proposalQuestion,
+        { ...proposalAnswer, actions: [executed] },
+        failedQuestion,
+        complete,
+      ],
+    })
+    expect(result.current.send).toEqual({ status: 'idle', finished: true })
+    expect(requestsTo(fetchMock, SEND)).toHaveLength(1)
+  })
+})
+
+it('libera decisões da leitura silenciosa superada por recarga sem abortar GET ou mascarar o próximo', async () => {
+  const oldSilent = delayedHistory()
+  const reload = delayedHistory()
+  const nextSilent = delayedHistory()
+  const executed = decidedActions[0]!
+  const failed = decidedActions[2]!
+  const authoritative = {
+    ...executed,
+    payload: { ...executed.payload, instructions: 'Versão posterior do servidor' },
+  }
+  const owners: Map<unknown, unknown>[] = []
+  const nativeSet = Map.prototype.set
+  // Observa os recursos reais que retêm estas duas decisões, sem expor refs
+  // em produção nem substituir seu armazenamento. O oráculo é o conteúdo
+  // retido/liberado, não o número de chamadas de clear/set.
+  vi.spyOn(Map.prototype, 'set').mockImplementation(function (
+    this: Map<unknown, unknown>,
+    key: unknown,
+    value: unknown,
+  ) {
+    if ((value === executed || value === failed) && !owners.includes(this)) {
+      owners.push(this)
+    }
+    return nativeSet.call(this, key, value)
+  })
+  const { result, fetchMock } = await mountWith(
+    (_init, call) =>
+      call === 1
+        ? Response.json([proposalQuestion, proposalAnswer])
+        : call === 2
+          ? oldSilent.promise
+          : call === 3
+            ? reload.promise
+            : nextSilent.promise,
+    failedActionTurn,
+  )
+  act(() => result.current.setDraft('Outra pergunta'))
+  act(() => result.current.submit())
+  await waitFor(() => expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2))
+  act(() => result.current.updateAction(executed))
+  const superseded = owners[0]!
+  expect(superseded).toBeDefined()
+  expect([...superseded.values()]).toEqual([executed])
+  const silentSignal = requestsTo(fetchMock, HISTORY)[1]!.signal!
+
+  act(() => result.current.reloadHistory())
+  await waitFor(() => expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3))
+  // A promessa antiga continua pendente, mas seus dados já não têm utilidade.
+  expect([...superseded.values()]).toEqual([])
+  expect(silentSignal.aborted).toBe(false)
+  act(() => {
+    result.current.updateAction(failed)
+    result.current.setDraft('Rascunho conservado')
+  })
+  expect([...superseded.values()]).toEqual([])
+  expect(owners[1]).toBeDefined()
+  expect([...owners[1]!.values()]).toEqual([failed])
+  act(() =>
+    reload.release(Response.json([proposalQuestion, proposalAnswer, failedQuestion, failedAnswer])),
+  )
+  await flushPromises()
+  expect(result.current.history).toEqual({
+    status: 'loaded',
+    messages: [
+      proposalQuestion,
+      { ...proposalAnswer, actions: [failed] },
+      failedQuestion,
+      failedAnswer,
+    ],
+  })
+  expect([...owners[1]!.values()]).toEqual([])
+  expect(result.current.draft).toBe('Rascunho conservado')
+  expect(result.current.canSubmit).toBe(true)
+
+  act(() => result.current.retry())
+  await waitFor(() => expect(requestsTo(fetchMock, HISTORY)).toHaveLength(4))
+  const latest = [
+    proposalQuestion,
+    { ...proposalAnswer, actions: [authoritative] },
+    failedQuestion,
+    failedAnswer,
+  ]
+  act(() => nextSilent.release(Response.json(latest)))
+  await flushPromises()
+  expect(result.current.history).toEqual({ status: 'loaded', messages: latest })
+  act(() => oldSilent.release(Response.json([proposalQuestion, proposalAnswer])))
+  await flushPromises()
+  expect(result.current.history).toEqual({ status: 'loaded', messages: latest })
+  expect(silentSignal.aborted).toBe(false)
+  expect(requestsTo(fetchMock, SEND)).toHaveLength(2)
+})

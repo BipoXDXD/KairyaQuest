@@ -24,6 +24,7 @@ from pydantic import (
     computed_field,
 )
 
+from focusquest.core.validation import TextoPersistivel
 from focusquest.modules.missions.cycle_domain import Availability
 from focusquest.modules.missions.cycle_service import MissaoLida
 from focusquest.modules.missions.domain import (
@@ -123,8 +124,8 @@ class MissionCreate(BaseModel):
     alto obriga o cliente a ser explicito UMA vez.
     """
 
-    instructions: str = Field(min_length=1)
-    completion_criterion: str = Field(min_length=1)
+    instructions: TextoPersistivel = Field(min_length=1)
+    completion_criterion: TextoPersistivel = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
     deadline: Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
@@ -145,7 +146,9 @@ class MissionComplete(BaseModel):
     primeira ou uma tentativa nova.
     """
 
-    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
 
 
 class MissionRead(BaseModel):

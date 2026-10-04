@@ -75,7 +75,7 @@ function Chest({ children }: { children: string }) {
 /** O conteudo de uma missao ja revelada. So leitura: a trilha nao conclui. */
 function MissionContent({ mission }: { mission: Mission }) {
   return (
-    <div data-testid="trail-mission" className="mt-2">
+    <div data-testid="trail-mission" className="mt-2 min-w-0 wrap-anywhere">
       <p className="text-sm font-semibold text-slate-100">{mission.instructions}</p>
       <p className="mt-1 text-sm text-slate-300">
         <span className="text-slate-400">Critério de conclusão: </span>

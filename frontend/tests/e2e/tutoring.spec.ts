@@ -1,6 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
+import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
 import { definirRoteiro, liberar, reiniciar, requisicoes } from './falso'
 import { API_URL } from './servers'
 
@@ -252,4 +253,226 @@ test.describe('(e) celular', () => {
     await expect(folha).toHaveCount(0)
     await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
   })
+  test('indisponível: Tab e Shift+Tab alcançam a conversa e devolvem o foco ao fechar', async ({
+    page,
+  }) => {
+    await page.route('**/api/tutoring/status', (route) =>
+      route.fulfill({ json: { available: false } }),
+    )
+    await page.route('**/api/tutoring/messages', (route) => route.fulfill({ json: [] }))
+    await page.goto('/')
+    await page.getByTestId('tutor-sheet-open').click()
+    const sheet = page.getByRole('dialog', { name: 'Tifa' })
+    const close = sheet.getByRole('button', { name: 'Fechar a conversa' })
+    const history = sheet.getByRole('region', { name: 'Conversa com a Tifa' })
+    await expect(sheet.getByTestId('tutor-unavailable')).toHaveText(INDISPONIVEL)
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(history).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(history).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(close).toBeFocused()
+    await semViolacoes(page)
+    await page.keyboard.press('Enter')
+    await expect(sheet).toHaveCount(0)
+    await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(history).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+    await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
+    expect(await requisicoes()).toHaveLength(0)
+  })
+
+  test('o link da ação executada participa do Tab e fecha a folha pelo teclado', async ({
+    page,
+  }) => {
+    const pedido = proposta('Missão para navegar pelo teclado')
+    await definirRoteiro({ blocks: [{ text: ['Vamos praticar!'] }, { tool_input: pedido }] })
+    await page.goto('/')
+    await page.getByTestId('tutor-sheet-open').click()
+    await expect(page.getByLabel('Sua mensagem para a Tifa')).toBeEnabled()
+    await perguntar(page, `Missão para testar foco (e2e ${EXECUCAO})`)
+    const card = page.getByTestId('tutor-proposal').filter({ hasText: pedido.instructions })
+    await card.getByRole('button', { name: `Confirmar a proposta: ${pedido.instructions}` }).click()
+    await expect(card.getByTestId('proposal-created')).toHaveText('Missão criada')
+    // O turno vem do banco real. Isola somente o histórico exibido para que
+    // ações dos outros cenários não alterem a ordem de teclado deste caso.
+    const messages = await conversa(page)
+    const response = messages.find((message) =>
+      message.actions.some((action) => action.payload.instructions === pedido.instructions),
+    )!
+    const turn = messages.filter(
+      (message) => message.id === response.id || message.id === response.reply_to_id,
+    )
+    await page.route('**/api/tutoring/status', (route) =>
+      route.fulfill({ json: { available: false } }),
+    )
+    await page.route('**/api/tutoring/messages', (route) => route.fulfill({ json: turn }))
+    await page.reload()
+    await page.getByTestId('tutor-sheet-open').click()
+    const sheet = page.getByRole('dialog', { name: 'Tifa' })
+    const close = sheet.getByRole('button', { name: 'Fechar a conversa' })
+    const history = sheet.getByRole('region', { name: 'Conversa com a Tifa' })
+    const link = sheet.getByRole('link', { name: 'Ver no Quartel-General' })
+    await expect(sheet.getByTestId('tutor-unavailable')).toHaveText(INDISPONIVEL)
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(history).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(link).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(link).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(history).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(close).toBeFocused()
+    await semViolacoes(page)
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Enter')
+    await expect(sheet).toHaveCount(0)
+    await expect(page).toHaveURL(/#missions-heading$/)
+    await expect(page.locator('#missions-heading')).toBeInViewport()
+    expect(await requisicoes()).toHaveLength(1)
+  })
 })
+
+// Regressão exclusivamente de frontend: POST/GET de tutoria interceptados,
+// sem chamada ao provedor ou escrita no banco nesta sequência controlada.
+for (const decision of ['executada', 'recusada', 'falhou'] as const) {
+  test(`histórico anterior não reabre a ação ${decision}`, async ({ page }) => {
+    const payload = proposta(`Decisão durante GET: ${decision}`)
+    const action: ActionRead = {
+      id: 4900,
+      kind: 'create_mission',
+      state: 'proposta',
+      payload,
+      mission_id: null,
+      error_code: null,
+    }
+    const updated: ActionRead = {
+      ...action,
+      state: decision,
+      mission_id: decision === 'executada' ? 4901 : null,
+      error_code: decision === 'falhou' ? 'prazo_expirado' : null,
+    }
+    const message = (id: number, role: MessageRead['role'], content: string): MessageRead => ({
+      id,
+      role,
+      content,
+      status: 'completa',
+      client_message_id: role === 'user' ? `e2e-${id}` : null,
+      reply_to_id: role === 'tutor' ? id - 1 : null,
+      error_code: null,
+      created_at: '2026-10-04T12:00:00Z',
+      actions: [],
+    })
+    const initial = [
+      message(1, 'user', 'Quero uma missão'),
+      { ...message(2, 'tutor', 'Proponho esta.'), actions: [action] },
+    ]
+    let captured!: () => void
+    const started = new Promise<void>((resolve) => {
+      captured = resolve
+    })
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let historyCalls = 0
+    let sentQuestion: MessageRead | undefined
+    await page.route('**/api/tutoring/messages', async (route) => {
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as {
+          content: string
+          client_message_id: string
+        }
+        sentQuestion = {
+          ...message(3, 'user', body.content),
+          client_message_id: body.client_message_id,
+        }
+        const events = [
+          ['user_message', sentQuestion],
+          ['delta', { text: 'Prefixo seguro' }],
+          ['error', { code: 'provedor_indisponivel' }],
+        ]
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: events
+            .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+            .join(''),
+        })
+        return
+      }
+      historyCalls += 1
+      if (historyCalls === 1) {
+        await route.fulfill({ json: initial })
+        return
+      }
+      captured()
+      await held
+      // O texto distinto prova que a leitura foi de fato aplicada antes do
+      // oráculo do cartão. Só esperar finished() poderia observar a UI antiga.
+      await route.fulfill({
+        json: [
+          ...initial,
+          sentQuestion,
+          {
+            ...message(4, 'tutor', 'Histórico atualizado pelo GET controlado'),
+            status: 'falhou',
+            error_code: 'provedor_indisponivel',
+          },
+        ],
+      })
+    })
+    await page.route('**/api/tutoring/actions/4900/*', async (route) => {
+      if (decision === 'falhou') {
+        await route.fulfill({ status: 422, json: { code: 'prazo_expirado' } })
+      } else {
+        await route.fulfill({
+          json:
+            decision === 'executada'
+              ? { action: updated, mission: { id: 4901, instructions: payload.instructions } }
+              : { action: updated },
+        })
+      }
+    })
+    await abrirPainel(page)
+    const card = page.getByTestId('tutor-proposal').filter({ hasText: payload.instructions })
+    await expect(card).toHaveAttribute('data-state', 'proposta')
+    await perguntar(page, `Falha controlada (e2e ${EXECUCAO})`)
+    await started
+    await card.getByTestId(decision === 'recusada' ? 'proposal-reject' : 'proposal-confirm').click()
+    await expect(card).toHaveAttribute('data-state', decision)
+    await page.getByLabel('Sua mensagem para a Tifa').fill('Rascunho após a decisão')
+    release()
+    await expect(
+      page.getByText('Histórico atualizado pelo GET controlado', { exact: true }),
+    ).toBeVisible()
+    await expect(card).toHaveAttribute('data-state', decision)
+    await expect(card.getByTestId('proposal-confirm')).toHaveCount(0)
+    await expect(card.getByTestId('proposal-reject')).toHaveCount(0)
+    await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue('Rascunho após a decisão')
+    await expect(
+      card.getByTestId(
+        decision === 'executada'
+          ? 'proposal-created'
+          : decision === 'recusada'
+            ? 'proposal-rejected'
+            : 'proposal-expired',
+      ),
+    ).toBeVisible()
+    if (decision === 'executada') {
+      await expect(card.getByTestId('proposal-board-link')).toBeVisible()
+    }
+    expect(historyCalls).toBe(2)
+  })
+}

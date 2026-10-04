@@ -97,6 +97,10 @@ class ProvedorAnthropic:
                     ):
                         yield Proposta(dict(evento.content_block.input))
                     elif evento.type == "message_stop":
+                        if evento.message.stop_reason == "max_tokens":
+                            raise ProvedorIndisponivelError(
+                                "o provedor encerrou a resposta no limite de tokens"
+                            )
                         yield Fim()
         except (anthropic.APITimeoutError, httpx2.TimeoutException) as erro:
             # Os DOIS tipos, e nao so o do SDK: a demora no meio do stream sai

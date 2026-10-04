@@ -29,7 +29,10 @@ migração `0004`, `shared/types/reward.ts` e os testes correspondentes; ver
 "Alterações do Incremento D" em `docs/HANDOFF.md`. Os Incrementos B, C e D já
 estão na branch de integração: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR
 #14 (C) em `8ab91ce`, os dois em 2026-09-25, e o D (`feat/incremento-d`)
-segue **não publicado** (ver "Revisão-base" em `docs/HANDOFF.md`).
+foi publicado pelo PR #17 e mesclado em `af6f50d`, em 2026-09-25.
+A base atual é `49faaf0` (PR #18), com a atualização Python local descrita
+no início de `docs/HANDOFF.md`. As referências às Tasks e revisões abaixo
+preservam a origem histórica da estrutura.
 Ficam de fora os caminhos ignorados pelo git — dependências
 (`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
 e de teste (`frontend/dist/`, `frontend/coverage/`,
@@ -143,7 +146,7 @@ FocusQuest/
 │   │   │   │   └── client.ts      # o cliente HTTP único: postJson e postStream; componente nenhum chama fetch
 │   │   │   ├── hooks/              # hooks genéricos com mais de um usuário entre features (C, docs/ARCHITECTURE.md §5)
 │   │   │   │   ├── useRefreshOnReturn.test.tsx
-│   │   │   │   └── useRefreshOnReturn.ts  # refresh silencioso em visibilitychange/focus; usado por useCycle e useCurrentPlan (C, Task 5, decisão K7)
+│   │   │   │   └── useRefreshOnReturn.ts  # refresh silencioso em visibilitychange/focus; usado por useCycle/useCurrentPlan (C) e useProgress (D)
 │   │   │   ├── lib/                # funções puras com mais de um usuário entre features (docs/ARCHITECTURE.md §5)
 │   │   │   │   ├── civilDate.test.ts      # (C, Task 2; movido de features/missions/, git mv, decisão K10)
 │   │   │   │   ├── civilDate.ts           # formatCivilDate; civilWeekday (o dia da semana, sem fuso) (C, Task 2)
@@ -230,7 +233,7 @@ FocusQuest/
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros
 │       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5)
-│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15)
+│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; recebe Progresso do service e formata a linha no fim do contexto (D, decisão D15)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo)
 │       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar
 │       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
@@ -336,6 +339,38 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   `frontend/src` e `frontend/index.html`. São restos do scaffold do Vite. A
   remoção é mudança de código, não deste documento; está registrada como
   pendência em `docs/HANDOFF.md`.
+
+### Estabilização local de 2026-10-04
+
+A árvore histórica acima descreve os incrementos publicados. A manutenção
+local ainda sem commit acrescenta `core/validation.py`, regressões de
+entradas persistíveis, deltas inválidos, truncamento do provedor e leitura
+concorrente de progresso, além de E2E de layout e navegação.
+
+Os schemas rejeitam NUL após as restrições existentes, sem sanitizar textos
+ou identificadores. O serviço de tutoria valida NUL e encodabilidade UTF-8
+antes de acumular ou emitir cada delta; dados inválidos seguem o erro
+existente `falhou`/`provedor_indisponivel`, preservando apenas deltas anteriores
+válidos. O adaptador também recusa `stop_reason=max_tokens` antes de `Fim`.
+O transporte em `main.py` também serializa erros de entrada
+(`RequestValidationError`) em JSON 422 com escapes ASCII. Isso permite
+diagnosticar Unicode inválido sem falhar na codificação UTF-8 da resposta;
+os schemas continuam recusando os dados. Erros internos, configuração e
+validação de resposta não entram nesse handler; NaN/Infinity não fazem
+parte do recorte. As regressões ficam em
+`tests/integration/test_request_validation.py`.
+
+A continuação após reinício acrescenta
+`tests/integration/test_mission_operations_schema_parity.py`: dois testes
+comparam FK (colunas, schema, alvo e ON DELETE) e UNIQUE (nome/colunas) de
+`mission_operations` entre PostgreSQL migrado e modelo. Não alteram produção
+nem migração e não comparam CHECK, defaults, índices ou demais opções;
+não existe CHECK nessa tabela atual. Esse recorte amplia a pendência 9
+sem afirmar paridade geral do esquema.
+
+Nenhuma dependência, endpoint, estado ou infraestrutura nova foi introduzida
+por essa manutenção. As decisões e verificações estão em
+`docs/REVISAO-2026-10-04.md`.
 
 ## 2. Árvore-alvo — contrato, não descrição
 
@@ -447,14 +482,16 @@ real, e em qual módulo.
 | `provider.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
-**A dependência é `tutoring → missions`, nunca o contrário.**
-`tutoring/service.py` importa `Mission` e `criar_missao` de
-`modules/missions/service.py`, e `tutoring/domain.py` reusa
+**A tutoria executa operações de missão por `tutoring.service → missions.service`.**
+`tutoring/service.py` importa `Mission` de `modules/missions/models.py` e
+`criar_missao` de `modules/missions/service.py`, e `tutoring/domain.py` reusa
 `TransicaoIlegalError` de `modules/missions/domain.py` (mesmo `code`, mesmo
 sentido — confirmar ou recusar uma ação segue o desenho de concluir uma
 missão). Nada em `modules/missions/` importa nada de `modules/tutoring/`; a
 convenção de fronteira 2 (§5, "nada de dependência circular") proíbe o
-sentido inverso.
+sentido inverso. Desde o D, a tutoria também lê progresso por
+`tutoring.service → progression.service`; não é uma dependência exclusiva
+de `missions`.
 
 **O módulo `progression` (Incremento D) e a direção das dependências.**
 `missions.service` → `progression.service`: `concluir_missao`
@@ -471,10 +508,13 @@ dois enums, registrado como pendência 82 em `docs/HANDOFF.md`).
 `progression.service` **não** importa `missions.service` nem nada de
 `tutoring` além do que está listado — não há caminho do chat até o saldo
 (D15, README §6: "pedir pontos no chat não altera saldo"). Não há ciclo de
-import entre os três módulos: `missions` não importa nada de `progression`
-nem de `tutoring` de volta.
-`tutoring.context` também consome `progression.ler_progresso` (só leitura,
-direto, sem HTTP) para montar a linha de progresso do turno da Tifa (D15).
+import entre os serviços: `missions.service` importa `progression.service`,
+mas este não retorna a `missions.service` nem a `tutoring.service` ou
+`tutoring.context`. Os imports de modelos, enums e leituras listados acima
+continuam permitidos; `missions` não importa `tutoring`.
+`tutoring.service` também consome `progression.ler_progresso` (só leitura,
+direto, sem HTTP) e passa o resultado para `tutoring.context`, que importa
+o tipo `Progresso` e formata a linha do turno da Tifa (D15).
 
 Uma precisão sobre a transação, que a tabela resume demais: **quem faz o
 `commit` é a rota**, não o serviço nem a dependência de sessão. O motivo
@@ -498,7 +538,7 @@ concluir missão ou confirmar recompensa por conta própria.
 | `GET /api/missions` | `200` com a lista | Lista as missões do usuário único, em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
-| `GET /ready` | `200`, `503` ou `500` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; **`500`** quando **não há configuração de banco** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente) — a criação da engine falha antes da consulta, com `ValidationError` do `Settings`. Medido. Qualquer orquestrador trata não-2xx como "não pronto", então a probe reprova nos dois casos de falha; a diferença de status está registrada como pendência em `docs/HANDOFF.md`. |
+| `GET /ready` | `200` ou `503` nos estados esperados | Readiness. Executa `SELECT 1`: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco não responde ou o `Settings` recusa configuração ausente/inválida com a engine ainda não cacheada. `get_ready_engine`, dependência local desta rota, contém esse `ValidationError` antes da consulta. Não inclui inputs/URLs na resposta nem afrouxa configuração das demais rotas; erros de programação inesperados continuam propagando. Engine lazy/cache existentes preservados. Regressões em `test_health.py`; pendência28 resolvida localmente na estabilização. |
 
 - **Usuário único, declarado** (decisão A2): as três rotas de missão usam a
   constante `USUARIO_UNICO = 1` do `router.py`. Não há autenticação, sessão
@@ -706,6 +746,21 @@ modelo×migração — os `UNIQUE`, o índice parcial e a FK composta não
 | `GET /api/plans/current` | `200` com `{"plan": PlanRead \| null}` | O plano da semana atual, na **mesma forma** do 201 acima (decisão P2) — "sem plano" é estado, não erro. |
 | `GET /api/cycle` | `200` com `CycleRead` | O ciclo derivado do relógio: a missão de hoje, a sequência, os dias até o próximo marco e a especial (se disponível). |
 
+**Leitura coerente do ciclo (estabilização de 2026-10-04).** `ler_ciclo`
+lê o relógio uma vez e projeta os valores das diárias, especiais e metadados
+dos planos do usuário em uma única consulta. Histórico, missão de hoje,
+sequência e especial são derivados desse conjunto: uma conclusão concorrente
+pode aparecer inteira antes ou depois da leitura, sem misturar os dois
+estados. São oito missões por semana do histórico; não há cache, trava
+adicional, commit interno ou alteração de isolamento. As `Mission` devolvidas
+são cópias transientes para leitura, sem vínculo com a identity map da
+`Session`: `refresh`/`expire` posterior não modifica uma leitura já entregue.
+O autoflush normal inclui alterações próprias na transação do caller; quem
+usa `no_autoflush` precisa fazer flush do que deseja incluir. Isso não altera
+`carregar_historico` nem promete consistência entre chamadas ou endpoints.
+Regressões de duas conexões e controles do caller estão em
+`tests/integration/test_cycle_consistency.py`.
+
 **A forma da trilha (`PlanRead`)**: `{"week_start", "days": [{"day",
 "availability", "mission"} × 7], "special": {"availability", "progress",
 "mission"}}`. Cada dia carrega sua `availability`
@@ -798,6 +853,15 @@ destravado). Sem nenhuma conclusão: `xp_total` 0, `level` 1,
 `unlocked_at` nulo. Sem caminho de erro de negócio — só o tratamento
 genérico de falha de banco.
 
+Na estabilização local de 2026-10-04, `ler_progresso` passou a consultar
+saldo e datas das conquistas em **um SELECT**: soma em subquery, antes de
+LEFT JOIN com conquistas do mesmo usuário. Isso evita misturar snapshots de
+dois comandos sob READ COMMITTED, preserva saldo zero e catálogo completo
+quando não há conquista e não multiplica XP pela junção. Não há trava,
+commit interno ou alteração do isolamento global. Uma resposta pode estar
+antiga, mas saldo e conquistas desta chamada representam o mesmo snapshot;
+isso não promete coerência entre endpoints diferentes.
+
 **`reward` no corpo da conclusão** (`RewardRead`): `xp_awarded` (o XP desta
 missão, congelado, D2), `xp_total` (o saldo do usuário **no momento daquela
 conclusão**, não o atual — a semântica do reenvio, D10;
@@ -865,6 +929,14 @@ tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
   recarrega uma vez, sozinho, quando a última termina. Tudo é estado local do
   React; nada disso sai da feature.
 
+  Na estabilização local de 2026-10-04, quadro e ciclo comunicam ao registro
+  IDs explicitamente concluídas em uma leitura atual bem-sucedida. A poda
+  aguarda o último encerramento quando há POSTs em voo. O conjunto local de
+  candidatas contém apenas chaves existentes e é limpo pela poda ou por
+  `release`; não acumula todas as missões concluídas. Ausência, loading, erro,
+  resposta obsoleta e `refreshFailed` não autorizam poda. Assim o retry ainda
+  usa a mesma chave quando o resultado permanece desconhecido.
+
   **Desde o Incremento B** (Tasks 7–8, commits `242d677` e `08b3dcc`),
   `missions` ganhou o ciclo diário: `useCycle.ts` busca
   `GET /api/cycle` e expõe um `refresh` que **não** passa por "carregando"
@@ -885,6 +957,14 @@ tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
   quadro de avulsas (`MissionList.tsx`) passou a se chamar "Outras missões
   — tarefas com prazo" (decisão P8), e `Headquarters.tsx` compõe
   `<CycleSection />` **acima** dele.
+
+  Na estabilização local de 2026-10-04, a lista da diária também recebe
+  a chave da missão. Uma ref captura o foco antes de remover essa lista;
+  se o elemento realmente desaparecer e o foco ficar no `body`, o título
+  estável da seção recebe foco, com indicação visual. Outro controle já
+  focado, uma área oculta ou o fundo inerte de um modal ativo têm prioridade. A captura é
+  consumida no mesmo commit: não provoca transferência tardia de foco nem
+  substitui a chave que preserva o estado de cada cartão.
 
   **Conserto final da revisão da branch** (commit `71a2001`):
   `MissionCard.tsx` ganhou duas props opcionais, com padrão igual ao
@@ -925,6 +1005,35 @@ tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
   (`MissionListHandle` + `useImperativeHandle` em `MissionList.tsx`) — um
   evento, não uma prop observada por efeito, que o lint
   `react-hooks/set-state-in-effect` reprovaria.
+
+  As decisões recebidas durante um GET de histórico são reconciliadas nesse
+  candidato antes de aplicar sua resposta: uma confirmação/recusa não volta
+  a proposta quando uma leitura anterior chega depois. Uma leitura iniciada
+  após a decisão permanece autoritativa. Os mapas são locais aos candidatos
+  atuais de recarga e atualização silenciosa, guardam a última versão por
+  ação e são liberados quando a leitura termina ou perde elegibilidade;
+  iniciar recarga também limpa o candidato silencioso superado. Isso permite
+  terminar `loading` sem GET adicional nem cache global, preservando as
+  guardas de geração/abort e sem mutar refs dentro de updater React.
+
+  `useCompleteMission` e `useDecideAction` guardam sincronamente uma operação
+  em voo por instância, além do `disabled` dos controles. Confirmar e recusar
+  compartilham a guarda. UUID que lança não deixa voo órfão; callbacks e
+  `settled` terminam antes de liberá-la. Retry, chaves, recompensa e registros
+  continuam os existentes; instâncias distintas/remontagens continuam
+  dependendo da idempotência do backend, sem exclusão global nova.
+
+  A transição responsiva preserva o foco que pertencia à conversa antes
+  de remover seu contêiner. A folha móvel ativa recebe foco e torna inertes
+  os irmãos dos seus ancestrais, sem isolar o próprio painel ou sua região
+  viva; fechamento, desktop, ocultação e desmontagem restauram os atributos
+  anteriores. `focusin` contém foco programático, além do ciclo de Tab.
+  `Headquarters` repassa sua visibilidade por `hidden`: o QG continua montado
+  em Campanhas, preservando rascunho/stream e preferência da folha, mas uma
+  folha oculta não toma foco nem bloqueia Campanhas. O desenho atende ao
+  modal único e layout atual, sem gerenciador global/observer/portal novo.
+  Regressões de teclado/layout estão em `TutorPanel.test.tsx` e
+  `tests/e2e/tutor-focus.spec.ts`.
 
   Em **`campaigns`** (nasceu no C), a trilha da semana: `useCurrentPlan.ts`
   busca `GET /api/plans/current` e expõe `{ state, reload, refresh }` — o
@@ -977,10 +1086,13 @@ tipos que eles devolvem (`MissionRead`, `CycleRead`) são outros, nunca
   quando `document.visibilityState === 'visible'`) e `focus` da janela, e
   chama o `refresh` mais recente (guardado numa `ref`, não como dependência
   do efeito) — fecha a pendência 57 do B (a virada do dia com a aba aberta).
-  Dois usuários: `useCycle` e `useCurrentPlan`. **Custo declarado (K7):**
-  trocar de área **dentro** do app depois da meia-noite não dispara nenhum
-  dos dois eventos — o Quartel-General oculto continua no dia anterior até
-  a aba sair e voltar, ou até recarregar (pendência, `docs/HANDOFF.md`).
+  Três usuários atuais: `useCycle`, `useCurrentPlan` e `useProgress` (D).
+  **Custo declarado do desenho original (K7), corrigido localmente em
+  2026-10-04:** a navegação dentro do app não dispara esses eventos.
+  `Headquarters` agora detecta a transição oculto→visível e pede refresh
+  silencioso de ciclo e progresso pelos handles das seções. São dois GETs
+  por retorno efetivo, sem duplicar a montagem inicial, desmontar conteúdo
+  ou interromper a conversa. O hook compartilhado mantém sua finalidade.
 - **`src/shared/types/`** *(existe, desde o C)* — tipos compartilhados por
   mais de uma feature (§5 regra 3). Nasceu com `mission.ts` (decisão K10,
   Ruling R3): `Mission`, `MissionState`, `MissionType`, `Availability`,

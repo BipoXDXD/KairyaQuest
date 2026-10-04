@@ -5,7 +5,7 @@ import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
 const CARD_CLASS =
-  'rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
+  'min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
   'focus-within:ring-2 focus-within:ring-emerald-400'
 
 const COMPLETE_BUTTON_CLASS =
@@ -187,7 +187,7 @@ export function MissionCard({
       <div className="flex items-start justify-between gap-4">
         <HeadingTag
           data-testid="mission-instructions"
-          className="text-base font-semibold text-slate-100"
+          className="min-w-0 text-base font-semibold text-slate-100"
         >
           {mission.instructions}
         </HeadingTag>

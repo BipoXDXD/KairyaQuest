@@ -171,22 +171,27 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
 
 def ler_progresso(session: Session, user_id: int) -> Progresso:
     """Saldo, faixa do nivel e o catalogo inteiro com a data ou nulo. So leitura."""
-    total = session.scalar(
-        select(func.coalesce(func.sum(XpEntry.amount), 0)).where(
-            XpEntry.user_id == user_id
-        )
+    # READ COMMITTED fixa um snapshot por comando. Duas consultas poderiam
+    # combinar saldo anterior com conquistas de uma conclusao ja commitada.
+    # O agregado sem GROUP BY e o LEFT JOIN preservam a linha sem conquistas;
+    # somar antes da juncao evita multiplicar XP pelo numero de conquistas.
+    saldo = (
+        select(func.coalesce(func.sum(XpEntry.amount), 0).label("xp_total"))
+        .where(XpEntry.user_id == user_id)
+        .subquery()
     )
+    linhas = session.execute(
+        select(saldo.c.xp_total, UserAchievement.code, UserAchievement.unlocked_at)
+        .select_from(saldo)
+        .outerjoin(UserAchievement, UserAchievement.user_id == user_id)
+    ).all()
+    total = linhas[0].xp_total
     datas = {
-        Codigo(codigo): quando
-        for codigo, quando in session.execute(
-            select(UserAchievement.code, UserAchievement.unlocked_at).where(
-                UserAchievement.user_id == user_id
-            )
-        ).tuples()
+        Codigo(codigo): quando for _, codigo, quando in linhas if codigo is not None
     }
     return Progresso(
-        xp_total=total or 0,
-        faixa=faixa_do_nivel(total or 0),
+        xp_total=total,
+        faixa=faixa_do_nivel(total),
         conquistas=tuple(
             ConquistaNoPainel(CONQUISTA_POR_CODIGO[c.codigo], datas.get(c.codigo))
             for c in CATALOGO

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { postJson } from '../../shared/api/client'
 import { describeActionFailure, type ActionFailure } from './actionFailure'
 import type { ActionRead, ConfirmRead, RejectRead } from './types'
@@ -21,9 +21,10 @@ export type DecisionState =
  * `prazo_expirado`: o backend GRAVOU a acao como `falhou` antes do 422 (spec,
  * "Confirmar e recusar"). A tela espelha isso sem outra ida a rede.
  *
- * Nao se protege sozinho contra dois `confirm()` no mesmo tick: a guarda e o
- * `disabled` dos botoes durante `confirming`/`rejecting` (pendencia 34). Com a
- * chave idempotente, dois POSTs com ela nao criam duas missoes.
+ * A guarda sincrona e compartilhada por confirmar/recusar nesta instancia:
+ * enquanto a cadeia nao terminou, outro callback (mesmo tick) nao envia.
+ * O `disabled` continua sendo feedback na tela; chaves/backend protegem
+ * instancias distintas e remontagens.
  */
 export function useDecideAction(
   action: ActionRead,
@@ -31,10 +32,14 @@ export function useDecideAction(
   on: { changed: (action: ActionRead) => void; missionCreated: () => void },
 ): { state: DecisionState; confirm: () => void; reject: () => void } {
   const [state, setState] = useState<DecisionState>({ status: 'idle' })
+  const inFlight = useRef(false)
   const { changed, missionCreated } = on
 
   const confirm = useCallback(() => {
+    if (inFlight.current) return
+    // Se gerar a chave lancar, estado e guarda continuam livres.
     const operationId = keys.operationIdFor(action.id)
+    inFlight.current = true
     setState({ status: 'confirming' })
     postJson<ConfirmRead>(`/tutoring/actions/${String(action.id)}/confirm`, {
       operation_id: operationId,
@@ -55,9 +60,14 @@ export function useDecideAction(
         }
         setState({ status: 'failed', failure, attempted: 'confirm' })
       })
+      .finally(() => {
+        inFlight.current = false
+      })
   }, [action, keys, changed, missionCreated])
 
   const reject = useCallback(() => {
+    if (inFlight.current) return
+    inFlight.current = true
     setState({ status: 'rejecting' })
     postJson<RejectRead>(`/tutoring/actions/${String(action.id)}/reject`, {})
       .then((result) => {
@@ -70,6 +80,9 @@ export function useDecideAction(
           failure: describeActionFailure(error, 'reject'),
           attempted: 'reject',
         })
+      })
+      .finally(() => {
+        inFlight.current = false
       })
   }, [action, changed])
 

@@ -38,8 +38,8 @@ function rejectLabel(decision: DecisionState): string {
 /**
  * Confirmar e Recusar de uma proposta ainda em aberto.
  *
- * - **decidindo**: os DOIS botoes desabilitados. E a guarda contra o clique
- *   duplo (pendencia 34): o hook nao se protege sozinho.
+ * - **decidindo**: os DOIS botoes desabilitados dao feedback e impedem
+ *   cliques repetidos; o hook tambem guarda uma operacao em voo por instancia.
  * - **falha que se repete**: o aviso, e o botao da acao tentada vira "Tentar
  *   de novo"; o outro volta ao normal.
  * - **falha que nao se repete** (ja decidida, nao existe mais): o aviso, e
@@ -215,7 +215,7 @@ export function ProposalCard({
       data-testid="tutor-proposal"
       data-action-id={action.id}
       data-state={action.state}
-      className="mt-3 rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
+      className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
     >
       <h3 className="text-sm font-semibold text-slate-50">Proposta de missão</h3>
       <p data-testid="proposal-instructions" className="mt-1 text-sm text-slate-100">

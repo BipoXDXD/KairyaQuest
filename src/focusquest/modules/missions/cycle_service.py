@@ -148,7 +148,7 @@ def carregar_historico(session: Session, user_id: int) -> dict[date, DiaDoPlano]
         select(Mission, WeeklyPlan.created_at)
         .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
         .where(Mission.user_id == user_id, Mission.mission_type == MissionType.DIARIA)
-    ).tuples()
+    )
     return {
         dia_da_diaria(missao): DiaDoPlano(
             concluida=missao.state is MissionState.CONCLUIDA,
@@ -341,42 +341,78 @@ def ler_plano_atual(
 
 
 def _especial_vigente(
-    session: Session, user_id: int, historico: Historico, agora: datetime
+    especiais: dict[date, Mission], historico: Historico, agora: datetime
 ) -> MissaoLida | None:
     """A especial do marco mais recente, enquanto a janela dela estiver aberta
-    (spec, "A especial no Quartel-General")."""
+    (spec, "A especial no Quartel-General"). Usa o mesmo snapshot das diarias.
+    """
     marco = marco_mais_recente(historico, dia_de(agora))
     if marco is None or agora >= fim_da_janela_da_especial(marco):
         return None
-    especial = session.scalars(
-        select(Mission)
-        .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
-        .where(
-            Mission.user_id == user_id,
-            Mission.mission_type == MissionType.ESPECIAL,
-            WeeklyPlan.week_start == segunda_da_semana(marco),
-        )
-    ).one()
-    return _ler_especial(especial, marco, agora)
+    return _ler_especial(especiais[segunda_da_semana(marco)], marco, agora)
 
 
 def ler_ciclo(session: Session, user_id: int, *, clock: Clock) -> CicloLido:
-    """O dia: a missao de hoje, a sequencia e a especial vigente."""
+    """O dia inteiro deriva de um unico SELECT, com o relogio lido uma vez.
+
+    Valores de colunas evitam identidades ORM antigas na Session do chamador.
+    As Mission devolvidas sao copias transitorias do snapshot, nao entidades
+    gerenciadas: refresh/expire posteriores nao alteram esta leitura. O
+    autoflush normal preserva as alteracoes proprias pendentes, sem commit,
+    locks ou mudanca de isolamento. Se o chamador desabilitar autoflush, deve
+    fazer flush das alteracoes que deseja incluir neste snapshot.
+
+    Inclui todas as semanas (o historico precisa delas) e as oito missoes de
+    cada plano, sem filtros prematuros de especiais por janela.
+    """
     agora = clock()
     hoje = dia_de(agora)
-    historico = carregar_historico(session, user_id)
-    atual = sequencia(historico, hoje)
-    de_hoje = session.scalar(
-        select(Mission).where(
-            Mission.user_id == user_id,
-            Mission.mission_type == MissionType.DIARIA,
-            Mission.day == hoje,
+    linhas = (
+        session.execute(
+            select(
+                Mission.__table__,
+                WeeklyPlan.created_at.label("plano_criado_em"),
+                WeeklyPlan.week_start.label("semana"),
+            )
+            .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
+            .where(
+                Mission.user_id == user_id,
+                Mission.mission_type.in_((MissionType.DIARIA, MissionType.ESPECIAL)),
+            )
         )
+        .mappings()
+        .all()
     )
+
+    historico: dict[date, DiaDoPlano] = {}
+    diarias: dict[date, Mission] = {}
+    especiais: dict[date, Mission] = {}
+    for linha in linhas:
+        missao = Mission(
+            **{coluna.key: linha[coluna.key] for coluna in Mission.__table__.columns}
+        )
+        if missao.mission_type is MissionType.DIARIA:
+            dia = dia_da_diaria(missao)
+            diarias[dia] = missao
+            historico[dia] = DiaDoPlano(
+                concluida=missao.state is MissionState.CONCLUIDA,
+                plano_criado_em=dia_de(linha["plano_criado_em"]),
+            )
+        else:
+            especiais[linha["semana"]] = missao
+
+    atual = sequencia(historico, hoje)
+    de_hoje = diarias.get(hoje)
     return CicloLido(
         hoje=hoje,
-        missao=None if de_hoje is None else ler_missao(session, de_hoje, agora),
+        missao=None
+        if de_hoje is None
+        else MissaoLida(
+            de_hoje,
+            fim_do_dia(hoje),
+            disponibilidade_da_diaria(hoje, historico[hoje], hoje),
+        ),
         sequencia=atual,
         dias_para_o_marco=dias_para_o_marco(atual),
-        especial=_especial_vigente(session, user_id, historico, agora),
+        especial=_especial_vigente(especiais, historico, agora),
     )

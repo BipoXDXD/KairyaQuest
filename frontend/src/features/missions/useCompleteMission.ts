@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
@@ -69,8 +69,12 @@ export function useCompleteMission(
   onCompleted?: () => void,
 ): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
+  const inFlight = useRef(false)
 
   const complete = useCallback(() => {
+    // A ref bloqueia no mesmo tick e sobrevive ao rerender; estado/disabled
+    // continuam sendo o feedback da tela, sem decidir a exclusao do voo.
+    if (inFlight.current) return
     // Primeiro, e antes de qualquer mudanca de estado: se `operationIdFor`
     // lancar (crypto.randomUUID pode lancar em contexto inseguro), nada muda
     // -- nem o cartao vai para "Concluindo...", nem o registro conta um voo
@@ -78,6 +82,7 @@ export function useCompleteMission(
     // contador do registro preso em 1 para sempre (regressao medida na
     // revisao da Task 6).
     const operationId = registry.operationIdFor(missionId)
+    inFlight.current = true
     setState({ status: 'submitting' })
     // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
     // ja encontra esta conclusao em voo.
@@ -102,7 +107,11 @@ export function useCompleteMission(
       .finally(() => {
         // Por ultimo, depois do estado final: se havia recarga esperando, ela
         // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
-        registry.settled()
+        try {
+          registry.settled()
+        } finally {
+          inFlight.current = false
+        }
       })
   }, [missionId, registry, onCompleted])
 

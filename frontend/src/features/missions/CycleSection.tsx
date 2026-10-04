@@ -1,4 +1,12 @@
-import type { ReactElement } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ReactElement,
+  type Ref,
+} from 'react'
 import { formatCivilDate } from '../../shared/lib/civilDate'
 import { DAYS_PER_MILESTONE } from '../../shared/types/mission'
 import { MissionCard } from './MissionCard'
@@ -6,6 +14,10 @@ import type { Cycle } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useCycle, type CycleState } from './useCycle'
+
+export interface CycleSectionHandle {
+  refresh: () => void
+}
 
 /** "1 dia seguido" / "3 dias seguidos". */
 function streakLabel(days: number): string {
@@ -40,7 +52,9 @@ function CycleLoaded({
   cycle,
   refreshFailed,
   card,
+  dailyRef,
 }: {
+  dailyRef: Ref<HTMLUListElement>
   cycle: Cycle
   refreshFailed: boolean
   card: CardProps
@@ -56,7 +70,7 @@ function CycleLoaded({
           sequência.
         </p>
       ) : (
-        <ul role="list" className="flex flex-col gap-3">
+        <ul key={cycle.mission.id} ref={dailyRef} role="list" className="flex flex-col gap-3">
           {/* m1: a chave pela ID da missao, e nao pela POSICAO. Sem ela, um
               `refresh` que devolve outra missao (a diaria de amanha, se a
               conclusao caiu perto da meia-noite e a resposta chegou depois)
@@ -108,7 +122,15 @@ function CycleLoaded({
 }
 
 /** Um estado por ramo; `ReactElement` faz um estado novo reprovar o `tsc`. */
-function CycleContent({ state, card }: { state: CycleState; card: CardProps }): ReactElement {
+function CycleContent({
+  state,
+  card,
+  dailyRef,
+}: {
+  state: CycleState
+  card: CardProps
+  dailyRef: Ref<HTMLUListElement>
+}): ReactElement {
   switch (state.status) {
     case 'loading':
       return (
@@ -136,7 +158,14 @@ function CycleContent({ state, card }: { state: CycleState; card: CardProps }): 
         </div>
       )
     case 'loaded':
-      return <CycleLoaded cycle={state.cycle} refreshFailed={state.refreshFailed} card={card} />
+      return (
+        <CycleLoaded
+          cycle={state.cycle}
+          refreshFailed={state.refreshFailed}
+          card={card}
+          dailyRef={dailyRef}
+        />
+      )
   }
 }
 
@@ -152,9 +181,54 @@ function CycleContent({ state, card }: { state: CycleState; card: CardProps }): 
  * feita aqui (a diaria ou a especial) -- hoje, para atualizar o painel de
  * progresso com `refresh()` silencioso (Task 8, incremento D).
  */
-export function CycleSection({ onMissionCompleted }: { onMissionCompleted?: () => void }) {
+export function CycleSection({
+  onMissionCompleted,
+  ref,
+}: {
+  onMissionCompleted?: () => void
+  ref?: Ref<CycleSectionHandle>
+}) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  const daily = useRef<HTMLUListElement | null>(null)
+  const lostFocus = useRef<Element | null>(null)
+  const dailyRef = useCallback((node: HTMLUListElement | null) => {
+    // O detach da lista com key por ID acontece ANTES de remover a diária.
+    // A ref estável não captura em refresh da mesma missão; especial não participa.
+    if (node === null) {
+      const focused = document.activeElement
+      if (daily.current!.contains(focused)) {
+        lostFocus.current = focused
+      }
+    }
+    daily.current = node
+  }, [])
+  useLayoutEffect(() => {
+    const previous = lostFocus.current
+    lostFocus.current = null
+    // StrictMode pode desligar uma ref sem remover seu elemento. Outro
+    // controle que já recebeu foco tem prioridade sobre esta recuperação.
+    if (previous === null || previous.isConnected || document.activeElement !== document.body) {
+      return
+    }
+    const target = heading.current!
+    // QG oculto e fundo de modal ativo não são destinos de foco.
+    if (target.closest('[hidden], [inert]') === null) {
+      target.focus()
+    }
+  })
   const { state, reload, refresh } = useCycle()
+  useImperativeHandle(ref, () => ({ refresh }), [refresh])
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
+
+  useEffect(() => {
+    if (state.status === 'loaded' && !state.refreshFailed) {
+      registry.reconcileCompleted(
+        [state.cycle.mission, state.cycle.special].flatMap((mission) =>
+          mission !== null && mission.state === 'concluida' ? [mission.id] : [],
+        ),
+      )
+    }
+  }, [state, registry])
   const card: CardProps = {
     registry,
     onReload: requestReload,
@@ -167,10 +241,15 @@ export function CycleSection({ onMissionCompleted }: { onMissionCompleted?: () =
   }
   return (
     <section aria-labelledby="cycle-heading" data-testid="cycle" className="mb-8">
-      <h2 id="cycle-heading" className="mb-3 text-lg font-semibold text-slate-200">
+      <h2
+        ref={heading}
+        id="cycle-heading"
+        tabIndex={-1}
+        className="mb-3 rounded text-lg font-semibold text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+      >
         Missão de hoje — sua diária
       </h2>
-      <CycleContent state={state} card={card} />
+      <CycleContent state={state} card={card} dailyRef={dailyRef} />
     </section>
   )
 }

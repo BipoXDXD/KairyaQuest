@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { StrictMode } from 'react'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { controlledStream, sseFrame, streamResponse } from '../../test/sse'
 import { stubViewport } from '../../test/viewport'
@@ -819,6 +820,21 @@ describe('TutorPanel: celular', () => {
     expect(document.activeElement).toBe(input())
   })
 
+  it('P33 indisponível: Tab alcança o histórico e Shift+Tab dá a volta', async () => {
+    mountPanel({ [STATUS]: () => Response.json({ available: false }) }, 'mobile')
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await screen.findByTestId('tutor-unavailable')
+    const close = within(dialog).getByTestId('tutor-sheet-close')
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    close.focus()
+    expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(true)
+    expect(fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })).toBe(false)
+    expect(history).toHaveFocus()
+    expect(fireEvent.keyDown(history, { key: 'Tab' })).toBe(false)
+    expect(close).toHaveFocus()
+  })
+
   it('P27 outras teclas na folha nao fazem nada', async () => {
     mountPanel({}, 'mobile')
 
@@ -893,6 +909,43 @@ describe('TutorPanel: a proposta de missao', () => {
     expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('P34 o link executado entra no ciclo na ordem do documento', async () => {
+    mountPanel(
+      { [HISTORY]: historyWith(executed), [STATUS]: () => Response.json({ available: false }) },
+      'mobile',
+    )
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
+    await within(dialog).findByTestId('tutor-unavailable')
+    const close = within(dialog).getByTestId('tutor-sheet-close')
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    history.focus()
+    expect(fireEvent.keyDown(history, { key: 'Tab' })).toBe(true)
+    close.focus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(link).toHaveFocus()
+    fireEvent.keyDown(link, { key: 'Tab' })
+    expect(close).toHaveFocus()
+  })
+
+  it('P35 controles com tabIndex negativo não viram limites do ciclo', async () => {
+    mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    await ready()
+    const close = within(dialog).getByTestId('tutor-sheet-close')
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
+    input().tabIndex = -1
+    type('Mensagem')
+    sendButton().tabIndex = -1
+    link.tabIndex = -1
+    close.focus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(history).toHaveFocus()
+  })
+
   it('P29 Ver no Quartel-General fecha a folha no celular', async () => {
     mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
 
@@ -906,4 +959,180 @@ describe('TutorPanel: a proposta de missao', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByTestId('tutor-sheet-open')).toBeInTheDocument()
   })
+})
+
+describe('TutorPanel: coordenação do foco responsivo', () => {
+  it('transfere o foco removido entre layouts sem abrir uma folha fechada', async () => {
+    const { viewport } = mountPanel({})
+    await ready()
+    input().focus()
+    act(() => viewport.setDesktop(false))
+    expect(screen.getByTestId('tutor-sheet-open')).toHaveFocus()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    act(() => viewport.setDesktop(true))
+    expect(input()).toHaveFocus()
+  })
+
+  it('restaura foco interno quando a folha aberta reaparece', async () => {
+    const { viewport } = mountPanel({}, 'mobile')
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    await ready()
+    screen.getByTestId('tutor-sheet-close').focus()
+    act(() => viewport.setDesktop(true))
+    expect(input()).toHaveFocus()
+    act(() => viewport.setDesktop(false))
+    expect(input()).toHaveFocus()
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement)
+  })
+})
+
+describe('TutorPanel: isolamento e limpeza da folha', () => {
+  function mountedBackground(strict = false) {
+    routeFetch({
+      [STATUS]: () => Response.json({ available: true }),
+      [HISTORY]: () => Response.json([]),
+    })
+    const viewport = stubViewport('mobile')
+    const tree = (
+      <div>
+        <button data-testid="external">Fundo</button>
+        <section inert>
+          <button>Já inerte</button>
+        </section>
+        <div>
+          <TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />
+        </div>
+      </div>
+    )
+    const mounted = render(strict ? <StrictMode>{tree}</StrictMode> : tree)
+    // O atributo booleano também pode ter um valor anterior não vazio.
+    const previous = screen.getByText('Já inerte').parentElement!
+    previous.setAttribute('inert', 'anterior')
+    return { ...mounted, viewport, previous, external: screen.getByTestId('external') }
+  }
+
+  for (const strict of [false, true]) {
+    it(`isola ancestrais sem tornar região viva inerte e restaura valores (${strict ? 'StrictMode' : 'normal'})`, async () => {
+      const { external, previous } = mountedBackground(strict)
+      external.focus()
+      fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+      await ready()
+      expect(external).toHaveAttribute('inert', '')
+      expect(previous).toHaveAttribute('inert', '')
+      expect(screen.getByTestId('tutor-live').closest('[inert]')).toBeNull()
+      expect(screen.getByRole('dialog').closest('[inert]')).toBeNull()
+      input().focus()
+      expect(input()).toHaveFocus()
+      // jsdom não implementa inert; este foco real exercita a guarda focusin.
+      external.focus()
+      expect(input()).toHaveFocus()
+      fireEvent.keyDown(input(), { key: 'Escape' })
+      await waitFor(() => expect(screen.getByTestId('tutor-sheet-open')).toHaveFocus())
+      expect(external).not.toHaveAttribute('inert')
+      expect(previous).toHaveAttribute('inert', 'anterior')
+      external.focus()
+      expect(external).toHaveFocus()
+    })
+  }
+
+  it('restaura interatividade ao fechar pelo backdrop', async () => {
+    const { external, container } = mountedBackground()
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    await ready()
+    fireEvent.click(container.querySelector('div[aria-hidden="true"]')!)
+    await waitFor(() => expect(screen.getByTestId('tutor-sheet-open')).toHaveFocus())
+    expect(external).not.toHaveAttribute('inert')
+    external.focus()
+    expect(external).toHaveFocus()
+  })
+
+  it('limpa isolamento e guarda de foco na desmontagem sem restaurar controles removidos', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'Outro app'
+    document.body.append(outside)
+    const { unmount, previous } = mountedBackground(true)
+    try {
+      fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+      await ready()
+      expect(outside).toHaveAttribute('inert', '')
+      unmount()
+      expect(outside).not.toHaveAttribute('inert')
+      expect(previous).toHaveAttribute('inert', 'anterior')
+      outside.focus()
+      expect(outside).toHaveFocus()
+    } finally {
+      outside.remove()
+    }
+  })
+
+  it('restaura fundo no desktop e não rouba foco externo ao retornar para folha fechada', async () => {
+    const { external, viewport } = mountedBackground()
+    fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+    await ready()
+    act(() => viewport.setDesktop(true))
+    expect(external).not.toHaveAttribute('inert')
+    external.focus()
+    act(() => viewport.setDesktop(false))
+    // Uma folha ativa tem prioridade mesmo se o foco era externo no desktop.
+    expect(input()).toHaveFocus()
+    fireEvent.keyDown(input(), { key: 'Escape' })
+    external.focus()
+    act(() => viewport.setDesktop(true))
+    expect(external).toHaveFocus()
+    act(() => viewport.setDesktop(false))
+    expect(external).toHaveFocus()
+  })
+
+  it('o controle recolhido e o campo indisponível usam destinos focáveis', async () => {
+    const { viewport } = mountPanel({ [STATUS]: () => Response.json({ available: false }) })
+    await screen.findByTestId('tutor-unavailable')
+    const toggle = screen.getByTestId('tutor-panel-toggle')
+    toggle.focus()
+    act(() => viewport.setDesktop(false))
+    expect(screen.getByTestId('tutor-sheet-open')).toHaveFocus()
+    act(() => viewport.setDesktop(true))
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveFocus()
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    screen.getByTestId('tutor-panel-toggle').focus()
+    act(() => viewport.setDesktop(false))
+    act(() => viewport.setDesktop(true))
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveFocus()
+    expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
+it('QG oculto libera o fundo, conserva conversa e só contém foco quando volta visível', async () => {
+  routeFetch({
+    [STATUS]: () => Response.json({ available: true }),
+    [HISTORY]: () => Response.json([]),
+  })
+  const viewport = stubViewport('mobile')
+  const tree = (hidden: boolean) => (
+    <div>
+      <button data-testid="other-area">Campanhas</button>
+      <div hidden={hidden}>
+        <TutorPanel hidden={hidden} onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />
+      </div>
+    </div>
+  )
+  const { rerender } = render(tree(false))
+  fireEvent.click(screen.getByTestId('tutor-sheet-open'))
+  await ready()
+  type('Rascunho entre áreas')
+  const external = screen.getByTestId('other-area')
+  expect(external).toHaveAttribute('inert', '')
+  rerender(tree(true))
+  expect(external).not.toHaveAttribute('inert')
+  external.focus()
+  expect(external).toHaveFocus()
+  act(() => viewport.setDesktop(true))
+  expect(external).toHaveFocus()
+  act(() => viewport.setDesktop(false))
+  expect(external).toHaveFocus()
+  rerender(tree(false))
+  expect(input()).toHaveValue('Rascunho entre áreas')
+  expect(input()).toHaveFocus()
+  expect(external).toHaveAttribute('inert', '')
+  fireEvent.keyDown(input(), { key: 'Escape' })
+  expect(external).not.toHaveAttribute('inert')
 })

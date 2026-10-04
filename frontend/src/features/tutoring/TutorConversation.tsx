@@ -59,7 +59,7 @@ function MessageItem({
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
       <Author role={message.role} />
-      <p className="whitespace-pre-wrap">{message.content}</p>
+      <p className="wrap-anywhere whitespace-pre-wrap">{message.content}</p>
       {mark !== null && (
         <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
           {mark}
@@ -135,7 +135,7 @@ function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
   return (
     <li data-testid="tutor-partial" className={BUBBLE.tutor}>
       <Author role="tutor" />
-      <p className="whitespace-pre-wrap">{send.partial}</p>
+      <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
       <p className="mt-1 text-xs text-emerald-300">Tifa está escrevendo…</p>
     </li>
   )
@@ -235,7 +235,7 @@ export function TutorConversation({
   const busy = send.status === 'sending' || send.status === 'writing'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       {/* A regiao rola; sem nada focavel dentro (sem proposta nem Tentar de
           novo), so o tabIndex deixa quem usa teclado rola-la (axe
           scrollable-region-focusable). O nome diz o que o foco alcancou. */}
@@ -243,7 +243,7 @@ export function TutorConversation({
         role="region"
         aria-label="Conversa com a Tifa"
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
       >
         {unavailable && (
           <p data-testid="tutor-unavailable" className="mb-3 text-sm font-medium text-amber-200">

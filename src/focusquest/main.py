@@ -6,12 +6,16 @@ caso -- e o caso esquecido sai como 500, que e a resposta que este projeto nao
 aceita dar para um bloqueio previsto (README s8: "explique bloqueios").
 """
 
+import json
 import logging
 from enum import StrEnum
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -82,6 +86,26 @@ class CodigoDeErro(StrEnum):
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
     SEMANA_DISTANTE = "semana_distante"
+
+
+@app.exception_handler(RequestValidationError)
+def _validacao_da_requisicao(request: Request, exc: RequestValidationError) -> Response:
+    """Recusa a entrada sem perder diagnosticos com surrogates isolados.
+
+    Pydantic ja rejeita o texto, mas o input ecoado no erro pode nao ser UTF-8
+    representavel. Escapes JSON preservam esse input e o formato nativo do 422;
+    erros internos e de resposta continuam fora desta fronteira.
+    """
+    return Response(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        media_type="application/json",
+        content=json.dumps(
+            {"detail": jsonable_encoder(exc.errors())},
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        ),
+    )
 
 
 def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:
@@ -247,9 +271,22 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def get_ready_engine() -> Engine | None:
+    """Readiness traduz configuracao invalida sem afrouxar os outros consumidores.
+
+    Resolver `Depends(get_engine)` antes da rota deixaria o ValidationError de
+    Settings fora da fronteira de indisponibilidade. A engine continua sendo
+    criada e cacheada por get_engine; erros inesperados continuam propagando.
+    """
+    try:
+        return get_engine()
+    except ValidationError:
+        return None
+
+
 @app.get("/ready")
 def ready(
-    engine: Annotated[Engine, Depends(get_engine)], response: Response
+    engine: Annotated[Engine | None, Depends(get_ready_engine)], response: Response
 ) -> dict[str, str]:
     """Readiness. Abre a `connection` e consulta de verdade: um readiness que
     nao consulta mente sobre estar pronto.
@@ -264,6 +301,9 @@ def ready(
     orquestrador e por monitoramento; o texto em portugues que a pessoa le
     pertence ao frontend, que traduz o estado.
     """
+    if engine is None:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "database": "unavailable"}
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

@@ -274,3 +274,208 @@ describe('useDecideAction', () => {
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
   })
 })
+
+describe('useDecideAction — uma decisao em voo por instancia', () => {
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(K1)
+      .mockReturnValueOnce(K2)
+      .mockReturnValueOnce(K3)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each([
+    ['confirm', 'confirm'],
+    ['reject', 'reject'],
+    ['confirm', 'reject'],
+    ['reject', 'confirm'],
+  ] as const)(
+    '%s seguido de %s no mesmo tick envia somente a primeira decisao',
+    async (primeira, segunda) => {
+      let responder: (response: Response) => void = () => undefined
+      const pendente = new Promise<Response>((resolve) => {
+        responder = resolve
+      })
+      const fetchMock = routeFetch({ [CONFIRM]: () => pendente, [REJECT]: () => pendente })
+      const { changed, missionCreated, result } = mount()
+      act(() => {
+        result.current.decision[primeira]()
+        result.current.decision[segunda]()
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(result.current.decision.state).toEqual({
+        status: primeira === 'confirm' ? 'confirming' : 'rejecting',
+      })
+      expect(sentKeys(fetchMock)).toEqual(primeira === 'confirm' ? [{ operation_id: K1 }] : [])
+      expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual(
+        primeira === 'reject' ? [{}] : [],
+      )
+      const acao = primeira === 'confirm' ? executada : recusada
+      await act(async () => {
+        responder(Response.json({ action: acao, mission: { id: 40 } }))
+      })
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
+      expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+      expect(missionCreated).toHaveBeenCalledTimes(primeira === 'confirm' ? 1 : 0)
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(primeira === 'confirm' ? 1 : 0)
+    },
+  )
+
+  it('UUID que lanca preserva idle e permite confirmar na proxima tentativa', async () => {
+    vi.mocked(crypto.randomUUID)
+      .mockReset()
+      .mockImplementationOnce(() => {
+        throw new Error('UUID indisponivel')
+      })
+      .mockReturnValueOnce(K1)
+    const fetchMock = routeFetch({ [CONFIRM]: confirmed })
+    const { changed, missionCreated, result } = mount()
+    act(() => {
+      expect(() => result.current.decision.confirm()).toThrow('UUID indisponivel')
+    })
+    expect(result.current.decision.state).toEqual({ status: 'idle' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(changed).not.toHaveBeenCalled()
+    expect(missionCreated).not.toHaveBeenCalled()
+    act(() => {
+      result.current.decision.confirm()
+    })
+    await waitFor(() => {
+      expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
+    })
+    expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
+    expect(missionCreated).toHaveBeenCalledTimes(1)
+    expect(result.current.decision.state).toEqual({ status: 'idle' })
+  })
+
+  it.each(['confirm', 'reject'] as const)(
+    'apos falha ao recusar, libera uma nova decisao %s',
+    async (proxima) => {
+      let falhar: (error: Error) => void = () => undefined
+      const pendente = new Promise<Response>((_resolve, reject) => {
+        falhar = reject
+      })
+      const fetchMock = routeFetch({
+        [REJECT]: inSequence(
+          () => pendente,
+          () => Response.json({ action: recusada }),
+        ),
+        [CONFIRM]: confirmed,
+      })
+      const { changed, missionCreated, result } = mount()
+      act(() => {
+        result.current.decision.reject()
+      })
+      await act(async () => {
+        falhar(new TypeError('Failed to fetch'))
+      })
+      expect(result.current.decision.state).toMatchObject({
+        status: 'failed',
+        attempted: 'reject',
+        failure: { recovery: 'retry' },
+      })
+      expect(changed).not.toHaveBeenCalled()
+      act(() => {
+        result.current.decision[proxima]()
+      })
+      const acao = proxima === 'confirm' ? executada : recusada
+      await waitFor(() => {
+        expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+      })
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(sentKeys(fetchMock)).toEqual(proxima === 'confirm' ? [{ operation_id: K1 }] : [])
+      expect(missionCreated).toHaveBeenCalledTimes(proxima === 'confirm' ? 1 : 0)
+    },
+  )
+
+  it('callbacks capturados e novos apos rerender compartilham a guarda ativa', async () => {
+    let responder: (response: Response) => void = () => undefined
+    const pendente = new Promise<Response>((resolve) => {
+      responder = resolve
+    })
+    const fetchMock = routeFetch({ [CONFIRM]: () => pendente, [REJECT]: PENDING })
+    const antigo = { changed: vi.fn(), missionCreated: vi.fn() }
+    const novo = { changed: vi.fn(), missionCreated: vi.fn() }
+    const { result, rerender } = renderHook(
+      ({ action, on }) => {
+        const keys = useActionKeys()
+        return useDecideAction(action, keys, on)
+      },
+      { initialProps: { action: proposta(5), on: antigo } },
+    )
+    const confirmarCapturado = result.current.confirm
+    const recusarCapturado = result.current.reject
+    act(() => {
+      confirmarCapturado()
+    })
+    rerender({ action: proposta(5), on: novo })
+    act(() => {
+      confirmarCapturado()
+      recusarCapturado()
+      result.current.confirm()
+      result.current.reject()
+    })
+    expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
+    expect(requestsTo(fetchMock, REJECT)).toEqual([])
+    await act(async () => {
+      responder(Response.json({ action: executada, mission: { id: 40 } }))
+    })
+    expect(result.current.state).toEqual({ status: 'idle' })
+    expect(antigo.changed).toHaveBeenCalledExactlyOnceWith(executada)
+    expect(antigo.missionCreated).toHaveBeenCalledTimes(1)
+    expect(novo.changed).not.toHaveBeenCalled()
+    expect(novo.missionCreated).not.toHaveBeenCalled()
+  })
+
+  it.each(['confirm', 'reject'] as const)(
+    'mantem a guarda durante changed de %s',
+    async (primeira) => {
+      let responder: (response: Response) => void = () => undefined
+      const pendente = new Promise<Response>((resolve) => {
+        responder = resolve
+      })
+      const fetchMock = routeFetch({ [CONFIRM]: () => pendente, [REJECT]: () => pendente })
+      let tentarOutra: () => void = () => undefined
+      const changed = vi.fn(() => {
+        tentarOutra()
+      })
+      const missionCreated = vi.fn(() => {
+        tentarOutra()
+      })
+      const { result } = renderHook(() => {
+        const keys = useActionKeys()
+        return useDecideAction(proposta(5), keys, { changed, missionCreated })
+      })
+      tentarOutra = primeira === 'confirm' ? result.current.reject : result.current.confirm
+      act(() => {
+        result.current[primeira]()
+      })
+      const acao = primeira === 'confirm' ? executada : recusada
+      await act(async () => {
+        responder(Response.json({ action: acao, mission: { id: 40 } }))
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(result.current.state).toEqual({ status: 'idle' })
+      expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+      expect(missionCreated).toHaveBeenCalledTimes(primeira === 'confirm' ? 1 : 0)
+    },
+  )
+
+  it('duas instancias podem confirmar independentemente', () => {
+    const fetchMock = routeFetch({ [CONFIRM]: PENDING })
+    const primeira = mount()
+    const segunda = mount()
+    act(() => {
+      primeira.result.current.decision.confirm()
+      segunda.result.current.decision.confirm()
+    })
+    expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }, { operation_id: K2 }])
+    expect(primeira.result.current.decision.state).toEqual({ status: 'confirming' })
+    expect(segunda.result.current.decision.state).toEqual({ status: 'confirming' })
+  })
+})
