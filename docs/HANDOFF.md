@@ -8,6 +8,41 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Registro do roundtrip populado da 0004 — 2026-10-05
+
+**Correção documental da pendência 83, base `5ba81c3`.** A estabilização já
+registrava abaixo que o teste populado fechava a 83, mas a lista de pendências
+continuava afirmando ausência desse caso. Esta fatia reconcilia os registros e
+explicita a cobertura existente; nenhum código, teste, migração, configuração,
+contrato ou dependência foi alterado.
+
+`test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao`, em
+`test_progression_migration.py`, exige que todas as tabelas legadas medidas
+estejam não vazias e que existam XP/conquistas. Desce até 0003, compara o legado,
+sobe para head e compara o legado novamente e a progressão reconstruída. Também
+confere que as missões pendentes não recebem XP/conquistas. O teste estrutural
+de criação/remoção de tabelas permanece na suíte.
+
+**Limites:** o snapshot do legado mede suas colunas de 0003, inclusive IDs das
+linhas; `fallback_model`, posterior, fica fora da comparação de mensagens.
+XP/conquistas são reconstruídos e comparados por conteúdo/vínculo lógico com a
+missão, normalizando `xp_entries.id` e `user_achievements.xp_entry_id`. Esta prova
+não afirma identidade bruta da progressão, sequences, índices ou todo o schema;
+não se confunde com a T-M4 da 0005 e nenhuma outra pendência foi modificada.
+
+**Evidência desta sessão:** o arquivo do teste é byte a byte igual à main e ao
+que integrou a suíte relacionada de 25 testes aprovada na fase T-M4. Esse comando
+incluía o módulo inteiro de progressão e o caso novo da outra fase; não aprova
+esta árvore documental. Neste worktree, hooks foram instalados explicitamente,
+banco exclusivo preparado e baseline `make check` aprovado: 1436 Python,
+990 frontend, 59 E2E, cobertura 100%, fontes/HEAD/índice estáveis. Gate da árvore
+final, revisão e publicação ficam no ledger ao terminarem.
+
+Branch `wt/docs-roundtrip-populado`, banco `focusquest_docs-roundtrip-populado_test`,
+offset 20. O responsável autorizou somente esta fatia documental, com commit
+assinado, push de uma ref e PR após revisão e gate completo. Nenhum compose
+executado fora do principal; PR18 e outros checkpoints preservados; nenhum merge.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -4613,12 +4648,20 @@ C".
     `progression/service.py` (não em `domain.py` nem em `schemas.py`), de
     acordo com a interface que o plano definiu para a Task 3 — vale
     registrar para quem for procurar por eles.
-83. **O teste de ida-e-volta da migração 0004 roda com as tabelas vazias.**
+83. ~~**O teste de ida-e-volta da migração 0004 roda com as tabelas vazias.**
     `test_a_0004_cria_as_tabelas_e_o_downgrade_as_remove` prova que
     `upgrade`/`downgrade` funcionam, mas sem dado nenhum; o round-trip com
     dado populado só acontece dentro do `setup`/`finally` de cada teste que
     usa a fixture `cenario` (que sempre termina em `head`), não como
-    afirmação própria de um teste.
+    afirmação própria de um teste.~~ **Já resolvida pela estabilização na base
+    `5ba81c3`; registro alinhado em 2026-10-05:** o teste explícito
+    `test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao`
+    exige legado/XP/conquistas não vazios, preserva o legado em 0003↔head e
+    compara a progressão reconstruída, excluindo pendentes. O legado conserva
+    suas colunas de 0003; `fallback_model` posterior não participa do snapshot.
+    IDs das entradas de XP e suas FKs nas conquistas são normalizados: não é
+    prova de identidade bruta da progressão, sequences, índices ou todo o schema.
+    Nenhum teste redundante foi acrescentado nesta correção documental.
 84. ~~**`progression/router.py` reescreve `Annotated[Session,
     Depends(get_session)]`** em vez de reaproveitar `SessaoDaRequisicao`, o
     alias que `missions/router.py` já define para a mesma dependência.

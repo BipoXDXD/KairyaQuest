@@ -351,7 +351,7 @@ FocusQuest/
 │   │   ├── test_missions_service.py
 │   │   ├── test_progression_api.py         # o contrato de GET /api/progress e o reward no 200 da conclusão e do reenvio (D, Task 4)
 │   │   ├── test_progression_concorrencia.py  # duas primeiras conclusões em paralelo destravam uma conquista só; falha injetada no crédito desfaz a conclusão; a trava do usuário é tomada (D, Task 3, conexões reais)
-│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3)
+│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3); roundtrip populado preserva legado e reconstrói progressão sem IDs brutos (83)
 │   │   ├── test_progression_service.py     # o crédito na conclusão, a recompensa reconstruída (inclusive o reenvio antigo) e a leitura (D, Task 3)
 │   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
 │   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh; o isolamento do gate do push (Frente 0)
@@ -1884,7 +1884,14 @@ frontend/tests/e2e/tutor-focus.spec.ts
 Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
 atual, incluindo unicidade por `(mission_id, source)` do E; os de
 `mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
-sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
-compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
+sem afirmar paridade geral de todo o esquema. O caso explícito
+`test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao` exige
+legado/XP/conquistas não vazios, preserva o legado em 0003↔head e compara a
+progressão reconstruída, excluindo missões pendentes (83 já resolvida na base).
+As nove colunas legadas de `tutor_messages` são comparadas explicitamente:
 `fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
-ao contrato de preservação da `0004`. Migrações não foram alteradas.
+ao contrato de preservação da `0004`. Os IDs do legado são preservados; os IDs
+das entradas de XP e suas FKs nas conquistas são normalizados na comparação
+da progressão reconstruída. Esse caso não mede identidade bruta da progressão,
+sequences, índices ou todo o schema. Nenhum teste ou migração foi alterado
+pela correção documental da 83.
