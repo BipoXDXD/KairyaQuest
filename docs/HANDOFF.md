@@ -3,6 +3,53 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
+## Diagnóstico do worker da Tifa — 2026-10-05
+
+Fatia de testes em `wt/tifa-diagnostico`, baseada no head `0cb4cc2` do
+[PR #7](https://github.com/BipoXDXD/FocusQuest/pull/7), com banco
+`focusquest_tifa-diagnostico_test` e offset15. A `main` permanece na revisão
+`5ba81c3`; este teste da feature não é declarado integrado nela. O responsável
+aprovou design, implementação e publicação por fase com revisão/gate/hooks;
+merge permanece pendente. O PR desta fatia será empilhado contra
+`wt/tifa-conclusao`, sem alterar aquela árvore nem reescrever branches publicadas.
+
+**Mudança:** o mesmo harness de disputa/limpeza serve aos dois cenários originais
+e às falhas injetadas. As esperas pelo pré-carregamento e pelo bloqueio observam
+`Future.done()` e propagam `Future.result()`: a exceção do worker não é mais
+substituída por timeout opaco. Finalização sem a condição esperada falha
+explicitamente. A consulta `pg_blocking_pids`, PIDs distintos, clocks fixos,
+pré-carregamento retido e efeitos das duas ordens originais permanecem.
+O `finally` mantém rollback do vencedor e liberação do evento antes do shutdown
+do executor. Nenhum arquivo de produção, contrato, dependência ou migração muda.
+
+**Provas reais:** dois workers com Session e Future reais falham antes/depois do
+sinal. Cada worker trava e altera o payload da ação sem commit; após o sinal, o
+vencedor já executou uma conclusão real, ainda sem commit. Ambos exigem a MESMA
+instância do erro sentinela. Depois de as sessões saírem, outra conexão usa
+`FOR UPDATE NOWAIT` na missão e ação e verifica estado/prazo/payload originais,
+campos da ação intactos e ausência de operações, XP e histórico. Isso cobre
+falhas antecipadas do worker; não mede uma falha do coordenador enquanto o
+worker já está bloqueado. A ordem de liberação desse caminho foi preservada
+pela refatoração, sem alegar uma matriz completa de falhas.
+
+Comandos executados nesta sessão, no banco exclusivo:
+
+| Comando | Resultado observado |
+|---|---|
+| Script oficial de novo worktree, conferência de base/branch vazia/remoto ausente e rebase vazio autorizado sobre PR7; instalação normal dos hooks | EXIT0, HEAD `0cb4cc2`, árvore inicialmente limpa; sem compose |
+| `uv run pytest tests/integration/test_tutoring_conclusao_concorrencia.py -v` após extração sem mudança de waits | 2 aprovados |
+| Mesmo módulo com as novas regressões, antes da mudança dos helpers | RED: 2 falhas por esperas opacas, 2 aprovados; 20,73s |
+| Mesmo módulo após polling do Future | GREEN: 4 aprovados; 0,52s |
+| Mutações isoladas: retirar polling do sinal / retirar polling do bloqueio / commit no lugar do rollback do vencedor / commit do worker antes da sentinela | Todas EXIT1: erro opaco nos dois primeiros, missão concluída indevida no terceiro, payload alterado indevido no quarto. Bytes restaurados em `finally` e SHA-256 conferido; módulo restaurado aprovado |
+| Ruff lint/format e mypy no arquivo de teste | Aprovados, sem achados |
+| `uv run pytest` com este módulo, `test_tutoring_acoes.py`, `test_missions_concorrencia.py`, `test_acompanhamento_concorrencia.py` | 43 aprovados; 9,10s |
+
+Revisão independente final, `make check` da árvore final, commit, push e PR ainda
+pendentes neste ponto do registro. Resultados posteriores ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-tifa-diagnostico/` e no PR, sem converter
+histórico em resultado de outra árvore. Plano:
+`docs/superpowers/plans/2026-10-05-tifa-diagnostico.md`.
+
 ## Objetivo
 
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora

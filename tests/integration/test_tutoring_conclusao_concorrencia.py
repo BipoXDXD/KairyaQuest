@@ -8,8 +8,8 @@ populate_existing de buscar_para_escrever deve reprovar ambos os casos.
 
 import threading
 import time
-from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -127,11 +127,38 @@ def _operar(
     )
 
 
-def _esperar_bloqueio(engine: Engine, esperando: int, vencedor: int) -> None:
+def _verificar_fim_do_worker(
+    futuro: Future[Mission | ResultadoDaConfirmacao], etapa: str
+) -> None:
+    if futuro.done():
+        futuro.result()  # Propaga a excecao original, sem um segundo timeout.
+        pytest.fail(f"worker terminou antes de {etapa}")
+
+
+def _esperar_precarregamento(
+    carregou: threading.Event, futuro: Future[Mission | ResultadoDaConfirmacao]
+) -> None:
+    limite = time.monotonic() + SEGUNDOS_LIMITE
+    while not carregou.is_set():
+        _verificar_fim_do_worker(futuro, "sinalizar o pre-carregamento")
+        if time.monotonic() >= limite:
+            _verificar_fim_do_worker(futuro, "sinalizar o pre-carregamento")
+            pytest.fail("sessao nao pre-carregou a missao")
+        carregou.wait(0.01)
+    _verificar_fim_do_worker(futuro, "iniciar a operacao")
+
+
+def _esperar_bloqueio(
+    engine: Engine,
+    esperando: int,
+    vencedor: int,
+    futuro: Future[Mission | ResultadoDaConfirmacao],
+) -> None:
     """Observa a dependencia exata entre os dois backends, com prazo maximo."""
     limite = time.monotonic() + SEGUNDOS_LIMITE
     with engine.connect() as observador:
         while time.monotonic() < limite:
+            _verificar_fim_do_worker(futuro, "esperar pelo vencedor")
             bloqueadores = observador.execute(
                 text("SELECT pg_blocking_pids(:pid)"), {"pid": esperando}
             ).scalar_one()
@@ -139,7 +166,47 @@ def _esperar_bloqueio(engine: Engine, esperando: int, vencedor: int) -> None:
             if vencedor in bloqueadores:
                 return
             time.sleep(0.01)
+    _verificar_fim_do_worker(futuro, "esperar pelo vencedor")
     pytest.fail(f"backend {esperando} nao esperou pelo vencedor {vencedor}")
+
+
+def _concorrer(
+    banco_migrado: Engine,
+    missao_id: int,
+    acao_id: int,
+    primeira: Operacao,
+    esperar: Callable[
+        [threading.Event, threading.Event, list[int]], Mission | ResultadoDaConfirmacao
+    ],
+) -> tuple[Mission | ResultadoDaConfirmacao, Mission | ResultadoDaConfirmacao]:
+    """Mesmo entrelacamento e limpeza para o caminho normal e falhas da thread."""
+    carregou = threading.Event()
+    iniciar_pedido = threading.Event()
+    pids: list[int] = []
+    with (
+        ThreadPoolExecutor(max_workers=1) as executor,
+        Session(bind=banco_migrado, expire_on_commit=False) as vencedor,
+    ):
+        vencedor.execute(text("SET LOCAL statement_timeout = '15s'"))
+        pid_vencedor = vencedor.execute(text("SELECT pg_backend_pid()")).scalar_one()
+        futuro = executor.submit(esperar, carregou, iniciar_pedido, pids)
+        try:
+            _esperar_precarregamento(carregou, futuro)
+            resultado_primeiro = _operar(
+                vencedor, primeira, missao_id, acao_id, PRIMEIRO_EM
+            )
+            assert isinstance(resultado_primeiro, Mission | Executada)
+            iniciar_pedido.set()
+            assert pids[0] != pid_vencedor
+            _esperar_bloqueio(banco_migrado, pids[0], pid_vencedor, futuro)
+            vencedor.commit()
+            resultado_segundo = futuro.result(timeout=SEGUNDOS_LIMITE)
+        finally:
+            # Libera a trava antes de o executor esperar a thread, inclusive em erro.
+            vencedor.rollback()
+            iniciar_pedido.set()
+
+    return resultado_primeiro, resultado_segundo
 
 
 @pytest.mark.parametrize("primeira", ["conclusao", "tifa"])
@@ -149,11 +216,10 @@ def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
     """Conclusao primeiro invalida a proposta; Tifa primeiro muda o prazo lido."""
     missao_id, acao_id = proposta_commitada
     segunda: Operacao = "tifa" if primeira == "conclusao" else "conclusao"
-    carregou = threading.Event()
-    iniciar_pedido = threading.Event()
-    pids: list[int] = []
 
-    def esperar() -> Mission | ResultadoDaConfirmacao:
+    def esperar(
+        carregou: threading.Event, iniciar_pedido: threading.Event, pids: list[int]
+    ) -> Mission | ResultadoDaConfirmacao:
         with Session(bind=banco_migrado, expire_on_commit=False) as sessao:
             sessao.execute(text("SET LOCAL statement_timeout = '15s'"))
             pids.append(sessao.execute(text("SELECT pg_backend_pid()")).scalar_one())
@@ -170,28 +236,9 @@ def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
                 assert resultado is carregada
             return resultado
 
-    with (
-        ThreadPoolExecutor(max_workers=1) as executor,
-        Session(bind=banco_migrado, expire_on_commit=False) as vencedor,
-    ):
-        vencedor.execute(text("SET LOCAL statement_timeout = '15s'"))
-        pid_vencedor = vencedor.execute(text("SELECT pg_backend_pid()")).scalar_one()
-        futuro = executor.submit(esperar)
-        try:
-            assert carregou.wait(SEGUNDOS_LIMITE), "sessao nao pre-carregou a missao"
-            resultado_primeiro = _operar(
-                vencedor, primeira, missao_id, acao_id, PRIMEIRO_EM
-            )
-            assert isinstance(resultado_primeiro, Mission | Executada)
-            iniciar_pedido.set()
-            assert pids[0] != pid_vencedor
-            _esperar_bloqueio(banco_migrado, pids[0], pid_vencedor)
-            vencedor.commit()
-            resultado_segundo = futuro.result(timeout=SEGUNDOS_LIMITE)
-        finally:
-            # Libera a trava antes de o executor esperar a thread, inclusive em erro.
-            vencedor.rollback()
-            iniciar_pedido.set()
+    resultado_primeiro, resultado_segundo = _concorrer(
+        banco_migrado, missao_id, acao_id, primeira, esperar
+    )
 
     conclusao_em = PRIMEIRO_EM if primeira == "conclusao" else SEGUNDO_EM
     with Session(bind=banco_migrado) as leitura:
@@ -252,3 +299,88 @@ def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
                 (OPERACAO_CONCLUSAO, "complete"),
                 (OPERACAO_TIFA, "reschedule"),
             ]
+
+
+@pytest.mark.parametrize("momento", ["antes_do_sinal", "depois_do_sinal"])
+def test_erro_do_worker_e_propagado_e_as_duas_transacoes_sao_desfeitas(
+    banco_migrado: Engine, proposta_commitada: tuple[int, int], momento: str
+) -> None:
+    """Erro original, estado restaurado e linhas livres em outra conexao NOWAIT."""
+    missao_id, acao_id = proposta_commitada
+    sentinela = RuntimeError(f"worker falhou {momento}")
+
+    def falhar(
+        carregou: threading.Event, iniciar_pedido: threading.Event, pids: list[int]
+    ) -> Mission | ResultadoDaConfirmacao:
+        with Session(bind=banco_migrado) as sessao:
+            pids.append(sessao.execute(text("SELECT pg_backend_pid()")).scalar_one())
+            acao = sessao.get(TutorAction, acao_id, with_for_update=True)
+            assert acao is not None
+            acao.payload = {**acao.payload, "reason": "sentinela_nao_commitada"}
+            sessao.flush()
+            if momento == "depois_do_sinal":
+                carregou.set()
+                assert iniciar_pedido.wait(SEGUNDOS_LIMITE), "vencedor nao iniciou"
+            raise sentinela
+
+    with pytest.raises(RuntimeError) as erro:
+        _concorrer(banco_migrado, missao_id, acao_id, "conclusao", falhar)
+    assert erro.value is sentinela
+
+    # Ambas as sessoes sairam. NOWAIT reprova imediatamente se alguma trava
+    # ficou retida; dados originais provam o rollback, inclusive da conclusao.
+    with banco_migrado.connect() as sonda:
+        missao = sonda.execute(
+            select(Mission.state, Mission.deadline, Mission.completed_at)
+            .where(Mission.id == missao_id)
+            .with_for_update(nowait=True)
+        ).one()
+        acao = sonda.execute(
+            select(
+                TutorAction.state,
+                TutorAction.payload,
+                TutorAction.operation_id,
+                TutorAction.error_code,
+                TutorAction.mission_id,
+                TutorAction.decided_at,
+            )
+            .where(TutorAction.id == acao_id)
+            .with_for_update(nowait=True)
+        ).one()
+        assert missao == (MissionState.PENDENTE, PRAZO_ATUAL, None)
+        assert acao == (
+            EstadoDaAcao.PROPOSTA,
+            {
+                "mission_id": missao_id,
+                "new_deadline": NOVO_PRAZO.isoformat(),
+                "reason": "falta_de_tempo",
+                "instructions": "Ler o capitulo 3",
+                "previous_deadline": PRAZO_ATUAL.isoformat(),
+            },
+            None,
+            None,
+            None,
+            None,
+        )
+        assert (
+            sonda.execute(
+                select(MissionOperation.id).where(
+                    MissionOperation.mission_id == missao_id
+                )
+            ).all()
+            == []
+        )
+        assert (
+            sonda.execute(
+                select(XpEntry.id).where(XpEntry.mission_id == missao_id)
+            ).all()
+            == []
+        )
+        assert (
+            sonda.execute(
+                select(MissionReschedule.id).where(
+                    MissionReschedule.mission_id == missao_id
+                )
+            ).all()
+            == []
+        )
