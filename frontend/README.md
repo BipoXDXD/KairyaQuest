@@ -76,7 +76,9 @@ Para trabalhar em paralelo, use o worktree criado por
   banco e provedor falso reais; geometria, foco e corridas de interface usam
   requisições interceptadas conforme o cenário, inclusive SSE simulado.
   Essas fixtures de interface não comprovam persistência.
-- `src/index.css`: estilos globais e movimento da recompensa.
+- `src/index.css`: tokens visuais, layout desktop/mobile e movimento da recompensa.
+- `public/art/`: cenários medievais e retratos locais; procedência em
+  [ART](../docs/ART.md).
 
 Vitest exige 100% de linhas, ramificações, funções e instruções do código
 de aplicação em `src/`; o denominador e suas exclusões estão em
@@ -84,8 +86,9 @@ de aplicação em `src/`; o denominador e suas exclusões estão em
 substituem a inspeção visual de desktop/celular ou a validação num aparelho
 com teclado virtual.
 
-O retrato da Tifa permanece um placeholder original. Não há assets oficiais
-do jogo, tutoria simulada de produção ou autenticação implementada. A entrega
+O painel usa um retrato gerado da Tifa com o traje clássico, acompanhado
+de cenários medievais. Não há assets extraídos do jogo, tutoria simulada de
+produção ou autenticação implementada. A entrega
 com evidência e a avaliação da Tifa estão implementadas; a avaliação é
 interpretação do modelo, identificada na tela. O roadmap e as limitações
 atuais estão no handoff.

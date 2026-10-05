@@ -445,7 +445,7 @@ chave.
 ## Emendas (2026-09-19, execução do 1b-1)
 
 Esta spec foi escrita antes da implementação, como a do 1a. O plano
-(`docs/superpowers/plans/2026-09-19-incremento-1b-1.md`) fez nove medições
+(registro histórico: `git show ca3b03c:docs/superpowers/plans/2026-09-19-incremento-1b-1.md`) fez nove medições
 num projeto descartável antes de qualquer código de produção ("Medições que
 corrigem a spec") e registrou quatro decisões que a spec não fixava
 ("Decisões que a spec não fixava"). A execução das oito tarefas, por sua
@@ -489,7 +489,7 @@ original permanece intocado; a emenda fica ao lado.
 Esta spec previa, na seção "A chamada real", que a chave ficaria "só no
 `.env` local" do dono (decisão D1) e uma única chamada real gravando a
 camada 3. O plano do 1b-2
-(`docs/superpowers/plans/2026-09-22-incremento-1b-2.md`) mudou os dois, por
+(registro histórico: `git show ca3b03c:docs/superpowers/plans/2026-09-22-incremento-1b-2.md`) mudou os dois, por
 decisão do dono, e a execução acrescentou mais três pontos que a spec não
 fixava. Nos casos abaixo o texto original permanece intocado; a emenda fica
 ao lado. A parte que depende da chave real (E2, E3) foi feita na Task 8, com
