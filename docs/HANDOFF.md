@@ -4,7 +4,66 @@ Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalh
 Sem credenciais, sem caminhos pessoais.
 
 
-## Estado corrente — composição das fases #7–#24
+## Foco após reagendamento sem rolagem — 163(c) — 2026-10-05
+
+Retomada autorizada em 2026-10-05: commit, push e PR desta fase, com merge
+da composição condicionado a testes reforçados. O ambiente do worktree movido
+foi reparado por `uv sync --locked --reinstall`; os hooks compartilhados foram
+preservados. Acrescentado um terceiro cenário Chromium: sucesso enquanto a
+pessoa já escreve à Tifa conserva foco, rascunho e rolagem, mas fecha o
+formulário e atualiza prazo/histórico. Build aprovado e três casos aprovados.
+Mutação removendo somente a guarda de foco no body: um caso reprovado no foco
+da Tifa e dois controles aprovados; bytes de produção restaurados em `finally`,
+SHA-256 idêntico, novo build e três casos aprovados. Evidência desta retomada em
+`.superpowers/sdd/2026-10-05-foco-reagendamento/resume-2026-10-05/`.
+O gate fresco, hooks e publicação serão registrados ali após execução; os
+resultados abaixo são o histórico anterior à pausa.
+
+Fatia estreita em `wt/foco-reagendamento-conjunto`, baseada no commit assinado
+`b9c73f24e2297ba92a96d0685a979258175ca7c1` da composição. Integração por PR para
+`wt/composicao-autonoma`; nenhum merge na main. O dono delegou decisões não
+críticas e autorizou publicação após revisão, gate completo e hooks normais.
+Worktree, banco de teste e portas próprios, offset 24; nenhum compose externo.
+O envelope da composição abaixo é a fotografia preservada da base desta fase.
+
+`RescheduleForm.tsx` acrescenta somente `preventScroll: true` à chamada de foco
+já existente após sucesso. A guarda continua exigindo formulário fechado pelo
+novo prazo e foco perdido no body: foco que a pessoa já levou a outro controle
+não é tomado. Iniciar, Concluir e recuperação de foco do ciclo não mudam.
+Não há contrato, dependência, política ou infraestrutura nova.
+
+Dois casos em `frontend/tests/e2e/reschedule-focus-scroll.spec.ts` exercitam o
+app e o cliente HTTP reais em Chromium. Respostas completas interceptam todas
+as rotas API, sem escrita no banco nesses casos. O POST fica retido enquanto
+a pessoa rola; o disclosure está comprovadamente fora da viewport antes da
+resposta. Altura mínima, cartões seguintes e scroll anchoring desativado apenas
+na fixture isolam rolagem por foco do recolhimento normal do formulário.
+
+No sucesso, payload, estado Pendente, prazo, histórico único, anúncio,
+formulário fechado e retorno de foco são verificados antes do scroll. No erro
+422 `prazo_expirado`, o formulário e o rascunho permanecem, o prazo não muda,
+nenhum elo aparece e o alerta é traduzido; foco e texto da Tifa e a rolagem
+continuam preservados. Routes pendentes são abortadas no finally da fixture.
+
+Executado nesta sessão: baseline próprio `make check` EXIT 0 em 339,08 s,
+1477 Python/992 frontend/59 E2E e cobertura 100%; 369 fontes, HEAD e índice
+estáveis. RED do navegador: um caso reprovado somente no `scrollTop` 800 → 174,
+com `window.scrollY` 482 preservado e os efeitos/foco anteriores aprovados;
+o controle 422 passou. A alteração mínima produziu GREEN 2 casos. Mutação
+retirando só `preventScroll`, após novo build, reproduziu 1 falha/1 controle
+aprovado. Bytes do candidato restaurados no finally e SHA-256 conferido;
+novo build e GREEN 2 casos. Relacionados: 198 testes de componentes em 2,94 s
+e `make check-e2e` EXIT 0, 61 cenários em 57,4 s. Revisão independente, gate
+final congelado, hooks, SHA, PR e CI são registrados no ledger ignorado
+`.superpowers/sdd/2026-10-05-foco-reagendamento/` conforme terminam; focais e
+baseline não aprovam automaticamente os arquivos novos.
+
+Completa somente 163(c). A prova mede foco e posições reais em Chromium com
+geometria controlada; jsdom não é apresentado como prova de scroll. Não mede
+leitor de tela real, todos os viewports ou persistência desses dois HTTPs.
+163(d–e) e as demais pendências permanecem abertas. Os worktrees de origem das outras fases e da composição foram preservados.
+
+## Histórico — fotografia da composição das fases #7–#24
 
 Fotografia: 2026-10-05T01:46:22-03:00 (`America/Sao_Paulo`). Branch `wt/composicao-autonoma`,
 base `5ba81c3dcc4b4916c63e4e9da2967f989c4039bb` (main após PR #6).
@@ -6476,8 +6535,12 @@ ledger; nenhum é bug esquecido.
     `instructions` na recarga da conclusão, Iniciar/Reagendar e avaliação,
     inclusive esperando; rótulos visíveis e recarga global da trilha intactos.
     RED 16/181 e mutação do enunciado antigo detectada, GREEN 198 nesta sessão; integração main/publicação no ledger.
-    (c) O foco,
-    depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
+    ~~(c) O foco, depois do sucesso do reagendamento, usa `.focus()` sem
+    `preventScroll`.~~ **(c) Resolvida na feature `wt/foco-reagendamento-conjunto`:**
+    a chamada existente preserva a rolagem com `preventScroll: true`. Chromium
+    comprova foco/estado/prazo/histórico antes do scroll; RED 800 → 174,
+    GREEN 2 e mutação causal/restauração. Controle 422 conserva rascunho,
+    foco da Tifa e posição; somente esta recuperação, sem generalizar outras.
     (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
     sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
     impacto hoje, porque a tela só cria prazos em minutos. (e) O rótulo do Iniciar

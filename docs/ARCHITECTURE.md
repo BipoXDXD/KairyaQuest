@@ -219,6 +219,7 @@ FocusQuest/
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
+│   │   │   ├── reschedule-focus-scroll.spec.ts # Chromium: retorno de foco após reagendar sem deslocar scroll; controle 422 conserva rascunho/foco, HTTPs de apresentação (163(c))
 │   │   │   ├── tracking.spec.ts   # o E2E do acompanhamento: iniciar e concluir com a duração real, reagendar pela tela com o histórico, e a proposta de reagendamento da Tifa confirmada, com axe (F, Task 11)
 │   │   │   └── tutoring.spec.ts   # oito cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho nos dois motivos e a recusa (pendência 120)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
@@ -1599,6 +1600,20 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   no estado de espera; disabled, callbacks e regiões vivas não mudam.
   `CampaignTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
   botão global não recebe identificação de uma missão.
+
+  **Foco após reagendar sem deslocar a leitura (163(c)):**
+  `RescheduleForm` mantém a guarda de sucesso com foco no body e devolve-o ao
+  disclosure com `focus({ preventScroll: true })`. O efeito não toma foco de
+  outro controle. O teste Chromium `reschedule-focus-scroll.spec.ts` segura o
+  POST, estabelece scroll real com o disclosure fora da viewport e verifica
+  payload, estado, prazo, histórico e foco antes da posição. Um controle de
+  sucesso com foco já na Tifa comprova que não há transferência de foco nem
+  perda do rascunho enquanto o prazo/histórico mudam. O erro 422 mantém
+  rascunho, alerta, prazo e foco da Tifa; Routes pendentes são abortadas no
+  finally. HTTPs são fixtures de apresentação, sem prova de persistência;
+  geometria controlada separa scroll por foco de scroll anchoring/colapso.
+  Iniciar, Concluir e recuperação do ciclo não mudam. A prova não generaliza
+  viewports ou leitor de tela real; jsdom não mede rolagem.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no

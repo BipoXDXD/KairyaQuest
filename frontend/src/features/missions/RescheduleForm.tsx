@@ -111,7 +111,7 @@ export function RescheduleForm({
   const closedBySuccess = openedFor !== null && !expanded
   useEffect(() => {
     if (closedBySuccess && document.activeElement === document.body) {
-      toggleRef.current?.focus()
+      toggleRef.current?.focus({ preventScroll: true })
     }
   }, [closedBySuccess])
 
