@@ -135,6 +135,98 @@ describe('useRescheduleMission', () => {
     })
   })
 
+  it.each([
+    ['2026-10-05T18:00', '2026-10-05T21:00:59.123456Z'],
+    ['2026-10-05T18:00', '2026-10-05T18:00:59.123456-03:00'],
+    ['2019-02-16T23:30', '2019-02-17T02:30:59.123456Z'],
+  ])(
+    'conserva o ISO original %s / %s quando a hora civil nao mudou',
+    async (civil, originalDeadline) => {
+      const fetchMock = routeFetch({ [ROTA]: comCode('prazo_inalterado', 409) })
+      const { result } = renderReschedule()
+      const draft = { ...RASCUNHO, civil, originalDeadline }
+
+      act(() => {
+        result.current.reschedule(draft)
+      })
+
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'failed',
+          failure: {
+            message: 'O novo prazo é igual ao atual. Escolha outro horário.',
+            recovery: 'edit',
+          },
+        })
+      })
+      expect(requestsTo(fetchMock, ROTA).map(jsonBody)).toEqual([
+        {
+          operation_id: K1,
+          new_deadline: originalDeadline,
+          reason: 'falta_de_tempo',
+        },
+      ])
+      expect(result.current.lastRescheduled).toBeNull()
+    },
+  )
+
+  it('depois de editar a hora civil usa a conversao de minutos, sem conservar segundos antigos', async () => {
+    const fetchMock = routeFetch({ [ROTA]: sucesso })
+    const { result } = renderReschedule()
+    const draft = {
+      ...RASCUNHO,
+      civil: '2026-10-06T18:00',
+      originalDeadline: '2026-10-05T21:00:59.123456Z',
+    }
+    act(() => {
+      result.current.reschedule(draft)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'rescheduled', mission: reagendada })
+    })
+    expect(requestsTo(fetchMock, ROTA).map(jsonBody)).toEqual([
+      {
+        operation_id: K1,
+        new_deadline: '2026-10-06T21:00:00.000Z',
+        reason: 'falta_de_tempo',
+      },
+    ])
+  })
+
+  it('retry do prazo original conserva a chave e o corpo literal ate a recusa conhecida', async () => {
+    const fetchMock = routeFetch({
+      [ROTA]: (_, call) =>
+        call === 1
+          ? Promise.reject(new TypeError('Failed to fetch'))
+          : Response.json({ detail: 'x', code: 'prazo_inalterado' }, { status: 409 }),
+    })
+    const { result } = renderReschedule()
+    const draft = { ...RASCUNHO, originalDeadline: '2026-10-05T21:00:59.123456Z' }
+    act(() => {
+      result.current.reschedule(draft)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        status: 'failed',
+        failure: { recovery: 'retry' },
+      })
+    })
+    act(() => {
+      result.current.reschedule(draft)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        status: 'failed',
+        failure: { recovery: 'edit' },
+      })
+    })
+    expect(requestsTo(fetchMock, ROTA).map(jsonBody)).toEqual([
+      { operation_id: K1, new_deadline: '2026-10-05T21:00:59.123456Z', reason: 'falta_de_tempo' },
+      { operation_id: K1, new_deadline: '2026-10-05T21:00:59.123456Z', reason: 'falta_de_tempo' },
+    ])
+    expect(result.current.lastRescheduled).toBeNull()
+  })
+
   it('usa o horario de verao historico: o processo esta em Tokyo, o prazo e de Sao Paulo', async () => {
     const fetchMock = routeFetch({ [ROTA]: sucesso })
     const { result } = renderReschedule()

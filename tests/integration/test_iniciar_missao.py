@@ -31,8 +31,14 @@ from focusquest.modules.missions.domain import (
     duracao_real,
     xp_da_missao,
 )
-from focusquest.modules.missions.models import Mission, MissionOperation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvidence,
+    MissionOperation,
+    User,
+)
 from focusquest.modules.missions.service import (
+    NovaEvidencia,
     concluir_missao,
     criar_missao,
     iniciar_missao,
@@ -141,8 +147,34 @@ def test_a_chave_da_conclusao_nao_serve_para_iniciar_e_vice_versa(
     _iniciar(session, iniciada, "op-gasta-i")
     with pytest.raises(OperacaoReutilizadaError):
         concluir_missao(
-            session, ESTUDANTE, iniciada.id, "op-gasta-i", clock=relogio(AGORA)
+            session,
+            ESTUDANTE,
+            iniciada.id,
+            "op-gasta-i",
+            clock=relogio(AGORA),
+            evidencia=NovaEvidencia("Evidencia do pedido recusado", None),
         )
+    # SQL com autoflush ANTES do rollback: uma escrita pendente nao pode
+    # ficar escondida pela limpeza da fixture nem pelo identity map.
+    assert (
+        session.scalar(
+            select(MissionEvidence).where(MissionEvidence.mission_id == iniciada.id)
+        )
+        is None
+    )
+    assert (
+        session.scalar(select(XpEntry).where(XpEntry.mission_id == iniciada.id)) is None
+    )
+    assert session.execute(
+        select(Mission.state, Mission.started_at, Mission.completed_at).where(
+            Mission.id == iniciada.id
+        )
+    ).one() == (MissionState.EM_ANDAMENTO, AGORA, None)
+    assert session.execute(
+        select(MissionOperation.operation_id, MissionOperation.kind).where(
+            MissionOperation.mission_id == iniciada.id
+        )
+    ).all() == [("op-gasta-i", "start")]
 
 
 def test_a_chave_de_outra_missao_e_chave_gasta(session: Session) -> None:

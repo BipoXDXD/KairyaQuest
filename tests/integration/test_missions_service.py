@@ -19,12 +19,19 @@ from focusquest.core.errors import (
     OperacaoReutilizadaError,
 )
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
-from focusquest.modules.missions.models import MissionOperation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvidence,
+    MissionOperation,
+    User,
+)
 from focusquest.modules.missions.service import (
+    NovaEvidencia,
     concluir_missao,
     criar_missao,
     listar_missoes,
 )
+from focusquest.modules.progression.models import FONTE_CONCLUSAO, XpEntry
 
 # O usuario unico semeado pela migracao (README s8).
 ESTUDANTE = 1
@@ -274,11 +281,62 @@ def test_reenviar_operacao_de_outra_missao_e_recusado(session: Session) -> None:
     """
     primeira_missao = _criar(session)
     segunda_missao = _criar(session)
-    concluir_missao(session, ESTUDANTE, primeira_missao, "op-abc", clock=_relogio)
+    concluir_missao(
+        session,
+        ESTUDANTE,
+        primeira_missao,
+        "op-abc",
+        clock=_relogio,
+        evidencia=NovaEvidencia("Entrega original", "https://exemplo.com/origem"),
+    )
 
     with pytest.raises(OperacaoReutilizadaError) as excecao:
-        concluir_missao(session, ESTUDANTE, segunda_missao, "op-abc", clock=_relogio)
+        concluir_missao(
+            session,
+            ESTUDANTE,
+            segunda_missao,
+            "op-abc",
+            clock=_relogio,
+            evidencia=NovaEvidencia("Pedido recusado", "https://exemplo.com/recusado"),
+        )
 
+    # A evidencia original permanece e a tentativa recusada nao ganha linha.
+    # A consulta faz autoflush antes de qualquer rollback da fixture.
+    ids = (primeira_missao, segunda_missao)
+    assert session.execute(
+        select(
+            MissionEvidence.mission_id,
+            MissionEvidence.text,
+            MissionEvidence.link,
+            MissionEvidence.submitted_at,
+        ).where(MissionEvidence.mission_id.in_(ids))
+    ).all() == [
+        (primeira_missao, "Entrega original", "https://exemplo.com/origem", AGORA)
+    ]
+    assert session.execute(
+        select(
+            XpEntry.mission_id,
+            XpEntry.user_id,
+            XpEntry.amount,
+            XpEntry.source,
+            XpEntry.credited_at,
+        ).where(XpEntry.mission_id.in_(ids))
+    ).all() == [(primeira_missao, ESTUDANTE, 40, FONTE_CONCLUSAO, AGORA)]
+    assert session.execute(
+        select(
+            MissionOperation.mission_id,
+            MissionOperation.operation_id,
+            MissionOperation.kind,
+        ).where(MissionOperation.mission_id.in_(ids))
+    ).all() == [(primeira_missao, "op-abc", "complete")]
+    assert session.execute(
+        select(Mission.id, Mission.state, Mission.started_at, Mission.completed_at)
+        .where(Mission.id.in_(ids))
+        .order_by(Mission.id)
+    ).all() == [
+        (primeira_missao, MissionState.CONCLUIDA, None, AGORA),
+        (segunda_missao, MissionState.PENDENTE, None, None),
+    ]
     assert "op-abc" in str(excecao.value)
     # A mensagem NAO revela nada da outra missao. Ela nao tem digito nenhum,
     # entao esta assercao so falha se o id vazar de verdade.

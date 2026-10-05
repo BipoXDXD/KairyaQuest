@@ -355,12 +355,26 @@ commit publicado ou integrar o PR na `main`.
 - [x] Adaptar o oráculo da migração antiga e os testes de teclado às regras E/F/G.
 - [x] Aprovar o rerun completo de `check-api` no backend conciliado.
 - [x] Aprovar `make check` no resultado combinado e concluir revisão documental.
-- [ ] Conferir índice; finalizar commit assinado na branch do PR com hooks.
-- [ ] Push de uma ref e atualização do PR; conferir CI e ausência de conflitos.
+- [x] Conferir índice; finalizar commit assinado na branch do PR com hooks.
+- [x] Push de uma ref e atualização do PR; conferir CI e ausência de conflitos.
 
-Checklist registrado antes do commit de publicação; as referências e o
-resultado posterior ficam no ledger e no PR. Gate combinado EXIT 0:
+Checklist concluído após conferir o commit assinado `43ff5f7`, o push com
+hooks ativos e os dez checks aprovados da ponta do PR. Gate combinado EXIT 0:
 1436 Python, 990 frontend, 59 E2E e 100%, fontes/HEAD/índice preservados.
 
 As evidências e o andamento estão em `progress.md`, com novas capturas em
 `evidence/conciliacao-pr6/`; nenhum checkpoint anterior será sobrescrito.
+
+## Integração autorizada do PR #6
+
+O pedido explícito de merge substituiu a restrição de publicação das etapas
+anteriores. O plano está concluído:
+
+- [x] Executar `make check` antes do merge: EXIT 0, 1436 Python/990 frontend/59 E2E, cobertura 100% e 349 fontes estáveis.
+- [x] Conferir ponta `43ff5f7`, base `469e149`, ausência de conflitos e dez checks SUCCESS.
+- [x] Integrar pelo PR #6 com a proteção da `main`: merge commit `5ba81c3`.
+- [x] Confirmar árvore idêntica à validada e atualizar a `main` local por fast-forward.
+- [x] Conferir os cinco jobs SUCCESS do CI pós-merge `37245877941`, incluindo `quality-gate`.
+
+O registro mais recente do ledger contém comandos e evidências desta
+integração. As pendências de produto não fazem parte deste plano encerrado.

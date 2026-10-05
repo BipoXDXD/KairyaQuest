@@ -1,20 +1,71 @@
 # Retomar o FocusQuest
 
-## Conciliação local aprovada do PR #6
+## Continuação corrente — composição #7–#24
 
-O estado corrente está no topo de `docs/HANDOFF.md` e no registro mais recente
-de `.superpowers/sdd/2026-10-04-estabilizacao/progress.md`. As vinte fatias
-locais foram preservadas no commit assinado `891eda0` e no PR #6.
-A `main` em `469e149` já contém E/F/G, preservados na conciliação.
-O gate combinado passou nesta sessão: 1436 Python, 990 frontend, 59 E2E e
-100% de cobertura. O estado da publicação e do CI da ponta está no PR/ledger. Não retomar a implementação do E a partir das pendências antigas.
-Os registros abaixo descrevem a estabilização anterior; seus gates não aprovam
-o resultado combinado. Nenhum merge do PR na `main` foi solicitado.
+Fotografia: 2026-10-05T01:46:22-03:00. Branch `wt/composicao-autonoma` sobre main `5ba81c3`.
+As PRs #7–#24 estão publicadas; cada gate isolado tem cobertura 100% e cada
+push/PR tem cinco jobs verdes nos heads indicados no estado corrente de
+[docs/HANDOFF.md](docs/HANDOFF.md). Nenhum merge foi realizado.
+A combinação está preparada e aguarda seu próprio gate, hooks, publicação e
+CI: não atribuir os resultados isolados ao conjunto. Baseline limpo desta
+árvore aprovado: 1436 Python, 990 frontend, 59 E2E e cobertura 100%.
+
+Não repetir fases ou mutações já encerradas. Confrontar o head, os logs e o
+ledger `.superpowers/sdd/2026-10-05-composicao-fases/` antes de continuar.
+Manter cinco agentes GPT 6.1 Sol High, um implementador por árvore, banco e
+portas próprios; nunca concorrência de API/E2E no mesmo banco. O dono autorizou
+commit assinado, push de uma ref e PR após gate completo 100%, com hooks;
+merge, gastos, credenciais e mudanças de contratos/custo/timeout aguardam o dono.
+
+Os registros de #20 abaixo preservam a fotografia histórica de 00:39:33.
+As pendências atuais e limites parciais 97/100/104/160/161/163 estão no topo do
+handoff, inclusive S-M6 sem definição recuperada. Rodin não foi executado nem
+houve nova chamada paga. Histórico de pausa não significa pausa vigente.
+
+## Histórico — checkpoint autônomo de 2026-10-05
+
+Snapshot: 2026-10-05T00:39:33-03:00 (`America/Sao_Paulo`); atualizações posteriores
+ficam nos ledgers por fase e no próximo checkpoint.
+
+A pausa está encerrada. A main consultada permanece em `5ba81c3` (PR #6);
+as fases autônomas estão publicadas nas PRs #7–17, com heads, bases, gates e
+CI no topo de [docs/HANDOFF.md](docs/HANDOFF.md). As features ainda não foram
+mescladas. Não repetir implementações, mutações ou pushes já concluídos;
+confrontar o head e seu ledger antes de continuar. Esta atualização documental
+parte do PR #8 (`009d9f7`) e sua PR usa base `docs/estado-pos-pr6`.
+
+O dono autorizou decisões não críticas e commit assinado, push de uma ref e PR
+por fase aprovada, sempre com hooks ativos, make check completo e cobertura de
+100%. Merge, decisões críticas e gastos permanecem pendentes. Preservar cinco
+agentes GPT 6.1 Sol, esforço High, um implementador por worktree e recursos
+isolados. Os gates de cada feature não aprovam a combinação entre elas.
+
+Context7 e Dometrain responderam nesta sessão; Rodin apenas expõe ferramentas,
+sem execução funcional confirmada ou geração paga. Gate, revisão e publicação
+próprios deste checkpoint ficam registrados em
+`.superpowers/sdd/2026-10-05-checkpoint-autonomo/progress.md`. Os blocos abaixo
+preservam a história, incluindo pausas já encerradas e ordens antigas.
+
+## Histórico da publicação do PR #7 e da primeira continuação autônoma
+
+O PR #6 foi integrado na `main` em `5ba81c3`, preservando E/F/G e as vinte
+fatias de estabilização. A prova da pendência 167 está no commit assinado
+`0cb4cc2`, branch `wt/tifa-conclusao`, no [PR #7](https://github.com/BipoXDXD/FocusQuest/pull/7);
+a `main` consultada ainda não contém esse teste. O gate desta retomada da Tifa
+passou: 1438 Python, 990 frontend, 59 E2E e cobertura de 100%.
+Leia o topo de `docs/HANDOFF.md` e `docs/RETOMADA-2026-10-04.md` para o estado
+corrente e os ledgers das fases. Não repetir a estabilização nem reaplicar E/F/G.
+
+Durante sua ausência, o dono autorizou decisões não críticas e commit, push e
+PR por fase, com gate completo e cobertura de 100%. Merge e decisões críticas
+ficam pendentes. Usar cinco agentes GPT 6.1 Sol, esforço High, com tarefas
+separadas. Preservar alterações, worktrees e checkpoints; os resultados de
+outra branch não aprovam a revisão que será publicada.
 
 
-## Retomada da estabilização em 2026-10-04
+## Histórico da retomada da estabilização em 2026-10-04
 
-Para retomar a manutenção local atual, leia `README.md`,
+Naquela retomada, o roteiro era ler `README.md`,
 `docs/ARCHITECTURE.md`, `docs/HANDOFF.md` e `docs/QUALITY.md`, nessa ordem,
 e depois **`docs/RETOMADA-2026-10-04.md`**. Os deltas 18 e 19 já foram
 integrados após revisão independente; gate conjunto aprovado (821 Python,

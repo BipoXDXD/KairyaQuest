@@ -171,7 +171,8 @@ function CompletionControls({
           onClick={onReload}
           className={RELOAD_BUTTON_CLASS}
         >
-          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
+          <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
       )}
       <div
@@ -199,11 +200,11 @@ function CompletionControls({
 }
 
 /** O texto do botao Iniciar em cada estado em que ele aparece. */
-function startLabel(start: StartState): string {
+function startLabel(start: StartState, hasRetainedKey: boolean): string {
   if (start.status === 'submitting') {
     return 'Iniciando…'
   }
-  return start.status === 'failed' ? 'Tentar de novo' : 'Iniciar'
+  return start.status === 'failed' || hasRetainedKey ? 'Tentar de novo' : 'Iniciar'
 }
 
 /** O que a regiao viva do Iniciar anuncia. */
@@ -250,12 +251,14 @@ function RefreshNotice({
   onReload,
   reloadWaiting,
   reloadLabel,
+  instructions,
 }: {
   message: string
   testId: string
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
+  instructions: string
 }) {
   return (
     <>
@@ -266,7 +269,8 @@ function RefreshNotice({
         onClick={onReload}
         className={RELOAD_BUTTON_CLASS}
       >
-        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
+        <span className="sr-only">a missão: {instructions}</span>
       </button>
       <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
         {message}
@@ -293,6 +297,7 @@ function RefreshNotice({
 function StartControls({
   mission,
   start,
+  hasRetainedKey,
   onStart,
   otherInFlight,
   onReload,
@@ -301,6 +306,7 @@ function StartControls({
 }: {
   mission: Mission
   start: StartState
+  hasRetainedKey: boolean
   onStart: () => void
   otherInFlight: boolean
   onReload: () => void
@@ -320,6 +326,7 @@ function StartControls({
         <RefreshNotice
           message={failure.message}
           testId="mission-start"
+          instructions={mission.instructions}
           onReload={onReload}
           reloadWaiting={reloadWaiting}
           reloadLabel={reloadLabel}
@@ -334,7 +341,8 @@ function StartControls({
               onClick={onStart}
               className={COMPLETE_BUTTON_CLASS}
             >
-              {startLabel(start)} <span className="sr-only">a missão: {mission.instructions}</span>
+              {startLabel(start, hasRetainedKey)}{' '}
+              <span className="sr-only">a missão: {mission.instructions}</span>
             </button>
           )}
           {failure !== null && (
@@ -570,6 +578,7 @@ export function MissionCard({
         <StartControls
           mission={mission}
           start={start}
+          hasRetainedKey={registry.hasActionKey(listed.id, 'start')}
           onStart={startMission}
           otherInFlight={completing || rescheduling}
           onReload={onReload}
@@ -606,6 +615,7 @@ export function MissionCard({
           <RefreshNotice
             message={rescheduleFailure.message}
             testId="mission-reschedule"
+            instructions={mission.instructions}
             onReload={onReload}
             reloadWaiting={reloadWaiting}
             reloadLabel={reloadLabel}

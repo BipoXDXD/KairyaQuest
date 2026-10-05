@@ -36,6 +36,8 @@ export interface CompletionRegistry {
    * Concluir gasta num Iniciar faria o Concluir falhar com `operacao_reutilizada`.
    */
   actionKeyFor: (missionId: number, action: MissionAction) => string
+  /** Consulta a chave existente sem criar UUID nem modificar o registro. */
+  hasActionKey: (missionId: number, action: MissionAction) => boolean
   /** Tira a chave da acao da missao: o proximo pedido dela gera outra. */
   releaseActionKey: (missionId: number, action: MissionAction) => void
   /**
@@ -101,8 +103,9 @@ export interface UseCompletionRegistryResult {
  * As chaves do Iniciar e do Reagendar (incremento F) moram no mesmo registro,
  * pelo mesmo motivo, num mapa a parte: por missao e por tipo (`actionKeyFor`).
  *
- * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao lidos e
- * escritos so dentro de callbacks, e mudar um deles nao deve renderizar nada.
+ * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao escritos
+ * dentro de callbacks e consultados pelos leitores do registro, sem criar
+ * chaves no render. Mudar um deles nao deve renderizar nada.
  * O que a tela mostra -- se ha espera -- e estado. O pedido pendente tem as duas formas porque
  * `settled` precisa le-lo na hora, sem esperar o proximo render.
  */
@@ -145,6 +148,7 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
         }
         return operationId
       },
+      hasActionKey: (missionId, action) => actionKeys.current.has(`${action}:${String(missionId)}`),
       releaseActionKey: (missionId, action) => {
         actionKeys.current.delete(`${action}:${String(missionId)}`)
       },

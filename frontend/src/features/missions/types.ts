@@ -101,9 +101,11 @@ export type RescheduleErrorCode =
 /**
  * O rascunho do reagendamento, como o formulario o entrega ao hook: a hora
  * civil de Sao Paulo (`datetime-local`, `YYYY-MM-DDTHH:mm`) e o motivo, que so
- * e `null` enquanto a pessoa nao escolheu (nenhum vem marcado).
+ * e `null` enquanto a pessoa nao escolheu (nenhum vem marcado). O prazo original
+ * preserva segundos, fracao e offset quando a hora civil nao foi alterada.
  */
 export interface RescheduleDraft {
   civil: string
   reason: RescheduleReason | null
+  originalDeadline?: string
 }

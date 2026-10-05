@@ -523,11 +523,13 @@ describe('CycleSection', () => {
     )
 
     expect(
-      await screen.findByRole('button', { name: 'Atualizar a missão de hoje' }),
+      await screen.findByRole('button', {
+        name: `Atualizar a missão de hoje a missão: ${diaria.instructions}`,
+      }),
     ).toBeInTheDocument()
     // O rotulo padrao do MissionCard (do quadro de avulsas) nao pode aparecer
     // aqui: seria falar de um "quadro" que a secao do ciclo nao tem.
-    expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Atualizar o quadro/ })).toBeNull()
   })
 
   it('o botao de recuperacao da diaria de ontem diz "Atualizar a diária de ontem", nao o da missao de hoje', async () => {
@@ -541,10 +543,12 @@ describe('CycleSection', () => {
     fireEvent.click(within(secao).getByTestId('mission-complete'))
 
     expect(
-      await within(secao).findByRole('button', { name: 'Atualizar a diária de ontem' }),
+      await within(secao).findByRole('button', {
+        name: `Atualizar a diária de ontem a missão: ${diariaDeOntem.instructions}`,
+      }),
     ).toBeInTheDocument()
     // O rotulo da missao de hoje, num cartao que nao e a de hoje, mentiria.
-    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Atualizar a missão de hoje/ })).toBeNull()
   })
 
   it('o botao de recuperacao da especial diz "Atualizar a missão especial", nao o da missao de hoje', async () => {
@@ -559,9 +563,11 @@ describe('CycleSection', () => {
     fireEvent.click(within(secao).getByTestId('mission-complete'))
 
     expect(
-      await within(secao).findByRole('button', { name: 'Atualizar a missão especial' }),
+      await within(secao).findByRole('button', {
+        name: `Atualizar a missão especial a missão: ${especial.instructions}`,
+      }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Atualizar a missão de hoje' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Atualizar a missão de hoje/ })).toBeNull()
   })
 
   it('se o refresh depois da conclusao devolve OUTRA missao, o cartao troca para ela com Concluir', async () => {
@@ -668,6 +674,9 @@ describe('CycleSection', () => {
 
       const atualizar = await within(cartao).findByTestId('mission-start-reload')
       expect(atualizar).toHaveTextContent('Atualizar a missão de hoje')
+      expect(atualizar).toHaveAccessibleName(
+        `Atualizar a missão de hoje a missão: ${diaria.instructions}`,
+      )
       fireEvent.click(atualizar)
 
       await waitFor(() => {

@@ -1,5 +1,6 @@
 """O adaptador Anthropic: a unica peca da aplicacao que importa o SDK."""
 
+import logging
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -31,6 +32,8 @@ from focusquest.modules.tutoring.provider import (
     Turno,
 )
 from focusquest.modules.tutoring.schemas import RescheduleProposal
+
+_LOGGER = logging.getLogger(__name__)
 
 # Tentativas do proprio SDK, alem da primeira chamada. Elas so acontecem antes
 # do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
@@ -119,6 +122,12 @@ def _traduzir_erros() -> Iterator[None]:
         # como `httpx2.ReadTimeout` cru (medido).
         raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
     except (anthropic.APIError, httpx2.TransportError) as erro:
+        if isinstance(erro, anthropic.APIStatusError):
+            _LOGGER.warning(
+                "Falha HTTP do provedor: status=%d tipo=%s",
+                erro.status_code,
+                type(erro).__name__,
+            )
         raise ProvedorIndisponivelError(
             f"o provedor falhou: {type(erro).__name__}"
         ) from erro

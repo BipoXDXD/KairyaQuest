@@ -119,7 +119,7 @@ FocusQuest/
 │   │   │   │   ├── RescheduleHistory.tsx   # "Reagendada N vezes" e o <details> "Histórico de prazos", uma linha por reagendamento, motivo e origem em texto; tolera `reschedules` ausente (pendência 162) (F, Task 10)
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
-│   │   │   │   ├── rescheduleDraft.ts       # RescheduleDraft e sameDraft: compara o rascunho enviado com o atual para decidir se a chave se mantém (F, Task 10) (F: StartErrorCode, RescheduleErrorCode e RescheduleDraft)
+│   │   │   │   ├── rescheduleDraft.ts       # deadlineForDraft preserva o ISO original sem edição; sameDraft compara civil, motivo e prazo efetivo para a chave (163(d)); RescheduleDraft mora em types.ts
 │   │   │   │   ├── rescheduleFailure.test.ts
 │   │   │   │   ├── rescheduleFailure.ts     # mapa exaustivo code → mensagem e saída (corrigir, atualizar, nova chave, mesma chave) do reagendamento (F, Task 8)
 │   │   │   │   ├── startFailure.test.ts
@@ -170,7 +170,7 @@ FocusQuest/
 │   │   │       ├── panelPreference.ts     # localStorage do painel aberto/fechado, tolerante a exceção
 │   │   │       ├── questionLimit.test.ts
 │   │   │       ├── questionLimit.ts       # MAX_QUESTION_LENGTH, COUNTER_VISIBLE_FROM, describeQuestionLength
-│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action) (F: ActionRead é a união CreateMissionAction | RescheduleMissionAction; cópia local dos rótulos de motivo, pendência 32)
+│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action) (F: ActionRead é a união CreateMissionAction | RescheduleMissionAction; RescheduleReason importado de shared/types/mission.ts, sem reexport; o cartão lê o mapa compartilhado diretamente, pendência 161(a))
 │   │   │       ├── useActionKeys.test.tsx
 │   │   │       ├── useActionKeys.ts       # chaves de confirmação por ação, no topo do TutorPanel
 │   │   │       ├── useDecideAction.test.tsx
@@ -219,6 +219,7 @@ FocusQuest/
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
+│   │   │   ├── reschedule-focus-scroll.spec.ts # Chromium: retorno de foco após reagendar sem deslocar scroll; controle 422 conserva rascunho/foco, HTTPs de apresentação (163(c))
 │   │   │   ├── tracking.spec.ts   # o E2E do acompanhamento: iniciar e concluir com a duração real, reagendar pela tela com o histórico, e a proposta de reagendamento da Tifa confirmada, com axe (F, Task 11)
 │   │   │   └── tutoring.spec.ts   # oito cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho nos dois motivos e a recusa (pendência 120)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
@@ -290,7 +291,7 @@ FocusQuest/
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação (F: TipoDeAcao.REAGENDAR_MISSAO e REAGENDAMENTO_INVALIDO)
 │       │       ├── models.py      # TutorMessage, TutorAction
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12) (F: Proposta(nome, entrada), para saber qual ferramenta foi chamada, decisão F18)
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E) (F: oferece as duas ferramentas, create_mission e reschedule_mission, ainda com uma chamada por resposta e sem strict; esquema_do_reagendamento); responder pelo endpoint beta com o fallback da recusa (pendência 174)
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E); falhas HTTP registram só status e tipo, sem dados da requisição/resposta (pendência 100) (F: oferece as duas ferramentas, create_mission e reschedule_mission, ainda com uma chamada por resposta e sem strict; esquema_do_reagendamento); responder pelo endpoint beta com o fallback da recusa (pendência 174)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5) (F: o bloco "Reagendar" — só com o motivo conversado, ajuda antes de adiar, nunca culpa pela contagem; a diária e a especial nunca são reagendadas, só lembradas até o limite, pendência 117)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; as missões do ciclo em conclusão tardia (tardias_do_ciclo, sobre o ler_ciclo; pendência 117), sem #id; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15) (F: cada pendente com o estado, o início e "reagendada N vez(es); último motivo"; ROTULO_DO_MOTIVO; o texto da ação por tipo)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo) (F: RescheduleProposal, com StrictInt no id e o prazo só em texto ISO, e RetratoDoReagendamento)
@@ -316,6 +317,8 @@ FocusQuest/
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
 │   │   ├── referencia_da_avaliacao_real.json  # a sequência de tipos de evento de uma avaliação real, sem conteúdo (gerada pelo camada3_da_avaliacao.py)
 │   │   ├── test_acompanhamento_concorrencia.py  # conexões reais, sem sleep: dois inícios, início × conclusão, dois reagendamentos encadeados, reagendamento × conclusão, o relógio lido depois da trava (F, Task 5)
+│   │   ├── test_reagendamento_espera_deterministica.py # parte da pendência 160: dois reagendamentos diretos com PIDs/espera comprovados e relógio injetado; prazo vence sem escrita ou gera segundo elo com histórico/instante posterior corretos; cleanup por CASCADE
+│   │   ├── test_inicio_virada_dia_concorrencia.py # início diário após espera comprovada: perdida recusa sem escrita; revelada inicia na meia-noite SP (160 parcial)
 │   │   ├── test_acompanhamento_migration.py  # a 0006: ida e volta, cada restrição nova dizendo não por INSERT cru, o downgrade que falha alto (F, Task 2)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio; cada stop_reason vira a Parada do Fim)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
@@ -330,8 +333,8 @@ FocusQuest/
 │   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
 │   │   ├── test_evaluation_api.py  # o contrato de POST /evaluation: o corpo da spec, reward nulo, o repetido, cada erro com status e code, as falhas do modelo já gravadas (E, Task 5)
-│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5)
-│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2)
+│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5); missão retida e usuário livre durante a escrita bloqueada da avaliação (104 parcial)
+│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2); snapshot populado preserva IDs/FKs brutos do XP e conquistas em 0004↔0005 (T-M4)
 │   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
 │   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
 │   │   ├── test_evaluation_service.py  # avaliar_missao contra o falso: os três vereditos com e sem bônus, o repetido sem chamar o falso, falhas gravadas antes do erro, o limite total, a injeção (E, Task 5)
@@ -351,7 +354,7 @@ FocusQuest/
 │   │   ├── test_missions_service.py
 │   │   ├── test_progression_api.py         # o contrato de GET /api/progress e o reward no 200 da conclusão e do reenvio (D, Task 4)
 │   │   ├── test_progression_concorrencia.py  # duas primeiras conclusões em paralelo destravam uma conquista só; falha injetada no crédito desfaz a conclusão; a trava do usuário é tomada (D, Task 3, conexões reais)
-│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3)
+│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3); roundtrip populado preserva legado e reconstrói progressão sem IDs brutos (83)
 │   │   ├── test_progression_service.py     # o crédito na conclusão, a recompensa reconstruída (inclusive o reenvio antigo) e a leitura (D, Task 3)
 │   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
 │   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh; o isolamento do gate do push (Frente 0)
@@ -379,6 +382,7 @@ FocusQuest/
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
 │       ├── test_run_configs.py    # as configurações de .run/: XML, sem caminho pessoal, não ignoradas, e o que apontam existe (pendência 17)
+│       ├── test_diagnostico_do_provedor.py  # status HTTP e tipo da causa no WARNING, sem corpo/mensagem/header/URL/traceback; erros sem resposta não inventam status (pendência 100)
 │       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
 │       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
@@ -610,10 +614,15 @@ só `evaluation` o levanta. Na revisão da Task 5 ele foi para
 `modules/evaluation/errors.py` — como `TransicaoIlegalError` mora em
 `missions/domain.py`. `SemEvidenciaError` e `AvaliacaoEmAndamentoError` ficaram
 em `core/errors.py`, porque `missions` e `evaluation` os levantam. A regra é
-verificada por `tests/unit/test_core_sem_modulos.py`, que lê com `ast` cada
-`*.py` de `core/` e exige que nenhum importe `focusquest.modules`. **O teste
-tem furos conhecidos** (pendência 103): não pega `from focusquest import
-modules`, nem import relativo, nem subpasta de `core/`.
+verificada por `tests/unit/test_core_sem_modulos.py`, que percorre também
+as subpastas de `core/` e examina com `ast` cada `*.py`. A prova cobre imports
+estáticos diretos, `from focusquest import modules`, aliases e imports
+relativos resolvidos contra o pacote do arquivo. Nos imports `from`, a base
+e os candidatos `base.nome` contam: o nome pode ser um submódulo. Os testes
+exigem o conjunto exato, incluindo casos mistos e prefixos semelhantes,
+para também detectar achados espúrios (pendência 103). A prova não executa
+código nem resolve chamadas dinâmicas a `importlib.import_module` ou
+`__import__`; esse limite é explícito, não garantia de isolamento em runtime.
 
 **Não há ciclo entre arquivos, mas há dependência nos dois sentidos entre
 pacotes.** Nenhum arquivo importa, direta ou indiretamente, um arquivo que o
@@ -649,6 +658,31 @@ final, revertendo o que ficou pela metade.
 A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
+
+### Prova cruzada da confirmação da Tifa × conclusão (pendência 167)
+
+`tests/integration/test_tutoring_conclusao_concorrencia.py` concentra os dois
+vencedores possíveis, com conexões reais e dados commitados. A sessão que
+espera mantém a missão no identity map; uma conexão observadora verifica
+`pg_blocking_pids` antes de liberar a transação vencedora. O módulo verifica
+os efeitos persistidos em ação, missão, histórico, operações e XP, e limpa
+somente o cenário criado (mensagens antes da missão, efeitos por CASCADE).
+Não importa helpers de outro módulo de teste nem acrescenta mecanismo ao
+código de produção. A responsabilidade complementa os testes existentes de
+`test_tutoring_reagendamento.py` e `test_acompanhamento_concorrencia.py`.
+
+### Reagendamento direto durante espera (parte da pendência 160)
+
+`tests/integration/test_reagendamento_espera_deterministica.py` mantém a
+missão pré-carregada e retida na sessão perdedora e observa o PID vencedor em
+`pg_blocking_pids`. Só então avança o relógio injetado, que retorna sem esperar,
+e libera o primeiro commit. Verifica a recusa de um prazo que venceu sem
+escrita perdedora ainda antes do rollback, e dois elos encadeados quando o
+prazo continua futuro, com o instante posterior à espera. Lê prazo devolvido,
+estado persistido, operações/histórico e ausência de XP. A limpeza apaga somente
+a missão criada e seus efeitos por CASCADE; rollback libera a trava antes de
+aguardar o executor. O módulo complementa os cenários e sondas antigos de
+`test_acompanhamento_concorrencia.py`; não muda serviços nem fecha toda a 160.
 
 ### Logging (pendência 13)
 
@@ -917,6 +951,19 @@ confirmação despacha pelo `kind` da ação e há uma segunda ferramenta,
 `reschedule_mission` (ver "O contrato HTTP do acompanhamento", abaixo): a
 confirmação de um reagendamento pode gravar a ação `falhou` com
 `reagendamento_invalido` e responder `409 reagendamento_invalido`.
+
+### Consultas da trilha semanal (pendência 166)
+
+`cycle_service._ler_plano` carrega `evidence`, `evaluation` e `reschedules`
+com `selectinload` na consulta das oito missões do plano. A leitura da trilha
+atual e sua serialização por `PlanRead` custam seis comandos: plano, missões,
+histórico das diárias e três relações. A resposta continua ocultando o
+conteúdo dos dias futuros e da especial bloqueada. Os loaders também leem
+as relações das missões ocultas, custo fixo limitado a oito pais por plano.
+`tests/integration/test_plans_leitura_consultas.py` mede o SQL real com a
+sessão sem identidades do preparo e verifica conteúdo na segunda e domingo.
+O ciclo usa outro caminho, snapshot de colunas em um comando, e não recebe
+loaders ORM: sua consistência continua em `test_cycle_consistency.py`.
 
 ### O contrato HTTP do ciclo diário que existe (Incremento B)
 
@@ -1256,8 +1303,13 @@ teste confere que não divergem, e outro que toda `FalhaDaAvaliacao` tem um
 `CodigoDeErro` de mesmo valor. Nas três falhas gravadas, a linha `falhou` só
 sai do estado por um novo pedido (`falhou → avaliando`, `attempt + 1`): é o
 "Tentar de novo" da tela. **`tool_choice` da avaliação é `auto`, com a
-ferramenta `strict` e o sistema mandando chamá-la** (emenda EM3 da spec, não
-medida por chamada real: pendência 91).
+ferramenta `strict` e o sistema mandando chamá-la** (emenda EM3 da spec).
+Uma amostra real autorizada, registrada na pendência 91 de
+[HANDOFF.md](HANDOFF.md), confirmou a chamada da ferramenta e a aceitação do
+esquema `strict`. A referência histórica está em
+`tests/integration/referencia_da_avaliacao_real.json`; esta composição não
+repete a chamada. A amostra cobre uma entrega que atende ao critério, sem
+aprovar os outros vereditos ou o circuito pela tela com bônus real.
 
 **Concorrência e ordem de travas.** Missão → avaliação → usuário, sempre (desde
 o F, a ordem global tem a ação da tutoria na frente: ação → missão → avaliação →
@@ -1266,6 +1318,16 @@ avaliação só é escrita com a missão travada, e o usuário só é travado pe
 `registrar_bonus`, por último. Dois pedidos simultâneos: um avalia, o outro
 recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
 `evaluation_bonus` por missão (`uq_xp_entries_mission_id_source`).
+
+`test_evaluation_concorrencia.py` prova um trecho dessa ordem em conexões
+reais: outra transação retém somente a avaliação, `pg_blocking_pids` observa
+a transação 2 esperando sua escrita, a missão recusa `FOR KEY SHARE NOWAIT`
+e o usuário ainda aceita `FOR SHARE NOWAIT`. A avaliação hoje bloqueia no
+`UPDATE`/flush, sem exigir um `SELECT FOR UPDATE` dela. Ao liberar a espera,
+o cenário confere avaliação e evidência persistidas, operação única e os
+créditos de conclusão e bônus da missão. Antecipar o bônus faz a sonda do
+usuário reprovar por `LockNotAvailable`. Esta prova parcial da pendência 104
+não cobre a matriz de conflitos cruzados nem a ordem global de todos os fluxos.
 
 
 ### O contrato HTTP do acompanhamento que existe (Incremento F)
@@ -1380,6 +1442,16 @@ erro. A chave que a tela gastou num reagendamento idêntico não serve à
 confirmação da Tifa (`_exigir_elo_da_tifa`): ela é `operacao_reutilizada`.
 O `ConfirmRead` devolve `mission` = a missão reagendada.
 
+**Preservação do XP na 0005 (T-M4).**
+`test_evaluation_migration.py` acrescenta um roundtrip populado SQL em 0004↔0005:
+compara todas as colunas das entradas, IDs/FKs brutos das conquistas, vínculos
+lógicos e somatórios por dois usuários próprios. Conteúdo e vínculos são
+conferidos antes do oráculo de identidade; uma renumeração que mantém valores e
+FKs reprova no ID. Finally restaura head e limpa somente os usuários próprios por
+CASCADE. Complementa os testes da 0004 que já atravessam a 0005 e medem valores,
+fonte, datas e conquistas; não mede sequences, índices ou todo o schema, nem muda
+migração/produção permanentemente.
+
 **Ordem das travas (F14).** **Ação → missão → avaliação → usuário**, sempre.
 Iniciar e reagendar travam a missão **antes** de ler relógio, estado e prazo;
 `buscar_para_escrever(travar=True)` relê a linha com `populate_existing`, para a
@@ -1391,8 +1463,23 @@ nunca uma atualização perdida. Provado por conexões reais em
 `test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`; a
 ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
 tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
-testes de detecção de corrida dependem do escalonador (pendência 160), e falta
-o de confirmação da Tifa × conclusão (pendência 167).
+testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
+A confirmação da Tifa × conclusão (pendência 167) ganhou uma prova das duas
+ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
+`wt/tifa-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
+a `main` em `5ba81c3` ainda não contém o módulo.
+
+**Início diário na virada civil (160 parcial).**
+`test_inicio_virada_dia_concorrencia.py` retém a pré-carga, observa os PIDs exatos
+em `pg_blocking_pids` e muda um relógio não bloqueante somente após comprovar a
+espera. O dono apenas segura a linha. À meia-noite de São Paulo, a diária pendente
+de ontem é recusada sem operação, alteração da missão ou XP, também conferidos
+antes do rollback; a diária de hoje é revelada e iniciada com `started_at` exato,
+retornado e persistido, e uma operação `start`. O `finally` libera a trava antes
+do shutdown do executor; limpeza remove somente o plano próprio e seus efeitos.
+A mutação de relógio anterior à trava reprova ambos, com restauração byte a byte.
+Este módulo não prova refresh de estado alterado, HTTP ou todas as corridas; as
+sondas existentes e os outros limites da 160 permanecem.
 
 **A missão iniciada dentro do prazo pode ser concluída depois dele (F25).** Só
 para `em_andamento` com `started_at` antes do prazo, até o fim do dia seguinte ao
@@ -1461,11 +1548,28 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   (`RescheduleForm.tsx`, só na avulsa não concluída) usa a hora civil de
   Brasília: `saoPauloCivilToIso` e `isoToSaoPauloCivil`, em
   `shared/lib/deadline.ts`, convertem com o `Intl`, sem deslocamento fixo (F21).
-  O rascunho do reagendamento mora no cartão e **não** sobrevive à recarga do
-  quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
+  O formulário guarda o ISO original em `RescheduleDraft.originalDeadline`
+  (campo interno opcional). `deadlineForDraft`, em `rescheduleDraft.ts`, envia
+  esse literal quando o civil em minutos não mudou, preservando segundos,
+  fração e offset; hora editada usa o conversor existente. `sameDraft` compara
+  civil, motivo e prazo efetivo para decidir a reutilização da chave de retry
+  (163(d)). O POST continua com somente `operation_id`, `new_deadline` e
+  `reason`. Não há editor de segundos nem política nova de horário repetido:
+  original intacto mantém seu instante; edição conserva a escolha do conversor.
+  O rascunho do reagendamento mora no formulário do cartão e **não** sobrevive
+  à recarga do quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
   e o `<details>` "Histórico de prazos" (`RescheduleHistory.tsx`), e fica num
   envio de cada vez: Iniciar, Reagendar e Concluir se desabilitam entre si
   enquanto um deles está em voo.
+
+  **Iniciar após remontagem (163(e)):** o leitor interno
+  `CompletionRegistry.hasActionKey(missionId, action)` consulta somente a
+  existência do slot; não cria UUID nem modifica o registro no render.
+  `MissionCard` consulta `start` e passa um boolean privado ao controle:
+  “Iniciando…” tem prioridade em voo; falha local ou chave retida mostra
+  “Tentar de novo”; sem ambos, “Iniciar”. Mensagens antigas não sobrevivem à
+  remontagem. Geração, envio, liberação e reconciliação continuam nos mesmos
+  lugares; uma chave de Reagendar não afeta esse nome.
 
   **Desde o Incremento B** (Tasks 7–8, commits `242d677` e `08b3dcc`),
   `missions` ganhou o ciclo diário: `useCycle.ts` busca
@@ -1496,7 +1600,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   da especial, porque a seção da especial já usa `<h3>` para o próprio
   título, e um `<h3>` aninhado quebraria a hierarquia de cabeçalhos.
   `reloadLabel?: string` (padrão `"Atualizar o quadro"`, repassado a
-  `CompletionControls`) troca o rótulo do botão de recuperação — os dois
+  `CompletionControls`) troca o rótulo do botão de recuperação — os
   cartões do ciclo usam `"Atualizar a missão de hoje"` (a diária de hoje),
   `"Atualizar a diária de ontem"` e `"Atualizar a missão especial"`, cada um
   com o rótulo do próprio cartão. O parágrafo da
@@ -1504,6 +1608,29 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   região viva **desde o primeiro render** (o mesmo padrão do painel da
   Tifa, acima), para que uma mudança de sequência ao concluir uma missão
   seja anunciada por leitor de tela.
+
+  **Nome acessível da recarga por missão (163(b)):** `CompletionControls`,
+  o `RefreshNotice` privado de Iniciar/Reagendar e `EvidenceAndEvaluation`
+  acrescentam "a missão: <instructions>" em `span.sr-only`, após o rótulo
+  visível contextual. `RefreshNotice` recebe somente `instructions: string`
+  dos dois consumidores, usando a missão atual do cartão. O sufixo permanece
+  no estado de espera; disabled, callbacks e regiões vivas não mudam.
+  `CampaignTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
+  botão global não recebe identificação de uma missão.
+
+  **Foco após reagendar sem deslocar a leitura (163(c)):**
+  `RescheduleForm` mantém a guarda de sucesso com foco no body e devolve-o ao
+  disclosure com `focus({ preventScroll: true })`. O efeito não toma foco de
+  outro controle. O teste Chromium `reschedule-focus-scroll.spec.ts` segura o
+  POST, estabelece scroll real com o disclosure fora da viewport e verifica
+  payload, estado, prazo, histórico e foco antes da posição. Um controle de
+  sucesso com foco já na Tifa comprova que não há transferência de foco nem
+  perda do rascunho enquanto o prazo/histórico mudam. O erro 422 mantém
+  rascunho, alerta, prazo e foco da Tifa; Routes pendentes são abortadas no
+  finally. HTTPs são fixtures de apresentação, sem prova de persistência;
+  geometria controlada separa scroll por foco de scroll anchoring/colapso.
+  Iniciar, Concluir e recuperação do ciclo não mudam. A prova não generaliza
+  viewports ou leitor de tela real; jsdom não mede rolagem.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no
@@ -1884,7 +2011,71 @@ frontend/tests/e2e/tutor-focus.spec.ts
 Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
 atual, incluindo unicidade por `(mission_id, source)` do E; os de
 `mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
-sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
-compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
+sem afirmar paridade geral de todo o esquema. O caso explícito
+`test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao` exige
+legado/XP/conquistas não vazios, preserva o legado em 0003↔head e compara a
+progressão reconstruída, excluindo missões pendentes (83 já resolvida na base).
+As nove colunas legadas de `tutor_messages` são comparadas explicitamente:
 `fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
-ao contrato de preservação da `0004`. Migrações não foram alteradas.
+ao contrato de preservação da `0004`. Os IDs do legado são preservados; os IDs
+das entradas de XP e suas FKs nas conquistas são normalizados na comparação
+da progressão reconstruída. Esse caso não mede identidade bruta da progressão,
+sequences, índices ou todo o schema. Nenhum teste ou migração foi alterado
+pela correção documental da 83.
+
+
+### Prova da janela tardia depois da trava
+
+A fatia `wt/conclusao-tardia-espera` (base `5ba81c3`, ainda não integrada à
+`main`) acrescenta `tests/integration/test_conclusao_tardia_espera.py`.
+O holder apenas trava a diária já iniciada. O controlador observa a
+espera pelo PID exato, avança um relógio que não bloqueia e só então libera.
+Os casos cobrem o fim da janela tardia e o último segundo ainda disponível,
+com conclusão, evidência e XP no instante posterior à espera.
+
+Na recusa, consultas SQL com autoflush verificam a ausência de escritas
+antes do rollback; uma sessão nova confere a persistência. No sucesso,
+verificam estado, início preservado, timestamps, evidência, operações e o
+único crédito de 40 XP da diária. O cleanup usa o plano criado como escopo,
+e libera a trava antes de aguardar o executor em qualquer saída.
+Não altera produção nem comprova releitura após mudança da linha: o holder
+não muda os dados. É uma prova parcial da F25/160, não uma matriz geral.
+
+
+### Retentativas HTTP e geração nos testes de encerramento
+
+Na fatia `wt/sdk-retries-oraculo` (base `5ba81c3`, ainda não integrada à
+`main`), `test_tutoring_max_tokens.py` distingue uma geração lógica das
+retentativas HTTP que o SDK já permite. Um tratador local devolve 500 imediato
+na tentativa zero; as seguintes usam o mesmo servidor falso e stream real.
+Não muda o roteiro global nem depende de atraso artificial para obter retry.
+
+O oráculo exige entre uma e `1 + TENTATIVAS` requisições, sequência exata
+`x-stainless-retry-count` de zero em diante e o mesmo JSON em todas as
+tentativas da geração. No cenário 500, exige pelo menos duas requisições.
+O reenvio explícito delimita duas gerações, cada uma com seu próprio grupo,
+e continua exigindo dois geradores fechados. Status, SSE, proposta,
+persistência e efeitos anteriores permanecem verificados. O teste com
+`max_retries=0` continua exigindo uma única requisição física.
+
+O header é observabilidade do SDK instalado, confirmado no seu código e no
+HTTP real dos testes, não um contrato público do FocusQuest. Uma atualização
+do SDK pode exigir rever este oráculo. Nenhuma política de retentativa,
+timeout, adaptador de produção ou contrato do produto foi alterado.
+
+## Prova sequencial de reuso com evidência — 2026-10-05
+
+`test_iniciar_missao.py` fortalece o caso existente de chave de início usada
+para concluir a mesma missão; `test_missions_service.py` fortalece o caso de
+chave de conclusão usada noutra missão. `NovaEvidencia` acompanha a tentativa
+recusada. Consultas SQL com autoflush antes do rollback verificam evidência,
+XP, operações, estado e timestamps; o segundo preserva também a entrega e
+progressão da origem. Não há cenário duplicado nem alteração de produção.
+
+O controle de mutação mantém o erro real e apenas escreve evidência no
+caminho de reuso: os três módulos antigos (71 casos) passam; as duas
+verificações fortalecidas detectam a escrita indevida. O serviço é restaurado
+no `finally` e confirmado por SHA antes da execução relacionada aprovada.
+Esta é parte de 97(j)/T-M1: não mede rollback numa sessão nova, comparação de
+evidência no reenvio, disputa da UNIQUE, HTTP ou todas as recusas. Os gates e
+PR desta branch não aprovam uma combinação com outros incrementos.
