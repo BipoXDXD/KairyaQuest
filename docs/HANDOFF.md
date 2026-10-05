@@ -3,6 +3,51 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
+## Oráculo de GeneratorExit no tradutor — 2026-10-05
+
+Fatia de teste em `wt/tradutor-generator-exit`, base/main `5ba81c3`, banco
+`focusquest_tradutor-generator-exit_test` e offset19. O responsável aprovou a
+adoção somente se a suíte antiga deixasse passar a mutação e o caso novo a
+reprovasse; essa condição foi medida abaixo. Commit/push/PR por fase dependem
+da revisão e gate completos com hooks normais. Merge continua pendente.
+
+**Mudança:** um teste de erro real em `test_traducao_de_erros.py` exige que
+`GeneratorExit` atravesse `_traduzir_erros` conservando a mesma instância e
+`__cause__` None. O teste existente de ValueError permanece literal e intacto.
+Nenhum mock, alteração permanente de produção, contrato externo, dependência
+ou migração. A docstring da produção já prometia essa passagem; o ganho é um
+oráculo específico do contrato fino, sem alteração no comportamento do produto.
+
+**Controle antigo:** o caso novo ficou em `/tmp`, fora de `tests/`, até o
+controle completo. Aplicou-se temporariamente `except GeneratorExit: return`
+no tradutor. Os testes antigos foram executados por `pytest tests`, sem filtro,
+exclusão ou skip; os hashes de todos os arquivos de teste foram comparados com
+a base antes de adicionar o novo caso. O mutante não é código aprovado para
+uso: apenas caracterização isolada. Bytes de produção restaurados em `finally`
+e SHA-256 conferido; diff de `src/` vazio. O cancelamento por `close()` e os
+outros oráculos existentes não denunciavam essa supressão específica.
+
+Comandos executados nesta sessão, no ambiente exclusivo:
+
+| Comando | Resultado observado |
+|---|---|
+| Script oficial de novo worktree e instalação normal dos hooks | EXIT0; HEAD `5ba81c3`, árvore inicialmente limpa, banco/portas próprios; sem compose |
+| `uv run pytest tests --collect-only -v` antes da mutação | 1436 casos antigos coletados, teste novo somente fora de `tests/` |
+| `uv run pytest tests/unit tests/integration/test_anthropic_provider.py tests/integration/test_tutoring_service.py tests/integration/test_tutoring_desconexao.py -v` sob mutação | 482 aprovados; 45,80s |
+| `uv run pytest tests -v` inteiro sob mutação, ainda sem caso novo na árvore | 1436 aprovados; 208,51s; testes antigos com hashes intactos |
+| Caso novo adicionado ao unitfile somente após controle; execução explícita dele sob mutante | RED: 1 falha, `DID NOT RAISE GeneratorExit`; 1,80s |
+| Produção restaurada em finally/SHA e `uv run pytest tests/unit/test_traducao_de_erros.py -v` | GREEN: 8 aprovados; 1,98s; nenhum diff de produção |
+| Ruff lint/format e mypy no arquivo unit | Aprovados, sem achados |
+
+A prova distingue a supressão de GeneratorExit; não mede todas as falhas de
+cancelamento, liberação de recursos do SDK nem uma correção de produto.
+O controle mutante não é gate oficial nem afirma cobertura da árvore mutante.
+Teste novo nesta feature, ainda fora da `main`. Revisão independente final,
+gate da árvore final, commit, push, PR e CI ainda pendentes neste ponto do
+registro; resultados posteriores no ledger ignorado
+`.superpowers/sdd/2026-10-05-tradutor-generator-exit/` e no PR. Plano:
+`docs/superpowers/plans/2026-10-05-tradutor-generator-exit.md`.
+
 ## Objetivo
 
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
@@ -4876,10 +4921,14 @@ ledger; nenhum é bug esquecido.
     `downgrade` da `0005` fixava `0004`~~ **resolvida pelo MB** (item 5; resta que,
     com uma `0006` que tenha guarda própria, o `RuntimeError` do teste pode vir da
     `0006`, o que o `match=tabela` só distingue para evidência e avaliação, não
-    para o bônus); (j) não feitos, fora do brief das ondas: T-M5 (`GeneratorExit`
-    atravessando `_traduzir_erros`), S-M6, "o upgrade preserva os `xp_entries`
-    existentes" (T-M4) e a segunda metade do T-M1 (falha de conclusão com
-    evidência não deixa linha em `mission_evidence`).
+    para o bônus); (j) ~~T-M5 (`GeneratorExit` atravessando `_traduzir_erros`)~~:
+    **oráculo adicionado na branch `wt/tradutor-generator-exit`, ainda fora da
+    main**, com ganho medido: toda a suíte antiga passou a supressão temporária,
+    o caso novo reprovou e a produção restaurada passou (registro no topo).
+    Os demais itens não feitos no brief das ondas permanecem registrados:
+    S-M6, "o upgrade preserva os `xp_entries` existentes" (T-M4) e a segunda
+    metade do T-M1 (falha de conclusão com evidência não deixa linha em
+    `mission_evidence`).
 98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1

@@ -76,3 +76,13 @@ def test_excecao_nao_relacionada_atravessa_sem_traducao() -> None:
 
     assert saiu.value is original
     assert saiu.value.__cause__ is None
+
+
+def test_generator_exit_atravessa_sem_traducao() -> None:
+    original = GeneratorExit("consumidor interrompeu o stream")
+
+    with pytest.raises(GeneratorExit) as saiu, _traduzir_erros():
+        raise original
+
+    assert saiu.value is original
+    assert saiu.value.__cause__ is None
