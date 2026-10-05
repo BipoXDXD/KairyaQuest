@@ -1888,3 +1888,21 @@ sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
 compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
 `fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
 ao contrato de preservação da `0004`. Migrações não foram alteradas.
+
+
+### Prova da janela tardia depois da trava
+
+A fatia `wt/conclusao-tardia-espera` (base `5ba81c3`, ainda não integrada à
+`main`) acrescenta `tests/integration/test_conclusao_tardia_espera.py`.
+O holder apenas trava a diária já iniciada. O controlador observa a
+espera pelo PID exato, avança um relógio que não bloqueia e só então libera.
+Os casos cobrem o fim da janela tardia e o último segundo ainda disponível,
+com conclusão, evidência e XP no instante posterior à espera.
+
+Na recusa, consultas SQL com autoflush verificam a ausência de escritas
+antes do rollback; uma sessão nova confere a persistência. No sucesso,
+verificam estado, início preservado, timestamps, evidência, operações e o
+único crédito de 40 XP da diária. O cleanup usa o plano criado como escopo,
+e libera a trava antes de aguardar o executor em qualquer saída.
+Não altera produção nem comprova releitura após mudança da linha: o holder
+não muda os dados. É uma prova parcial da F25/160, não uma matriz geral.

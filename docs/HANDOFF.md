@@ -8,6 +8,43 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Janela tardia depois da espera — 2026-10-05
+
+Fatia de prova da F25 e da pendência 160, em `wt/conclusao-tardia-espera`,
+baseada na `main` em `5ba81c3` e ainda não integrada. O dono autorizou
+continuação autônoma, decisões não críticas e commit/push/PR por fase com
+cobertura de 100%; merge e decisões críticas continuam pendentes.
+
+Dois cenários iniciam e commitam uma diária de quarta às 23:50 em São Paulo.
+Outra conexão mantém a missão em `FOR UPDATE`. O worker retém a missão
+carregada e o relógio retorna imediatamente; só depois de observar o PID do
+holder em `pg_blocking_pids` o controlador avança o instante e libera a trava.
+No limite sexta 00:00, a conclusão é recusada. No último segundo de quinta,
+é permitida, com conclusão, evidência e 40 XP creditados no instante posterior
+à espera. Início, operação e missão próprios permanecem identificados.
+
+A recusa consulta SQL com autoflush **antes do rollback** e depois numa
+sessão nova: missão ainda em andamento, início original, sem conclusão,
+evidência ou XP, e somente a operação de início. Assim uma escrita indevida
+não fica escondida pelo rollback do teste. O sucesso verifica timestamps,
+conteúdo da evidência, fonte/quantidade de XP e operações exatas. Finalmente,
+a trava é liberada antes do executor esperar a thread; a limpeza apaga só
+as missões do plano criado e o próprio plano.
+
+Validação focada executada: baseline de prazo e concorrência, 29 aprovados;
+novos cenários, dois aprovados. Mutação que antecipa o relógio à trava:
+duas falhas causais (conclusão indevida fora da janela e timestamp anterior).
+Mutação que grava evidência antes de recusar: uma falha na consulta anterior
+ao rollback e um controle aprovado. Bytes do serviço restaurados no `finally`
+e SHA confirmado; produção sem diff. Depois da restauração/formatação,
+31 testes relacionados aprovados em 3,56 s. Gate completo, hooks e publicação
+serão registrados no ledger e PR; estes resultados focados não os substituem.
+
+Limite: o holder não muda estado ou dados da linha. Esta prova confirma a
+janela e os efeitos do relógio posterior à espera, sem provar releitura do
+identity map, todas as corridas da 160, HTTP ou ocultação pública. Nenhuma
+biblioteca, endpoint, migração, infraestrutura ou chamada paga entrou.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -5415,6 +5452,13 @@ ledger; nenhum é bug esquecido.
     determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
     os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
     a única garantia determinística dele.
+    **Complemento nesta fatia (`wt/conclusao-tardia-espera`, base `5ba81c3`,
+    ainda não integrada):** dois cenários determinísticos da conclusão tardia
+    F25 observam a espera real, cruzam ou preservam o limite de sexta 00:00 SP
+    e verificam efeitos/timestamps após a liberação. Relógio antecipado
+    reprova ambos; evidência gravada antes da recusa é detectada antes do
+    rollback. Esta prova parcial não substitui as medições históricas acima
+    nem cobre a matriz inteira de início/reagendamento ou releitura de linha.
 161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
     liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
     **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
