@@ -650,6 +650,18 @@ A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
 
+### Prova cruzada da confirmação da Tifa × conclusão (pendência 167)
+
+`tests/integration/test_tutoring_conclusao_concorrencia.py` concentra os dois
+vencedores possíveis, com conexões reais e dados commitados. A sessão que
+espera mantém a missão no identity map; uma conexão observadora verifica
+`pg_blocking_pids` antes de liberar a transação vencedora. O módulo verifica
+os efeitos persistidos em ação, missão, histórico, operações e XP, e limpa
+somente o cenário criado (mensagens antes da missão, efeitos por CASCADE).
+Não importa helpers de outro módulo de teste nem acrescenta mecanismo ao
+código de produção. A responsabilidade complementa os testes existentes de
+`test_tutoring_reagendamento.py` e `test_acompanhamento_concorrencia.py`.
+
 ### Logging (pendência 13)
 
 Mínimo de propósito, sem dependência nova: `core/log.py` e o `lifespan` de

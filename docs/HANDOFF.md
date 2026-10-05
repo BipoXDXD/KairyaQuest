@@ -8,7 +8,98 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
-## Conciliação do PR #6 — 2026-10-04
+## Retomada — pendência 167, confirmação da Tifa × conclusão
+
+O dono solicitou retomar a pausa. Trabalho no worktree `wt/tifa-conclusao`,
+base `5ba81c3`, banco exclusivo `focusquest_tifa-conclusao_test` e offset 6.
+O dono autorizou commit, push e abertura de PR desta fatia. A publicação será
+feita com os hooks ativos; commit/PR e resultados do CI ficam no ledger e no
+próprio PR após execução. O merge continua dependendo de autorização própria.
+Os seis outros worktrees e os checkpoints continuam preservados. As três
+alterações documentais não commitadas do principal foram copiadas para esta
+branch antes da atualização, preservando os registros anteriores.
+
+**Entrega:** `tests/integration/test_tutoring_conclusao_concorrencia.py`, dois
+cenários com conexões PostgreSQL reais. A sessão que espera mantém uma missão
+pré-carregada; o teste observa `pg_blocking_pids` e só depois libera o commit
+vencedor. Conclusão primeiro: ação `falhou/reagendamento_invalido`, prazo
+original, sem elo nem operação de reagendamento. Tifa primeiro: conclusão
+devolve o prazo novo, ação executada e um elo de origem Tifa anterior à
+conclusão. Ambos persistem uma só operação de conclusão e um crédito de 40 XP.
+Sem mudança permanente no código de produção, contrato, dependência ou banco.
+
+**Comandos executados nesta retomada:** `make db-up` somente no principal;
+`make check` de baseline no worktree, EXIT 0 (1436 Python, 990 frontend,
+59 E2E e cobertura 100%); Ruff lint/format e mypy no arquivo novo, aprovados;
+pytest do módulo, 2 aprovados; suíte relacionada (o módulo novo,
+`test_tutoring_reagendamento.py` e `test_acompanhamento_concorrencia.py`),
+55 aprovados. Mutação temporária `populate_existing=False`: os dois cenários
+reprovaram (EXIT 1); arquivo de produção restaurado em `finally` e conferido
+por SHA-256; reexecução, 2 aprovados. O gate final da implementação passou:
+1438 Python, 990 frontend, 59 E2E, cobertura 100%, EXIT 0 e 351 arquivos/HEAD/índice
+estáveis. O gate da publicação e o CI terão resultados próprios no ledger e no
+PR; aquele resultado não aprova revisões posteriores.
+
+Plano: `docs/superpowers/plans/2026-10-04-tifa-conclusao-concorrencia.md`.
+Ledger e logs: `.superpowers/sdd/2026-10-04-tifa-conclusao-concorrencia/`.
+**Revisão independente:** nenhum achado crítico ou importante. Uma melhoria
+de diagnóstico dos testes ficou adiada: exceção antecipada da thread pode
+aparecer como timeout antes de o controlador ler o futuro. O teste reprova
+e a limpeza libera as travas, mas a causa original fica menos visível.
+
+**Limite:** a prova passa pelos serviços e pelo banco; não simula duas abas
+do navegador nem uma chamada real à Anthropic. A pendência 160, de outros
+testes cuja detecção depende do escalonador, não é encerrada por esta fatia.
+
+## Histórico da pausa — 2026-10-04 21:48:53 -03
+
+O dono pediu pausa para reiniciar e salvar tudo. Alterações documentais locais,
+registros de leitura e sete worktrees preservados. Principal na branch
+`docs/estado-pos-pr6`, HEAD `5ba81c3`; nenhum novo commit, push ou PR.
+O worktree `wt/tifa-conclusao` foi preparado para a pendência 167, sem edição
+de produto ou testes. Seu gate de baseline foi interrompido (código 130):
+frontend 990/990 e 100%, Python incompleto, E2E não executado. Não aprovado.
+A nota desta pausa é posterior ao gate anterior da documentação.
+
+Retomada detalhada em `docs/RETOMADA-2026-10-04.md`, bloco "Histórico da pausa";
+checkpoint em `.superpowers/sdd/2026-10-04-estabilizacao/evidence/pausa-reinicio-20261004-214853/`.
+Pausa encerrada pelo pedido do dono: "retome de onde parou". A continuação está no bloco acima.
+
+## Estado atual — PR #6 integrado em 2026-10-04
+
+O dono autorizou o merge do [PR #6](https://github.com/BipoXDXD/FocusQuest/pull/6).
+O GitHub confirmou a integração na `main` pelo commit
+`5ba81c3dcc4b4916c63e4e9da2967f989c4039bb`, às 21:01:55 de 2026-10-04
+em `America/Sao_Paulo`. Seus pais são `469e149` e `43ff5f7`: os incrementos
+E/F/G e as vinte fatias de estabilização estão integrados.
+
+Antes do merge, `make check` foi executado novamente: EXIT 0, 285,43 s,
+1436 testes Python, 990 frontend e 59 E2E, cobertura de 100% no backend
+e nas quatro métricas do frontend. As 349 fontes, HEAD e índice permaneceram
+iguais durante o comando. A árvore do merge é idêntica à da ponta validada.
+Os dez checks da ponta do PR estavam aprovados no momento da integração.
+
+O [CI pós-merge](https://github.com/BipoXDXD/FocusQuest/actions/runs/37245877941)
+também foi conferido: `check-web`, `check-api`, `check-e2e`, `check-secrets`
+e `quality-gate` concluíram com sucesso sobre `5ba81c3`.
+A `main` local foi atualizada por fast-forward; os worktrees auxiliares,
+a branch do PR e os checkpoints anteriores foram preservados.
+Comandos, snapshots e resultados estão no registro mais recente de
+`.superpowers/sdd/2026-10-04-estabilizacao/progress.md`, com evidências em
+`evidence/merge-pr6/` e `evidence/pos-merge-pr6/`.
+
+**Retomada:** partir da `main` integrada e trabalhar em nova branch, conforme
+o AGENTS.md. O plano de estabilização está concluído; os estados de publicação
+e as pendências antigas abaixo são históricos e precisam ser confrontados
+com o código atual antes de iniciar outra fatia. Não reimplementar E/F/G
+a partir daqueles registros. Consultas ao acervo feitas na estabilização
+estão descritas em `docs/REVISAO-2026-10-04.md`; esse registro não comprova
+leitura anterior ao início do projeto nem de livros específicos de Python.
+
+## Histórico da conciliação do PR #6 — 2026-10-04
+
+Este bloco descreve a preparação anterior ao commit `43ff5f7` e ao merge;
+o estado corrente é o da seção acima.
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
 e abertura do PR e pediu continuar
@@ -5502,7 +5593,7 @@ ledger; nenhum é bug esquecido.
     mesmo N+1 que `evidence` e `evaluation` já tinham ali, e o custo é pequeno e
     fixo. Resolver: `selectinload` nas consultas de `cycle_service.py`, com um teste
     de contagem de consultas como o de `test_missions_listagem_consultas.py`.
-167. **Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
+167. ~~**Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
     tela** (revisão final do F, m6). Há confirmação × reagendamento direto,
     reagendamento × conclusão e a mesma confirmação em paralelo, mas não uma
     confirmação de reagendamento junto com a conclusão da mesma missão. A ordem das
@@ -5511,7 +5602,16 @@ ledger; nenhum é bug esquecido.
     prova por conexões reais, no padrão do cenário "reagendamento × conclusão" de
     `test_acompanhamento_concorrencia.py`: nunca um elo gravado depois da conclusão,
     e, se os dois vencem, a conclusão viu o prazo novo. Liga-se à pendência 160 (a
-    detecção de corrida depende do escalonador).
+    detecção de corrida depende do escalonador).~~
+    **Resolvida na retomada de 2026-10-04:**
+    `test_tutoring_conclusao_concorrencia.py` controla as duas ordens por
+    conexões reais, observa o PID bloqueador antes do commit e mantém a missão
+    antiga no identity map da sessão que espera. Confere ação, prazo devolvido,
+    elo/histórico, operações e crédito único de XP. Ambos os casos vistos
+    reprovando sem `populate_existing`; bytes restaurados e teste verde.
+    O cenário não depende de quem ganha uma corrida; os limites de outros
+    testes da pendência 160 permanecem abertos. Comandos/resultados no topo.
+
 168. ~~**O E2E do F tem prazos fixos que vencem, e o gate reprova sozinho a partir
     de 2027-01-10** (revisão final do F, I2). O `check-e2e` roda com o relógio real
     da API (`system_now`, pendência 116), e dois cenários de
