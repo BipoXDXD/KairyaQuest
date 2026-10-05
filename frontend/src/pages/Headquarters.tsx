@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react'
-import { CycleSection } from '../features/missions/CycleSection'
+import { useCallback, useEffect, useRef } from 'react'
+import { CycleSection, type CycleSectionHandle } from '../features/missions/CycleSection'
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
@@ -36,6 +36,8 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
 export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   const board = useRef<MissionListHandle>(null)
   const progress = useRef<ProgressPanelHandle>(null)
+  const cycle = useRef<CycleSectionHandle>(null)
+  const wasHidden = useRef(hidden)
   // O `!`: o quadro e o painel montam junto com a pagina, antes de qualquer
   // clique que chegue aqui. Um `?.` criaria um ramo que nenhum uso real
   // alcanca.
@@ -45,6 +47,16 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   const refreshProgress = useCallback(() => {
     progress.current!.refresh()
   }, [])
+  useEffect(() => {
+    // A navegação dentro da mesma aba não emite focus/visibilitychange.
+    // Só o retorno atualiza: a montagem inicial já carrega cada feature.
+    const returning = wasHidden.current && !hidden
+    wasHidden.current = hidden
+    if (returning) {
+      cycle.current!.refresh()
+      refreshProgress()
+    }
+  }, [hidden, refreshProgress])
   return (
     <div hidden={hidden} className="lg:flex">
       {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
@@ -68,13 +80,13 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
           </p>
         </header>
         <ProgressPanel ref={progress} />
-        <CycleSection onMissionCompleted={refreshProgress} />
+        <CycleSection ref={cycle} onMissionCompleted={refreshProgress} />
         <MissionList ref={board} onMissionCompleted={refreshProgress} />
       </main>
       {/* O `#missions-heading` e o `id` do titulo do quadro. A pagina e quem
           conhece as duas features, entao e ela quem passa o endereco -- a
           feature `tutoring` nao sabe que esse `id` existe. */}
-      <TutorPanel onMissionCreated={reloadBoard} boardHref="#missions-heading" />
+      <TutorPanel hidden={hidden} onMissionCreated={reloadBoard} boardHref="#missions-heading" />
     </div>
   )
 }

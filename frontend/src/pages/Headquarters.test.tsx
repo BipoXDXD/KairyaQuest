@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { StrictMode } from 'react'
 import type { Progress } from '../features/progression/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
 import type { Mission } from '../shared/types/mission'
@@ -146,6 +147,41 @@ describe('Headquarters', () => {
     await screen.findByTestId('tutor-greeting')
     await screen.findByTestId('progress-level')
   })
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    'só oculto→visível atualiza, sem carga adicional na montagem (oculta: %s, StrictMode: %s)',
+    async (initialHidden, strict) => {
+      const fetchMock = stubPage()
+      const { rerender } = render(
+        <Headquarters hidden={initialHidden} />,
+        strict ? { wrapper: StrictMode } : {},
+      )
+      await screen.findByTestId('progress-level')
+      await screen.findByTestId('cycle-no-plan')
+      await screen.findByTestId('tutor-greeting')
+      const initialCalls = strict ? 2 : 1
+      expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(initialCalls)
+      expect(requestsTo(fetchMock, 'GET /api/progress')).toHaveLength(initialCalls)
+      const input = screen.getByTestId('tutor-input')
+      rerender(<Headquarters hidden={initialHidden} />)
+      if (!initialHidden) rerender(<Headquarters hidden />)
+      rerender(<Headquarters hidden />)
+      expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(initialCalls)
+      expect(requestsTo(fetchMock, 'GET /api/progress')).toHaveLength(initialCalls)
+      await act(async () => rerender(<Headquarters hidden={false} />))
+      expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(initialCalls + 1)
+      expect(requestsTo(fetchMock, 'GET /api/progress')).toHaveLength(initialCalls + 1)
+      expect(screen.getByTestId('tutor-input')).toBe(input)
+      await act(async () => rerender(<Headquarters />))
+      expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(initialCalls + 1)
+      expect(requestsTo(fetchMock, 'GET /api/progress')).toHaveLength(initialCalls + 1)
+    },
+  )
 
   it('concluir uma avulsa atualiza o painel sem passar por carregando', async () => {
     const avulsa: Mission = {

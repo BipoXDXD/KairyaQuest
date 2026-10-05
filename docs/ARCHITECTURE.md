@@ -255,7 +255,8 @@ FocusQuest/
 │       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
 │       │   ├── errors.py          # erros de domínio comuns a mais de um módulo; SemEvidenciaError e AvaliacaoEmAndamentoError (E). Sem import de modules/: o teste tests/unit/test_core_sem_modulos.py o exige PrazoDerivadoError, PrazoInalteradoError e ReagendamentoInvalidoError (F)
 │       │   ├── log.py             # configurar_logging: handler no stderr só se a raiz não tiver um, nível só no logger focusquest (pendência 13)
-│       │   └── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
+│       │   ├── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
+│       │   └── validation.py      # TextoPersistivel: rejeita U+0000 em entradas textuais destinadas ao PostgreSQL
 │       ├── modules/
 │       │   ├── __init__.py
 │       │   ├── evaluation/        # o processo de avaliar uma entrega (E); ver §3, "O módulo evaluation e a direção única das dependências"
@@ -1829,3 +1830,61 @@ descreve a forma do código e não fala de comandos; **qualidade** descreve a
 verificação e não fala de onde o arquivo mora; **handoff** descreve o estado
 em um momento do tempo e envelhece de propósito, enquanto estes dois só mudam
 quando a forma ou o gate mudam.
+
+## 7. Estabilização conciliada com E/F/G — 2026-10-04
+
+A conciliação do PR #6 parte de `469e149` e conserva os módulos, rotas e
+migrações dos incrementos E/F/G. `core/validation.py` fornece
+`TextoPersistivel`, usado nos contratos textuais persistidos, inclusive os
+identificadores de iniciar/reagendar. Rejeita U+0000 sem sanitizar identificadores
+ou alterar trim e limites. Texto recebido do provedor também é validado antes
+de acrescentar ou emitir um delta: NUL e Unicode não representável não chegam
+ao PostgreSQL nem ao SSE; o prefixo válido e o encerramento de erro permanecem.
+`main.py` serializa somente `RequestValidationError` como JSON ASCII com 422,
+preservando os diagnósticos de entrada sem converter erros internos em 422.
+
+`ler_progresso` agrega o livro-razão antes do LEFT JOIN das conquistas em um
+SELECT, evitando multiplicação de XP e combinações de snapshots. `ler_ciclo`
+lê o relógio uma vez e projeta missões, planos, evidência e avaliação em um
+SELECT. Histórico, missão de hoje, diária tardia e especial são derivados
+desse conjunto. As cópias são transientes: a identity map não substitui valores
+do snapshot por objetos antigos nem muda a resposta após refresh/expire.
+O autoflush normal preserva alterações próprias ainda não commitadas. Não há
+novo isolamento, trava, cache, commit interno nem garantia entre endpoints.
+
+Na interface, a guarda de voo por instância complementa a idempotência do
+backend; respostas de GET anteriores não substituem a leitura mais recente.
+O histórico reconcilia decisões tomadas enquanto aquele GET estava em curso,
+e um GET posterior volta a ser autoritativo. Quadro e ciclo comunicam somente
+IDs explicitamente concluídas ao registro de chaves, incluindo `late_daily`;
+a poda espera todos os voos e conserva rascunhos e chaves de iniciar/reagendar.
+Foco e `inert` respeitam visibilidade e mudanças de breakpoint. Textos longos
+quebram dentro dos cartões, inclusive a proposta de reagendamento do F.
+
+Arquivos adicionais da estabilização, além da árvore histórica da seção 1:
+
+```text
+src/focusquest/core/validation.py
+tests/unit/test_textos_persistiveis.py
+tests/integration/test_cycle_consistency.py
+tests/integration/test_mission_operations_schema_parity.py
+tests/integration/test_progression_consistency.py
+tests/integration/test_progression_schema_parity.py
+tests/integration/test_request_validation.py
+tests/integration/test_textos_persistiveis.py
+tests/integration/test_tutoring_delta_nul.py
+tests/integration/test_tutoring_delta_unicode.py
+tests/integration/test_tutoring_max_tokens.py
+frontend/tests/e2e/cycle-focus.spec.ts
+frontend/tests/e2e/layout.spec.ts
+frontend/tests/e2e/navigation.spec.ts
+frontend/tests/e2e/tutor-focus.spec.ts
+```
+
+Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
+atual, incluindo unicidade por `(mission_id, source)` do E; os de
+`mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
+sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
+compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
+`fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
+ao contrato de preservação da `0004`. Migrações não foram alteradas.

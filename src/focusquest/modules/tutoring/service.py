@@ -33,6 +33,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoInalteradoError,
 )
+from focusquest.core.validation import rejeitar_nul
 from focusquest.modules.missions.cycle_service import ler_ciclo
 from focusquest.modules.missions.domain import (
     MissionState,
@@ -298,6 +299,14 @@ def transmitir(
         try:
             for evento in eventos:
                 if isinstance(evento, Delta):
+                    try:
+                        rejeitar_nul(evento.texto)
+                        # UnicodeEncodeError e ValueError: mesmo erro de provedor.
+                        evento.texto.encode("utf-8")
+                    except ValueError as erro:
+                        raise ProvedorIndisponivelError(
+                            "o provedor enviou texto nao persistivel"
+                        ) from erro
                     partes.append(evento.texto)
                     yield Trecho(evento.texto)
                 elif isinstance(evento, Proposta):

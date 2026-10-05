@@ -1,4 +1,4 @@
-import { useImperativeHandle, type ReactElement, type Ref } from 'react'
+import { useEffect, useImperativeHandle, type ReactElement, type Ref } from 'react'
 import { MissionCard } from './MissionCard'
 import { useCompletionRegistry, type CompletionRegistry } from './useCompletionRegistry'
 import { useMissions, type MissionsState } from './useMissions'
@@ -139,6 +139,16 @@ export function MissionList({
   // O `requestReload`, e nao o `reload` cru: com uma conclusao em voo, a
   // recarga pedida de fora ESPERA, como o "Atualizar o quadro" (Incremento A).
   useImperativeHandle(ref, () => ({ reload: requestReload }), [requestReload])
+
+  useEffect(() => {
+    if (state.status === 'loaded') {
+      registry.reconcileCompleted(
+        state.missions
+          .filter((mission) => mission.state === 'concluida')
+          .map((mission) => mission.id),
+      )
+    }
+  }, [state, registry])
 
   return (
     <section aria-labelledby="missions-heading" data-testid="missions">

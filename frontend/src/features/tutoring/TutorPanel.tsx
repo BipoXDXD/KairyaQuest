@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { announceAnswer } from './answerOutcome'
 import { readPanelOpen, writePanelOpen } from './panelPreference'
 import { ProposalCard } from './ProposalCard'
@@ -38,8 +38,8 @@ function Portrait() {
 /** Os elementos focaveis da folha, na ordem do documento. */
 function focusables(root: HTMLElement): HTMLElement[] {
   return Array.from(
-    root.querySelectorAll<HTMLElement>('button:not([disabled]), textarea:not([disabled])'),
-  )
+    root.querySelectorAll<HTMLElement>('button, textarea, a[href], [tabindex]'),
+  ).filter((item) => item.tabIndex >= 0 && !item.matches(':disabled'))
 }
 
 /**
@@ -58,11 +58,14 @@ function focusables(root: HTMLElement): HTMLElement[] {
 export function TutorPanel({
   onMissionCreated,
   boardHref,
+  hidden = false,
 }: {
   /** Uma proposta foi confirmada: a pagina recarrega o quadro. */
   onMissionCreated: () => void
   /** O endereco do quadro na pagina. A feature nao sabe onde ele mora. */
   boardHref: string
+  /** A página conserva a conversa montada ao navegar para outra área. */
+  hidden?: boolean
 }) {
   const isDesktop = useIsDesktop()
   const { state: status, reload: reloadStatus } = useTutorStatus()
@@ -73,9 +76,79 @@ export function TutorPanel({
   const keys = useActionKeys()
   const [desktopOpen, setDesktopOpen] = useState(readPanelOpen)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const panel = useRef<HTMLElement>(null)
+  const desktopToggle = useRef<HTMLButtonElement>(null)
+  const layout = useRef<HTMLDivElement | null>(null)
+  const transferFocus = useRef(false)
+  // O callback roda antes da remoção da subtree: depois dela activeElement
+  // já seria BODY, sem distinguir conversa de foco em outro recurso.
+  const captureLayout = useCallback((node: HTMLDivElement | null) => {
+    if (node === null) {
+      transferFocus.current = layout.current!.contains(document.activeElement)
+    }
+    layout.current = node
+  }, [])
   const openButton = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const sheetClose = useRef<HTMLButtonElement>(null)
+
+  useLayoutEffect(() => {
+    const transfer = transferFocus.current
+    transferFocus.current = false
+    // Uma folha lembrada dentro do QG oculto não é um modal ativo.
+    if (hidden) {
+      return
+    }
+    if (isDesktop || !sheetOpen) {
+      if (transfer) {
+        const field = input.current
+        const target = isDesktop
+          ? field !== null && !field.disabled
+            ? field
+            : desktopToggle.current!
+          : openButton.current!
+        target.focus()
+      }
+      return
+    }
+
+    const sheet = document.getElementById('tutor-sheet')!
+    const focusSheet = () => {
+      const field = input.current!
+      ;(field.disabled ? sheetClose.current! : field).focus()
+    }
+    // Isola irmãos em cada nível, nunca um ancestral da própria folha.
+    // A região viva, a folha e o backdrop ficam disponíveis dentro do aside.
+    const background: [Element, string | null][] = []
+    let branch: Element = panel.current!
+    while (branch !== document.body) {
+      const parent = branch.parentElement!
+      for (const sibling of parent.children) {
+        if (sibling !== branch) {
+          background.push([sibling, sibling.getAttribute('inert')])
+          sibling.setAttribute('inert', '')
+        }
+      }
+      branch = parent
+    }
+    const containFocus = () => {
+      if (!sheet.contains(document.activeElement)) {
+        focusSheet()
+      }
+    }
+    document.addEventListener('focusin', containFocus)
+    focusSheet()
+    return () => {
+      document.removeEventListener('focusin', containFocus)
+      for (const [element, previous] of background) {
+        if (previous === null) {
+          element.removeAttribute('inert')
+        } else {
+          element.setAttribute('inert', previous)
+        }
+      }
+    }
+  }, [isDesktop, sheetOpen, hidden])
 
   const toggleDesktop = () => {
     const next = !desktopOpen
@@ -136,14 +209,23 @@ export function TutorPanel({
   )
 
   return (
-    <aside aria-label="Tifa" data-testid="tutor-panel" className="lg:border-l lg:border-slate-800">
+    <aside
+      ref={panel}
+      aria-label="Tifa"
+      data-testid="tutor-panel"
+      className="lg:border-l lg:border-slate-800"
+    >
       <p role="status" data-testid="tutor-live" className="sr-only">
         {liveText(conversation.send)}
       </p>
 
       {isDesktop ? (
-        <div className={`flex h-screen flex-col gap-3 p-4 ${desktopOpen ? 'w-96' : 'w-20'}`}>
-          <header className="flex items-center gap-3">
+        <div
+          key="desktop"
+          ref={captureLayout}
+          className={`flex h-screen flex-col gap-3 p-4 ${desktopOpen ? 'w-96' : 'w-20'}`}
+        >
+          <header className={`flex items-center gap-3 ${desktopOpen ? '' : 'flex-col'}`}>
             <Portrait />
             {desktopOpen && (
               <div className="flex-1">
@@ -153,13 +235,16 @@ export function TutorPanel({
             )}
             <button
               type="button"
+              ref={desktopToggle}
               data-testid="tutor-panel-toggle"
+              aria-label={desktopOpen ? 'Recolher o painel da Tifa' : 'Abrir o painel da Tifa'}
+              title={desktopOpen ? 'Recolher o painel da Tifa' : 'Abrir o painel da Tifa'}
               aria-expanded={desktopOpen}
               aria-controls="tutor-panel-body"
               onClick={toggleDesktop}
-              className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+              className={`rounded border border-slate-600 text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ${desktopOpen ? 'px-2 py-1 text-xs' : 'flex h-11 w-11 items-center justify-center text-xl'}`}
             >
-              {desktopOpen ? 'Recolher o painel da Tifa' : 'Abrir o painel da Tifa'}
+              {desktopOpen ? 'Recolher o painel da Tifa' : <span aria-hidden="true">›</span>}
             </button>
           </header>
           {desktopOpen && (
@@ -169,7 +254,7 @@ export function TutorPanel({
           )}
         </div>
       ) : (
-        <>
+        <div key="mobile" ref={captureLayout}>
           {!sheetOpen && (
             <button
               ref={openButton}
@@ -177,17 +262,7 @@ export function TutorPanel({
               data-testid="tutor-sheet-open"
               aria-expanded={false}
               aria-controls="tutor-sheet"
-              onClick={() => {
-                setSheetOpen(true)
-                // O foco entra na folha, no campo. Com o campo desabilitado (Tifa
-                // fora do ar, status ainda carregando), `focus()` nao faz nada e o
-                // foco ficaria no `body`, atras de um dialogo modal: vai para o
-                // "Fechar a conversa". Os dois existem: a folha acabou de abrir.
-                queueMicrotask(() => {
-                  const field = input.current!
-                  ;(field.disabled ? sheetClose.current! : field).focus()
-                })
-              }}
+              onClick={() => setSheetOpen(true)}
               className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
               <Portrait />
@@ -229,7 +304,7 @@ export function TutorPanel({
               </div>
             </>
           )}
-        </>
+        </div>
       )}
     </aside>
   )

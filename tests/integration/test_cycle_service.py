@@ -31,11 +31,14 @@ from focusquest.modules.missions.cycle_service import (
 )
 from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission, MissionOperation, WeeklyPlan
+from focusquest.modules.missions.schemas import MissionRead
 from focusquest.modules.missions.service import (
     concluir_missao,
     criar_missao,
     iniciar_missao,
 )
+from focusquest.modules.progression.models import UserAchievement, XpEntry
+from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 
 ESTUDANTE = 1
 SEGUNDA = date(2026, 9, 21)
@@ -743,3 +746,109 @@ def test_reenvio_da_conclusao_tardia_depois_do_limite_devolve_o_mesmo_sucesso(
         .where(MissionOperation.mission_id == quarta.id)
     )
     assert operacoes == 2  # o inicio e UMA conclusao
+
+
+def _contagens_da_leitura(session: Session) -> tuple[int, ...]:
+    return tuple(
+        session.scalar(select(func.count()).select_from(tabela)) or 0
+        for tabela in (
+            Mission,
+            WeeklyPlan,
+            MissionOperation,
+            XpEntry,
+            UserAchievement,
+            TutorMessage,
+            TutorAction,
+        )
+    )
+
+
+def test_diaria_perdida_preserva_conteudo_na_trilha_e_por_id_sem_gravar(
+    session: Session,
+) -> None:
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    diaria = _diaria_do_dia(session, SEGUNDA)
+    antes = _contagens_da_leitura(session)
+    hoje = ao_meio_dia(SEGUNDA + timedelta(days=1))
+
+    trilha = ler_plano_atual(session, ESTUDANTE, clock=relogio(hoje))
+    assert trilha is not None
+    dia = trilha.dias[0]
+    assert dia.availability is Availability.PERDIDA
+    assert dia.missao is not None
+    por_id = ler_missao(session, diaria, hoje)
+    for lida in (dia.missao, por_id):
+        leitura = MissionRead.da_leitura(lida)
+        assert leitura.id == diaria.id
+        assert leitura.availability is Availability.PERDIDA
+        assert leitura.instructions == "Diaria 0"
+        assert leitura.completion_criterion == "Criterio 0"
+        assert leitura.difficulty == 2
+        assert leitura.estimated_minutes == 30
+        assert leitura.mission_type is MissionType.DIARIA
+        assert leitura.day == SEGUNDA
+        assert leitura.deadline == fim_do_dia(SEGUNDA)
+        assert leitura.xp == 40
+        assert leitura.state is MissionState.PENDENTE
+        assert leitura.started_at is None and leitura.completed_at is None
+    assert not session.new and not session.dirty and not session.deleted
+    assert _contagens_da_leitura(session) == antes
+    session.flush()
+    session.expire_all()
+    persistida = session.get(Mission, diaria.id)
+    assert persistida is not None
+    assert persistida.state is MissionState.PENDENTE
+    assert persistida.deadline is None
+    assert not session.new and not session.dirty and not session.deleted
+
+
+def test_especial_expirada_na_mesma_semana_preserva_conteudo_sem_gravar(
+    session: Session,
+) -> None:
+    anterior = SEGUNDA - UMA_SEMANA
+    _criar(session, semana=anterior, agora=ao_meio_dia(anterior))
+    for indice in range(3, 7):
+        _concluir_no_dia(session, anterior + timedelta(days=indice))
+    _criar(session, agora=ao_meio_dia(SEGUNDA))
+    for indice in range(3):
+        _concluir_no_dia(session, SEGUNDA + timedelta(days=indice))
+    especial = session.scalars(
+        select(Mission)
+        .join(WeeklyPlan, Mission.plan_id == WeeklyPlan.id)
+        .where(
+            Mission.mission_type == MissionType.ESPECIAL,
+            WeeklyPlan.week_start == SEGUNDA,
+        )
+    ).one()
+    antes = _contagens_da_leitura(session)
+    sexta = ao_meio_dia(SEGUNDA + timedelta(days=4))
+
+    trilha = ler_plano_atual(session, ESTUDANTE, clock=relogio(sexta))
+    assert trilha is not None
+    assert trilha.semana == SEGUNDA
+    assert trilha.especial.availability is Availability.EXPIRADA
+    assert trilha.especial.missao is not None
+    por_id = ler_missao(session, especial, sexta)
+    for lida in (trilha.especial.missao, por_id):
+        leitura = MissionRead.da_leitura(lida)
+        assert leitura.id == especial.id
+        assert leitura.availability is Availability.EXPIRADA
+        assert leitura.instructions == "Prova simulada"
+        assert leitura.completion_criterion == "Nota registrada"
+        assert leitura.difficulty == 5
+        assert leitura.estimated_minutes == 120
+        assert leitura.mission_type is MissionType.ESPECIAL
+        assert leitura.day is None
+        assert leitura.deadline == fim_do_dia(SEGUNDA + timedelta(days=3))
+        assert leitura.xp == 660
+        assert leitura.state is MissionState.PENDENTE
+        assert leitura.started_at is None and leitura.completed_at is None
+    assert not session.new and not session.dirty and not session.deleted
+    assert _contagens_da_leitura(session) == antes
+    session.flush()
+    session.expire_all()
+    persistida = session.get(Mission, especial.id)
+    assert persistida is not None
+    assert persistida.state is MissionState.PENDENTE
+    assert persistida.deadline is None
+    assert not session.new and not session.dirty and not session.deleted

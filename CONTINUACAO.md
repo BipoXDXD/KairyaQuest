@@ -1,5 +1,34 @@
 # Retomar o FocusQuest
 
+## Conciliação local aprovada do PR #6
+
+O estado corrente está no topo de `docs/HANDOFF.md` e no registro mais recente
+de `.superpowers/sdd/2026-10-04-estabilizacao/progress.md`. As vinte fatias
+locais foram preservadas no commit assinado `891eda0` e no PR #6.
+A `main` em `469e149` já contém E/F/G, preservados na conciliação.
+O gate combinado passou nesta sessão: 1436 Python, 990 frontend, 59 E2E e
+100% de cobertura. O estado da publicação e do CI da ponta está no PR/ledger. Não retomar a implementação do E a partir das pendências antigas.
+Os registros abaixo descrevem a estabilização anterior; seus gates não aprovam
+o resultado combinado. Nenhum merge do PR na `main` foi solicitado.
+
+
+## Retomada da estabilização em 2026-10-04
+
+Para retomar a manutenção local atual, leia `README.md`,
+`docs/ARCHITECTURE.md`, `docs/HANDOFF.md` e `docs/QUALITY.md`, nessa ordem,
+e depois **`docs/RETOMADA-2026-10-04.md`**. Os deltas 18 e 19 já foram
+integrados após revisão independente; gate conjunto aprovado (821 Python,
+550 frontend, 47 E2E, 100%) e wheel/smoke aprovado, OpenAPI idêntico.
+O checkpoint novo usa `evidence/retomada-20261004/` dentro dos registros
+de estabilização; seus manifestos registram o gate e a recuperação finais.
+O topo do HANDOFF descreve o estado corrente; o roteiro
+também preserva a falha e os patches isolados da pausa como histórico.
+Há trabalho não commitado; não recrie o ambiente nem descarte os worktrees.
+Preferência atual: agentes GPT-6.1 High, concorrência conforme o limite da
+nova sessão. O resumo histórico abaixo não define a preferência atual.
+
+## Resumo histórico de 2026-09-26
+
 Resumo para retomar o projeto num clone novo (por exemplo, em outra máquina), com um agente que não tem a memória
 das sessões anteriores. Escrito em 2026-09-26, depois do merge do Incremento D; estado atualizado em 2026-09-28, com o Incremento E implementado.
 
@@ -11,8 +40,9 @@ das sessões anteriores. Escrito em 2026-09-26, depois do merge do Incremento D;
 FocusQuest: plataforma de estudos gamificada, com a tutora Tifa. Backend em Python/FastAPI/PostgreSQL; frontend em
 React/TypeScript/Tailwind. A `main` é protegida: o merge é por PR, com o `quality-gate` verde.
 
-**Antes de agir, leia:** `AGENTS.md` (regras), `docs/HANDOFF.md` (seções "Revisão-base" e "Próximo incremento", e a
-lista de Pendências), `docs/ARCHITECTURE.md` e `docs/QUALITY.md`.
+**Antes de agir, leia:** `AGENTS.md` e depois `README.md`, `docs/ARCHITECTURE.md`,
+`docs/HANDOFF.md` e `docs/QUALITY.md`, nessa ordem. Veja também a revisão-base,
+o próximo incremento e a lista de pendências no HANDOFF.
 
 ## Primeiro uso num clone novo
 

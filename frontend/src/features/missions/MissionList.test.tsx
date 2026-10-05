@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { createRef } from 'react'
+import { createRef, StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { formatDeadline } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
+import * as completionRegistryHook from './useCompletionRegistry'
+import type { CompletionRegistry } from './useCompletionRegistry'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { MissionList, type MissionListHandle } from './MissionList'
 
@@ -2399,5 +2401,162 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(chaves(fetchMock, 'POST /api/missions/7/start')).toEqual([K1, K1])
       expect(chaves(fetchMock, 'POST /api/missions/8/start')).toEqual([K2])
     })
+  })
+})
+
+describe('quadro reconcilia chaves pelo GET autoritativo', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each([false, true])(
+    'POST desconhecido e GET concluida soltam chave sem outro POST ou UUID (StrictMode=%s)',
+    async (strict) => {
+      const k1 = '00000000-0000-4000-8000-000000000001'
+      const k2 = '00000000-0000-4000-8000-000000000002'
+      vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(k1).mockReturnValueOnce(k2)
+      let registry!: CompletionRegistry
+      const original = completionRegistryHook.useCompletionRegistry
+      vi.spyOn(completionRegistryHook, 'useCompletionRegistry').mockImplementation((reload) => {
+        const result = original(reload)
+        registry = result.registry
+        return result
+      })
+      let terminal = false
+      const fetchMock = routeFetch({
+        'GET /api/missions': () =>
+          Response.json([
+            terminal
+              ? {
+                  ...pendente,
+                  state: 'concluida',
+                  availability: 'concluida',
+                  completed_at: '2026-09-23T15:00:00Z',
+                }
+              : pendente,
+          ]),
+        'POST /api/missions/7/complete': () => Promise.reject(new TypeError('resposta perdida')),
+      })
+      const ref = createRef<MissionListHandle>()
+      const content = <MissionList ref={ref} />
+      render(strict ? <StrictMode>{content}</StrictMode> : content)
+      fireEvent.click(await screen.findByTestId('mission-complete'))
+      await screen.findByTestId('mission-completion-error')
+      const post = requestsTo(fetchMock, 'POST /api/missions/7/complete')
+      expect(JSON.parse(post[0].body as string)).toEqual({ operation_id: k1 })
+      terminal = true
+      // A leitura terminal tambem precisa assentar o efeito que libera a chave.
+      await act(async () => ref.current!.reload())
+      await waitFor(() =>
+        expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída'),
+      )
+      expect(screen.queryByTestId('mission-complete')).toBeNull()
+      expect(screen.queryByTestId('reward-announcement')).toBeNull()
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/complete')).toHaveLength(1)
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+      // Observa somente API publica; esta chamada de teste aloca a chave seguinte.
+      expect(registry.operationIdFor(7)).toBe(k2)
+    },
+  )
+})
+
+// Observacao de API publica: o hook e seu estado continuam reais.
+function observeRegistry() {
+  let registry!: CompletionRegistry
+  const original = completionRegistryHook.useCompletionRegistry
+  vi.spyOn(completionRegistryHook, 'useCompletionRegistry').mockImplementation((reload) => {
+    const result = original(reload)
+    registry = result.registry
+    return result
+  })
+  return () => registry
+}
+
+describe('quadro conserva chaves sem prova terminal', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each(['pendente', 'em_andamento', 'vazia', 'ausente', 'erro', 'loading'])(
+    '%s nao retira chave: remount e retry mandam o operation_id original',
+    async (scene) => {
+      const key = '00000000-0000-4000-8000-000000000001'
+      vi.spyOn(crypto, 'randomUUID').mockReturnValue(key)
+      const registry = observeRegistry()
+      let finish!: (response: Response) => void
+      const delayed = new Promise<Response>((resolve) => {
+        finish = resolve
+      })
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_init, call) => {
+          if (call !== 2) return Response.json([pendente])
+          if (scene === 'loading') return delayed
+          if (scene === 'erro') return Response.json({}, { status: 503 })
+          return Response.json(
+            scene === 'vazia'
+              ? []
+              : scene === 'ausente'
+                ? [concluida]
+                : [{ ...pendente, state: scene }],
+          )
+        },
+        'POST /api/missions/7/complete': () => Promise.reject(new TypeError('resposta perdida')),
+      })
+      const ref = createRef<MissionListHandle>()
+      render(<MissionList ref={ref} />)
+      fireEvent.click(await screen.findByTestId('mission-complete'))
+      await screen.findByTestId('mission-completion-error')
+      act(() => ref.current!.reload())
+      if (scene === 'loading') {
+        expect(screen.getByTestId('missions-loading')).toBeInTheDocument()
+        expect(registry().operationIdFor(7)).toBe(key)
+        await act(async () => finish(Response.json([pendente])))
+      } else {
+        await screen.findByTestId(
+          scene === 'vazia'
+            ? 'missions-empty'
+            : scene === 'erro'
+              ? 'missions-error'
+              : 'missions-list',
+        )
+      }
+      expect(registry().operationIdFor(7)).toBe(key)
+      act(() => ref.current!.reload())
+      fireEvent.click(await screen.findByTestId('mission-complete'))
+      await screen.findByTestId('mission-completion-error')
+      expect(
+        requestsTo(fetchMock, 'POST /api/missions/7/complete').map((init) =>
+          JSON.parse(init.body as string),
+        ),
+      ).toEqual([{ operation_id: key }, { operation_id: key }])
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('GET terminal obsoleto nao libera a chave mantida pela leitura atual', async () => {
+    const key = '00000000-0000-4000-8000-000000000001'
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(key)
+    const registry = observeRegistry()
+    let finish!: (response: Response) => void
+    const old = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    routeFetch({
+      'GET /api/missions': (_init, call) => (call === 2 ? old : Response.json([pendente])),
+      'POST /api/missions/7/complete': () => Promise.reject(new TypeError('resposta perdida')),
+    })
+    const ref = createRef<MissionListHandle>()
+    render(<MissionList ref={ref} />)
+    fireEvent.click(await screen.findByTestId('mission-complete'))
+    await screen.findByTestId('mission-completion-error')
+    act(() => ref.current!.reload())
+    act(() => ref.current!.reload())
+    await screen.findByTestId('missions-list')
+    await act(async () => finish(Response.json([{ ...pendente, state: 'concluida' }])))
+    expect(screen.getByTestId('mission-state')).toHaveTextContent('Pendente')
+    expect(registry().operationIdFor(7)).toBe(key)
+    expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
   })
 })

@@ -6,6 +6,7 @@ caso -- e o caso esquecido sai como 500, que e a resposta que este projeto nao
 aceita dar para um bloqueio previsto (README s8: "explique bloqueios").
 """
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,6 +14,8 @@ from enum import StrEnum
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -143,6 +146,26 @@ class CodigoDeErro(StrEnum):
     PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
     TEMPO_ESGOTADO = "tempo_esgotado"
     AVALIACAO_INVALIDA = "avaliacao_invalida"
+
+
+@app.exception_handler(RequestValidationError)
+def _validacao_da_requisicao(request: Request, exc: RequestValidationError) -> Response:
+    """Recusa a entrada sem perder diagnosticos com surrogates isolados.
+
+    Pydantic ja rejeita o texto, mas o input ecoado no erro pode nao ser UTF-8
+    representavel. Escapes JSON preservam esse input e o formato nativo do 422;
+    erros internos e de resposta continuam fora desta fronteira.
+    """
+    return Response(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        media_type="application/json",
+        content=json.dumps(
+            {"detail": jsonable_encoder(exc.errors())},
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        ),
+    )
 
 
 def _erro(status_code: int, detalhe: str, codigo: CodigoDeErro) -> JSONResponse:

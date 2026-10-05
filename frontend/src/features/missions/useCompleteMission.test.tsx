@@ -638,3 +638,251 @@ describe('useCompleteMission', () => {
     })
   })
 })
+
+describe('useCompleteMission — um envio em voo por instancia', () => {
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(PRIMEIRA_CHAVE)
+      .mockReturnValueOnce(SEGUNDA_CHAVE)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('dois complete no mesmo tick enviam uma vez e preservam missao, reward e recarga', async () => {
+    let responder: (response: Response) => void = () => undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const onCompleted = vi.fn()
+    const { result, reload } = renderCompletion(onCompleted)
+    const started = vi.spyOn(result.current.registry, 'started')
+    const settled = vi.spyOn(result.current.registry, 'settled')
+
+    act(() => {
+      result.current.complete()
+      result.current.complete()
+      result.current.requestReload()
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
+    expect(started).toHaveBeenCalledTimes(1)
+    expect(settled).not.toHaveBeenCalled()
+    expect(reload).not.toHaveBeenCalled()
+    expect(result.current.state).toEqual({ status: 'submitting' })
+
+    await act(async () => {
+      responder(Response.json(concluidaResposta))
+    })
+    expect(result.current.state).toEqual({
+      status: 'completed',
+      mission: concluida,
+      reward: recompensa,
+    })
+    expect(onCompleted).toHaveBeenCalledTimes(1)
+    expect(started).toHaveBeenCalledTimes(1)
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+  })
+
+  it('callback capturado e callback novo apos rerender nao duplicam o pedido ativo', async () => {
+    let responder: (response: Response) => void = () => undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const primeiroCallback = vi.fn()
+    const segundoCallback = vi.fn()
+    const reload = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ onCompleted }) => {
+        const { registry } = useCompletionRegistry(reload)
+        return useCompleteMission(7, registry, onCompleted)
+      },
+      { initialProps: { onCompleted: primeiroCallback } },
+    )
+    const capturado = result.current.complete
+    act(() => {
+      capturado()
+    })
+    rerender({ onCompleted: segundoCallback })
+    act(() => {
+      capturado()
+      result.current.complete()
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
+    await act(async () => {
+      responder(Response.json(concluidaResposta))
+    })
+    expect(result.current.state).toEqual({
+      status: 'completed',
+      mission: concluida,
+      reward: recompensa,
+    })
+    expect(primeiroCallback).toHaveBeenCalledTimes(1)
+    expect(segundoCallback).not.toHaveBeenCalled()
+  })
+
+  it('mantem a guarda durante onCompleted e a recarga liberada por settled', async () => {
+    let responder: (response: Response) => void = () => undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    let tentarDeNovo: () => void = () => undefined
+    const onCompleted = vi.fn(() => {
+      tentarDeNovo()
+    })
+    const reload = vi.fn(() => {
+      tentarDeNovo()
+    })
+    const { result } = renderHook(() => {
+      const { registry, reload: requestReload } = useCompletionRegistry(reload)
+      return { ...useCompleteMission(7, registry, onCompleted), requestReload }
+    })
+    tentarDeNovo = result.current.complete
+    act(() => {
+      result.current.complete()
+      result.current.requestReload()
+    })
+    await act(async () => {
+      responder(Response.json(concluidaResposta))
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
+    expect(result.current.state).toEqual({
+      status: 'completed',
+      mission: concluida,
+      reward: recompensa,
+    })
+    expect(onCompleted).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('UUID que lanca preserva idle, nao prende registry e permite a proxima tentativa', async () => {
+    vi.mocked(crypto.randomUUID)
+      .mockReset()
+      .mockImplementationOnce(() => {
+        throw new Error('UUID indisponivel')
+      })
+      .mockReturnValueOnce(PRIMEIRA_CHAVE)
+    let responder: (response: Response) => void = () => undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const { result, reload } = renderCompletion()
+    act(() => {
+      expect(() => result.current.complete()).toThrow('UUID indisponivel')
+    })
+    expect(result.current.state).toEqual({ status: 'idle' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    act(() => {
+      result.current.requestReload()
+    })
+    expect(reload).toHaveBeenCalledTimes(1)
+    act(() => {
+      result.current.complete()
+      result.current.requestReload()
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE])
+    expect(reload).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      responder(Response.json(concluidaResposta))
+    })
+    expect(result.current.state).toEqual({
+      status: 'completed',
+      mission: concluida,
+      reward: recompensa,
+    })
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('erro no onCompleted libera a guarda e preserva o tratamento existente', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(Response.json(concluidaResposta)))
+    vi.stubGlobal('fetch', fetchMock)
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const onCompleted = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('Falha no callback')
+      })
+      .mockImplementationOnce(() => undefined)
+    const { result } = renderCompletion(onCompleted)
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('completed')
+    })
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, SEGUNDA_CHAVE])
+    expect(onCompleted).toHaveBeenCalledTimes(2)
+    expect(errorLog).toHaveBeenCalledWith(
+      'onCompleted lancou depois da conclusao:',
+      expect.any(Error),
+    )
+  })
+
+  it('duas instancias compartilham a chave e o registry sem bloquear uma a outra', async () => {
+    const respostas: ((response: Response) => void)[] = []
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          respostas.push(resolve)
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const reload = vi.fn()
+    const { result } = renderHook(() => {
+      const { registry, reload: requestReload } = useCompletionRegistry(reload)
+      return {
+        primeira: useCompleteMission(7, registry),
+        segunda: useCompleteMission(7, registry),
+        requestReload,
+      }
+    })
+    act(() => {
+      result.current.primeira.complete()
+      result.current.segunda.complete()
+      result.current.requestReload()
+    })
+    expect(sentOperationIds(fetchMock)).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
+    await act(async () => {
+      respostas[0]!(Response.json(concluidaResposta))
+    })
+    expect(result.current.primeira.state.status).toBe('completed')
+    expect(result.current.segunda.state.status).toBe('submitting')
+    expect(reload).not.toHaveBeenCalled()
+    await act(async () => {
+      respostas[1]!(Response.json(concluidaResposta))
+    })
+    expect(result.current.segunda.state.status).toBe('completed')
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+})

@@ -94,7 +94,7 @@ function MissionProposalCard({
       data-testid="tutor-proposal"
       data-action-id={action.id}
       data-state={action.state}
-      className="mt-3 rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
+      className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
     >
       <h3 className="text-sm font-semibold text-slate-50">Proposta de missão</h3>
       <p data-testid="proposal-instructions" className="mt-1 text-sm text-slate-100">

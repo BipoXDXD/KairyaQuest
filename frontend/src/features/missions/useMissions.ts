@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, requestJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 
@@ -46,6 +46,9 @@ function messageFor(error: unknown): string {
 export function useMissions(): UseMissionsResult {
   const [state, setState] = useState<MissionsState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
+  // Cancelar a rede não invalida uma resposta já em processamento. A geração
+  // muda na recarga, antes do próximo efeito, e na limpeza (inclusive StrictMode).
+  const requestId = useRef(0)
 
   // O volta-a-carregar mora AQUI, e nao no corpo do efeito, por duas razoes
   // que coincidem. A primeira e de regra: `reload` e uma acao da pessoa, e o
@@ -55,19 +58,18 @@ export function useMissions(): UseMissionsResult {
   // encadeia um render a mais a cada execucao do efeito. O estado inicial ja
   // nasce 'loading', entao nao falta nada no primeiro carregamento.
   const reload = useCallback(() => {
+    requestId.current += 1
     setState({ status: 'loading' })
     setAttempt((anterior) => anterior + 1)
   }, [])
 
   useEffect(() => {
+    const id = (requestId.current += 1)
     const controller = new AbortController()
 
     requestJson<Mission[]>('/missions', controller.signal)
       .then((missions) => {
-        // Uma resposta que ja estava em processamento quando o pedido foi
-        // abortado (o `reload` ou a desmontagem limparam o efeito) e velha:
-        // gravar por cima esconderia a carga mais nova.
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestId.current !== id) {
           return
         }
         setState(
@@ -78,13 +80,14 @@ export function useMissions(): UseMissionsResult {
         // Um pedido que NOS cancelamos nao e uma falha para mostrar. Sem esta
         // guarda, a limpeza do efeito (StrictMode, ou uma troca de tela)
         // sobrescreveria a resposta boa com o estado de erro.
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestId.current !== id) {
           return
         }
         setState({ status: 'error', message: messageFor(error) })
       })
 
     return () => {
+      requestId.current += 1
       controller.abort()
     }
     // `attempt` e a unica dependencia: ele muda so por `reload`, e e o que

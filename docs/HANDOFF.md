@@ -8,6 +8,58 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Conciliação do PR #6 — 2026-10-04
+
+**Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
+e abertura do PR e pediu continuar
+após a publicação. O commit assinado `891eda0` preserva as vinte fatias locais,
+baseadas em `49faaf0`; o PR #6 foi aberto como draft. O estado remoto atual
+está no próprio PR. O CI de `891eda0` passou, incluindo
+`quality-gate`, no run `37241056152`. A `main` remota está em `469e149`
+(PR #5), com os incrementos E, F e os lotes G já integrados. Esses avanços
+são a base do produto nesta conciliação; os estados de publicação antigos
+abaixo são registros históricos.
+
+Objetivo: integrar a `main` na branch do PR, resolver os conflitos por domínio
+e validar o resultado combinado. Nenhum merge do PR na `main` foi solicitado.
+Os worktrees anteriores e os checkpoints permanecem preservados. Backend e
+interface trabalharam em novos worktrees, com banco de teste e portas próprios;
+o controlador integrou os patches revisados no principal byte a byte.
+
+As decisões mais recentes prevalecem: `max_tokens` encerra a tutoria como
+`interrompida`; `/ready` trata como `not_configured` somente a ausência de
+`database_url`; conclusão com evidência, avaliação e bônus, iniciar/reagendar,
+histórico de prazos, conclusão tardia e fallback de modelo permanecem ativos.
+As correções locais de snapshot, validação de texto, idempotência e foco foram
+adaptadas a esses contratos. As três guardas de depreciação do pytest coexistem:
+duas do Starlette e a de SQLAlchemy restrita ao código da aplicação.
+
+**Gates isolados executados:** backend `check-api` EXIT 0, 1436 testes e 100%
+(2063 instruções/364 ramificações); frontend `check-web` EXIT 0, 990 testes e
+100% (1263 instruções/951 ramificações/350 funções/1229 linhas), `check-e2e`
+EXIT 0, 59 cenários contra backend da `main`. Revisão independente sem achados
+nas fontes. Esses resultados não aprovam o resultado combinado.
+
+**Gate combinado executado nesta sessão:** `make check`, EXIT 0, 287,53 s,
+1436 testes Python, 990 frontend e 59 E2E. Cobertura 100%: backend 2063
+instruções/364 ramificações; frontend 1263 instruções/951 ramificações/
+350 funções/1229 linhas. Lock, Ruff lint/format, mypy sobre 149 fontes,
+lint/format/tipos frontend, build e Gitleaks aprovados (17,40 MB/zero achados).
+As 349 fontes, HEAD e índice permaneceram iguais durante todo o comando.
+Revisão independente C0/I0/M0 após corrigir a documentação e a configuração.
+
+A revisão encontrou três arquivos com conteúdo anterior à conciliação
+(warnings, arquitetura e handoff). Os bytes divergentes e o log interrompido
+foram preservados em `evidence/conciliacao-pr6/`; essa execução interrompida
+não vale como aprovação. O gate aprovado acima usa as versões restauradas,
+com as três guardas ativas e as regras atuais de E/F/G.
+
+O resultado está pronto para commit/push na branch do PR, com conferência do
+índice e hooks ativos; o pre-commit verificará também esta consolidação
+documental. O push continua limitado a uma ref. O ledger e o PR registram
+as referências de publicação e o CI da nova ponta; o CI antigo não o aprova.
+Nenhum merge do PR na `main` foi solicitado ou executado.
+
 ## Revisão-base
 
 **Incremento F — acompanhar a execução: iniciar e reagendar missões.** Branch
@@ -3420,13 +3472,12 @@ ninguém mexer.
    camada vazia que o README §3 proíbe. O módulo `users`, quando nascer,
    precisa remover a classe daqui, ou o SQLAlchemy recusará a tabela
    duplicada.
-9. **Modelo e migração descrevem as mesmas restrições em dois lugares, e só
-   os `CHECK` de `missions` têm teste de divergência** (compara o que o
-   PostgreSQL descreve para a tabela real e para uma cópia criada a partir
-   do modelo). Não existe teste de comparação geral entre modelo e migração
-   (`compare_metadata` do Alembic, que de todo modo não compara `CHECK`); um
-   `CHECK` novo em `mission_operations`, ou outra divergência fora dos
-   `CHECK` de `missions`, não é detectado por teste dedicado.
+9. **A comparação entre modelo e migração ainda é parcial.** A conciliação
+   acrescenta testes dedicados de FKs/UNIQUE/índices de `xp_entries` e de
+   FKs/UNIQUE nomeadas de `mission_operations`, comparando o modelo atual
+   com PostgreSQL migrado. A unicidade de XP considera `(mission_id, source)`
+   do E. Isso se soma às verificações de restrições já existentes; não há
+   comparação geral de todo o esquema nem promessa de detectar qualquer drift.
    **Cresceu no Incremento B:** os `UNIQUE` (`uq_weekly_plans_id_user_id`,
    `uq_missions_plan_id_day`), o índice único parcial
    (`uq_missions_especial_por_plano`) e a FK composta
@@ -3902,7 +3953,13 @@ que não tinham chegado aqui)
     da pergunta à Tifa (Task 3) e, na Task 5, o `operation_id` da
     confirmação da proposta: no mesmo cenário, o Enviar lançaria
     `TypeError` antes do pedido. Continua **não medido**.
-34. **`useCompleteMission` não se protege sozinho contra envio duplo.** A
+34. ~~**`useCompleteMission` não se protege sozinho contra envio duplo.**~~
+    **Corrigida na estabilização conciliada em 2026-10-04:** guarda síncrona
+    por instância em `useCompleteMission` e em confirmar/recusar do
+    `useDecideAction`. Mantém retry, callbacks, recompensas e as chaves E/F.
+    Revisão independente sem achados; gate isolado frontend 990 testes/100%
+    e 59 E2E; o gate combinado aprovado está no topo deste registro.
+    **Descrição anterior, histórica:** a
     única guarda é o `disabled` do botão, que é testada; o hook em si aceita
     dois `complete()` no mesmo tick. Medido pela revisão final: dois
     `complete()` no mesmo tick mandam **dois POSTs com a mesma chave**, e o
@@ -3967,6 +4024,13 @@ que não tinham chegado aqui)
     O crescimento é limitado — só cresce com falhas de resultado
     desconhecido, uma por missão — e não foi resolvido: fica registrado
     como limitação, não como bug esquecido.
+
+    **Atualização da conciliação de 2026-10-04: parcialmente resolvida.**
+    Quadro e ciclo podam chaves de conclusão só para IDs explicitamente
+    concluídas em leitura autoritativa, incluindo a diária tardia, e depois
+    de todos os voos. Rascunhos e chaves de iniciar/reagendar permanecem.
+    Missões ausentes continuam fora dessa poda; a limitação dessa parte segue
+    aberta. Não houve alegação de ganho de desempenho.
 
 **Criada pela correção do cache do CI (PR #7)**
 
@@ -6133,3 +6197,406 @@ Spec em `docs/superpowers/specs/2026-09-17-fundacao-qualidade-design.md`.
   `gh pr list --state all`.
 - Os relatórios de execução daquelas tarefas ficam em `.superpowers/sdd/`,
   ignorado pelo git: não chegam a um clone.
+
+## Histórico local anterior à conciliação
+
+As seções seguintes preservam o registro do checkout baseado em `49faaf0`.
+Contagens, pendências e afirmações de estado descrevem aquele momento; não
+definem a revisão combinada nem substituem as decisões do topo deste arquivo.
+O conteúdo integral anterior também está preservado no commit `891eda0`.
+
+## Preparação do commit e PR — autorização em 2026-10-04
+
+O dono autorizou commitar todo o trabalho local e abrir o PR, incluindo o
+push da branch `chore/atualizar-dependencias-python`. O merge não foi
+solicitado. O escopo é a atualização Python e as vinte fatias de manutenção
+registradas abaixo, sobre a base local `49faaf0`.
+
+A consulta ao remoto nesta preparação encontrou `origin/main` em `469e149`,
+com 165 commits posteriores à base local, incluindo E/F e lotes G, e mudanças
+em arquivos que esta branch também altera. O PR será um rascunho para preservar
+e revisar esse conjunto; os gates da branch não validam o resultado combinado
+com a main atual. Conciliar os deltas e executar o gate do resultado combinado
+são requisitos antes de torná-lo apto a merge. As referências abaixo a E ainda
+pendente descrevem o estado desta árvore local histórica, não a main remota.
+
+A fatia 20 concluiu `make check` com EXIT 0: 823 Python, 550 frontend, 47 E2E
+e cobertura 100%, com 263 fontes/65 alteradas ou novas, HEAD e índice estáveis.
+Checkpoint recuperado e revisado independentemente C0/I0/M0. O commit desta
+preparação terá uma nova validação pelos hooks instalados; o pre-push valida
+sua revisão em worktree isolado. Resultados finais e referências de commit/PR
+ficam no ledger de estabilização. Ambiente, credenciais e scratch ignorado
+continuam fora dos arquivos versionados.
+
+## Continuação após reinício — 2026-10-04, fatia 20
+
+A retomada conferiu o último estado do ledger: as fatias 1–19 e o
+checkpoint já estavam fechados; a pausa final foi para reiniciar a sessão.
+Antes de escrever, os hashes das 262 fontes do principal, três worktrees,
+117 payloads e sidecars corresponderam aos manifestos. Os três checkpoints
+anteriores também permaneceram intactos. Ambiente e hooks Git existentes
+preservados; não houve novo bootstrap nem recriação do PostgreSQL.
+
+Manutenção delimitada da pendência 9: dois testes novos em
+`tests/integration/test_mission_operations_schema_parity.py` comparam a FK
+(colunas, schema, alvo e ON DELETE) e o UNIQUE (nome e colunas) de
+`mission_operations` entre banco realmente migrado e modelo. Baseline e
+restauração passaram; cinco mutações unilaterais do modelo reprovaram por
+desigualdade. Produção restaurada byte a byte, sem alterar modelo, migração,
+dependência, endpoint ou regra de idempotência. Revisão independente
+APPROVED C0/I0/M0; integração após `git apply --check` e igualdade dos bytes.
+Não existe CHECK nessa tabela hoje; não se afirma paridade geral nem
+comparação de defaults, índices ou demais opções de restrição.
+
+O gate completo da combinação e a recuperação usam um destino novo,
+`evidence/continuacao-pos-reinicio/`, nos registros de estabilização.
+Comandos, resultados e identidade final ficam no `progress.md`,
+`gate.json` e `recovery-verification.json` desse destino. Os resultados
+821/550/47 abaixo descrevem o checkpoint anterior, sem os dois testes novos.
+Decisões E, texto SSE reservado ao dono, timeouts, retenção de chaves ausentes,
+validação humana/aparelho físico/Safari/Firefox continuam pendentes.
+Nenhum commit, push, PR, merge ou publicação.
+
+## Retomada da estabilização — 2026-10-04
+
+**Estado atual: deltas 18 e 19 integrados e revisados; gate conjunto
+aprovado.** Base e HEAD mantidos em
+`49faaf0d5cbf6d8edbac83fa6142e788acc5f177`, branch
+`chore/atualizar-dependencias-python`, índice vazio. As alterações Python
+anteriores e os três worktrees foram preservados. Não houve commit, push,
+PR, merge ou publicação.
+
+Antes de editar, as quatro árvores corresponderam integralmente aos
+manifestos da pausa. A revisão independente do delta 18 aprovou C0/I0/M0:
+106 testes passaram; mutações sem poda ou sem conexão do quadro reprovaram
+por efeitos reais. O replay controlado confirmou a diferença entre barreira
+síncrona e `await act(async ...)`, sem atribuir uma ordem instrumentada à
+falha natural anterior. Aplicação restrita aos dois testes aprovados.
+
+O delta 19, já aprovado C0/I0/M0, acrescenta somente o handler de
+`RequestValidationError` e suas regressões. Mantém a recusa da entrada e
+serializa o diagnóstico 422 com escapes ASCII; não captura erros internos,
+de configuração ou de validação de resposta. Nenhum endpoint, dependência
+ou serviço novo. Os quatro arquivos integrados coincidem byte a byte com
+as versões revisadas; as demais fontes de produção foram preservadas.
+
+Gate conjunto executado no principal: `make check`, **EXIT 0**, 821 testes
+Python, 550 frontend e 47 E2E. Cobertura 100%: backend 1298 instruções/198
+ramificações; frontend 851 instruções/534 ramificações/250 funções/825
+linhas. Lock, Ruff, mypy, lint/format/tipos, build e Gitleaks aprovados.
+Os 262 arquivos de fonte, incluindo 64 alterados/novos, HEAD e índice
+mantiveram os hashes durante o comando. Log `focusquest-resume-integration.log`
+e registro próprio preservados no pacote; esse gate antecede a consolidação
+documental final, cujo resultado fica em `focusquest-resume-final.json`.
+
+`uv build --wheel` e smoke com importação direta do wheel: **EXIT 0**.
+Os 38 módulos Python empacotados correspondem ao checkout; seis requisições
+de Unicode inválido/controles recusadas com diagnóstico 422 completo, sem
+acesso a banco/provedor. A primeira tentativa do smoke ficou aguardando no
+sandbox e foi encerrada (EXIT 143); o mesmo smoke fora dele passou, sem
+mudar expectativas. OpenAPI idêntico ao pré-integração e à referência
+inicial, com 12 caminhos. Não houve chamada paga.
+
+Destino do checkpoint novo: `evidence/retomada-20261004/`, dentro dos
+registros de estabilização. A recuperação preliminar aplicou o patch completo
+sobre a base limpa e conferiu as 262 fontes/64 alteradas ou novas; todos os
+checksums passaram e a varredura da extração teve EXIT 0, sem achados.
+O fechamento repete a prova para os bytes da documentação consolidada:
+`verification-root.json` e o parecer independente registram a selagem;
+`recovery-manifest.json` associa o pacote ao gate final efetivamente executado.
+Os checkpoints anteriores não foram substituídos. O roteiro em
+`docs/RETOMADA-2026-10-04.md` separa este estado do histórico da pausa abaixo.
+
+Continuam com o dono as decisões do Incremento E, avaliação/XP e
+autenticação/exposição. Permanecem pendentes missões ausentes, textos SSE
+desconhecidos, incertezas de timeout do POST e validação humana/aparelho
+físico/Safari/Firefox. Nenhuma dessas limitações foi declarada resolvida.
+
+## Histórico da pausa — 2026-10-04
+
+Pausa solicitada pelo dono para iniciar uma nova sessão. Roteiro completo em
+`docs/RETOMADA-2026-10-04.md`; entrada curta em `CONTINUACAO.md`.
+Principal preservado sem commit: o último gate reprovou na sessão 6646,
+antes de API/E2E. Documentação desta pausa ainda não passou por novo gate.
+Correção 19 tem gate isolado e revisão APPROVED, sem integração; delta dos
+testes 18 permanece isolado e exige revisão independente. Checkpoint da
+pausa em `evidence/pausa-20261004/`, dentro dos registros de estabilização,
+com fontes, patches, logs e estados de recuperação. Os anteriores intactos.
+
+Delta dos testes 18 entregue: gate isolado da sessão 57208 EXIT 0,
+762 Python/550 frontend/47 E2E e 100%; somente duas barreiras de teste
+alteradas, produção igual. Revisão independente e integração pendentes.
+Três auxiliares encerraram seu trabalho; não iniciar novas tarefas nesta pausa.
+
+## Objetivo
+
+FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
+interativa. Especificação completa em `README.md`. Entrega por incrementos.
+
+## Continuação durante a ausência — 2026-10-04
+
+**Estado: oito fatias integradas; o primeiro gate 11–18 passou, mas a
+verificação documental posterior reprovou; correção dos testes está isolada.
+Correção da resposta de validação aprovada em isolamento,
+sem commit ou publicação.** O dono pediu retomar sem parar durante a ida ao
+mercado. A primeira estabilização abaixo permanece preservada: seus 45 arquivos
+foram conferidos contra o checkpoint antes da retomada. GPT-6.1 High e
+isolamento por worktree/banco/portas continuam valendo.
+
+Gate intermediário das fatias 11–15 no principal: `make check`, **EXIT 0**, 759 testes
+Python, 506 frontend e 40 E2E. Cobertura 100%: backend 1292 instruções/198
+ramificações; frontend 812 instruções/509 ramificações/241 funções/787 linhas.
+Lock, Ruff, mypy, lint/format/tipos, build e Gitleaks aprovados. Evidência:
+`focusquest-market-integrated-check-11-15.log`, preservada no próximo checkpoint.
+
+Gate integrado das fatias 11–17: `make check`, **EXIT 0**, 762 testes Python,
+520 frontend e 47 E2E. Cobertura 100%: backend 1292 instruções/198 ramificações;
+frontend 829 instruções/520 ramificações/243 funções/804 linhas. Lock, Ruff,
+mypy, lint/format/tipos, build e Gitleaks aprovados. Os 57 arquivos alterados
+ou novos mantiveram os hashes durante o gate; HEAD e índice preservados.
+Evidência: `focusquest-market-integrated-check-11-17.log`. A consolidação
+documental posterior também passou, na sessão 85194, com as mesmas contagens;
+o checkpoint 11–17 foi selado e recuperado independentemente.
+
+Gate integrado 11–18: `make check`, **EXIT 0**, 762 Python, 550 frontend,
+47 E2E e 100%. Backend 1292/198; frontend 851 instruções/534 ramificações/
+250 funções/825 linhas. Lock, lint/format/tipos, build e Gitleaks aprovados.
+Evidência: `focusquest-market-integrated-check-11-18.log`, sessão 66576.
+Identidades dos 61 arquivos alterados/novos conferidas ao concluir; nenhuma
+fonte foi editada pelo controlador durante a execução. A consolidação
+documental também será verificada antes do checkpoint próprio desta fatia.
+
+A verificação documental posterior (`focusquest-market-checkpoint-check-11-18.log`,
+sessão 6646) terminou com **EXIT 2** em `check-web`: 549 testes passaram e
+um teste do quadro com `StrictMode` recebeu a chave anterior em vez da próxima.
+API e E2E não foram executados nessa tentativa. Os 61 hashes capturados antes
+do comando, HEAD e índice permaneceram iguais. Investigação/correção isoladas,
+com revisão independente prevista; não atribuir a falha a timing sem prova.
+O checkpoint 11–18 ainda não foi selado; os anteriores permanecem aprovados.
+
+Correções integradas após revisão independente:
+
+- **Ciclo diário:** auditoria reproduziu 6/6 respostas mistas em duas conexões,
+  com conclusão real e operação/XP persistidos. A leitura conjunta de valores
+  de diárias/planos/especiais fornece cópias estáveis, com clock único e sem
+  mudar isolamento, escrita ou `carregar_historico`. O controle do plano
+  atual não misturou em seis amostras; nenhuma garantia geral foi inferida.
+- **Conversa móvel:** foco e fundo inerte coordenados ao cruzar breakpoints.
+  Visibilidade repassada pela página evita bloquear Campanhas com folha
+  oculta, preservando rascunho/stream/preferência. SSE dos novos cenários é
+  inteiramente interceptado; comprova interação, não persistência/TCP real.
+- **Histórico:** decisões durante GET anterior são reconciliadas naquele
+  candidato; GET posterior permanece autoritativo. A recarga sai de `loading`
+  para `loaded`. O Minor de limpeza do mapa silencioso superado foi corrigido
+  e revisto; dados não ficam retidos nem voltam a preencher esse candidato.
+- **Pendência 34:** guarda síncrona por instância nos hooks de conclusão e
+  decisão, compartilhada em confirmar/recusar. Evita POSTs extras e mantém
+  chaves, retry, callbacks, recompensa e registros de voo. A idempotência
+  existente continua protegendo instâncias distintas e remontagens.
+- **Pendência 28:** `/ready` devolve 503 com o corpo público existente quando
+  `Settings` recusa configuração ausente/inválida, com cache de engine vazio.
+  `/health`, configuração obrigatória, criação lazy/cache e erros inesperados
+  preservados; nenhum fallback ou handler global foi introduzido.
+
+Gates isolados finais, antes da integração: ciclo 754/471/31; foco 746/480/37;
+histórico 746/480/34; guardas 754/488/31; readiness 759/480/37. Todos EXIT 0 e 100%.
+Cada contagem descreve sua combinação de worktree, não testes exclusivos da fatia.
+
+**Fatia 16 integrada:** captura antes de remover a diária focada e título
+estável como destino; foco externo, área oculta e modal têm prioridade.
+Quatorze testes novos de componente e sete E2E; quatro mutações detectadas e
+restauradas, gate isolado 754/520/47 e 100%, revisão independente sem achados.
+A validação principal 11–17 acima cobre também esta fatia.
+
+**Fatia 17 integrada:** testes delimitados de paridade em `xp_entries`,
+comparando FKs, UNIQUE e índice entre banco migrado e modelo. Nenhuma
+divergência de produção demonstrada, migração ou regra alterada. Baseline com
+três testes GREEN, cinco mutações unilaterais detectadas/restauradas; gate
+isolado 762/506/40 e 100%, sem a fatia 16. Revisão independente sem achados;
+aplicação no principal e comparação byte a byte aprovadas.
+
+**Fatia 18 integrada:** auditoria reproduziu retenção da chave após
+GET autoritativo de missão concluída, tanto no quadro como no ciclo. A correção
+fica restrita a IDs explicitamente concluídas e aguarda o último encerramento
+se houver operações em voo. Ausência, loading, erro e dados antigos não
+autorizam poda. A pendência 38 continuará parcial para missões ausentes;
+sem alegação de impacto de desempenho ou alteração de idempotência/recompensa.
+Trinta testes novos, nove mutações detectadas/restauradas e revisão
+independente sem achados. Gate isolado 762/550/47 e 100%; seis arquivos
+integrados idênticos ao patch aprovado. O primeiro gate falhou em um controle
+sintético; a montagem/efeitos foram sincronizados com `act`, mantendo a
+expectativa. A investigação não observou a ordem natural daquela falha;
+replay controlado prova o risco da fixture, sem alegar reprodução natural.
+
+Checkpoint 11–17 aprovado por recuperação independente: 57 arquivos
+idênticos, 437 checksums e zero achados na varredura do conteúdo extraído.
+A fatia 18 usa um próximo destino próprio; esse checkpoint permanece intacto.
+Pesquisa da pendência 22: quarenta probes offline não justificaram novo gate
+de lock npm; proteção vigente preservada.
+
+**Fatia 19 entregue isolada:** auditoria confirmou 27 respostas 500 por
+`UnicodeEncodeError` ao ecoar inputs inválidos no diagnóstico 422. Pydantic
+já recusa esses dados; nenhum caso usou banco/provedor. Correção restrita à
+serialização de `RequestValidationError`, com escapes JSON, sem aceitar
+entrada inválida ou capturar erros internos/configuração. NaN/Infinity estão
+fora desse recorte. Integração e gate combinado ainda pendentes.
+
+Entrega isolada 19: RED de 39 falhas/20 controles; 59 testes novos GREEN e
+69 com health/readiness. Três mutações detectadas e restauradas, OpenAPI
+profundamente igual. Gate completo da sessão 99323 **EXIT 0**, 821 Python,
+550 frontend, 47 E2E; 100% em 1298 instruções/198 ramificações backend e
+851/534/250/825 frontend. Revisão independente APPROVED C0/I0/M0; integração pendente;
+o resultado isolado não resolve a sincronização dos testes 18 em outra frente.
+
+Critérios do Incremento E, texto de SSE desconhecido da pendência 49, revisão
+humana/aparelho físico e autorização de commit/push/PR/merge/publicação continuam
+pendentes. Ledger e briefs estão em `.superpowers/sdd/2026-10-04-estabilizacao/`;
+o checkpoint da primeira etapa permanece intacto. O próximo checkpoint usa
+`evidence/continuacao-mercado/`, sem ambiente, credenciais ou PDFs.
+
+## Estabilização autônoma — 2026-10-04
+
+**Estado: estabilização concluída localmente, gate final aprovado, sem commit
+ou publicação.** Pedido do dono: avaliar
+todo o contexto Markdown, consultar livros úteis e continuar por cerca de
+duas horas com múltiplos agentes GPT-6.1 High; tomar decisões comuns e deixar
+as críticas pendentes. Base `49faaf0`, com a atualização Python abaixo já
+presente e preservada. Plano em
+`docs/superpowers/plans/2026-10-04-estabilizacao.md`; análise e decisões em
+`docs/REVISAO-2026-10-04.md`.
+
+Gate inicial executado nesta sessão: `make check`, **aprovado, EXIT 0**;
+598 testes Python, 444 frontend, 17 E2E, cobertura de 100%. Hooks confirmados
+por `uv run pre-commit install --install-hooks`. PostgreSQL existente
+confirmado saudável, sem recriar container ou volume.
+
+Implementação em `wt/auditoria-backend`, `wt/auditoria-interface` e
+`wt/auditoria-consistencia`, com bancos de teste e portas exclusivos,
+criados pelo script do projeto. Os dois primeiros também passaram no gate
+inicial, em paralelo. Cada patch teve revisão independente antes de ser
+aplicado pelo controlador; o terceiro isolou a reprodução concorrente de
+progresso. Nenhum worktree recriou o PostgreSQL compartilhado.
+
+Correções integradas: NUL nas entradas persistidas; NUL e Unicode não
+codificável nos deltas da IA; resposta cortada por `max_tokens`; respostas
+obsoletas nos hooks; ciclo de foco da conversa móvel; excesso de largura
+com painel recolhido e textos longos; leitura única de XP/conquistas; refresh
+silencioso de ciclo/progresso ao voltar ao Quartel-General. Novos testes de
+serviço e migração populada fecham as pendências 58 e 83 sem alterar regras.
+As pendências 45, 60 e 77 também foram resolvidas localmente.
+
+O primeiro gate integrado aprovou 694 testes Python, 463 frontend e 29 E2E.
+O gate final de todas as fatias foi executado pelo controlador: `make check`,
+**aprovado, EXIT 0; 746 testes Python, 471 frontend e 31 E2E**, cobertura
+de 100% (backend: 1274 instruções/192 ramificações; frontend: 725 instruções,
+474 ramificações, 230 funções e 703 linhas). Lock, Ruff lint/format, mypy
+(99 fontes), build e Gitleaks aprovados. Revisões finais de backend/configuração
+e frontend: APPROVED, sem novos achados. O wheel final foi construído e
+importado; guardas incluídas e OpenAPI idêntico ao inicial. Auditorias de
+dependências: `npm audit` e `pip-audit`, zero vulnerabilidades conhecidas;
+`uv pip check`, pacotes compatíveis. Limites e evidências estão no relatório.
+
+A inspeção visual do build em Chromium, com fixtures de leitura, cobriu
+1440/1024/375/320 px. O documento passou a caber nos quatro viewports;
+axe-core não apontou violações nos estados observados. Isso não substitui
+revisão humana ou celular físico com teclado virtual (pendência 61).
+
+Nenhuma credencial real ou chamada paga foi usada. Commit, push, PR, merge
+e publicação continuam aguardando autorização. O Incremento E permanece
+pendente do desenho de evidências, avaliação e recompensa. Opções para
+essa decisão, sem implementação autorizada, estão em
+`docs/superpowers/plans/2026-10-04-incremento-e-decisoes.md`.
+
+Checkpoint local ignorado: `.superpowers/sdd/2026-10-04-estabilizacao/` —
+ledger de decisões e `evidence/checkpoint-20261004.tar.gz` com diff completo
+(incluindo arquivos novos), patches incrementais, logs, pareceres e imagens.
+O diff completo é verificado aplicando sobre uma extração limpa de `49faaf0`,
+sem alterar os worktrees. Não contém `.env`, credenciais ou PDFs do acervo.
+Os três worktrees e suas alterações foram mantidos para retomada.
+
+## Atualização das dependências Python — 2026-10-04
+
+Branch local `chore/atualizar-dependencias-python`, baseada em `49faaf0`
+(`main`, merge do PR #18). Pedido: atualizar as dependências desatualizadas
+do `pyproject.toml` e verificar a compatibilidade do projeto. Alterações
+locais, sem commit, push ou publicação. A alteração preexistente de
+`.python-version` para `3.14.8` foi preservada; o interpretador da `.venv`
+já usa essa versão.
+
+Versões estáveis verificadas no PyPI com `uv tree --outdated` e metadados
+dos pacotes, antes de modificar os pins:
+
+| Dependência direta | Antes | Depois |
+|---|---|---|
+| `anthropic` | 1.7.0 | 1.11.0 |
+| `fastapi` | 0.141.1 | 0.142.2 |
+| `httpx2` | 2.13.0 | 2.13.1 |
+| `psycopg[binary]` | 3.3.5 | 3.3.6 |
+| `sqlalchemy` | 2.0.54 | 2.1.3 |
+| `tzdata` | 2026.4 | 2026.5 |
+| `uvicorn` | 0.53.0 | 0.54.0 |
+| `mypy` (dev) | 2.3.1 no lock, sem pin | 2.4.0, com pin |
+| `ruff` (dev) | 0.16.8 no lock, sem pin | 0.16.10, com pin |
+
+`pre-commit` recebeu pin `4.6.2`, a versão já instalada, e o backend de
+build existente, `hatchling`, recebeu pin `1.32.4`, a versão estável
+verificada. Motivo: manter também as ferramentas e o build isolado
+reproduzíveis. As demais dependências diretas já estavam atualizadas.
+
+`uv lock --upgrade` atualizou **24 pacotes**: nove dependências diretas e
+15 transitivas. `uv sync --locked` sincronizou a `.venv`. O FastAPI trouxe
+`opentelemetry-api==1.45.0` como requisito transitivo; nenhum exportador ou
+serviço de monitoramento foi configurado. O SQLAlchemy 2.1 deixou de
+instalar `greenlet` por padrão; o projeto usa sessões síncronas e não
+precisa do extra `asyncio`.
+
+A consulta final de versões aponta apenas `pydantic-core`: há versão mais
+nova, mas **`pydantic==2.13.5` exige exatamente `pydantic-core==2.46.5`**.
+Essa restrição foi respeitada. Não adicionar um pin concorrente nem forçar
+a atualização isolada do core.
+
+Documentação de compatibilidade consultada via Context7: atualização e
+sincronização do uv; migração do SQLAlchemy 2.1 (autoflush em toda execução
+de statement); transporte e stream do SDK Anthropic; versões e
+OpenTelemetry do FastAPI. O código atual já usa `httpx2` no adaptador e
+faz o flush da conclusão antes de registrar XP. Nenhuma regra, rota ou
+esquema de aplicação foi alterado nesta atualização.
+
+O primeiro gate com as novas versões revelou dois usos obsoletos de
+`Result.tuples()`, em `missions/cycle_service.py` e
+`progression/service.py`. As duas consultas agora desempacotam as linhas
+diretamente, conforme o SQLAlchemy 2.1. O pytest passou a tratar
+`SADeprecationWarning` originada em `focusquest.*` como erro, para impedir
+regressão; `docs/QUALITY.md` descreve essa regra. Nenhum aviso foi suprimido.
+
+Registro das verificações da etapa de atualização Python, anterior à
+estabilização acima; seus resultados históricos foram preservados:
+
+- Hooks: `uv run pre-commit install --install-hooks`, aprovado; instalados
+  `pre-commit`, `pre-merge-commit` e `pre-push`.
+- Base: o primeiro `make check` falhou porque o PostgreSQL estava parado
+  (conexão recusada). `make db-up` iniciou o serviço existente e confirmou
+  o healthcheck. Novo `make check` na base: aprovado, EXIT 0; 598 testes
+  Python, 444 testes frontend e 17 cenários E2E, cobertura de 100%.
+- Primeiro gate após atualizar: `make check` aprovado, EXIT 0; 598 testes
+  Python, 444 testes frontend e 17 cenários E2E, cobertura de 100%. Essa
+  rodada revelou os avisos de `Result.tuples()`, corrigidos em seguida.
+- Regressão: dois testes existentes, um de cada serviço, reprovaram com a
+  nova regra do pytest antes da correção. Depois da correção, os dois
+  arquivos completos (`test_cycle_service.py` e
+  `test_progression_service.py`): **29 testes aprovados**, sem avisos.
+  Ruff lint e formatação aprovados; mypy aprovado nos 92 arquivos.
+- Gate final após adaptar as consultas e documentar a regra do pytest:
+  `make check` aprovado, EXIT 0; **598 testes Python sem avisos**, **444
+  testes frontend** e **17 cenários E2E**. Cobertura Python: 100% (1254
+  instruções, 188 ramificações); frontend: 100% nos quatro eixos. Build,
+  axe-core, Ruff, mypy e Gitleaks aprovados.
+- Comparação do OpenAPI gerado antes/depois: documentos idênticos.
+- `uv build --wheel`: aprovado, wheel gerado com Hatchling fixado.
+- `uv pip check`: aprovado, todos os 58 pacotes instalados compatíveis;
+  as 17 dependências diretas satisfazem os requisitos do `pyproject.toml`.
+- `git diff --check`: aprovado.
+
+O painel `Problems → File` do PyCharm não está acessível pelas ferramentas
+desta sessão; a validação foi executada pelo terminal. Seu estado na IDE
+não foi confirmado.

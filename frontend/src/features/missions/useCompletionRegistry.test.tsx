@@ -339,3 +339,130 @@ describe('useCompletionRegistry -- as chaves de iniciar e reagendar', () => {
     expect(result.current.registry.actionKeyFor(7, 'reschedule')).toBe(K1)
   })
 })
+
+describe('reconciliacao de terminais explicitamente lidas', () => {
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(K1)
+      .mockReturnValueOnce(K2)
+      .mockReturnValueOnce(K3)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('libera apenas a chave terminal existente, sem gerar UUID ou recarregar', () => {
+    const { result, reload } = renderRegistry()
+    const { registry } = result.current
+    expect(registry.operationIdFor(7)).toBe(K1)
+    expect(registry.operationIdFor(8)).toBe(K2)
+    // Uma API ausente falha nesta assercao, antes da verificacao do efeito real.
+    expect(() => registry.reconcileCompleted([7, 7, 99])).not.toThrow()
+    expect(crypto.randomUUID).toHaveBeenCalledTimes(2)
+    expect(reload).not.toHaveBeenCalled()
+    expect(registry.operationIdFor(8)).toBe(K2)
+    expect(registry.operationIdFor(7)).toBe(K3)
+  })
+
+  it('nao acumula uma terminal que ainda nao tinha chave', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.started()
+    registry.reconcileCompleted([7, 99])
+    expect(crypto.randomUUID).not.toHaveBeenCalled()
+    expect(registry.operationIdFor(7)).toBe(K1)
+    act(() => registry.settled())
+    expect(registry.operationIdFor(7)).toBe(K1)
+  })
+
+  it('conserva candidatas ate o ULTIMO settled, antes da recarga adiada', () => {
+    let keyAtReload = ''
+    const reload = vi.fn(() => {
+      keyAtReload = result.current.registry.operationIdFor(7)
+    })
+    const { result } = renderHook(() => useCompletionRegistry(reload))
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.operationIdFor(8)
+    registry.started()
+    registry.started()
+    registry.reconcileCompleted([7])
+    act(() => result.current.reload())
+    expect(registry.operationIdFor(7)).toBe(K1)
+    act(() => registry.settled())
+    expect(registry.operationIdFor(7)).toBe(K1)
+    expect(registry.operationIdFor(8)).toBe(K2)
+    expect(reload).not.toHaveBeenCalled()
+    act(() => registry.settled())
+    expect(keyAtReload).toBe(K3)
+    expect(registry.operationIdFor(8)).toBe(K2)
+    expect(result.current.waitingForCompletion).toBe(false)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(result.current.registry).toBe(registry)
+  })
+
+  it('libera candidatas no ultimo settled mesmo sem recarga pendente', () => {
+    const { result, reload } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.started()
+    registry.reconcileCompleted([7])
+    act(() => registry.settled())
+    expect(registry.operationIdFor(7)).toBe(K2)
+    expect(reload).not.toHaveBeenCalled()
+    registry.started()
+    act(() => registry.settled())
+    expect(registry.operationIdFor(7)).toBe(K2)
+  })
+
+  it('release retira a candidata e nao poda uma chave futura da mesma ID', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.started()
+    registry.reconcileCompleted([7])
+    registry.release(7)
+    expect(registry.operationIdFor(7)).toBe(K2)
+    act(() => registry.settled())
+    expect(registry.operationIdFor(7)).toBe(K2)
+  })
+
+  it('lista vazia conserva as duas chaves e nao cancela candidata comprovada', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.operationIdFor(7)
+    registry.operationIdFor(8)
+    registry.reconcileCompleted([])
+    expect(registry.operationIdFor(7)).toBe(K1)
+    expect(registry.operationIdFor(8)).toBe(K2)
+    registry.started()
+    registry.reconcileCompleted([7])
+    registry.reconcileCompleted([])
+    act(() => registry.settled())
+    expect(registry.operationIdFor(8)).toBe(K2)
+    expect(registry.operationIdFor(7)).toBe(K3)
+  })
+})
+
+it('a leitura terminal libera retry de concluir, preservando o rascunho e as chaves do F', () => {
+  vi.spyOn(crypto, 'randomUUID')
+    .mockReturnValueOnce(K1)
+    .mockReturnValueOnce(K2)
+    .mockReturnValueOnce(K3)
+    .mockReturnValueOnce(K4)
+  const { result } = renderRegistry()
+  const { registry } = result.current
+  registry.operationIdFor(7)
+  registry.markRetryPending(7)
+  registry.saveDraft(7, { text: 'Minha entrega preservada', link: 'https://exemplo.test' })
+  expect(registry.actionKeyFor(7, 'start')).toBe(K2)
+  expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+  registry.reconcileCompleted([7])
+  expect(registry.operationIdFor(7)).toBe(K4)
+  expect(registry.isRetryPending(7)).toBe(false)
+  expect(registry.draftFor(7)).toEqual({
+    text: 'Minha entrega preservada',
+    link: 'https://exemplo.test',
+  })
+  expect(registry.actionKeyFor(7, 'start')).toBe(K2)
+  expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
+  vi.restoreAllMocks()
+})

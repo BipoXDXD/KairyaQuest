@@ -16,7 +16,7 @@ import { useRescheduleMission, type RescheduleState } from './useRescheduleMissi
 import { useStartMission, type StartState } from './useStartMission'
 
 const CARD_CLASS =
-  'rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
+  'min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
   'focus-within:ring-2 focus-within:ring-emerald-400'
 
 const COMPLETE_BUTTON_CLASS =
@@ -494,7 +494,7 @@ export function MissionCard({
           ref={titleRef}
           tabIndex={-1}
           data-testid="mission-instructions"
-          className="text-base font-semibold text-slate-100 focus:outline-none"
+          className="min-w-0 text-base font-semibold text-slate-100 focus:outline-none"
         >
           {mission.instructions}
         </HeadingTag>

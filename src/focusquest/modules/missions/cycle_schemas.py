@@ -11,6 +11,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
+from focusquest.core.validation import TextoPersistivel
 from focusquest.modules.missions.cycle_domain import (
     DIAS_DA_SEMANA,
     MINUTOS_DO_DIA,
@@ -42,8 +43,8 @@ class DailyCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    instructions: str = Field(min_length=1)
-    completion_criterion: str = Field(min_length=1)
+    instructions: TextoPersistivel = Field(min_length=1)
+    completion_criterion: TextoPersistivel = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MINUTOS_DO_DIA)
 
@@ -55,8 +56,8 @@ class BonusCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    instructions: str = Field(min_length=1)
-    completion_criterion: str = Field(min_length=1)
+    instructions: TextoPersistivel = Field(min_length=1)
+    completion_criterion: TextoPersistivel = Field(min_length=1)
     estimated_minutes: int = Field(gt=0, le=MINUTOS_DO_DIA)
 
 

@@ -26,6 +26,7 @@ from pydantic import (
     computed_field,
 )
 
+from focusquest.core.validation import TextoPersistivel
 from focusquest.modules.missions.cycle_domain import Availability
 from focusquest.modules.missions.cycle_service import MissaoLida
 from focusquest.modules.missions.domain import (
@@ -140,8 +141,8 @@ class MissionCreate(BaseModel):
     alto obriga o cliente a ser explicito UMA vez.
     """
 
-    instructions: str = Field(min_length=1)
-    completion_criterion: str = Field(min_length=1)
+    instructions: TextoPersistivel = Field(min_length=1)
+    completion_criterion: TextoPersistivel = Field(min_length=1)
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
     deadline: PrazoComFuso
@@ -254,7 +255,9 @@ def _campos_da_entrega(
 class MissionStart(BaseModel):
     """O corpo do inicio: so a chave de idempotencia (F2)."""
 
-    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
 
 
 class MissionRescheduleIn(BaseModel):
@@ -267,7 +270,9 @@ class MissionRescheduleIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
     new_deadline: PrazoComFuso
     reason: MotivoDoReagendamento
 
@@ -309,7 +314,9 @@ class MissionComplete(BaseModel):
     operacao: o mesmo identificador com outra evidencia e chave gasta.
     """
 
-    operation_id: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR)
+    operation_id: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_IDENTIFICADOR
+    )
     evidence: EvidenceIn | None = None
 
 

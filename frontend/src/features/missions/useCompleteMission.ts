@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
@@ -84,9 +84,11 @@ export function useCompleteMission(
   onCompleted?: () => void,
 ): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
+  const inFlight = useRef(false)
 
   const complete = useCallback(
     (evidence?: EvidenceDraft) => {
+      if (inFlight.current) return
       const described = evidence === undefined ? undefined : describeEvidence(evidence)
       if (described !== undefined && described.body === null) {
         return
@@ -98,6 +100,7 @@ export function useCompleteMission(
       // que nunca vai settle. Com a ordem inversa, uma excecao aqui deixaria o
       // contador do registro preso em 1 para sempre.
       const operationId = registry.operationIdFor(missionId)
+      inFlight.current = true
       setState({ status: 'submitting' })
       // Antes do POST, no mesmo tick: uma recarga pedida logo depois do clique
       // ja encontra esta conclusao em voo.
@@ -134,7 +137,11 @@ export function useCompleteMission(
         .finally(() => {
           // Por ultimo, depois do estado final: se havia recarga esperando, ela
           // acontece aqui, e o cartao que ela remonta ja nao tem nada em voo.
-          registry.settled()
+          try {
+            registry.settled()
+          } finally {
+            inFlight.current = false
+          }
         })
     },
     [missionId, registry, onCompleted],

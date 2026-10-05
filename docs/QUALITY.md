@@ -271,6 +271,11 @@ Cinco receitas, nesta ordem:
 5. `uv run pytest --cov ...` — a suíte `tests/unit` e `tests/integration`,
    com o limiar da seção 3.
 
+O pytest trata `sqlalchemy.exc.SADeprecationWarning` originada nos módulos
+`focusquest.*` como erro (`pyproject.toml`, `tool.pytest.ini_options`).
+Assim, voltar a usar uma API obsoleta do SQLAlchemy no código da aplicação
+reprova os testes que a exercitam. A regra não suprime avisos de terceiros.
+
 **O `check-api` precisa de banco.** Os testes de integração usam PostgreSQL
 real, nunca SQLite (README §10), no banco apontado por
 `FOCUSQUEST_TEST_DATABASE_URL` — `focusquest_test` por padrão, e um banco
@@ -460,8 +465,9 @@ consequências operacionais:
   dois `make check` junto com um `scripts/check-push.sh` também aprovaram os
   três (números em `docs/HANDOFF.md`, "Resultados"). No CI a corrida não
   existe: cada job tem o próprio serviço PostgreSQL.
-- **Desde o Incremento B, cada execução do `check-e2e` começa e termina com
-  o banco vazio da própria execução** — não acumula mais entre chamadas
+- **Desde o Incremento B, cada execução do `check-e2e` começa com esquema
+  recriado e migrado** — os cenários deixam seus dados no banco ao terminar,
+  mas a rodada seguinte os remove antes de começar; não acumula entre chamadas
   seguidas (pendência 20, `docs/HANDOFF.md`, **resolvida** na Task 6,
   commit `50e2150`). Antes do B, medido na Task 7 do 1b-2: um `make check` completo
   deixava **6 missões**, **7 mensagens** da tutoria e **2 ações**, e um
@@ -663,7 +669,9 @@ Sem eufemismo:
   `make bootstrap` e `make check` inteiros no worktree temporário, sem `.env`
   nele, e aprovou (cerca de 25 segundos; o worktree foi removido ao fim). O
   caminho das variáveis do framework `pre-commit`, disparado por um
-  `git push` de verdade com o `check-api` no gate, ainda não aconteceu.
+  `git push` de verdade com o `check-api` no gate, foi exercitado depois:
+  o registro histórico está na pendência 18 resolvida do `docs/HANDOFF.md`.
+  Essa evidência anterior não é uma execução de push na sessão atual.
   O **mecanismo** — a lista de permissão e a recusa — mora em
   `scripts/push-env.sh`, que o `check-push.sh` carrega e chama, e tem teste
   automatizado em `tests/integration/test_push_env.py`, sem push nem
@@ -966,7 +974,7 @@ acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1, a terc
    qualquer teste executar.
 2. **Teste de contrato**
    (`tests/integration/test_provedor_falso.py`), rodando o SDK **real**
-   (`anthropic==1.7.0`) contra o falso: confere que a `Message` que o SDK
+   (a versão instalada pelo `uv.lock`) contra o falso: confere que a `Message` que o SDK
    monta do stream tem o texto e o `tool_use` esperados. Isso pega o que a
    camada 1 não vê — um evento **estruturalmente válido**, mas fora da
    sequência que o parser interno do SDK espera (por exemplo, um
@@ -977,6 +985,9 @@ acuse. Três camadas cobrem isso; as duas primeiras existem desde o 1b-1, a terc
    `anthropic/lib/streaming/_messages.py` — a guarda reprova o teste, não
    silencia o defeito. Se uma atualização futura do `anthropic` no
    `uv.lock` deixar de entender o falso, é esta camada que acusa no gate.
+   O teste nasceu com `anthropic==1.7.0`; a atualização local de
+   2026-10-04 para `1.11.0` também passou por ele, sem regravar a
+   referência histórica da API real.
 
 ### Camada 3: a sequência da API real
 

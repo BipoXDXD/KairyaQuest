@@ -104,11 +104,16 @@ APOS_O_PRIMEIRO_PEDACO = EVENTOS_DO_PENSAMENTO + 3
 # Os motivos de parada que um roteiro pode escolher. `max_tokens` e
 # `model_context_window_exceeded` cortam a resposta; `refusal` e a recusa (os
 # classificadores ou o proprio modelo recusaram), que chega tambem num 200 com
-# `message_stop` (pendencia 120). `stop_sequence` e `pause_turn` ficam de fora:
-# a conversa nao manda `stop_sequences` nem ferramenta de servidor, e sem eles
-# a API nao os emite.
+# `message_stop` (pendencia 120). `stop_sequence` e controle sintetico do
+# adaptador: a conversa nao manda stop_sequences. `pause_turn` fica de fora
+# (nao ha ferramenta de servidor).
 MotivoDeParada = Literal[
-    "end_turn", "tool_use", "max_tokens", "model_context_window_exceeded", "refusal"
+    "end_turn",
+    "tool_use",
+    "max_tokens",
+    "model_context_window_exceeded",
+    "refusal",
+    "stop_sequence",
 ]
 
 
@@ -337,7 +342,7 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[BetaRawMessageStreamEvent]:
             delta=DeltaDaMensagem(
                 stop_reason=roteiro.stop_reason
                 or ("tool_use" if tem_ferramenta else "end_turn"),
-                stop_sequence=None,
+                stop_sequence="FIM" if roteiro.stop_reason == "stop_sequence" else None,
             ),
             usage=BetaMessageDeltaUsage(
                 output_tokens=1, iterations=_uso_da_troca(substituicao)

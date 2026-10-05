@@ -67,6 +67,20 @@ export interface UseTutorConversationResult {
   updateAction: (action: ActionRead) => void
 }
 
+type HistoryReadKind = 'reload' | 'silent'
+
+/** Só decisões conhecidas DEPOIS do início desta leitura corrigem seu snapshot. */
+function reconcileActions(
+  messages: MessageRead[],
+  updates: Map<number, ActionRead>,
+): MessageRead[] {
+  let reconciled = messages
+  for (const action of updates.values()) {
+    reconciled = replaceAction(reconciled, action)
+  }
+  return reconciled
+}
+
 type TurnOutcome =
   | { kind: 'done'; question: MessageRead | null; answer: MessageRead }
   | { kind: 'failed'; question: MessageRead | null; partial: string; failure: MessageFailure }
@@ -157,14 +171,39 @@ export function useTutorConversation(): UseTutorConversationResult {
   const [send, setSend] = useState<SendState>({ status: 'idle', answer: null })
   const [draft, setDraft] = useState('')
   const lifetime = useRef<AbortController | null>(null)
+  // No máximo dois candidatos: a recarga atual e a leitura silenciosa atual.
+  // Cada um guarda só o último callback por ação desde seu início. Leituras
+  // posteriores começam vazias: o servidor volta a ser a fonte autoritativa.
+  const historyReads = useRef<Record<HistoryReadKind, Map<number, ActionRead> | null>>({
+    reload: null,
+    silent: null,
+  })
+  const beginHistoryRead = useCallback((kind: HistoryReadKind) => {
+    historyReads.current[kind]?.clear()
+    const updates = new Map<number, ActionRead>()
+    historyReads.current[kind] = updates
+    return updates
+  }, [])
+  const finishHistoryRead = useCallback(
+    (kind: HistoryReadKind, updates: Map<number, ActionRead>) => {
+      if (historyReads.current[kind] === updates) {
+        historyReads.current[kind] = null
+      }
+      updates.clear()
+    },
+    [],
+  )
 
   useEffect(() => {
     // Um controlador POR montagem: no StrictMode o efeito roda, limpa e roda
     // de novo, e um controlador criado uma vez so ficaria abortado para sempre.
     const controller = new AbortController()
     lifetime.current = controller
+    const reads = historyReads.current
     return () => {
       controller.abort()
+      reads.silent?.clear()
+      reads.silent = null
     }
   }, [])
 
@@ -189,11 +228,18 @@ export function useTutorConversation(): UseTutorConversationResult {
   useEffect(() => {
     const controller = new AbortController()
     generation.current += 1
+    // A recarga supera também a leitura silenciosa da geração anterior.
+    // Libera suas decisões mesmo se aquele GET continuar pendente na rede.
+    const previousSilent = historyReads.current.silent
+    if (previousSilent !== null) {
+      finishHistoryRead('silent', previousSilent)
+    }
     const requested = generation.current
+    const updates = beginHistoryRead('reload')
     requestJson<MessageRead[]>('/tutoring/messages', controller.signal)
       .then((messages) => {
         if (requested === generation.current) {
-          setHistory({ status: 'loaded', messages })
+          setHistory({ status: 'loaded', messages: reconcileActions(messages, updates) })
         }
       })
       .catch(() => {
@@ -201,10 +247,12 @@ export function useTutorConversation(): UseTutorConversationResult {
           setHistory({ status: 'error' })
         }
       })
+      .finally(() => finishHistoryRead('reload', updates))
     return () => {
       controller.abort()
+      finishHistoryRead('reload', updates)
     }
-  }, [attempt])
+  }, [attempt, beginHistoryRead, finishHistoryRead])
 
   // Ids das respostas provisorias (-1, -2, ...): nunca colidem com os do banco.
   const placeholderIds = useRef(0)
@@ -227,16 +275,19 @@ export function useTutorConversation(): UseTutorConversationResult {
     // recente pode gravar -- a mais antiga, chegando por ultimo, traria a
     // lista de antes do segundo turno.
     const id = (silentRequest.current += 1)
+    const updates = beginHistoryRead('silent')
     requestJson<MessageRead[]>('/tutoring/messages', lifetime.current!.signal)
       .then((messages) => {
         if (requested === generation.current && id === silentRequest.current) {
+          const reconciled = reconcileActions(messages, updates)
           setHistory((current) =>
-            current.status === 'loaded' ? { status: 'loaded', messages } : current,
+            current.status === 'loaded' ? { status: 'loaded', messages: reconciled } : current,
           )
         }
       })
       .catch(() => undefined)
-  }, [])
+      .finally(() => finishHistoryRead('silent', updates))
+  }, [beginHistoryRead, finishHistoryRead])
 
   const run = useCallback(
     (pending: PendingQuestion) => {
@@ -266,6 +317,14 @@ export function useTutorConversation(): UseTutorConversationResult {
           // nela; com uma recarga em voo (ou em erro), a recarga saiu ANTES do
           // `done` e pode nao ter o fim da resposta -- pede-se outra.
           generation.current += 1
+          // Esses candidatos perderam a geração: não precisam reter decisões
+          // enquanto um GET obsoleto continua pendente na rede.
+          for (const kind of ['reload', 'silent'] as const) {
+            const updates = historyReads.current[kind]
+            if (updates !== null) {
+              finishHistoryRead(kind, updates)
+            }
+          }
           setHistory((current) =>
             current.status === 'loaded'
               ? {
@@ -320,7 +379,7 @@ export function useTutorConversation(): UseTutorConversationResult {
         )
       })
     },
-    [refreshSilently],
+    [refreshSilently, finishHistoryRead],
   )
 
   const retryTarget = retryTargetOf(send, history)
@@ -348,6 +407,11 @@ export function useTutorConversation(): UseTutorConversationResult {
   }, [needsNewId, retryTarget, run])
 
   const updateAction = useCallback((action: ActionRead) => {
+    // Não invalida uma recarga necessária nem mantém override global. Só os
+    // GETs que já saíram podem conter a versão anterior à decisão conhecida.
+    for (const updates of Object.values(historyReads.current)) {
+      updates?.set(action.id, action)
+    }
     setHistory((current) =>
       current.status === 'loaded'
         ? { status: 'loaded', messages: replaceAction(current.messages, action) }

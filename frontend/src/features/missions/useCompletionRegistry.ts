@@ -65,6 +65,8 @@ export interface CompletionRegistry {
   isRetryPending: (missionId: number) => boolean
   /** Marca a missao como em retry pendente. `release` desmarca. */
   markRetryPending: (missionId: number) => void
+  /** IDs explicitamente concluidas numa leitura atual bem-sucedida. */
+  reconcileCompleted: (missionIds: readonly number[]) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
   /** Um POST de conclusao terminou, com qualquer resultado. */
@@ -90,7 +92,7 @@ export interface UseCompletionRegistryResult {
  * proximo Concluir de uma missao com resultado desconhecido saia com chave
  * nova, e a tela diria "ja estava concluida" sobre a conclusao que ela mesma
  * fez. Aqui a chave pertence a MISSAO e so sai do registro quando nao tem mais
- * uso (quem decide e `useCompleteMission`).
+ * uso: pelo resultado do POST ou por leitura atual que confirme `concluida`.
  *
  * A recarga espera porque, com um POST em voo, o reload remontaria o cartao
  * dele no meio do pedido. Pedida com conclusao em voo, ela fica pendente e e
@@ -109,12 +111,23 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
   const actionKeys = useRef(new Map<string, string>())
   const drafts = useRef(new Map<number, EvidenceDraft>())
   const retryPending = useRef(new Set<number>())
+  // So chaves existentes entram: nao acumula o catalogo de concluidas.
+  const completedPending = useRef(new Set<number>())
   const inFlight = useRef(0)
   const reloadPending = useRef(false)
   const [waitingForCompletion, setWaitingForCompletion] = useState(false)
 
-  const registry = useMemo<CompletionRegistry>(
-    () => ({
+  const registry = useMemo<CompletionRegistry>(() => {
+    const pruneCompleted = () => {
+      // Conservador: qualquer POST em voo adia todas as candidatas.
+      if (inFlight.current !== 0) return
+      for (const missionId of completedPending.current) {
+        operationIds.current.delete(missionId)
+        retryPending.current.delete(missionId)
+      }
+      completedPending.current.clear()
+    }
+    return {
       operationIdFor: (missionId) => {
         let operationId = operationIds.current.get(missionId)
         if (operationId === undefined) {
@@ -142,6 +155,7 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       release: (missionId) => {
         operationIds.current.delete(missionId)
         retryPending.current.delete(missionId)
+        completedPending.current.delete(missionId)
       },
       isRetryPending: (missionId) => retryPending.current.has(missionId),
       markRetryPending: (missionId) => {
@@ -150,20 +164,30 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       discardDraft: (missionId) => {
         drafts.current.delete(missionId)
       },
+      reconcileCompleted: (missionIds) => {
+        for (const missionId of missionIds) {
+          if (operationIds.current.has(missionId)) {
+            completedPending.current.add(missionId)
+          }
+        }
+        pruneCompleted()
+      },
       started: () => {
         inFlight.current += 1
       },
       settled: () => {
         inFlight.current -= 1
-        if (inFlight.current === 0 && reloadPending.current) {
+        const shouldReload = inFlight.current === 0 && reloadPending.current
+        if (shouldReload) {
           reloadPending.current = false
           setWaitingForCompletion(false)
-          reload()
         }
+        // Nenhum voo nem pedido de recarga pendente antes de liberar chaves.
+        pruneCompleted()
+        if (shouldReload) reload()
       },
-    }),
-    [reload],
-  )
+    }
+  }, [reload])
 
   const requestReload = useCallback(() => {
     if (inFlight.current > 0) {
