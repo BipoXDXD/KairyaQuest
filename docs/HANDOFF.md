@@ -8,6 +8,39 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Reuso de chave com evidência recusada — 2026-10-05
+
+Fatia de prova da pendência 97(j)/T-M1 em `wt/reuso-evidencia-recusada`,
+baseada na `main` em `5ba81c3` e ainda não integrada. O dono autorizou
+continuação autônoma, decisões não críticas e commit/push/PR por fase com
+cobertura de 100%; merge e decisões críticas continuam pendentes.
+
+Dois testes de serviço existentes foram fortalecidos, sem duplicar cenários:
+concluir usando a chave de início da mesma missão e concluir usando a chave
+de conclusão de outra missão. Ambos enviam `NovaEvidencia` no pedido recusado.
+Consultas SQL com autoflush **antes do rollback** exigem ausência de evidência
+e XP novos, estado, início, conclusão e operações exatos. No segundo caso,
+a missão de origem já tem evidência própria e 40 XP: conteúdo, link, horário,
+dono, fonte e operação permanecem na origem; a destinatária fica pendente.
+
+Baseline dos três módulos relacionados aprovado. Mutação temporária só em
+torno de `_exigir_mesma_operacao`: ao receber `OperacaoReutilizadaError`,
+atribui a evidência do pedido à missão e relança o erro real. Os 71 testes
+antigos desses módulos passaram em 1,45 s sob a mutação. As verificações
+fortalecidas produziram duas falhas causais na evidência indevida anterior
+ao rollback, em 0,74 s. O serviço foi restaurado no `finally`, com SHA igual
+à base e produção sem diff. Depois, os 71 relacionados passaram em 2,13 s.
+A correção de organização de imports foi exigida pelo lint; formatação
+aprovada. Gate completo, revisão, hooks e publicação serão registrados no
+ledger e PR; resultados focados e caracterização não os substituem.
+
+Limites: prova reuso **sequencial** de chave entre tipos ou missões, com
+consulta antes do rollback. Não prova estado numa sessão nova após rollback,
+`_mesma_evidencia`, corrida pela UNIQUE em `_gravar_operacao`, HTTP, demais
+recusas ou o T-M1 inteiro. A expiração após espera e a transição ilegal são
+provas distintas; não são incorporadas ou aprovadas em conjunto por esta
+fase. Nenhuma produção, biblioteca, endpoint, migração ou infraestrutura mudou.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -4880,6 +4913,10 @@ ledger; nenhum é bug esquecido.
     atravessando `_traduzir_erros`), S-M6, "o upgrade preserva os `xp_entries`
     existentes" (T-M4) e a segunda metade do T-M1 (falha de conclusão com
     evidência não deixa linha em `mission_evidence`).
+    **Prova parcial em branch, 2026-10-05:** `wt/reuso-evidencia-recusada`
+    fortalece dois casos sequenciais de chave reutilizada com evidência,
+    verificando ausência de escrita antes do rollback. Não fecha todo T-M1
+    nem significa integração na `main`; detalhes e limites no topo.
 98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1

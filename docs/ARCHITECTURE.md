@@ -1888,3 +1888,21 @@ sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
 compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
 `fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
 ao contrato de preservação da `0004`. Migrações não foram alteradas.
+
+
+## Prova sequencial de reuso com evidência — 2026-10-05
+
+`test_iniciar_missao.py` fortalece o caso existente de chave de início usada
+para concluir a mesma missão; `test_missions_service.py` fortalece o caso de
+chave de conclusão usada noutra missão. `NovaEvidencia` acompanha a tentativa
+recusada. Consultas SQL com autoflush antes do rollback verificam evidência,
+XP, operações, estado e timestamps; o segundo preserva também a entrega e
+progressão da origem. Não há cenário duplicado nem alteração de produção.
+
+O controle de mutação mantém o erro real e apenas escreve evidência no
+caminho de reuso: os três módulos antigos (71 casos) passam; as duas
+verificações fortalecidas detectam a escrita indevida. O serviço é restaurado
+no `finally` e confirmado por SHA antes da execução relacionada aprovada.
+Esta é parte de 97(j)/T-M1: não mede rollback numa sessão nova, comparação de
+evidência no reenvio, disputa da UNIQUE, HTTP ou todas as recusas. Os gates e
+PR desta branch não aprovam uma combinação com outros incrementos.
