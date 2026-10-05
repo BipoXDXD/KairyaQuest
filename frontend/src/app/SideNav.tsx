@@ -29,8 +29,20 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
     <nav
       aria-label="Áreas"
       data-testid="side-nav"
-      className="border-b border-slate-800 px-4 py-3 lg:sticky lg:top-0 lg:h-screen lg:w-56 lg:shrink-0 lg:border-r lg:border-b-0 lg:py-8"
+      className="rpg-nav border-b border-slate-800 px-4 py-3 lg:sticky lg:top-0 lg:h-screen lg:w-56 lg:shrink-0 lg:border-r lg:border-b-0 lg:py-8"
     >
+      <div className="rpg-brand">
+        <span className="rpg-crest" aria-hidden="true">
+          ✦
+        </span>
+        <div>
+          <p className="rpg-wordmark">FocusQuest</p>
+          <p className="rpg-brand-note">Sua jornada de estudos</p>
+        </div>
+      </div>
+      <p className="rpg-nav-caption" aria-hidden="true">
+        Explorar
+      </p>
       <ul className="flex flex-wrap gap-2 lg:flex-col">
         {AREAS.map((area) => {
           const current = area.id === active
@@ -43,7 +55,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
                 onClick={() => {
                   onNavigate(area.id)
                 }}
-                className={`${ITEM_CLASS} ${current ? CURRENT_CLASS : OTHER_CLASS}`}
+                className={`rpg-nav-item ${ITEM_CLASS} ${current ? CURRENT_CLASS : OTHER_CLASS}`}
               >
                 {current && (
                   <span aria-hidden="true" data-testid="nav-current-marker">

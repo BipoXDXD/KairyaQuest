@@ -20,8 +20,12 @@ export function Campaigns({
   onOpenHeadquarters?: () => void
 } = {}) {
   return (
-    <main data-testid="campaigns" className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="mb-6">
+    <main
+      data-testid="campaigns"
+      className="rpg-main campaigns-main mx-auto w-full max-w-3xl px-4 py-8"
+    >
+      <header className="rpg-hero rpg-hero-citadel mb-6">
+        <p className="rpg-eyebrow">O próximo capítulo</p>
         <h1
           id={CAMPAIGNS_HEADING_ID}
           tabIndex={-1}

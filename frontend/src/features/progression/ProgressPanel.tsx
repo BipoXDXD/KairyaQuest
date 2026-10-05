@@ -41,11 +41,14 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
   const valueText = `${xpFormat.format(into)} de ${xpFormat.format(span)} XP`
   const text = `${valueText} ${nextLevel}`
   return (
-    <div>
-      <p data-testid="progress-level" className="text-xl font-bold text-slate-50">
+    <div className="rpg-progress-content">
+      <p
+        data-testid="progress-level"
+        className="progress-level-value text-xl font-bold text-slate-50"
+      >
         Nível {progress.level}
       </p>
-      <p data-testid="progress-total" className="text-sm text-slate-300">
+      <p data-testid="progress-total" className="progress-total-value text-sm text-slate-300">
         {xpFormat.format(progress.xp_total)} XP no total
       </p>
       <div
@@ -67,12 +70,16 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       <p data-testid="progress-bar-text" aria-hidden="true" className="mt-1 text-sm text-slate-300">
         {text}
       </p>
-      <h3 className="mt-4 mb-2 text-sm font-semibold text-slate-200">Conquistas</h3>
-      <ul role="list" className="grid gap-2 sm:grid-cols-2">
-        {progress.achievements.map((a) => (
-          <AchievementItem key={a.code} achievement={a} />
-        ))}
-      </ul>
+      <details className="progress-achievements">
+        <summary>
+          <h3 className="inline text-sm font-semibold text-slate-200">Conquistas</h3>
+        </summary>
+        <ul role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
+          {progress.achievements.map((a) => (
+            <AchievementItem key={a.code} achievement={a} />
+          ))}
+        </ul>
+      </details>
     </div>
   )
 }
@@ -136,7 +143,11 @@ export function ProgressPanel({ ref }: { ref?: Ref<ProgressPanelHandle> }) {
   const { state, reload, refresh } = useProgress()
   useImperativeHandle(ref, () => ({ refresh }), [refresh])
   return (
-    <section aria-labelledby="progress-heading" data-testid="progress" className="mb-8">
+    <section
+      aria-labelledby="progress-heading"
+      data-testid="progress"
+      className="rpg-progress mb-8"
+    >
       <h2 id="progress-heading" className="mb-3 text-lg font-semibold text-slate-200">
         Seu progresso — nível e conquistas
       </h2>

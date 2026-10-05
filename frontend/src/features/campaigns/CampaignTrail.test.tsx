@@ -240,6 +240,18 @@ describe('CampaignTrail', () => {
     expect(within(missao).getByTestId('trail-difficulty')).toHaveTextContent('3 de 5')
     expect(within(missao).getByTestId('trail-estimated-minutes')).toHaveTextContent('30 min')
     expect(within(missao).getByTestId('trail-xp')).toHaveTextContent('90 XP')
+    for (const [testId, label] of [
+      ['trail-difficulty', 'Dificuldade'],
+      ['trail-estimated-minutes', 'Estimativa'],
+      ['trail-xp', 'Recompensa'],
+    ]) {
+      const value = within(missao).getByTestId(testId!)
+      const pair = value.parentElement!
+      expect(pair.tagName).toBe('DIV')
+      expect(pair.parentElement?.tagName).toBe('DL')
+      expect(pair.querySelector('dt')).toHaveTextContent(label!)
+      expect(pair.querySelectorAll('dd')).toHaveLength(1)
+    }
     expect(within(quarta).getByTestId('trail-availability')).toHaveTextContent('Concluída')
 
     const terca = await diaDaTrilha('2026-09-22')

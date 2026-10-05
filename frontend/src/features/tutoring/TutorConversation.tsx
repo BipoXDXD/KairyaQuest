@@ -251,7 +251,7 @@ export function TutorConversation({
   const busy = send.status === 'sending' || send.status === 'writing'
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+    <div className="tutor-conversation flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       {/* A regiao rola; sem nada focavel dentro (sem proposta nem Tentar de
           novo), so o tabIndex deixa quem usa teclado rola-la (axe
           scrollable-region-focusable). O nome diz o que o foco alcancou. */}

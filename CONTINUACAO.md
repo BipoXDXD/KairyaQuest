@@ -1,6 +1,23 @@
 # Retomar o FocusQuest
 
-## Continuação corrente — publicação concluída e prevenção de novas pastas irmãs
+## Continuação corrente — redesign desktop de estudos
+
+Base main `52d7fbf` (PR #29 integrado); branch `feat/desktop-medieval` no
+worktree existente da composição. Redesign autorizado: cenários medievais,
+Tifa no visual clássico, navegação e superfícies refinadas para desktop,
+conquistas em disclosure com nível/XP sempre visíveis. Mobile e os contratos
+existentes foram preservados. Esta fatia permanece no redesign de estudos;
+não altera os fluxos de criação de missões.
+
+Revisão visual técnica e gate completo fresco aprovados: 1500 Python,
+1002 frontend e 66 E2E, cobertura 100%. Os hooks,
+commit assinado, push de uma ref, PR, CI e merge com base atualizada têm sua
+própria evidência no ledger `.superpowers/sdd/desktop-medieval/` conforme
+executados. Não usar aprovação de outra revisão para publicar esta. Ler
+[docs/HANDOFF.md](docs/HANDOFF.md) e [docs/ART.md](docs/ART.md) antes de continuar.
+A correção de worktrees e sua história foram preservadas abaixo.
+
+## Histórico — publicação concluída e prevenção de novas pastas irmãs
 
 Revisão-base deste incremento: main `769e02d` (PR #25), com os PRs #7–#28 mesclados e
 nenhum PR aberto na conclusão da publicação. Não repetir essas fases.

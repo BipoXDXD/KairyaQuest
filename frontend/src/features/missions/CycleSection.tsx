@@ -314,7 +314,7 @@ export function CycleSection({
     reloadLabel: 'Atualizar a missão de hoje',
   }
   return (
-    <section aria-labelledby="cycle-heading" data-testid="cycle" className="mb-8">
+    <section aria-labelledby="cycle-heading" data-testid="cycle" className="rpg-cycle mb-8">
       <h2
         ref={heading}
         id="cycle-heading"

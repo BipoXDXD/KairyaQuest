@@ -58,16 +58,17 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
     }
   }, [hidden, refreshProgress])
   return (
-    <div hidden={hidden} className="lg:flex">
+    <div hidden={hidden} className="headquarters-layout lg:flex">
       {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
           baixo, e sem a folga cobriria os botoes do ultimo cartao do quadro
           (README §7: a conversa nao cobre botoes). */}
       <main
         data-testid="headquarters"
         hidden={hidden}
-        className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-24 lg:pb-8"
+        className="rpg-main mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-24 lg:pb-8"
       >
-        <header className="mb-6">
+        <header className="rpg-hero rpg-hero-library mb-6">
+          <p className="rpg-eyebrow">Biblioteca do aventureiro</p>
           <h1
             id={HEADQUARTERS_HEADING_ID}
             tabIndex={-1}

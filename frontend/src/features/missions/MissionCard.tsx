@@ -16,7 +16,7 @@ import { useRescheduleMission, type RescheduleState } from './useRescheduleMissi
 import { useStartMission, type StartState } from './useStartMission'
 
 const CARD_CLASS =
-  'min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
+  'rpg-mission-card min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
   'focus-within:ring-2 focus-within:ring-emerald-400'
 
 const COMPLETE_BUTTON_CLASS =
@@ -510,7 +510,7 @@ export function MissionCard({
             aviso alem da cor. */}
         <span
           data-testid="mission-state"
-          className="shrink-0 rounded-full border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-300"
+          className="rpg-mission-state shrink-0 rounded-full border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-300"
         >
           {MISSION_STATE_LABELS[mission.state]}
         </span>

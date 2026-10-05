@@ -88,6 +88,8 @@ describe('ProgressPanel', () => {
     serve(progress(20, 1, 0, 100, ['first_steps']))
     render(<ProgressPanel />)
     const itens = await screen.findAllByTestId('progress-achievement')
+    screen.getByText('Conquistas', { selector: 'h3' }).click()
+    expect(itens[0]).toBeVisible()
     expect(itens.map((i) => i.dataset.code)).toEqual(CATALOGO.map(([code]) => code))
     const primeira = itens[0]!
     expect(primeira).toHaveAttribute('data-unlocked', 'true')
@@ -97,6 +99,34 @@ describe('ProgressPanel', () => {
     expect(bloqueada).toHaveAttribute('data-unlocked', 'false')
     expect(within(bloqueada).getByText('Bloqueada:', { exact: false })).toBeInTheDocument()
     expect(bloqueada).toHaveTextContent('Complete a diária 7 dias seguidos.')
+  })
+
+  it('conquistas recolhem sem esconder nivel ou XP e abrem as sete informacoes', async () => {
+    serve(progress(260, 2, 100, 300, ['first_steps', 'tifa_partnership']))
+    render(<ProgressPanel />)
+    const level = await screen.findByTestId('progress-level')
+    const total = screen.getByTestId('progress-total')
+    const summary = screen.getByText('Conquistas', { selector: 'h3' }).closest('summary')
+    expect(summary).not.toBeNull()
+    const details = summary?.parentElement
+    expect(details?.tagName).toBe('DETAILS')
+    expect(details).not.toHaveAttribute('open')
+    expect(level).toBeVisible()
+    expect(total).toBeVisible()
+    const items = screen.getAllByTestId('progress-achievement')
+    expect(items).toHaveLength(7)
+    for (const item of items) expect(item).not.toBeVisible()
+
+    summary?.click()
+    expect(details).toHaveAttribute('open')
+    for (const item of items) expect(item).toBeVisible()
+    expect(items[0]).toHaveTextContent('Conquistada em 21/09/2026')
+    expect(items[1]).toHaveTextContent('Bloqueada: Complete a diária 7 dias seguidos.')
+    summary?.click()
+    expect(details).not.toHaveAttribute('open')
+    for (const item of items) expect(item).not.toBeVisible()
+    expect(level).toBeVisible()
+    expect(total).toBeVisible()
   })
 
   it('carregando tem role status', () => {

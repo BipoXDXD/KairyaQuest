@@ -155,6 +155,107 @@ for (const width of [1440, 1024]) {
   })
 }
 
+// O painel sticky preserva o composer nas alturas curtas; as sete conquistas
+// não empurram a próxima ação para fora da primeira dobra.
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1024, height: 768 },
+  { width: 1440, height: 500 },
+]) {
+  test(`desktop ${String(viewport.width)}x${String(viewport.height)}: a jornada e o composer continuam acessiveis`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    await layoutData(
+      page,
+      Array.from({ length: 10 }, (_, index) => ({ ...mission, id: 9500 + index })),
+    )
+    await page.route('**/api/progress', (route) =>
+      route.fulfill({
+        json: {
+          xp_total: 260,
+          level: 2,
+          level_floor_xp: 100,
+          next_level_xp: 300,
+          achievements: [
+            ['first_steps', 'Primeiros passos'],
+            ['streak_7', 'Uma semana inteira'],
+            ['streak_30', 'Um mês de hábito'],
+            ['veteran_10', 'Veterano I'],
+            ['veteran_50', 'Veterano II'],
+            ['veteran_100', 'Veterano III'],
+            ['tifa_partnership', 'Parceria com a Tifa'],
+          ].map(([code, title]) => ({
+            code,
+            title,
+            description: 'Continue estudando.',
+            unlocked_at: null,
+          })),
+        },
+      }),
+    )
+    await page.route('**/api/cycle', (route) =>
+      route.fulfill({
+        json: {
+          today: '2026-10-04',
+          mission: { ...mission, id: 9600, mission_type: 'diaria', day: '2026-10-04' },
+          streak: 3,
+          days_to_milestone: 4,
+          special: null,
+          late_daily: null,
+        },
+      }),
+    )
+    await page.goto('/')
+    await expect(page.getByTestId('tutor-greeting')).toBeVisible()
+    const achievements = page.getByTestId('progress-achievement')
+    await expect(achievements).toHaveCount(7)
+    await expect(achievements.first()).toBeHidden()
+    await expect(page.getByTestId('progress-total')).toBeVisible()
+    if (viewport.height === 900) {
+      const daily = page.getByTestId('cycle').getByTestId('mission-instructions')
+      const start = page
+        .getByTestId('cycle')
+        .getByRole('button', { name: `Iniciar a missão: ${mission.instructions}`, exact: true })
+      for (const target of [daily, start]) {
+        const bounds = await target.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.y).toBeGreaterThanOrEqual(0)
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height)
+      }
+    }
+    const input = page.getByLabel('Sua mensagem para a Tifa')
+    const draft = 'Meu rascunho continua na jornada.'
+    await input.fill(draft)
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(100)
+    async function composerFits() {
+      for (const target of [input, page.getByRole('button', { name: 'Enviar', exact: true })]) {
+        const bounds = await target.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.y).toBeGreaterThanOrEqual(0)
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height)
+      }
+    }
+    await composerFits()
+    const toggle = page.getByTestId('tutor-panel-toggle')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await toggle.click()
+    await expect(input).toHaveValue(draft)
+    await composerFits()
+    await page.getByTestId('nav-campaigns').click()
+    await expect(page.getByTestId('campaigns')).toBeVisible()
+    await expect(page.getByTestId('tutor-panel')).toBeHidden()
+    await expect(page.getByTestId('headquarters')).toBeHidden()
+    await page.getByTestId('nav-headquarters').click()
+    await expect(input).toHaveValue(draft)
+    await composerFits()
+    await noHorizontalOverflow(page)
+    await accessible(page)
+  })
+}
+
 for (const width of [320, 375]) {
   test.describe(`celular ${String(width)} com texto sem espaços`, () => {
     test.use({

@@ -3,7 +3,58 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
-## Estado corrente — publicação concluída e organização preventiva — 2026-10-05
+## Estado corrente — redesign desktop para estudos — 2026-10-05
+
+Base desta fatia: main `52d7fbf`, com o PR #29 integrado depois dos PRs #7–#28.
+Branch `feat/desktop-medieval`, no worktree existente da composição. Coordenação
+com quatro auxiliares GPT 6.1 Sol High, supervisionada pelo agente principal. O avanço
+por fast-forward preservou os hashes dos vinte arquivos pendentes do redesign.
+A autorização vigente cobre commit assinado, push de uma ref, PR e merge com
+base atualizada, testes reforçados e CI verde. A proposta intermediária de
+habit tracker foi cancelada pelo responsável: o produto continua focado em
+estudos. Nenhum fluxo de criação manual novo ou contrato entrou nesta fatia.
+
+Desktop ganha navegação com brasão decorativo, heroes de biblioteca/cidadela,
+títulos serifados locais, superfícies navy/bronze/mako e cartões refinados.
+Tifa usa o traje clássico escolhido pelo responsável, retrato inteiro no
+painel aberto e avatar compacto em mobile/recolhido. Os quatro WebP locais
+somam 668.608 bytes; originais e SHA-256 ficam no ledger. Procedência, prompts
+e limites em [ART.md](ART.md). Sem novas dependências, fontes externas ou API.
+
+As sete conquistas ficam em disclosure nativo inicialmente fechado; nível,
+XP e barra permanecem visíveis, e a diária com Iniciar cabe na primeira dobra
+1440×900. A informação permanece disponível por teclado. Os três campos de
+missão em Campanhas agora agrupam cada dt/dd, mantendo rótulos e valores.
+Hooks, montagem/hidden do QG, navegação, nomes acessíveis, foco, modal mobile,
+rascunho, stream, ações e recompensas foram preservados.
+
+Evidência executada nesta sessão: `make check-web` EXIT 0, 1002 testes e
+cobertura 100% nas quatro métricas; testes dos pares em Campanhas RED esperado
+(1 falha/16 controles), depois 17/17 verdes; três regressões Chromium com
+fixtures locais passaram em 1440×900, 1024×768 e 1440×500. Elas preservam
+composer/Enviar na viewport após rolagem, rascunho após recolher/navegar e QG
+oculto em Campanhas; a primeira também exige diária/Iniciar na primeira dobra.
+O primeiro focado teve seletor incorreto do nome de Iniciar: foi corrigido para
+o nome acessível completo existente, sem alterar o produto.
+
+Revisão visual técnica: 14 cenários sem overflow/erro de arte/violações axe;
+depois dos dois ajustes finais, duas capturas prioritárias e duas geometrias
+curtas passaram, com hashes src/public/dist estáveis. Retrato mostra rosto e
+traje clássico; pares de Campanhas estão alinhados. Capturas com fixtures
+GET apenas, sem provedor pago; aprovação de layout nesta sessão não equivale
+a aprovação humana definitiva da arte, leitor de tela real ou certificação
+AA. Axe registra limites de contraste incompleto sobre gradientes.
+
+Gate completo fresco antes da publicação: `make check` EXIT 0 em 308,25 s,
+1500 Python, 1002 frontend e 66 E2E, cobertura 100%; lint, tipos, formatação
+e Gitleaks aprovados. As 378 fontes, HEAD, índice e `.env` permaneceram
+estáveis durante a execução. Hooks e CI desta publicação são evidências próprias;
+consultar os resultados observados no ledger
+`.superpowers/sdd/desktop-medieval/` e no PR desta fatia. Resultados da base
+ou de capturas não os substituem. A correção preventiva de worktrees do PR
+#29 foi preservada integralmente, como descrito na fotografia abaixo.
+
+## Histórico — publicação concluída e organização preventiva — 2026-10-05
 
 O responsável autorizou commit, push e PR de todas as fases implementadas
 que aguardavam publicação e merge na main somente com testes reforçados.
