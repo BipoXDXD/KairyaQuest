@@ -1391,8 +1391,11 @@ nunca uma atualização perdida. Provado por conexões reais em
 `test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`; a
 ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
 tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
-testes de detecção de corrida dependem do escalonador (pendência 160), e falta
-o de confirmação da Tifa × conclusão (pendência 167).
+testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
+A confirmação da Tifa × conclusão (pendência 167) ganhou uma prova das duas
+ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
+`wt/tifa-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
+a `main` em `5ba81c3` ainda não contém o módulo.
 
 **A missão iniciada dentro do prazo pode ser concluída depois dele (F25).** Só
 para `em_andamento` com `started_at` antes do prazo, até o fim do dia seguinte ao

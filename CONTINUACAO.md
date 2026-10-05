@@ -1,20 +1,25 @@
 # Retomar o FocusQuest
 
-## Conciliação local aprovada do PR #6
+## Base integrada e continuação autônoma
 
-O estado corrente está no topo de `docs/HANDOFF.md` e no registro mais recente
-de `.superpowers/sdd/2026-10-04-estabilizacao/progress.md`. As vinte fatias
-locais foram preservadas no commit assinado `891eda0` e no PR #6.
-A `main` em `469e149` já contém E/F/G, preservados na conciliação.
-O gate combinado passou nesta sessão: 1436 Python, 990 frontend, 59 E2E e
-100% de cobertura. O estado da publicação e do CI da ponta está no PR/ledger. Não retomar a implementação do E a partir das pendências antigas.
-Os registros abaixo descrevem a estabilização anterior; seus gates não aprovam
-o resultado combinado. Nenhum merge do PR na `main` foi solicitado.
+O PR #6 foi integrado na `main` em `5ba81c3`, preservando E/F/G e as vinte
+fatias de estabilização. A prova da pendência 167 está no commit assinado
+`0cb4cc2`, branch `wt/tifa-conclusao`, no [PR #7](https://github.com/BipoXDXD/FocusQuest/pull/7);
+a `main` consultada ainda não contém esse teste. O gate desta retomada da Tifa
+passou: 1438 Python, 990 frontend, 59 E2E e cobertura de 100%.
+Leia o topo de `docs/HANDOFF.md` e `docs/RETOMADA-2026-10-04.md` para o estado
+corrente e os ledgers das fases. Não repetir a estabilização nem reaplicar E/F/G.
+
+Durante sua ausência, o dono autorizou decisões não críticas e commit, push e
+PR por fase, com gate completo e cobertura de 100%. Merge e decisões críticas
+ficam pendentes. Usar cinco agentes GPT 6.1 Sol, esforço High, com tarefas
+separadas. Preservar alterações, worktrees e checkpoints; os resultados de
+outra branch não aprovam a revisão que será publicada.
 
 
-## Retomada da estabilização em 2026-10-04
+## Histórico da retomada da estabilização em 2026-10-04
 
-Para retomar a manutenção local atual, leia `README.md`,
+Naquela retomada, o roteiro era ler `README.md`,
 `docs/ARCHITECTURE.md`, `docs/HANDOFF.md` e `docs/QUALITY.md`, nessa ordem,
 e depois **`docs/RETOMADA-2026-10-04.md`**. Os deltas 18 e 19 já foram
 integrados após revisão independente; gate conjunto aprovado (821 Python,
