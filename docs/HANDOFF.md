@@ -3,8 +3,247 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
+## Estado corrente — publicação e integração autorizadas — 2026-10-05
 
-## Estado corrente — composição das fases #7–#24
+O responsável autorizou commit, push e PR de todas as fases implementadas
+que aguardavam publicação e merge na main somente com testes reforçados.
+A coordenação usa quatro auxiliares GPT 6.1 Sol High; a preferência solicitada
+para o agente principal é GPT 6 Astra Medium. Não presumir a configuração
+do principal a partir deste documento.
+
+Base remota consultada: main `5ba81c3`. A composição `b9c73f2` reúne os PRs
+#7–#24; `9fd8f12` acrescenta seus commits ao histórico, sem alterar a árvore,
+com assinatura válida e hook completo aprovado. As três fases posteriores
+agora também estão reunidas: foco sem rolagem (163c), prazo original e chave
+de retry (163d), rótulo de Iniciar após remontagem (163e). A conciliação
+preserva os planos, relatos históricos e as três resoluções do item 163.
+Os relatos abaixo descrevem suas fotografias originais; frases de autorização
+ou publicação pendente neles não substituem esta instrução corrente.
+
+Verificação executada nesta retomada sobre a composição anterior às três
+fases: `make check` EXIT 0, 1477 Python, 992 frontend e 59 E2E, cobertura
+100%; lint, tipos, formatação e segredos aprovados. Revisão backend sem
+bloqueadores e cinco repetições seriais de onze casos críticos de concorrência,
+55/55 aprovados. Tentativas impedidas por cache/rede restritos não contam como
+aprovação e ficaram separadas da evidência válida.
+
+Reforços das fases: terceiro cenário Chromium comprova sucesso de
+reagendamento sem roubar foco/rascunho da Tifa; mutação da guarda de foco
+reprovou o caso e preservou dois controles. A mutação do rótulo de chave
+retida reprovou o nome após remontagem e preservou os controles. Prazo
+original tem testes de fração, offset, DST, chave de retry e POST/GET reais,
+com duas revisões independentes sem bloqueadores. Cada fase executa gate,
+hooks e publicação próprios. O gate da árvore combinada e seu CI ainda
+precisam concluir antes do merge; resultados posteriores ficam no ledger
+`.superpowers/sdd/2026-10-05-publicacao-final/` e no PR da composição.
+
+Auditoria de pendências locais: os cinco worktrees antigos de auditoria/PR6
+contêm versões já integradas ou superadas, sem delta novo a publicar. Foram
+preservados; não criar PRs duplicados a partir dessas fotografias. As branches
+sem commits novos sobre a base não representam fases implementadas novas.
+Limites de produto restantes (matriz global de locks, leitor de tela real,
+S-M6 e demais itens não implementados) continuam explícitos; esta autorização
+não transforma todo o backlog em escopo desta publicação.
+
+## Organização local dos worktrees — 2026-10-05
+
+A pedido do responsável, os 24 worktrees que ocupavam diretórios irmãos do
+projeto foram movidos com `git worktree move` para
+`.claude/worktrees/<nome>/`, caminho já ignorado pelo Git. O checkout principal
+permanece no lugar. Revisão-base desta organização: `009d9f7`.
+Sete worktrees continham alterações locais; todas foram preservadas.
+
+Verificação executada nesta sessão: HEAD, status, diff staged e hashes SHA-256
+dos arquivos rastreados, não rastreados não ignorados e `.env` iguais antes e
+depois das 24 movimentações. Os registros do Git acompanham os novos caminhos.
+Inventário local em `.superpowers/worktree-relocation-20261005.json`.
+Nenhum commit, push, merge ou alteração de banco nesta organização.
+`make check` não executado nesta operação de diretórios.
+
+Para continuar: usar os caminhos internos; não voltar a criar pastas irmãs
+entre os outros projetos do responsável. O script `scripts/novo-worktree.sh`
+ainda tem o destino antigo e precisa ser adaptado e validado antes de ser usado
+novamente. Ambientes virtuais e ferramentas com caminhos absolutos antigos
+podem precisar de reparo antes de executar os worktrees movidos.
+
+
+
+## Histórico da fase — prazo original no reagendamento — 163(d)
+
+**Base:** composição `b9c73f24e2297ba92a96d0685a979258175ca7c1`, branch nova
+`wt/prazo-original-reagendamento`. PR desta fatia terá base
+`wt/composicao-autonoma`; não há merge autorizado. A branch publicada da
+recarga #24 e seu ledger permanecem preservados. Um implementador exclusivo,
+banco `focusquest_recarga-missao-acessivel_test` e offset E2E 22; sem compose.
+
+O campo civil mostra minutos. Antes, abrir e salvar sem editar convertia um
+prazo `:59.123000Z` em `:00Z`: a API aceitava outro instante e criava histórico.
+O rascunho interno agora guarda `originalDeadline`; `deadlineForDraft` conserva
+literalmente o ISO original quando o civil não mudou. Isso inclui segundos,
+fração e offset, sem reconstrução por `Date`. Se a hora for editada, continua
+valendo a conversão existente em `America/Sao_Paulo`. `sameDraft` exige civil,
+motivo e prazo efetivo iguais antes de permitir reutilizar a chave de retry.
+O corpo HTTP continua contendo somente `operation_id`, `new_deadline` e `reason`.
+
+**Provas executadas e lidas nesta sessão:** baseline próprio `make check`
+EXIT 0 em 325,20 s, 1477 Python/992 frontend/59 E2E, cobertura 100%, Gitleaks 0;
+369 fontes, HEAD e índice estáveis. RED focado: 10 falhas/145 controles;
+RED final navegador/API: 1 falha/59 controles, demonstrando HTTP 200, segundos
+cortados e elo indevido. A primeira posição do caso no módulo serial impediu
+um controle posterior; log preservado, caso movido ao fim e RED repetido antes
+de corrigir produção. GREEN: 155 testes focados e TypeScript EXIT 0; E2E real
+60 aprovados em 66,43 s. GET confirmou prazo e estado originais, sem histórico,
+e POST retornou `409 prazo_inalterado` com formulário aberto.
+
+Duas mutações temporárias compilaram e reprovaram causalmente: converter
+sempre perdeu o ISO em 6 casos (132 controles); comparar somente civil/motivo
+reutilizou K1 em vez de K3 para outro prazo efetivo no caso focado. A filtragem
+desse caso não cria teste ignorado na suíte. Ambos foram restaurados em
+`finally`, com SHA original/restaurado igual. O GREEN após restauração,
+congelamento, revisão independente, gate final, hooks, commit, push, PR e CI
+ficam no ledger ignorado `.superpowers/sdd/2026-10-05-prazo-original-reagendamento/`.
+Nesta fotografia, gate final e publicação desta fatia ainda estão pendentes;
+o baseline não aprova o diff. Fontes ficam congeladas antes do gate: resultados
+posteriores entram no ledger/PR, sem editar esta fotografia.
+
+**Limites:** não há editor de segundos, mudança de step, política nova de DST,
+contrato, dependência ou mudança backend. Um original no segundo instante da
+hora civil repetida é conservado; uma hora editada mantém a escolha anterior
+do conversor. 163(c) e 163(e), leitor de tela real e demais pendências críticas
+permanecem separados. O corpo da fotografia da composição abaixo está intacto;
+seu texto de gate futuro descreve aquele instante, não reabre a composição.
+
+
+## Histórico da fase — foco após reagendamento sem rolagem — 163(c)
+
+Retomada autorizada em 2026-10-05: commit, push e PR desta fase, com merge
+da composição condicionado a testes reforçados. O ambiente do worktree movido
+foi reparado por `uv sync --locked --reinstall`; os hooks compartilhados foram
+preservados. Acrescentado um terceiro cenário Chromium: sucesso enquanto a
+pessoa já escreve à Tifa conserva foco, rascunho e rolagem, mas fecha o
+formulário e atualiza prazo/histórico. Build aprovado e três casos aprovados.
+Mutação removendo somente a guarda de foco no body: um caso reprovado no foco
+da Tifa e dois controles aprovados; bytes de produção restaurados em `finally`,
+SHA-256 idêntico, novo build e três casos aprovados. Evidência desta retomada em
+`.superpowers/sdd/2026-10-05-foco-reagendamento/resume-2026-10-05/`.
+O gate fresco, hooks e publicação serão registrados ali após execução; os
+resultados abaixo são o histórico anterior à pausa.
+
+Fatia estreita em `wt/foco-reagendamento-conjunto`, baseada no commit assinado
+`b9c73f24e2297ba92a96d0685a979258175ca7c1` da composição. Integração por PR para
+`wt/composicao-autonoma`; nenhum merge na main. O dono delegou decisões não
+críticas e autorizou publicação após revisão, gate completo e hooks normais.
+Worktree, banco de teste e portas próprios, offset 24; nenhum compose externo.
+O envelope da composição abaixo é a fotografia preservada da base desta fase.
+
+`RescheduleForm.tsx` acrescenta somente `preventScroll: true` à chamada de foco
+já existente após sucesso. A guarda continua exigindo formulário fechado pelo
+novo prazo e foco perdido no body: foco que a pessoa já levou a outro controle
+não é tomado. Iniciar, Concluir e recuperação de foco do ciclo não mudam.
+Não há contrato, dependência, política ou infraestrutura nova.
+
+Dois casos em `frontend/tests/e2e/reschedule-focus-scroll.spec.ts` exercitam o
+app e o cliente HTTP reais em Chromium. Respostas completas interceptam todas
+as rotas API, sem escrita no banco nesses casos. O POST fica retido enquanto
+a pessoa rola; o disclosure está comprovadamente fora da viewport antes da
+resposta. Altura mínima, cartões seguintes e scroll anchoring desativado apenas
+na fixture isolam rolagem por foco do recolhimento normal do formulário.
+
+No sucesso, payload, estado Pendente, prazo, histórico único, anúncio,
+formulário fechado e retorno de foco são verificados antes do scroll. No erro
+422 `prazo_expirado`, o formulário e o rascunho permanecem, o prazo não muda,
+nenhum elo aparece e o alerta é traduzido; foco e texto da Tifa e a rolagem
+continuam preservados. Routes pendentes são abortadas no finally da fixture.
+
+Executado nesta sessão: baseline próprio `make check` EXIT 0 em 339,08 s,
+1477 Python/992 frontend/59 E2E e cobertura 100%; 369 fontes, HEAD e índice
+estáveis. RED do navegador: um caso reprovado somente no `scrollTop` 800 → 174,
+com `window.scrollY` 482 preservado e os efeitos/foco anteriores aprovados;
+o controle 422 passou. A alteração mínima produziu GREEN 2 casos. Mutação
+retirando só `preventScroll`, após novo build, reproduziu 1 falha/1 controle
+aprovado. Bytes do candidato restaurados no finally e SHA-256 conferido;
+novo build e GREEN 2 casos. Relacionados: 198 testes de componentes em 2,94 s
+e `make check-e2e` EXIT 0, 61 cenários em 57,4 s. Revisão independente, gate
+final congelado, hooks, SHA, PR e CI são registrados no ledger ignorado
+`.superpowers/sdd/2026-10-05-foco-reagendamento/` conforme terminam; focais e
+baseline não aprovam automaticamente os arquivos novos.
+
+Completa somente 163(c). A prova mede foco e posições reais em Chromium com
+geometria controlada; jsdom não é apresentado como prova de scroll. Não mede
+leitor de tela real, todos os viewports ou persistência desses dois HTTPs.
+163(d–e) e as demais pendências permanecem abertas. Os worktrees de origem das outras fases e da composição foram preservados.
+
+## Histórico da fase — Iniciar após remontagem — 163(e)
+
+Branch `wt/iniciar-rotulo-retido`, base
+`b9c73f24e2297ba92a96d0685a979258175ca7c1` da composição publicada no
+[PR #25](https://github.com/BipoXDXD/FocusQuest/pull/25), com PR desta fatia
+sobre `wt/composicao-autonoma`. A main permanece `5ba81c3`; merge não ocorreu.
+O PR #25 teve cinco jobs aprovados tanto no [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37266335947)
+quanto no [pull_request](https://github.com/BipoXDXD/FocusQuest/actions/runs/37266404049),
+no head b9c completo acima. Design pequeno aprovado pela delegação do dono: o nome do botão observa a
+chave de Iniciar retida no registro após remontar, sem mudar envio ou regras
+de idempotência. Ambiente existente reutilizado limpo, banco próprio e
+`FOCUSQUEST_E2E_PORT_OFFSET=21`; branch e ledger do PR #23 preservados.
+
+`CompletionRegistry.hasActionKey(missionId, action)` consulta `Map.has`, sem
+criar UUID nem alterar o mapa. `MissionCard` passa a existência do slot
+`start` como boolean privado de `StartControls`/`startLabel`: em voo continua
+“Iniciando…”; com falha local ou chave retida oferece “Tentar de novo”; nos
+demais casos “Iniciar”. Não preserva a mensagem de erro antiga nem cria estado
+paralelo de retry. `useStartMission`, geração/liberação/reconciliação de chaves,
+payloads, timeout e contratos permanecem intactos.
+
+**Histórico da implementação anterior, preservado:** baseline `make check` EXIT 0,
+308,92 s, 1477 Python (219,65 s), 992 frontend, 59 E2E (58,1 s), cobertura 100%,
+Gitleaks sem vazamentos, 369 fontes+HEAD+índice estáveis. Depois dele, um teste
+existente foi fortalecido e dois controles reais de componente foram adicionados.
+O RED corrigido falhou somente no nome após remontagem: um reprovado e dois
+aprovados, 1,12 s. A primeira execução tinha também um seletor incorreto no
+controle de erro do formulário; ele foi corrigido sem mudar a expectativa.
+Produção permaneceu intacta até o RED causal.
+
+O cenário observa o nó anterior fora do documento, mensagem antiga ausente,
+região viva vazia, nome acessível exato, submitting/disabled prioritários,
+estado e `started_at` devolvidos pela resposta e remoção do botão no sucesso.
+Confere corpos completos `K1/K1`, pedido de outra missão com `K2`, dois GETs,
+zero UUIDs no render inicial e só dois depois dos envios. Os controles verificam
+que `operacao_reutilizada` libera a chave (após remontar, “Iniciar” envia outra)
+e que a chave de Reagendar não marca Iniciar como retry. Componentes, hook e
+registro reais, com HTTP falso roteado; não reivindica persistência no banco
+nem leitor de tela real.
+
+`npm --prefix frontend run typecheck`: aprovado. Os três módulos completos
+`MissionList.test.tsx`, `useCompletionRegistry.test.tsx` e
+`useStartMission.test.tsx`: 157 aprovados em 3,01 s. Mutação temporária do rótulo
+para ignorar a chave retida compilou e reprovou somente o cenário de remount,
+com os dois controles aprovados; restauração em `finally` conferida por SHA-256
+idêntico. Reexecução dos três módulos: 157 aprovados, 3,08 s. Uma invocação
+inicial de Prettier usou o diretório errado; formatação foi executada de novo
+no frontend e tipos/testes acima são posteriores à correção.
+
+**Retomada de publicação em 2026-10-05:** revisão do delta staged sem bloqueador
+funcional. O ambiente virtual foi reinstalado com `uv sync --locked --reinstall`
+para corrigir os caminhos após mover o worktree; hooks compartilhados existentes
+foram preservados. Nesta retomada, os três módulos acima aprovaram novamente
+157 testes em 2,78 s. A mutação temporária que ignora a chave retida reprovou
+somente o nome acessível pós-remontagem, com os dois controles aprovados;
+a fonte foi restaurada em `finally`, com SHA-256 idêntico. O gate completo
+fresco e os hooks de commit/push devem aprovar estes bytes antes da publicação.
+Essa prova usa os componentes reais e HTTP roteado, sem reivindicar persistência
+nem validação com leitor de tela físico.
+
+Gate completo final, congelamento, revisão, assinatura, hooks, push e PR desta
+fatia serão registrados no ledger ignorado
+`.superpowers/sdd/2026-10-05-iniciar-rotulo-retido/` e no seu PR. O baseline não
+aprova as fontes alteradas. Cinco agentes GPT 6.1 Sol High continuam divididos;
+163(c,d) estão sendo trabalhados separadamente e não entram nesta fatia.
+Merge, gastos, credenciais e mudanças de contratos/custo/timeout ficam pendentes.
+O registro seguinte conserva a fotografia anterior, inclusive o futuro ali
+previsto: o gate da composição depois passou (1477/992/59, 100%) e seu commit
+assinado/push/PR #25 foram executados; isso não aprova a presente alteração.
+
+## Histórico — fotografia da composição das fases #7–#24
 
 Fotografia: 2026-10-05T01:46:22-03:00 (`America/Sao_Paulo`). Branch `wt/composicao-autonoma`,
 base `5ba81c3dcc4b4916c63e4e9da2967f989c4039bb` (main após PR #6).
@@ -6476,14 +6715,27 @@ ledger; nenhum é bug esquecido.
     `instructions` na recarga da conclusão, Iniciar/Reagendar e avaliação,
     inclusive esperando; rótulos visíveis e recarga global da trilha intactos.
     RED 16/181 e mutação do enunciado antigo detectada, GREEN 198 nesta sessão; integração main/publicação no ledger.
-    (c) O foco,
-    depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
-    (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
-    sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
-    impacto hoje, porque a tela só cria prazos em minutos. (e) O rótulo do Iniciar
+    ~~(c) O foco, depois do sucesso do reagendamento, usa `.focus()` sem
+    `preventScroll`.~~ **(c) Resolvida na feature `wt/foco-reagendamento-conjunto`:**
+    a chamada existente preserva a rolagem com `preventScroll: true`. Chromium
+    comprova foco/estado/prazo/histórico antes do scroll; RED 800 → 174,
+    GREEN 2 e mutação causal/restauração. Controle 422 conserva rascunho,
+    foco da Tifa e posição; somente esta recuperação, sem generalizar outras.
+    ~~(d) Um prazo com segundos, reenviado sem mexer no campo, virava outro
+    instante em vez de `prazo_inalterado`.~~ **(d) Resolvida nesta feature:**
+    o rascunho conserva o ISO original quando o civil não muda; chave de retry
+    também compara o prazo efetivo. RED real HTTP 200/elo indevido e GREEN
+    HTTP 409/GET sem elo comprovados nesta sessão; gate/publicação no ledger.
+    O editor continua em minutos e não ganha política nova de precisão/DST.
+    ~~(e) O rótulo do Iniciar
     depois de **remontar** o cartão com a chave retida diz "Iniciar", e não
     "Tentar de novo": o registro não expõe "chave de ação retida"; o envio usa a
-    mesma chave (testado).
+    mesma chave (testado).~~ **(e) Resolvida na feature `wt/iniciar-rotulo-retido`:**
+    leitor puro `hasActionKey` do slot start define “Tentar de novo” após
+    remontar, sem criar UUID no render. Teste real de remount/corpos K1/K1/
+    submitting/efeito e controles de release/outro tipo, RED causal e mutação
+    detectada, GREEN 157. Integração main e publicação nos registros da fatia;
+    (c), (d) e (e) agora estão reunidos nesta composição, com provas próprias.
 164. **Arestas da confirmação da Tifa e do prazo em texto, adiadas** (revisão da
     Task 7). (a) **A tela aceita como "reenvio" a chave de uma confirmação da
     Tifa:** `POST /api/missions/{id}/reschedule` com a chave K de uma confirmação

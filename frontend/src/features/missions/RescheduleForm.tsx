@@ -111,7 +111,7 @@ export function RescheduleForm({
   const closedBySuccess = openedFor !== null && !expanded
   useEffect(() => {
     if (closedBySuccess && document.activeElement === document.body) {
-      toggleRef.current?.focus()
+      toggleRef.current?.focus({ preventScroll: true })
     }
   }, [closedBySuccess])
 
@@ -134,7 +134,11 @@ export function RescheduleForm({
             return
           }
           setOpenedFor(mission.deadline)
-          setDraft({ civil: isoToSaoPauloCivil(mission.deadline), reason: null })
+          setDraft({
+            civil: isoToSaoPauloCivil(mission.deadline),
+            reason: null,
+            originalDeadline: mission.deadline,
+          })
           setSent(null)
         }}
         className={TOGGLE_CLASS}

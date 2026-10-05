@@ -119,7 +119,7 @@ FocusQuest/
 │   │   │   │   ├── RescheduleHistory.tsx   # "Reagendada N vezes" e o <details> "Histórico de prazos", uma linha por reagendamento, motivo e origem em texto; tolera `reschedules` ausente (pendência 162) (F, Task 10)
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
-│   │   │   │   ├── rescheduleDraft.ts       # RescheduleDraft e sameDraft: compara o rascunho enviado com o atual para decidir se a chave se mantém (F, Task 10) (F: StartErrorCode, RescheduleErrorCode e RescheduleDraft)
+│   │   │   │   ├── rescheduleDraft.ts       # deadlineForDraft preserva o ISO original sem edição; sameDraft compara civil, motivo e prazo efetivo para a chave (163(d)); RescheduleDraft mora em types.ts
 │   │   │   │   ├── rescheduleFailure.test.ts
 │   │   │   │   ├── rescheduleFailure.ts     # mapa exaustivo code → mensagem e saída (corrigir, atualizar, nova chave, mesma chave) do reagendamento (F, Task 8)
 │   │   │   │   ├── startFailure.test.ts
@@ -219,6 +219,7 @@ FocusQuest/
 │   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
 │   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
 │   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
+│   │   │   ├── reschedule-focus-scroll.spec.ts # Chromium: retorno de foco após reagendar sem deslocar scroll; controle 422 conserva rascunho/foco, HTTPs de apresentação (163(c))
 │   │   │   ├── tracking.spec.ts   # o E2E do acompanhamento: iniciar e concluir com a duração real, reagendar pela tela com o histórico, e a proposta de reagendamento da Tifa confirmada, com axe (F, Task 11)
 │   │   │   └── tutoring.spec.ts   # oito cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho nos dois motivos e a recusa (pendência 120)
 │   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
@@ -1547,11 +1548,28 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   (`RescheduleForm.tsx`, só na avulsa não concluída) usa a hora civil de
   Brasília: `saoPauloCivilToIso` e `isoToSaoPauloCivil`, em
   `shared/lib/deadline.ts`, convertem com o `Intl`, sem deslocamento fixo (F21).
-  O rascunho do reagendamento mora no cartão e **não** sobrevive à recarga do
-  quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
+  O formulário guarda o ISO original em `RescheduleDraft.originalDeadline`
+  (campo interno opcional). `deadlineForDraft`, em `rescheduleDraft.ts`, envia
+  esse literal quando o civil em minutos não mudou, preservando segundos,
+  fração e offset; hora editada usa o conversor existente. `sameDraft` compara
+  civil, motivo e prazo efetivo para decidir a reutilização da chave de retry
+  (163(d)). O POST continua com somente `operation_id`, `new_deadline` e
+  `reason`. Não há editor de segundos nem política nova de horário repetido:
+  original intacto mantém seu instante; edição conserva a escolha do conversor.
+  O rascunho do reagendamento mora no formulário do cartão e **não** sobrevive
+  à recarga do quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
   e o `<details>` "Histórico de prazos" (`RescheduleHistory.tsx`), e fica num
   envio de cada vez: Iniciar, Reagendar e Concluir se desabilitam entre si
   enquanto um deles está em voo.
+
+  **Iniciar após remontagem (163(e)):** o leitor interno
+  `CompletionRegistry.hasActionKey(missionId, action)` consulta somente a
+  existência do slot; não cria UUID nem modifica o registro no render.
+  `MissionCard` consulta `start` e passa um boolean privado ao controle:
+  “Iniciando…” tem prioridade em voo; falha local ou chave retida mostra
+  “Tentar de novo”; sem ambos, “Iniciar”. Mensagens antigas não sobrevivem à
+  remontagem. Geração, envio, liberação e reconciliação continuam nos mesmos
+  lugares; uma chave de Reagendar não afeta esse nome.
 
   **Desde o Incremento B** (Tasks 7–8, commits `242d677` e `08b3dcc`),
   `missions` ganhou o ciclo diário: `useCycle.ts` busca
@@ -1599,6 +1617,20 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   no estado de espera; disabled, callbacks e regiões vivas não mudam.
   `CampaignTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
   botão global não recebe identificação de uma missão.
+
+  **Foco após reagendar sem deslocar a leitura (163(c)):**
+  `RescheduleForm` mantém a guarda de sucesso com foco no body e devolve-o ao
+  disclosure com `focus({ preventScroll: true })`. O efeito não toma foco de
+  outro controle. O teste Chromium `reschedule-focus-scroll.spec.ts` segura o
+  POST, estabelece scroll real com o disclosure fora da viewport e verifica
+  payload, estado, prazo, histórico e foco antes da posição. Um controle de
+  sucesso com foco já na Tifa comprova que não há transferência de foco nem
+  perda do rascunho enquanto o prazo/histórico mudam. O erro 422 mantém
+  rascunho, alerta, prazo e foco da Tifa; Routes pendentes são abortadas no
+  finally. HTTPs são fixtures de apresentação, sem prova de persistência;
+  geometria controlada separa scroll por foco de scroll anchoring/colapso.
+  Iniciar, Concluir e recuperação do ciclo não mudam. A prova não generaliza
+  viewports ou leitor de tela real; jsdom não mede rolagem.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no

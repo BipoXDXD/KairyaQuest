@@ -348,3 +348,40 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
     /· Mudança de prioridade · proposto pela Tifa$/,
   ])
 })
+
+test('prazo com segundos sem editar e recusado sem criar historico', async ({ page, request }) => {
+  const instante = new Date(daquiADias(10))
+  instante.setUTCSeconds(59, 123)
+  const criada = await criarMissao(request, 'Prazo original sem edicao', instante.toISOString())
+  await page.goto('/')
+  const cartao = cartaoDa(page, criada)
+  await cartao.getByTestId('reschedule-toggle').click()
+  await cartao
+    .getByRole('group', { name: 'Por que reagendar?' })
+    .getByLabel('Falta de tempo')
+    .check()
+  const respostaPendente = page.waitForResponse(
+    (resposta) =>
+      resposta.request().method() === 'POST' &&
+      new URL(resposta.url()).pathname === `/api/missions/${String(criada.id)}/reschedule`,
+  )
+  await cartao.getByTestId('reschedule-submit').click()
+  const resposta = await respostaPendente
+  const relida = await lerMissao(request, criada.id)
+  expect({
+    status: resposta.status(),
+    deadline: relida.deadline,
+    reschedules: relida.reschedules,
+  }).toEqual({
+    status: 409,
+    deadline: criada.deadline,
+    reschedules: [],
+  })
+  expect(await resposta.json()).toMatchObject({ code: 'prazo_inalterado' })
+  await expect(cartao.getByTestId('reschedule-error')).toHaveText(
+    'O novo prazo é igual ao atual. Escolha outro horário.',
+  )
+  await expect(cartao.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+  await expect(cartao.getByTestId('reschedule-deadline')).toBeEnabled()
+  expect(relida.state).toBe(criada.state)
+})
