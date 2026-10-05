@@ -3,7 +3,7 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
-## Estado corrente — publicação e integração autorizadas — 2026-10-05
+## Estado corrente — publicação concluída e organização preventiva — 2026-10-05
 
 O responsável autorizou commit, push e PR de todas as fases implementadas
 que aguardavam publicação e merge na main somente com testes reforçados.
@@ -11,7 +11,9 @@ A coordenação usa quatro auxiliares GPT 6.1 Sol High; a preferência solicitad
 para o agente principal é GPT 6 Astra Medium. Não presumir a configuração
 do principal a partir deste documento.
 
-Base remota consultada: main `5ba81c3`. A composição `b9c73f2` reúne os PRs
+Revisão-base desta continuação: main `769e02d`, merge do PR #25. Os PRs #7–#28
+estão mesclados; nenhum PR aberto nem fase inédita pendente de publicação
+na conclusão dessa etapa. A base anterior era `5ba81c3`. A composição `b9c73f2` reúne os PRs
 #7–#24; `9fd8f12` acrescenta seus commits ao histórico, sem alterar a árvore,
 com assinatura válida e hook completo aprovado. As três fases posteriores
 agora também estão reunidas: foco sem rolagem (163c), prazo original e chave
@@ -33,9 +35,31 @@ reprovou o caso e preservou dois controles. A mutação do rótulo de chave
 retida reprovou o nome após remontagem e preservou os controles. Prazo
 original tem testes de fração, offset, DST, chave de retry e POST/GET reais,
 com duas revisões independentes sem bloqueadores. Cada fase executa gate,
-hooks e publicação próprios. O gate da árvore combinada e seu CI ainda
-precisam concluir antes do merge; resultados posteriores ficam no ledger
-`.superpowers/sdd/2026-10-05-publicacao-final/` e no PR da composição.
+hooks e publicação próprios. O gate da árvore combinada e, depois, da main resultante aprovou
+1477 Python, 1001 frontend e 63 E2E, cobertura 100%. O CI da main aprovou
+cinco jobs na execução [37273721725](https://github.com/BipoXDXD/FocusQuest/actions/runs/37273721725).
+Resultados finais no ledger `.superpowers/sdd/2026-10-05-publicacao-final/`.
+
+Continuação nesta branch: o criador de worktrees passa a usar
+`.claude/worktrees/<nome>` dentro do principal, preservando nomes de banco,
+portas e hooks. O scratch `sdd` aponta para o ledger central no principal,
+sem alterar a allowlist do Gitleaks. Containers do principal com links/arquivos, destinos
+ocupados e ledgers preexistentes são recusados antes de criar o worktree.
+Scratch trazido pelo checkout é conferido depois: a recusa preserva seus
+dados e deixa o worktree criado, sem executar o bootstrap.
+A mudança evita recriar diretórios irmãos após a organização solicitada.
+Validação própria desta correção: 53 testes focados aprovados, incluindo
+chamada pelo worktree filho, preservação do projeto vizinho, escrita pelo
+link e recusas. O `make check` fresco desta retomada aprovou 1500 Python,
+1001 frontend e 63 E2E, cobertura 100%, lint, tipos, formatação e Gitleaks;
+as 373 fontes rastreadas, HEAD e índice permaneceram estáveis durante o gate.
+Revisões independentes sem bloqueadores e controles do scanner preservam a
+configuração existente. A execução anterior com 1497 Python não aprovava os
+três testes acrescentados durante ela; o gate fresco cobre o conjunto final.
+Este registro documenta a validação anterior à publicação. Evidências dos
+hooks, commit assinado, PR, CI e merge estão no ledger
+`.superpowers/sdd/2026-10-05-worktrees-internos/` e no PR desta correção,
+conforme cada ação é executada; os resultados anteriores não os substituem.
 
 Auditoria de pendências locais: os cinco worktrees antigos de auditoria/PR6
 contêm versões já integradas ou superadas, sem delta novo a publicar. Foram
@@ -45,7 +69,7 @@ Limites de produto restantes (matriz global de locks, leitor de tela real,
 S-M6 e demais itens não implementados) continuam explícitos; esta autorização
 não transforma todo o backlog em escopo desta publicação.
 
-## Organização local dos worktrees — 2026-10-05
+## Histórico — organização local dos worktrees — 2026-10-05
 
 A pedido do responsável, os 24 worktrees que ocupavam diretórios irmãos do
 projeto foram movidos com `git worktree move` para
@@ -60,7 +84,8 @@ Inventário local em `.superpowers/worktree-relocation-20261005.json`.
 Nenhum commit, push, merge ou alteração de banco nesta organização.
 `make check` não executado nesta operação de diretórios.
 
-Para continuar: usar os caminhos internos; não voltar a criar pastas irmãs
+Orientação daquela fotografia, anterior à correção descrita no estado
+corrente: usar os caminhos internos; não voltar a criar pastas irmãs
 entre os outros projetos do responsável. O script `scripts/novo-worktree.sh`
 ainda tem o destino antigo e precisa ser adaptado e validado antes de ser usado
 novamente. Ambientes virtuais e ferramentas com caminhos absolutos antigos

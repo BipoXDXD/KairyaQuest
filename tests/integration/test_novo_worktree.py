@@ -1,6 +1,6 @@
 """Testes do `scripts/novo-worktree.sh` (pendencia 19).
 
-O script cria um worktree irmao do principal, com banco de teste e portas do
+O script cria um worktree interno ao principal, com banco de teste e portas do
 E2E proprios, para dois gates rodarem ao mesmo tempo. Os testes o executam DE
 VERDADE, mas num repositorio git temporario: uma copia do script (e da
 biblioteca `push-env.sh`, de onde ele tira a reserva de portas do push) fica
@@ -63,7 +63,7 @@ class Repositorio:
 
         self.principal.mkdir()
         self.git("init", "-q", "-b", "main")
-        (self.principal / ".gitignore").write_text(".env\n")
+        (self.principal / ".gitignore").write_text(".env\n.claude/\n.superpowers/\n")
         (self.principal / "README.md").write_text("principal\n")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "base")
@@ -121,7 +121,7 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     resultado = repo.rodar("medida")
 
     assert resultado.returncode == 0, resultado.stderr
-    destino = repo.base / "FocusQuest-medida"
+    destino = repo.principal / ".claude" / "worktrees" / "medida"
     # Branch nova, a partir da main.
     assert repo.git("rev-parse", "--abbrev-ref", "HEAD", onde=destino) == "wt/medida"
     assert repo.git("rev-parse", "HEAD", onde=destino) == repo.git("rev-parse", "main")
@@ -154,7 +154,7 @@ def test_o_deslocamento_automatico_e_o_menor_livre(repo: Repositorio) -> None:
     resultado = repo.rodar("tres")
 
     assert resultado.returncode == 0, resultado.stderr
-    env = (repo.base / "FocusQuest-tres" / ".env").read_text()
+    env = (repo.principal / ".claude" / "worktrees" / "tres" / ".env").read_text()
     assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "2"
 
 
@@ -168,7 +168,7 @@ def test_um_deslocamento_do_principal_substitui_a_linha(repo: Repositorio) -> No
     resultado = repo.rodar("outro", "7")
 
     assert resultado.returncode == 0, resultado.stderr
-    env = (repo.base / "FocusQuest-outro" / ".env").read_text()
+    env = (repo.principal / ".claude" / "worktrees" / "outro" / ".env").read_text()
     assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "7"
 
 
@@ -205,8 +205,8 @@ def test_recusa_nome_invalido(repo: Repositorio, nome: str) -> None:
 
 
 def test_recusa_worktree_que_ja_existe(repo: Repositorio) -> None:
-    ocupado = repo.base / "FocusQuest-ja"
-    ocupado.mkdir()
+    ocupado = repo.principal / ".claude" / "worktrees" / "ja"
+    ocupado.mkdir(parents=True)
     (ocupado / "arquivo").write_text("intocado\n")
     antes = repo.worktrees()
 
@@ -287,7 +287,9 @@ def test_nunca_sobrescreve_um_env_existente(repo: Repositorio) -> None:
     assert resultado.returncode != 0
     assert "ja existe um .env" in resultado.stderr
     assert "nao foi possivel escrever" not in resultado.stderr
-    assert (repo.base / "FocusQuest-novo" / ".env").read_text() == "VERSIONADO=1\n"
+    assert (
+        repo.principal / ".claude" / "worktrees" / "novo" / ".env"
+    ).read_text() == "VERSIONADO=1\n"
     assert repo.make_chamado() == []
 
 
@@ -310,7 +312,10 @@ def test_falha_ao_escrever_o_env_nao_se_passa_por_env_existente(
     assert resultado.returncode != 0
     assert "nao foi possivel escrever" in resultado.stderr
     assert "ja existe" not in resultado.stderr
-    assert str(repo.base / "FocusQuest-novo" / ".env") in resultado.stderr
+    assert (
+        str(repo.principal / ".claude" / "worktrees" / "novo" / ".env")
+        in resultado.stderr
+    )
     assert repo.make_chamado() == []
 
 
@@ -380,7 +385,9 @@ def test_recusa_nome_cujo_push_cairia_no_banco_de_outro_worktree(
     """Um worktree com `.env` editado a mao para `focusquest_b_push_test`: o
     push de um worktree `b` usaria esse banco."""
     assert repo.rodar("a").returncode == 0
-    _trocar_banco(repo.base / "FocusQuest-a", "focusquest_b_push_test")
+    _trocar_banco(
+        repo.principal / ".claude" / "worktrees" / "a", "focusquest_b_push_test"
+    )
     antes = repo.worktrees()
     make_antes = repo.make_chamado()
 
@@ -388,7 +395,7 @@ def test_recusa_nome_cujo_push_cairia_no_banco_de_outro_worktree(
 
     assert resultado.returncode != 0
     assert "focusquest_b_push_test" in resultado.stderr
-    assert str(repo.base / "FocusQuest-a") in resultado.stderr
+    assert str(repo.principal / ".claude" / "worktrees" / "a") in resultado.stderr
     assert repo.worktrees() == antes
     assert repo.make_chamado() == make_antes
     assert repo.git("branch", "--list", "wt/b") == ""
@@ -396,7 +403,7 @@ def test_recusa_nome_cujo_push_cairia_no_banco_de_outro_worktree(
 
 def test_recusa_nome_cujo_banco_ja_e_de_outro_worktree(repo: Repositorio) -> None:
     assert repo.rodar("a").returncode == 0
-    _trocar_banco(repo.base / "FocusQuest-a", "focusquest_c_test")
+    _trocar_banco(repo.principal / ".claude" / "worktrees" / "a", "focusquest_c_test")
     antes = repo.worktrees()
 
     resultado = repo.rodar("c")
@@ -423,7 +430,7 @@ def test_nomes_vizinhos_de_push_nao_colidem(repo: Repositorio) -> None:
     ]
     assert len(set(todos)) == len(todos)
     for nome in nomes:
-        env = (repo.base / f"FocusQuest-{nome}" / ".env").read_text()
+        env = (repo.principal / ".claude" / "worktrees" / nome / ".env").read_text()
         assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
             f"{PREFIXO}focusquest_{nome}_test?options=-c%20x"
         )
@@ -462,3 +469,157 @@ def test_a_trava_e_liberada_no_sucesso_e_na_recusa(repo: Repositorio) -> None:
     assert "em uso" in recusado.stderr
     assert not _trava(repo).exists()
     assert repo.rodar("dois").returncode == 0
+
+
+def test_worktree_interno_preserva_outros_projetos_e_centraliza_ledger(
+    repo: Repositorio,
+) -> None:
+    vizinho = repo.base / "OutroProjeto"
+    vizinho.mkdir()
+    arquivo = vizinho / "original.txt"
+    arquivo.write_text("preservado\n")
+    antes = set(repo.base.iterdir())
+
+    resultado = repo.rodar("interno")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.principal / ".claude/worktrees/interno"
+    central = repo.principal / ".superpowers/sdd/worktree-ledgers/interno"
+    link = destino / ".superpowers/sdd"
+    assert link.is_symlink()
+    assert link.resolve() == central.resolve()
+    (link / "prova.txt").write_text("evidencia\n")
+    assert (central / "prova.txt").read_text() == "evidencia\n"
+    assert set(repo.base.iterdir()) - antes == {repo.registro_do_make}
+    assert arquivo.read_text() == "preservado\n"
+    assert not (destino / ".superpowers").is_symlink()
+
+
+@pytest.mark.parametrize("quebrado", [False, True])
+def test_recusa_ledger_preexistente_sem_criar_worktree(
+    repo: Repositorio,
+    quebrado: bool,
+) -> None:
+    central = repo.principal / ".superpowers/sdd/worktree-ledgers/novo"
+    central.parent.mkdir(parents=True)
+    if quebrado:
+        central.symlink_to(repo.base / "ausente", target_is_directory=True)
+    else:
+        central.mkdir()
+        (central / "prova.txt").write_text("intocado\n")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "ledger" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+    assert not (repo.principal / ".claude").exists()
+    if quebrado:
+        assert central.is_symlink()
+    else:
+        assert (central / "prova.txt").read_text() == "intocado\n"
+
+
+@pytest.mark.parametrize(
+    "componente",
+    [
+        ".claude",
+        ".claude/worktrees",
+        ".superpowers",
+        ".superpowers/sdd",
+        ".superpowers/sdd/worktree-ledgers",
+    ],
+)
+@pytest.mark.parametrize("tipo", ["arquivo", "link", "link-quebrado"])
+def test_recusa_container_inseguro_sem_criar_branch(
+    repo: Repositorio,
+    componente: str,
+    tipo: str,
+) -> None:
+    caminho = repo.principal / componente
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    externo = repo.base / "externo"
+    if tipo == "arquivo":
+        caminho.write_text("preservado\n")
+    else:
+        if tipo == "link":
+            externo.mkdir()
+        caminho.symlink_to(externo, target_is_directory=True)
+    antes = repo.worktrees()
+    resultado = repo.rodar("novo")
+    assert resultado.returncode != 0
+    _nada_foi_criado(repo, antes)
+    assert not externo.exists() or list(externo.iterdir()) == []
+
+
+def test_recusa_destino_link_quebrado(repo: Repositorio) -> None:
+    destino = repo.principal / ".claude/worktrees/novo"
+    destino.parent.mkdir(parents=True)
+    destino.symlink_to(repo.base / "ausente", target_is_directory=True)
+    antes = repo.worktrees()
+    resultado = repo.rodar("novo")
+    assert resultado.returncode != 0
+    assert "destino" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+    assert destino.is_symlink()
+
+
+def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
+    repo.git("add", "scripts")
+    repo.git("commit", "-q", "-m", "script")
+    assert repo.rodar("primeiro").returncode == 0
+    primeiro = repo.principal / ".claude/worktrees/primeiro"
+    env = primeiro / ".env"
+    env.write_text(env.read_text().replace("claude-opus-5", "modelo-do-filho"))
+    resultado = subprocess.run(
+        [str(primeiro / "scripts/novo-worktree.sh"), "segundo"],
+        cwd=primeiro,
+        env=repo.ambiente,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert resultado.returncode == 0, resultado.stderr
+    segundo = repo.principal / ".claude/worktrees/segundo"
+    assert segundo.as_posix() in repo.worktrees()
+    assert (
+        _valor((segundo / ".env").read_text(), "FOCUSQUEST_TUTOR_MODEL")
+        == "claude-opus-5"
+    )
+    assert _valor((segundo / ".env").read_text(), "FOCUSQUEST_E2E_PORT_OFFSET") == "2"
+    assert (
+        segundo / ".superpowers/sdd"
+    ).resolve() == repo.principal / ".superpowers/sdd/worktree-ledgers/segundo"
+
+
+@pytest.mark.parametrize("tipo", ["diretorio", "link-container", "link-sdd"])
+def test_recusa_scratch_trazido_pelo_checkout(repo: Repositorio, tipo: str) -> None:
+    externo = repo.base / "externo"
+    externo.mkdir()
+    marcador = externo / "intocado"
+    marcador.write_text("preservado\n")
+    gancho = repo.principal / ".git/hooks/post-checkout"
+    if tipo == "diretorio":
+        operacao = (
+            "mkdir -p .superpowers/sdd; echo preservado > .superpowers/sdd/intocado"
+        )
+    elif tipo == "link-container":
+        operacao = f'ln -s "{externo}" .superpowers'
+    else:
+        operacao = f'mkdir .superpowers; ln -s "{externo}" .superpowers/sdd'
+    gancho.write_text(f"#!/bin/sh\n{operacao}\n")
+    gancho.chmod(0o755)
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "scratch" in resultado.stderr
+    assert repo.make_chamado() == []
+    assert list(externo.iterdir()) == [marcador]
+    assert marcador.read_text() == "preservado\n"
+    assert not (repo.principal / ".superpowers/sdd/worktree-ledgers/novo").exists()
+    if tipo == "diretorio":
+        assert (
+            repo.principal / ".claude/worktrees/novo/.superpowers/sdd/intocado"
+        ).read_text() == "preservado\n"

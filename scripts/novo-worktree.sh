@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Cria um worktree irmao do principal, pronto para rodar o gate AO MESMO TEMPO
+# Cria um worktree interno ao principal, pronto para rodar o gate AO MESMO TEMPO
 # que o principal e que os outros worktrees (pendencia 19, docs/QUALITY.md
 # secao 4).
 #
 #   uso: scripts/novo-worktree.sh <nome> [deslocamento]
 #
 # O que faz, nesta ordem, e so depois de validar TUDO:
-#  1. cria ../FocusQuest-<nome> (irmao do worktree principal) numa branch nova,
+#  1. cria .claude/worktrees/<nome> dentro do principal numa branch nova,
 #     wt/<nome>, a partir da main atual;
 #  2. escreve o .env dele a partir do .env do principal, trocando o banco de
 #     teste para focusquest_<nome>_test (o resto da URL fica) e fixando
@@ -79,10 +79,21 @@ fi
 # O principal e o PRIMEIRO worktree da lista (o dono do .git), e nao
 # necessariamente este: o script pode ser chamado de dentro de outro worktree.
 principal="$(git -C "$ROOT" worktree list --porcelain | sed -n '1s/^worktree //p')"
-destino="$(dirname "$principal")/$(basename "$principal")-${nome}"
+destino="${principal}/.claude/worktrees/${nome}"
+ledger="${principal}/.superpowers/sdd/worktree-ledgers/${nome}"
 branch="wt/${nome}"
 
-[ -e "$destino" ] && recusa "o destino ${destino} ja existe; escolha outro nome"
+# Nao seguir links nos containers: o destino deve permanecer no principal.
+# Conferir antes de criar pais, branch ou worktree.
+for relativo in .claude .claude/worktrees .superpowers .superpowers/sdd .superpowers/sdd/worktree-ledgers; do
+  caminho="${principal}/${relativo}"
+  if [ -L "$caminho" ] || { [ -e "$caminho" ] && [ ! -d "$caminho" ]; }; then
+    recusa "container ${caminho} deve ser diretorio real, nao arquivo ou link"
+  fi
+done
+{ [ -e "$ledger" ] || [ -L "$ledger" ]; } && recusa "o ledger ${ledger} ja existe; escolha outro nome"
+
+{ [ -e "$destino" ] || [ -L "$destino" ]; } && recusa "o destino ${destino} ja existe; escolha outro nome"
 if git -C "$principal" show-ref --verify --quiet "refs/heads/${branch}"; then
   recusa "a branch ${branch} ja existe; escolha outro nome"
 fi
@@ -197,6 +208,7 @@ env_novo="${env_novo}
 FOCUSQUEST_E2E_PORT_OFFSET=${deslocamento}
 "
 
+mkdir -p "${principal}/.claude/worktrees" "${principal}/.superpowers/sdd/worktree-ledgers"
 git -C "$principal" worktree add --quiet -b "$branch" "$destino" main
 
 # noclobber: o redirecionamento falha se o arquivo ja existir, sem janela
@@ -212,6 +224,16 @@ if ! erro_da_escrita="$( (set -o noclobber && printf '%s' "$env_novo" >"${destin
   fi
   recusa "nao foi possivel escrever ${destino}/.env (${erro_da_escrita}); o worktree foi criado, mas o bootstrap nao rodou -- confira o espaco em disco e as permissoes e escreva o .env a mao"
 fi
+# Somente o scratch sdd fica centralizado na isencao JA existente do scanner.
+# Fontes e .superpowers/notas continuam sendo varridas. Nao sobrescrever dados.
+scratch="${destino}/.superpowers"
+if [ -L "$scratch" ] || { [ -e "$scratch" ] && [ ! -d "$scratch" ]; } ||
+  [ -e "${scratch}/sdd" ] || [ -L "${scratch}/sdd" ]; then
+  recusa "scratch ${scratch}/sdd ja existe ou tem container inseguro; worktree criado, bootstrap nao executado, dados preservados"
+fi
+mkdir "$ledger"
+mkdir -p "${destino}/.superpowers"
+ln -s "../../../../.superpowers/sdd/worktree-ledgers/${nome}" "${destino}/.superpowers/sdd"
 liberar_trava
 trap - EXIT
 
