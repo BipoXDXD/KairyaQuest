@@ -170,7 +170,7 @@ FocusQuest/
 │   │   │       ├── panelPreference.ts     # localStorage do painel aberto/fechado, tolerante a exceção
 │   │   │       ├── questionLimit.test.ts
 │   │   │       ├── questionLimit.ts       # MAX_QUESTION_LENGTH, COUNTER_VISIBLE_FROM, describeQuestionLength
-│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action) (F: ActionRead é a união CreateMissionAction | RescheduleMissionAction; cópia local dos rótulos de motivo, pendência 32)
+│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action) (F: ActionRead é a união CreateMissionAction | RescheduleMissionAction; RescheduleReason importado de shared/types/mission.ts, sem reexport; o cartão lê o mapa compartilhado diretamente, pendência 161(a))
 │   │   │       ├── useActionKeys.test.tsx
 │   │   │       ├── useActionKeys.ts       # chaves de confirmação por ação, no topo do TutorPanel
 │   │   │       ├── useDecideAction.test.tsx

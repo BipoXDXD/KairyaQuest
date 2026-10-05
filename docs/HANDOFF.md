@@ -8,7 +8,39 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
-## Conciliação do PR #6 — 2026-10-04
+## Fatia rótulos de reagendamento — pendência 161(a)
+
+Branch `wt/rotulos-reagendamento`, base `5ba81c3` (PR #6 já integrado), banco
+exclusivo e offset 10. Objetivo: a tutoria consumir o tipo e o mapa de
+motivos já compartilhados no frontend, mantendo os textos e o contrato.
+A autorização autônoma do dono foi repassada pelo coordenador; commit,
+push e PR seguem após revisão e gate. Nenhum merge nesta fatia.
+
+**Alterações:** o tipo `RescheduleReason` vem diretamente de
+`shared/types/mission.ts` em `tutoring/types.ts`; o cartão da proposta
+importa o mapa compartilhado diretamente. A union e o mapa locais saíram,
+sem reexport nem import entre features. Nenhum teste, texto, payload,
+dependência, configuração ou gate foi alterado.
+
+**Verificação:** hooks instalados com EXIT 0. O baseline correto dos três
+módulos de testes existentes passou, 45 testes; R2 exercita os três motivos
+do cartão, junto aos testes do formulário e histórico. A primeira chamada
+pela raiz não carregou a configuração do frontend e falhou; o diagnóstico
+foi preservado e somente o comando foi corrigido. Após a refatoração, os
+mesmos 45 testes passaram novamente (EXIT 0), e
+`npm --prefix frontend run typecheck` terminou com EXIT 0, sem erros.
+Os resultados posteriores de revisão, gate completo e publicação ficam no
+ledger `.superpowers/sdd/2026-10-05-rotulos-reagendamento/progress.md` e seus
+logs. Este bloco foi escrito antes dessas etapas; a verificação focada não
+aprova a publicação. Plano:
+`docs/superpowers/plans/2026-10-05-rotulos-reagendamento.md`.
+
+**Limites:** o espelho de textos entre Python e frontend da pendência 32 e o
+`kind` desconhecido da 161(b) permanecem. Nenhum comportamento novo.
+Os registros de conciliação abaixo são históricos e não substituem o estado
+desta fatia.
+
+## Histórico da conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
 e abertura do PR e pediu continuar
@@ -5415,20 +5447,20 @@ ledger; nenhum é bug esquecido.
     determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
     os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
     a única garantia determinística dele.
-161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
-    liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
-    **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
-    `tutoring/context.py` (o que o modelo lê), `RESCHEDULE_REASON_LABELS` em
-    `frontend/src/shared/types/mission.ts` (o cartão e o formulário) e uma
-    **cópia local** em `frontend/src/features/tutoring/types.ts` (o cartão da
-    proposta), com o comentário de espelho da 32. O comentário do código justifica a
-    cópia da tutoria (o cartão só precisa do texto, e a lista é curta), e a Task 9
-    correu em paralelo à Task 8, que criou a versão de `shared/` (relatório da
-    Task 9); depois do merge, a `tutoring` poderia importar de `shared/` (ela já
-    importa `formatDeadline` e `MAX_DIFFICULTY` de lá) e a cópia sairia. Um motivo novo no backend exige
-    escrever o rótulo nos três lugares: o `tsc` pega os dois do frontend
-    (`Record` exaustivo sobre o tipo), mas **não** o desencontro entre frontend e
-    backend. (b) **`kind` de ação desconhecido**: uma API mais nova que a tela
+161. **Rótulos de motivo e `kind` desconhecido** (liga à pendência 32).
+    (a) ~~**Cópia local do tipo e dos rótulos de reagendamento na tutoria.**~~
+    **Resolvida na fatia rotulos-reagendamento (2026-10-05):**
+    `tutoring/types.ts` importa `RescheduleReason` como tipo diretamente de
+    `shared/types/mission.ts`, e `RescheduleProposalCard.tsx` importa o mapa
+    compartilhado diretamente. A union e o mapa locais saíram, sem reexport
+    nem import de `features/missions/`. Os textos e os payloads não mudaram.
+    Os testes existentes R2 do cartão verificam os três motivos; formulário,
+    histórico e TypeScript verificam os demais consumidores. Resultados
+    executados nesta fatia estão no bloco de estado e no ledger dela.
+    **Limite preservado:** o mapa Python `ROTULO_DO_MOTIVO` do contexto enviado
+    ao modelo continua separado do mapa frontend; esta fatia não resolve a
+    sincronização entre backend e frontend da pendência 32.
+    (b) **`kind` de ação desconhecido**: uma API mais nova que a tela
     entrega um `kind` que o `ActionRead` não lista; o `ProposalCard` mostra o
     texto neutro "Proposta que esta versão não sabe mostrar." (`tutor-proposal-unknown`),
     sem botão e sem o `kind` cru, e a conversa continua. Esse texto é decisão do
