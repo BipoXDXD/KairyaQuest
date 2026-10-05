@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import Text, select, type_coerce
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
@@ -316,7 +316,15 @@ def _ler_plano(session: Session, plano: WeeklyPlan, agora: datetime) -> PlanoLid
     hoje = dia_de(agora)
     diarias: dict[date, Mission] = {}
     especiais: list[Mission] = []
-    for missao in session.scalars(select(Mission).where(Mission.plan_id == plano.id)):
+    for missao in session.scalars(
+        select(Mission)
+        .where(Mission.plan_id == plano.id)
+        .options(
+            selectinload(Mission.evidence),
+            selectinload(Mission.evaluation),
+            selectinload(Mission.reschedules),
+        )
+    ):
         if missao.mission_type is MissionType.DIARIA:
             diarias[dia_da_diaria(missao)] = missao
         else:

@@ -918,6 +918,19 @@ confirmação despacha pelo `kind` da ação e há uma segunda ferramenta,
 confirmação de um reagendamento pode gravar a ação `falhou` com
 `reagendamento_invalido` e responder `409 reagendamento_invalido`.
 
+### Consultas da trilha semanal (pendência 166)
+
+`cycle_service._ler_plano` carrega `evidence`, `evaluation` e `reschedules`
+com `selectinload` na consulta das oito missões do plano. A leitura da trilha
+atual e sua serialização por `PlanRead` custam seis comandos: plano, missões,
+histórico das diárias e três relações. A resposta continua ocultando o
+conteúdo dos dias futuros e da especial bloqueada. Os loaders também leem
+as relações das missões ocultas, custo fixo limitado a oito pais por plano.
+`tests/integration/test_plans_leitura_consultas.py` mede o SQL real com a
+sessão sem identidades do preparo e verifica conteúdo na segunda e domingo.
+O ciclo usa outro caminho, snapshot de colunas em um comando, e não recebe
+loaders ORM: sua consistência continua em `test_cycle_consistency.py`.
+
 ### O contrato HTTP do ciclo diário que existe (Incremento B)
 
 > **Fonte de verdade:** `src/focusquest/modules/missions/cycle_router.py`,

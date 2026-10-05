@@ -3,6 +3,43 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
+## Pendência 166 — leitura da trilha sem N+1 (2026-10-05)
+
+Registro da implementação em `wt/plano-consultas`, base `5ba81c3`, banco
+exclusivo `focusquest_plano-consultas_test` e offset 9. A consulta de
+`_ler_plano` antecipa evidência, avaliação e histórico de prazos com
+`selectinload`; são relações que `PlanRead` serializa em cada missão revelada.
+Nenhum contrato, dependência, migração ou regra de negócio foi acrescentado.
+`ler_ciclo` já usa snapshot de colunas em um comando e foi preservado.
+A implementação desta branch não significa integração na `main`.
+
+**Prova nesta sessão:** `uv run pytest tests/integration/test_plans_leitura_consultas.py`
+contra a produção anterior: EXIT 1, domingo com 27 consultas em vez de 6,
+segunda já com 6; todas as assertivas de conteúdo passaram antes da contagem.
+Após a correção: 2 aprovados, 6 consultas nos dois cenários. A contagem inclui
+`ler_plano_atual`, `PlanRead.da_leitura` e `model_dump`, com identidades do
+preparo descartadas. Confere IDs, dias, prazos, ocultação, disponibilidade,
+evidências e avaliações distintas, especial e ausência de reagendamentos.
+Seis comandos: plano, missões, histórico e três relações; o custo das relações
+é por lote, não por missão revelada. As oito missões do plano são carregadas,
+inclusive as ainda ocultas, que continuam sem conteúdo na resposta.
+
+**Força do teste:** retirar cada `selectinload` isoladamente fez o domingo
+reprovar com 13 consultas; três mutações EXIT 1. Bytes restaurados em `finally`
+e SHA-256 conferido a cada rodada; módulo restaurado, 2 aprovados.
+Ruff lint/format e mypy do incremento passaram. A suíte relacionada (novo
+módulo, `test_cycle_service.py`, `test_cycle_api.py`, `test_cycle_consistency.py`
+e `test_missions_listagem_consultas.py`) passou com 85 testes.
+
+Hooks instalados nesta sessão. O primeiro `make check` terminou EXIT 0
+(1436 Python, 990 frontend, 59 E2E, cobertura 100%), mas o teste novo foi criado
+durante ele e não foi coletado: esse comando é diagnóstico, não aprovação da
+árvore final. Revisão independente, gate da árvore final e publicação têm
+registros próprios em `.superpowers/sdd/2026-10-05-plano-consultas/` e no PR.
+Plano: `docs/superpowers/plans/2026-10-05-plano-consultas.md`.
+Commit, push e PR por fase foram autorizados; o controlador coordena a
+publicação com os hooks ativos. Merge continua pendente.
+
 ## Objetivo
 
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
@@ -5494,14 +5531,22 @@ ledger; nenhum é bug esquecido.
     custo de uma migração nova e de espelho no modelo. Sem efeito hoje: só o
     serviço escreve, e a spec (seção "Modelo de dados") já declara essa garantia,
     junto com "só avulsa não concluída", como do serviço.
-166. **`reschedules` é carregado sob demanda em `GET /api/plans/current` e em
+166. ~~**`reschedules` é carregado sob demanda em `GET /api/plans/current` e em
     `GET /api/cycle`** (revisão final do F, m4). O `MissionRead` lê
     `missao.reschedules` (`lazy="select"`), e o `selectinload` do merge (pendência
     96) cobre só a listagem: a trilha da semana (8 missões) e o ciclo (até 3) pagam
     **uma consulta a mais por missão**, sempre vazia para diária e especial. É o
     mesmo N+1 que `evidence` e `evaluation` já tinham ali, e o custo é pequeno e
     fixo. Resolver: `selectinload` nas consultas de `cycle_service.py`, com um teste
-    de contagem de consultas como o de `test_missions_listagem_consultas.py`.
+    de contagem de consultas como o de `test_missions_listagem_consultas.py`.~~
+    **Corrigida nesta branch (2026-10-05):** `_ler_plano` usa `selectinload`
+    para `evidence`, `evaluation` e `reschedules`. A leitura mais serialização
+    custa 6 consultas na segunda e no domingo (antes, 27 no domingo); três
+    mutações vistas reprovando com 13 consultas cada, bytes restaurados.
+    O trecho sobre `GET /api/cycle` era histórico: o ciclo atual já usa cópias
+    transientes de um SELECT de colunas, com prova própria de um comando.
+    Sem alterar esse snapshot; integração desta correção na `main` depende
+    do PR. Escopo, comandos e resultados no registro da fatia acima.
 167. **Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
     tela** (revisão final do F, m6). Há confirmação × reagendamento direto,
     reagendamento × conclusão e a mesma confirmação em paralelo, mas não uma
