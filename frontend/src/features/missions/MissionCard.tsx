@@ -200,11 +200,11 @@ function CompletionControls({
 }
 
 /** O texto do botao Iniciar em cada estado em que ele aparece. */
-function startLabel(start: StartState): string {
+function startLabel(start: StartState, hasRetainedKey: boolean): string {
   if (start.status === 'submitting') {
     return 'Iniciando…'
   }
-  return start.status === 'failed' ? 'Tentar de novo' : 'Iniciar'
+  return start.status === 'failed' || hasRetainedKey ? 'Tentar de novo' : 'Iniciar'
 }
 
 /** O que a regiao viva do Iniciar anuncia. */
@@ -297,6 +297,7 @@ function RefreshNotice({
 function StartControls({
   mission,
   start,
+  hasRetainedKey,
   onStart,
   otherInFlight,
   onReload,
@@ -305,6 +306,7 @@ function StartControls({
 }: {
   mission: Mission
   start: StartState
+  hasRetainedKey: boolean
   onStart: () => void
   otherInFlight: boolean
   onReload: () => void
@@ -339,7 +341,8 @@ function StartControls({
               onClick={onStart}
               className={COMPLETE_BUTTON_CLASS}
             >
-              {startLabel(start)} <span className="sr-only">a missão: {mission.instructions}</span>
+              {startLabel(start, hasRetainedKey)}{' '}
+              <span className="sr-only">a missão: {mission.instructions}</span>
             </button>
           )}
           {failure !== null && (
@@ -575,6 +578,7 @@ export function MissionCard({
         <StartControls
           mission={mission}
           start={start}
+          hasRetainedKey={registry.hasActionKey(listed.id, 'start')}
           onStart={startMission}
           otherInFlight={completing || rescheduling}
           onReload={onReload}

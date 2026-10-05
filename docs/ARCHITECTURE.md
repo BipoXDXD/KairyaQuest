@@ -1553,6 +1553,15 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   envio de cada vez: Iniciar, Reagendar e Concluir se desabilitam entre si
   enquanto um deles está em voo.
 
+  **Iniciar após remontagem (163(e)):** o leitor interno
+  `CompletionRegistry.hasActionKey(missionId, action)` consulta somente a
+  existência do slot; não cria UUID nem modifica o registro no render.
+  `MissionCard` consulta `start` e passa um boolean privado ao controle:
+  “Iniciando…” tem prioridade em voo; falha local ou chave retida mostra
+  “Tentar de novo”; sem ambos, “Iniciar”. Mensagens antigas não sobrevivem à
+  remontagem. Geração, envio, liberação e reconciliação continuam nos mesmos
+  lugares; uma chave de Reagendar não afeta esse nome.
+
   **Desde o Incremento B** (Tasks 7–8, commits `242d677` e `08b3dcc`),
   `missions` ganhou o ciclo diário: `useCycle.ts` busca
   `GET /api/cycle` e expõe um `refresh` que **não** passa por "carregando"

@@ -2484,16 +2484,29 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
     })
 
     it('a chave do Iniciar com falha "retry" sobrevive a remontagem: o clique depois da recarga manda a MESMA', async () => {
+      const repeated = deferred()
       const fetchMock = routeFetch({
         'GET /api/missions': (_, call) =>
           Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }]),
         'POST /api/missions/7/start': (_, call) =>
-          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(iniciada),
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : repeated.promise,
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
       render(<MissionList />)
       await screen.findByTestId('missions-list')
-      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      const originalCard = card(7)
+      expect(
+        within(originalCard).getByRole('button', {
+          name: `Iniciar a missão: ${pendente.instructions}`,
+        }),
+      ).toBeEnabled()
+      expect(
+        within(card(8)).getByRole('button', {
+          name: `Iniciar a missão: ${B.instructions}`,
+        }),
+      ).toBeEnabled()
+      expect(crypto.randomUUID).not.toHaveBeenCalled()
+      fireEvent.click(within(originalCard).getByTestId('mission-start'))
       await within(card(7)).findByTestId('mission-start-error')
       fireEvent.click(within(card(8)).getByTestId('mission-start'))
 
@@ -2502,12 +2515,110 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       await waitFor(() => {
         expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
       })
-      // O cartao de A remontou: o aviso sumiu, mas a chave ficou no registro.
+      expect(originalCard).not.toBeInTheDocument()
       expect(within(card(7)).queryByTestId('mission-start-error')).not.toBeInTheDocument()
-      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      expect(within(card(7)).getByTestId('mission-start-status')).toBeEmptyDOMElement()
+      const retry = within(card(7)).getByRole('button', {
+        name: `Tentar de novo a missão: ${pendente.instructions}`,
+      })
+      expect(retry).toBeEnabled()
+      fireEvent.click(retry)
+      expect(retry).toHaveAccessibleName(`Iniciando… a missão: ${pendente.instructions}`)
+      expect(retry).toBeDisabled()
+      await act(async () => {
+        repeated.resolve(Response.json(iniciada))
+        await repeated.promise
+      })
       await within(card(7)).findByText('Missão iniciada.')
-      expect(chaves(fetchMock, 'POST /api/missions/7/start')).toEqual([K1, K1])
+      expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      expect(
+        within(card(7)).getByTestId('mission-started-at').querySelector('time'),
+      ).toHaveAttribute('datetime', '2026-09-23T15:00:00Z')
+      expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/start').map(jsonBody)).toEqual([
+        { operation_id: K1 },
+        { operation_id: K1 },
+      ])
+      expect(requestsTo(fetchMock, 'POST /api/missions/8/start').map(jsonBody)).toEqual([
+        { operation_id: K2 },
+      ])
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(2)
+    })
+
+    it('a chave liberada por operacao_reutilizada volta a Iniciar depois de remontar, com chave nova', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/start': (_, call) =>
+          call === 1 ? conflito('operacao_reutilizada') : Response.json(iniciada),
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const originalCard = card(7)
+      fireEvent.click(within(originalCard).getByTestId('mission-start'))
+      await within(card(7)).findByTestId('mission-start-error')
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      fireEvent.click(await within(card(8)).findByTestId('mission-start-reload'))
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+      expect(originalCard).not.toBeInTheDocument()
+      expect(within(card(7)).queryByTestId('mission-start-error')).not.toBeInTheDocument()
+      const start = within(card(7)).getByRole('button', {
+        name: `Iniciar a missão: ${pendente.instructions}`,
+      })
+      expect(start).toBeEnabled()
+      fireEvent.click(start)
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/start').map(jsonBody)).toEqual([
+        { operation_id: K1 },
+        { operation_id: K3 },
+      ])
+      expect(requestsTo(fetchMock, 'POST /api/missions/8/start').map(jsonBody)).toEqual([
+        { operation_id: K2 },
+      ])
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(3)
+    })
+
+    it('uma chave retida do Reagendar não transforma Iniciar em retry depois da remontagem', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) =>
+          Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }]),
+        'POST /api/missions/7/reschedule': () => Promise.reject(new TypeError('Failed to fetch')),
+        'POST /api/missions/7/start': () => Response.json(iniciada),
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const originalCard = card(7)
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+      expect(
+        within(card(8)).getByRole('button', {
+          name: `Iniciar a missão: ${B.instructions}`,
+        }),
+      ).toBeEnabled()
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      fireEvent.click(await within(card(8)).findByTestId('mission-start-reload'))
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+      expect(originalCard).not.toBeInTheDocument()
+      const start = within(card(7)).getByRole('button', {
+        name: `Iniciar a missão: ${pendente.instructions}`,
+      })
+      expect(start).toBeEnabled()
+      fireEvent.click(start)
+      await within(card(7)).findByText('Missão iniciada.')
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/start').map(jsonBody)).toEqual([
+        { operation_id: K3 },
+      ])
+      expect(chaves(fetchMock, 'POST /api/missions/7/reschedule')).toEqual([K1])
       expect(chaves(fetchMock, 'POST /api/missions/8/start')).toEqual([K2])
+      expect(crypto.randomUUID).toHaveBeenCalledTimes(3)
     })
   })
 })

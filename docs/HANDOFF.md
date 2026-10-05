@@ -4,7 +4,77 @@ Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalh
 Sem credenciais, sem caminhos pessoais.
 
 
-## Estado corrente — composição das fases #7–#24
+## Estado corrente — Iniciar após remontagem — 163(e)
+
+Branch `wt/iniciar-rotulo-retido`, base
+`b9c73f24e2297ba92a96d0685a979258175ca7c1` da composição publicada no
+[PR #25](https://github.com/BipoXDXD/FocusQuest/pull/25), com PR desta fatia
+sobre `wt/composicao-autonoma`. A main permanece `5ba81c3`; merge não ocorreu.
+O PR #25 teve cinco jobs aprovados tanto no [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37266335947)
+quanto no [pull_request](https://github.com/BipoXDXD/FocusQuest/actions/runs/37266404049),
+no head b9c completo acima. Design pequeno aprovado pela delegação do dono: o nome do botão observa a
+chave de Iniciar retida no registro após remontar, sem mudar envio ou regras
+de idempotência. Ambiente existente reutilizado limpo, banco próprio e
+`FOCUSQUEST_E2E_PORT_OFFSET=21`; branch e ledger do PR #23 preservados.
+
+`CompletionRegistry.hasActionKey(missionId, action)` consulta `Map.has`, sem
+criar UUID nem alterar o mapa. `MissionCard` passa a existência do slot
+`start` como boolean privado de `StartControls`/`startLabel`: em voo continua
+“Iniciando…”; com falha local ou chave retida oferece “Tentar de novo”; nos
+demais casos “Iniciar”. Não preserva a mensagem de erro antiga nem cria estado
+paralelo de retry. `useStartMission`, geração/liberação/reconciliação de chaves,
+payloads, timeout e contratos permanecem intactos.
+
+**Histórico da implementação anterior, preservado:** baseline `make check` EXIT 0,
+308,92 s, 1477 Python (219,65 s), 992 frontend, 59 E2E (58,1 s), cobertura 100%,
+Gitleaks sem vazamentos, 369 fontes+HEAD+índice estáveis. Depois dele, um teste
+existente foi fortalecido e dois controles reais de componente foram adicionados.
+O RED corrigido falhou somente no nome após remontagem: um reprovado e dois
+aprovados, 1,12 s. A primeira execução tinha também um seletor incorreto no
+controle de erro do formulário; ele foi corrigido sem mudar a expectativa.
+Produção permaneceu intacta até o RED causal.
+
+O cenário observa o nó anterior fora do documento, mensagem antiga ausente,
+região viva vazia, nome acessível exato, submitting/disabled prioritários,
+estado e `started_at` devolvidos pela resposta e remoção do botão no sucesso.
+Confere corpos completos `K1/K1`, pedido de outra missão com `K2`, dois GETs,
+zero UUIDs no render inicial e só dois depois dos envios. Os controles verificam
+que `operacao_reutilizada` libera a chave (após remontar, “Iniciar” envia outra)
+e que a chave de Reagendar não marca Iniciar como retry. Componentes, hook e
+registro reais, com HTTP falso roteado; não reivindica persistência no banco
+nem leitor de tela real.
+
+`npm --prefix frontend run typecheck`: aprovado. Os três módulos completos
+`MissionList.test.tsx`, `useCompletionRegistry.test.tsx` e
+`useStartMission.test.tsx`: 157 aprovados em 3,01 s. Mutação temporária do rótulo
+para ignorar a chave retida compilou e reprovou somente o cenário de remount,
+com os dois controles aprovados; restauração em `finally` conferida por SHA-256
+idêntico. Reexecução dos três módulos: 157 aprovados, 3,08 s. Uma invocação
+inicial de Prettier usou o diretório errado; formatação foi executada de novo
+no frontend e tipos/testes acima são posteriores à correção.
+
+**Retomada de publicação em 2026-10-05:** revisão do delta staged sem bloqueador
+funcional. O ambiente virtual foi reinstalado com `uv sync --locked --reinstall`
+para corrigir os caminhos após mover o worktree; hooks compartilhados existentes
+foram preservados. Nesta retomada, os três módulos acima aprovaram novamente
+157 testes em 2,78 s. A mutação temporária que ignora a chave retida reprovou
+somente o nome acessível pós-remontagem, com os dois controles aprovados;
+a fonte foi restaurada em `finally`, com SHA-256 idêntico. O gate completo
+fresco e os hooks de commit/push devem aprovar estes bytes antes da publicação.
+Essa prova usa os componentes reais e HTTP roteado, sem reivindicar persistência
+nem validação com leitor de tela físico.
+
+Gate completo final, congelamento, revisão, assinatura, hooks, push e PR desta
+fatia serão registrados no ledger ignorado
+`.superpowers/sdd/2026-10-05-iniciar-rotulo-retido/` e no seu PR. O baseline não
+aprova as fontes alteradas. Cinco agentes GPT 6.1 Sol High continuam divididos;
+163(c,d) estão sendo trabalhados separadamente e não entram nesta fatia.
+Merge, gastos, credenciais e mudanças de contratos/custo/timeout ficam pendentes.
+O registro seguinte conserva a fotografia anterior, inclusive o futuro ali
+previsto: o gate da composição depois passou (1477/992/59, 100%) e seu commit
+assinado/push/PR #25 foram executados; isso não aprova a presente alteração.
+
+## Histórico — fotografia da composição das fases #7–#24
 
 Fotografia: 2026-10-05T01:46:22-03:00 (`America/Sao_Paulo`). Branch `wt/composicao-autonoma`,
 base `5ba81c3dcc4b4916c63e4e9da2967f989c4039bb` (main após PR #6).
@@ -6480,10 +6550,15 @@ ledger; nenhum é bug esquecido.
     depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
     (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
     sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
-    impacto hoje, porque a tela só cria prazos em minutos. (e) O rótulo do Iniciar
+    impacto hoje, porque a tela só cria prazos em minutos. ~~(e) O rótulo do Iniciar
     depois de **remontar** o cartão com a chave retida diz "Iniciar", e não
     "Tentar de novo": o registro não expõe "chave de ação retida"; o envio usa a
-    mesma chave (testado).
+    mesma chave (testado).~~ **(e) Resolvida na feature `wt/iniciar-rotulo-retido`:**
+    leitor puro `hasActionKey` do slot start define “Tentar de novo” após
+    remontar, sem criar UUID no render. Teste real de remount/corpos K1/K1/
+    submitting/efeito e controles de release/outro tipo, RED causal e mutação
+    detectada, GREEN 157. Integração main e publicação nos registros da fatia;
+    (c,d) permanecem separados.
 164. **Arestas da confirmação da Tifa e do prazo em texto, adiadas** (revisão da
     Task 7). (a) **A tela aceita como "reenvio" a chave de uma confirmação da
     Tifa:** `POST /api/missions/{id}/reschedule` com a chave K de uma confirmação
