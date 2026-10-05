@@ -134,7 +134,11 @@ export function RescheduleForm({
             return
           }
           setOpenedFor(mission.deadline)
-          setDraft({ civil: isoToSaoPauloCivil(mission.deadline), reason: null })
+          setDraft({
+            civil: isoToSaoPauloCivil(mission.deadline),
+            reason: null,
+            originalDeadline: mission.deadline,
+          })
           setSent(null)
         }}
         className={TOGGLE_CLASS}

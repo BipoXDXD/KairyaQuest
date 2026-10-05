@@ -119,7 +119,7 @@ FocusQuest/
 │   │   │   │   ├── RescheduleHistory.tsx   # "Reagendada N vezes" e o <details> "Histórico de prazos", uma linha por reagendamento, motivo e origem em texto; tolera `reschedules` ausente (pendência 162) (F, Task 10)
 │   │   │   │   ├── RewardAnnouncement.test.tsx
 │   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
-│   │   │   │   ├── rescheduleDraft.ts       # RescheduleDraft e sameDraft: compara o rascunho enviado com o atual para decidir se a chave se mantém (F, Task 10) (F: StartErrorCode, RescheduleErrorCode e RescheduleDraft)
+│   │   │   │   ├── rescheduleDraft.ts       # deadlineForDraft preserva o ISO original sem edição; sameDraft compara civil, motivo e prazo efetivo para a chave (163(d)); RescheduleDraft mora em types.ts
 │   │   │   │   ├── rescheduleFailure.test.ts
 │   │   │   │   ├── rescheduleFailure.ts     # mapa exaustivo code → mensagem e saída (corrigir, atualizar, nova chave, mesma chave) do reagendamento (F, Task 8)
 │   │   │   │   ├── startFailure.test.ts
@@ -1547,8 +1547,16 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   (`RescheduleForm.tsx`, só na avulsa não concluída) usa a hora civil de
   Brasília: `saoPauloCivilToIso` e `isoToSaoPauloCivil`, em
   `shared/lib/deadline.ts`, convertem com o `Intl`, sem deslocamento fixo (F21).
-  O rascunho do reagendamento mora no cartão e **não** sobrevive à recarga do
-  quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
+  O formulário guarda o ISO original em `RescheduleDraft.originalDeadline`
+  (campo interno opcional). `deadlineForDraft`, em `rescheduleDraft.ts`, envia
+  esse literal quando o civil em minutos não mudou, preservando segundos,
+  fração e offset; hora editada usa o conversor existente. `sameDraft` compara
+  civil, motivo e prazo efetivo para decidir a reutilização da chave de retry
+  (163(d)). O POST continua com somente `operation_id`, `new_deadline` e
+  `reason`. Não há editor de segundos nem política nova de horário repetido:
+  original intacto mantém seu instante; edição conserva a escolha do conversor.
+  O rascunho do reagendamento mora no formulário do cartão e **não** sobrevive
+  à recarga do quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
   e o `<details>` "Histórico de prazos" (`RescheduleHistory.tsx`), e fica num
   envio de cada vez: Iniciar, Reagendar e Concluir se desabilitam entre si
   enquanto um deles está em voo.

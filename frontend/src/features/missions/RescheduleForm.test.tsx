@@ -147,7 +147,11 @@ describe('RescheduleForm', () => {
     fireEvent.click(salvar())
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
-    expect(onSubmit).toHaveBeenCalledWith({ civil: '2026-10-05T18:00', reason: 'falta_de_tempo' })
+    expect(onSubmit).toHaveBeenCalledWith({
+      civil: '2026-10-05T18:00',
+      reason: 'falta_de_tempo',
+      originalDeadline: '2026-10-02T21:00:00Z',
+    })
   })
 
   it('disabled trava campos, motivos e o botao (um envio em voo)', () => {
@@ -183,7 +187,11 @@ describe('RescheduleForm', () => {
     expect(salvar()).toHaveTextContent('Salvar novo prazo')
     fireEvent.change(campo(), { target: { value: '2026-10-09T08:00' } })
     fireEvent.click(salvar())
-    expect(onSubmit).toHaveBeenLastCalledWith({ civil: '2026-10-09T08:00', reason: 'dificuldade' })
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      civil: '2026-10-09T08:00',
+      reason: 'dificuldade',
+      originalDeadline: '2026-10-02T21:00:00Z',
+    })
   })
 
   it('falha "retry": o aviso ligado ao botao, e "Tentar de novo" sem mudar nada reenvia o MESMO rascunho (F13)', () => {
@@ -226,7 +234,11 @@ describe('RescheduleForm', () => {
     expect(salvar()).toHaveTextContent('Salvar novo prazo')
     expect(screen.queryByTestId('reschedule-retry-notice')).not.toBeInTheDocument()
     fireEvent.click(salvar())
-    expect(onSubmit).toHaveBeenLastCalledWith({ civil: '2026-10-05T18:00', reason: 'dificuldade' })
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      civil: '2026-10-05T18:00',
+      reason: 'dificuldade',
+      originalDeadline: '2026-10-02T21:00:00Z',
+    })
 
     // O que conta e o ULTIMO envio: voltar ao motivo do primeiro ja e outro pedido.
     rerender({ failure: falhaRetry })
@@ -249,6 +261,7 @@ describe('RescheduleForm', () => {
     expect(screen.queryByTestId('reschedule-retry-notice')).not.toBeInTheDocument()
     fireEvent.click(salvar())
     expect(onSubmit).toHaveBeenLastCalledWith({
+      originalDeadline: '2026-10-02T21:00:00Z',
       civil: '2026-10-06T18:00',
       reason: 'falta_de_tempo',
     })

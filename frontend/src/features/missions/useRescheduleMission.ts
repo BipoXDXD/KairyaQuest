@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
-import { saoPauloCivilToIso } from '../../shared/lib/deadline'
+import { deadlineForDraft } from './rescheduleDraft'
 import type { Mission } from '../../shared/types/mission'
 import { describeRescheduleFailure, type RescheduleFailure } from './rescheduleFailure'
 import type { RescheduleDraft } from './types'
@@ -42,7 +42,8 @@ export interface UseRescheduleMissionResult {
  *
  * A hora que a pessoa escolhe e a civil de Sao Paulo (`datetime-local`); vira o
  * instante pelo `Intl` com `America/Sao_Paulo`, nunca por deslocamento fixo
- * (F21), e vai como UTC.
+ * (F21), e vai como UTC. Sem alterar a hora civil, conserva o ISO original,
+ * incluindo segundos, fracao e offset.
  *
  * A chave (`operation_id`) mora no `registry`, por missao E por tipo
  * (`actionKeyFor(missionId, 'reschedule')`), pelo mesmo motivo do Iniciar. Quando
@@ -74,7 +75,7 @@ export function useRescheduleMission(
       if (draft.reason === null) {
         return
       }
-      const newDeadline = saoPauloCivilToIso(draft.civil)
+      const newDeadline = deadlineForDraft(draft)
       if (newDeadline === null || inFlight.current) {
         return
       }

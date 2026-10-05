@@ -2162,6 +2162,83 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       ])
     })
 
+    it('sem editar a hora o formulario envia o prazo original preciso e conserva a missao na recusa', async () => {
+      const original = { ...pendente, deadline: '2026-10-02T21:00:59.123456Z' }
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([original]),
+        'POST /api/missions/7/reschedule': () => conflito('prazo_inalterado'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const alvo = within(card(7))
+      fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
+      expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toHaveValue(
+        '2026-10-02T18:00',
+      )
+      fireEvent.click(alvo.getByLabelText('Falta de tempo'))
+      fireEvent.click(alvo.getByTestId('reschedule-submit'))
+      await alvo.findByText('O novo prazo é igual ao atual. Escolha outro horário.')
+
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)).toEqual([
+        {
+          operation_id: K1,
+          new_deadline: '2026-10-02T21:00:59.123456Z',
+          reason: 'falta_de_tempo',
+        },
+      ])
+      expect(alvo.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+      expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toBeEnabled()
+      expect(alvo.getByTestId('mission-deadline')).toHaveAttribute(
+        'dateTime',
+        '2026-10-02T21:00:59.123456Z',
+      )
+      expect(alvo.getByTestId('mission-state')).toHaveTextContent('Pendente')
+      expect(alvo.queryByTestId('mission-reschedule-entry')).not.toBeInTheDocument()
+    })
+
+    it('mesmo civil e motivo com prazo efetivo atualizado exige chave nova depois do retry', async () => {
+      const original = { ...pendente, deadline: '2026-10-02T21:00:31.123456Z' }
+      const atualizada = { ...iniciada, deadline: '2026-10-02T21:00:59.123456Z' }
+      const fetchMock = routeFetch({
+        'GET /api/missions': () => Response.json([original]),
+        'POST /api/missions/7/start': () => Response.json(atualizada),
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1
+            ? Promise.reject(new TypeError('Failed to fetch'))
+            : conflito('prazo_inalterado'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      const alvo = within(card(7))
+      fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
+      fireEvent.click(alvo.getByLabelText('Falta de tempo'))
+      fireEvent.click(alvo.getByTestId('reschedule-submit'))
+      await alvo.findByTestId('reschedule-error')
+      expect(alvo.getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')
+      fireEvent.click(alvo.getByTestId('mission-start'))
+      await alvo.findByText('Missão iniciada.')
+      expect(alvo.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'false')
+      fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
+      expect(alvo.getByLabelText('Novo prazo (horário de Brasília)')).toHaveValue(
+        '2026-10-02T18:00',
+      )
+      fireEvent.click(alvo.getByLabelText('Falta de tempo'))
+      fireEvent.click(alvo.getByTestId('reschedule-submit'))
+      await alvo.findByText('O novo prazo é igual ao atual. Escolha outro horário.')
+
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-02T21:00:31.123456Z', reason: 'falta_de_tempo' },
+        { operation_id: K3, new_deadline: '2026-10-02T21:00:59.123456Z', reason: 'falta_de_tempo' },
+      ])
+      expect(alvo.getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      expect(alvo.getByTestId('mission-deadline')).toHaveAttribute(
+        'dateTime',
+        '2026-10-02T21:00:59.123456Z',
+      )
+      expect(alvo.queryByTestId('mission-reschedule-entry')).not.toBeInTheDocument()
+      expect(alvo.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+    })
+
     it('com o Iniciar em voo, o formulario de reagendar fica travado', async () => {
       routeFetch({
         'GET /api/missions': () => Response.json([pendente]),

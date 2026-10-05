@@ -4,7 +4,52 @@ Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalh
 Sem credenciais, sem caminhos pessoais.
 
 
-## Estado corrente — composição das fases #7–#24
+## Estado corrente — prazo original no reagendamento — 163(d)
+
+**Base:** composição `b9c73f24e2297ba92a96d0685a979258175ca7c1`, branch nova
+`wt/prazo-original-reagendamento`. PR desta fatia terá base
+`wt/composicao-autonoma`; não há merge autorizado. A branch publicada da
+recarga #24 e seu ledger permanecem preservados. Um implementador exclusivo,
+banco `focusquest_recarga-missao-acessivel_test` e offset E2E 22; sem compose.
+
+O campo civil mostra minutos. Antes, abrir e salvar sem editar convertia um
+prazo `:59.123000Z` em `:00Z`: a API aceitava outro instante e criava histórico.
+O rascunho interno agora guarda `originalDeadline`; `deadlineForDraft` conserva
+literalmente o ISO original quando o civil não mudou. Isso inclui segundos,
+fração e offset, sem reconstrução por `Date`. Se a hora for editada, continua
+valendo a conversão existente em `America/Sao_Paulo`. `sameDraft` exige civil,
+motivo e prazo efetivo iguais antes de permitir reutilizar a chave de retry.
+O corpo HTTP continua contendo somente `operation_id`, `new_deadline` e `reason`.
+
+**Provas executadas e lidas nesta sessão:** baseline próprio `make check`
+EXIT 0 em 325,20 s, 1477 Python/992 frontend/59 E2E, cobertura 100%, Gitleaks 0;
+369 fontes, HEAD e índice estáveis. RED focado: 10 falhas/145 controles;
+RED final navegador/API: 1 falha/59 controles, demonstrando HTTP 200, segundos
+cortados e elo indevido. A primeira posição do caso no módulo serial impediu
+um controle posterior; log preservado, caso movido ao fim e RED repetido antes
+de corrigir produção. GREEN: 155 testes focados e TypeScript EXIT 0; E2E real
+60 aprovados em 66,43 s. GET confirmou prazo e estado originais, sem histórico,
+e POST retornou `409 prazo_inalterado` com formulário aberto.
+
+Duas mutações temporárias compilaram e reprovaram causalmente: converter
+sempre perdeu o ISO em 6 casos (132 controles); comparar somente civil/motivo
+reutilizou K1 em vez de K3 para outro prazo efetivo no caso focado. A filtragem
+desse caso não cria teste ignorado na suíte. Ambos foram restaurados em
+`finally`, com SHA original/restaurado igual. O GREEN após restauração,
+congelamento, revisão independente, gate final, hooks, commit, push, PR e CI
+ficam no ledger ignorado `.superpowers/sdd/2026-10-05-prazo-original-reagendamento/`.
+Nesta fotografia, gate final e publicação desta fatia ainda estão pendentes;
+o baseline não aprova o diff. Fontes ficam congeladas antes do gate: resultados
+posteriores entram no ledger/PR, sem editar esta fotografia.
+
+**Limites:** não há editor de segundos, mudança de step, política nova de DST,
+contrato, dependência ou mudança backend. Um original no segundo instante da
+hora civil repetida é conservado; uma hora editada mantém a escolha anterior
+do conversor. 163(c) e 163(e), leitor de tela real e demais pendências críticas
+permanecem separados. O corpo da fotografia da composição abaixo está intacto;
+seu texto de gate futuro descreve aquele instante, não reabre a composição.
+
+## Histórico — composição das fases #7–#24 (fotografia de 01:46:22)
 
 Fotografia: 2026-10-05T01:46:22-03:00 (`America/Sao_Paulo`). Branch `wt/composicao-autonoma`,
 base `5ba81c3dcc4b4916c63e4e9da2967f989c4039bb` (main após PR #6).
@@ -6478,9 +6523,13 @@ ledger; nenhum é bug esquecido.
     RED 16/181 e mutação do enunciado antigo detectada, GREEN 198 nesta sessão; integração main/publicação no ledger.
     (c) O foco,
     depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
-    (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
-    sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
-    impacto hoje, porque a tela só cria prazos em minutos. (e) O rótulo do Iniciar
+    ~~(d) Um prazo com segundos, reenviado sem mexer no campo, virava outro
+    instante em vez de `prazo_inalterado`.~~ **(d) Resolvida nesta feature:**
+    o rascunho conserva o ISO original quando o civil não muda; chave de retry
+    também compara o prazo efetivo. RED real HTTP 200/elo indevido e GREEN
+    HTTP 409/GET sem elo comprovados nesta sessão; gate/publicação no ledger.
+    O editor continua em minutos e não ganha política nova de precisão/DST.
+    (e) O rótulo do Iniciar
     depois de **remontar** o cartão com a chave retida diz "Iniciar", e não
     "Tentar de novo": o registro não expõe "chave de ação retida"; o envio usa a
     mesma chave (testado).
