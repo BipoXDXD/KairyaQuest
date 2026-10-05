@@ -316,6 +316,7 @@ FocusQuest/
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
 │   │   ├── referencia_da_avaliacao_real.json  # a sequência de tipos de evento de uma avaliação real, sem conteúdo (gerada pelo camada3_da_avaliacao.py)
 │   │   ├── test_acompanhamento_concorrencia.py  # conexões reais, sem sleep: dois inícios, início × conclusão, dois reagendamentos encadeados, reagendamento × conclusão, o relógio lido depois da trava (F, Task 5)
+│   │   ├── test_inicio_virada_dia_concorrencia.py # início diário após espera comprovada: perdida recusa sem escrita; revelada inicia na meia-noite SP (160 parcial)
 │   │   ├── test_acompanhamento_migration.py  # a 0006: ida e volta, cada restrição nova dizendo não por INSERT cru, o downgrade que falha alto (F, Task 2)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio; cada stop_reason vira a Parada do Fim)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
@@ -1393,6 +1394,18 @@ ordem "ação antes da missão" **não é observável por teste** (nenhum caminh
 tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
 testes de detecção de corrida dependem do escalonador (pendência 160), e falta
 o de confirmação da Tifa × conclusão (pendência 167).
+
+**Início diário na virada civil (160 parcial).**
+`test_inicio_virada_dia_concorrencia.py` retém a pré-carga, observa os PIDs exatos
+em `pg_blocking_pids` e muda um relógio não bloqueante somente após comprovar a
+espera. O dono apenas segura a linha. À meia-noite de São Paulo, a diária pendente
+de ontem é recusada sem operação, alteração da missão ou XP, também conferidos
+antes do rollback; a diária de hoje é revelada e iniciada com `started_at` exato,
+retornado e persistido, e uma operação `start`. O `finally` libera a trava antes
+do shutdown do executor; limpeza remove somente o plano próprio e seus efeitos.
+A mutação de relógio anterior à trava reprova ambos, com restauração byte a byte.
+Este módulo não prova refresh de estado alterado, HTTP ou todas as corridas; as
+sondas existentes e os outros limites da 160 permanecem.
 
 **A missão iniciada dentro do prazo pode ser concluída depois dele (F25).** Só
 para `em_andamento` com `started_at` antes do prazo, até o fim do dia seguinte ao

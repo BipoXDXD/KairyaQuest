@@ -8,6 +8,49 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Início diário na virada civil — 2026-10-05
+
+**Fatia da pendência 160, base `5ba81c3`.** O responsável delegou a continuação
+em incrementos e autorizou commit assinado, push de uma ref e PR após revisão
+independente e gate completo; nenhum merge. Worktree `wt/inicio-virada-dia`,
+banco `focusquest_inicio-virada-dia_test`, offset 12. Hooks instalados nesta
+sessão, banco exclusivo preparado por `make reset-test-db`/`make migrate-test`;
+nenhum compose executado fora do principal. PR10 e a fatia 167 preservadas.
+
+**Alteração:** novo `test_inicio_virada_dia_concorrencia.py`, plano
+`docs/superpowers/plans/2026-10-05-inicio-virada-dia.md` e descrição arquitetural.
+Produção, contratos, dependências, configuração e testes antigos permanecem
+iguais à base. Duas diárias pendentes cruzam quarta 23:59:59 → quinta 00:00:00
+em São Paulo durante uma espera real por `FOR UPDATE`. A sessão dona apenas
+retém a linha; a perdedora mantém a missão pré-carregada. O relógio retorna
+imediatamente e só muda depois de `pg_blocking_pids` comprovar o bloqueio pelos
+PIDs distintos, antes da liberação da linha.
+
+A diária de quarta é recusada com `MissaoExpiradaError`; consultas com autoflush
+na transação viva, antes do rollback, conferem ausência de operação/XP e missão
+pendente sem início ou conclusão. A de quinta, antes oculta, inicia e devolve
+estado/`started_at` iguais aos persistidos, no instante exato da meia-noite,
+com uma única operação `start` e sem XP. `finally` libera a linha antes da espera
+do executor; a fixture remove somente as missões do plano próprio e seus efeitos
+por CASCADE, depois o plano.
+
+**Evidência executada nesta sessão:** baseline `make check` EXIT 0, 1436 Python,
+990 frontend, 59 E2E e cobertura 100%. Ruff lint/format e mypy do módulo aprovados;
+focado 2 passed. Mutação válida apenas em `iniciar_missao`, lendo relógio antes da
+busca travada, reprova ambos: quarta inicia indevidamente; quinta levanta
+`MissaoNaoEncontradaError`. Nenhuma falha por sintaxe ou timeout. Bytes restaurados
+em `finally` e SHA-256 da produção conferido igual à base; GREEN 2 passed.
+Suíte relacionada (módulo novo, `test_iniciar_missao.py` e
+`test_acompanhamento_concorrencia.py`): 39 passed. Os resultados de revisão final,
+gate da árvore final e publicação ficam no ledger ao terminarem; o baseline
+não aprova estes arquivos novos.
+
+**Limites:** prova específica da permissão de início pelo dia civil após espera,
+sem depender do escalonador. O dono não altera estado/prazo, então não prova
+remoção de `populate_existing` ou atualização concorrente da missão. Não mede
+HTTP, Tifa, reagendamento, conclusão nem todas as combinações da 160; os testes
+de mecanismo existentes continuam necessários e a pendência permanece parcial.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -5414,7 +5457,13 @@ ledger; nenhum é bug esquecido.
     cruzam, a consulta de idempotência já recusa), e por isso existe a variante
     determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
     os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
-    a única garantia determinística dele.
+    a garantia geral medida naquele incremento. **Resolução parcial em 2026-10-05:**
+    `test_inicio_virada_dia_concorrencia.py` acrescenta duas permissões de início
+    diário após bloqueio comprovado: a diária perdida é recusada sem escrita e a
+    revelada inicia na meia-noite civil. A mutação válida de relógio antes da trava
+    reprova os dois casos; restauração byte a byte e GREEN confirmados. O dono não
+    altera a linha, portanto não prova `populate_existing` nem todas as corridas;
+    os cenários antigos e a pendência continuam com seus limites restantes.
 161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
     liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
     **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
