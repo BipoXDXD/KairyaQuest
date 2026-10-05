@@ -556,7 +556,9 @@ describe('MissionList -- concluir', () => {
       'Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais.',
     )
     expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Atualizar o quadro' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: `Atualizar o quadro a missão: ${pendente.instructions}` }),
+    ).toBeInTheDocument()
     // Nem a prosa do backend nem o code cru chegam a tela.
     expect(screen.getByTestId('missions')).not.toHaveTextContent('PROSA-CRUA-DO-BACKEND')
     expect(screen.getByTestId('missions')).not.toHaveTextContent('missao_nao_encontrada')
@@ -586,7 +588,9 @@ describe('MissionList -- concluir', () => {
     expect(screen.getByTestId('missions')).not.toHaveTextContent('PROSA-CRUA-DO-BACKEND')
     expect(screen.getByTestId('missions')).not.toHaveTextContent('transicao_ilegal')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Atualizar o quadro' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: `Atualizar o quadro a missão: ${pendente.instructions}` }),
+    )
 
     await waitFor(() => {
       expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -711,6 +715,42 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('o nome acessivel da recarga distingue duas missoes e a recarga mostra o estado relido', async () => {
+    const fetchMock = routedFetch({
+      lists: [ok([missaoA, missaoB]), ok([missaoAConcluida, missaoBConcluida])],
+      posts: { 7: [conflict('transicao_ilegal')], 8: [conflict('transicao_ilegal')] },
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    fireEvent.click(within(card(7)).getByTestId('mission-complete'))
+    fireEvent.click(within(card(8)).getByTestId('mission-complete'))
+    await within(card(7)).findByTestId('mission-completion-error')
+    await within(card(8)).findByTestId('mission-completion-error')
+
+    expect(within(card(7)).getByTestId('mission-reload')).toHaveAccessibleName(
+      'Atualizar o quadro a missão: Ler o capitulo 3 de algoritmos',
+    )
+    expect(within(card(8)).getByTestId('mission-reload')).toHaveAccessibleName(
+      'Atualizar o quadro a missão: Revisar as anotacoes de grafos',
+    )
+    expect(screen.getAllByRole('button', { name: /^Atualizar o quadro a missão:/ })).toHaveLength(2)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Atualizar o quadro a missão: Revisar as anotacoes de grafos',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('mission-state').map((no) => no.textContent)).toEqual([
+        'Concluída',
+        'Concluída',
+      ])
+    })
+    expect(listGets(fetchMock)).toBe(2)
+    expect(sentKeys(fetchMock).map(([id]) => id)).toEqual([7, 8])
+    expect(screen.queryByTestId('mission-completion-error')).not.toBeInTheDocument()
   })
 
   it('T1: com o POST de A pendente, Atualizar o quadro espera, e recarrega UMA vez quando A termina', async () => {
@@ -934,7 +974,14 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
 
     expect(atualizar).toHaveAttribute('disabled')
     expect(atualizar).toHaveTextContent(ESPERA_BOTAO)
-    expect(within(card(8)).getByRole('button', { name: ESPERA_BOTAO })).toBe(atualizar)
+    expect(atualizar).toHaveAccessibleName(
+      'Aguardando o pedido em andamento… a missão: Revisar as anotacoes de grafos',
+    )
+    expect(
+      within(card(8)).getByRole('button', {
+        name: 'Aguardando o pedido em andamento… a missão: Revisar as anotacoes de grafos',
+      }),
+    ).toBe(atualizar)
     // O mesmo `data-testid` de sempre: o contrato do botao nao muda na espera.
     expect(atualizar).toHaveAttribute('data-testid', 'mission-reload')
     expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(ESPERA_ANUNCIO)
@@ -1415,6 +1462,9 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     const recarga = within(card(7)).getByTestId('evaluation-reload')
     expect(recarga).toBeDisabled()
     expect(recarga).toHaveTextContent('Aguardando o pedido em andamento…')
+    expect(recarga).toHaveAccessibleName(
+      `Aguardando o pedido em andamento… a missão: ${pendenteComEvidencia.instructions}`,
+    )
 
     await act(async () => {
       terminar(Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }))
@@ -1605,7 +1655,11 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     render(<MissionList />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar o quadro' }))
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: `Atualizar o quadro a missão: ${pendenteComEvidencia.instructions}`,
+      }),
+    )
 
     await waitFor(() => {
       expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
@@ -1846,6 +1900,9 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
       const atualizar = within(card(7)).getByTestId('mission-start-reload')
       expect(atualizar).toHaveTextContent('Atualizar o quadro')
+      expect(atualizar).toHaveAccessibleName(
+        `Atualizar o quadro a missão: ${pendente.instructions}`,
+      )
 
       fireEvent.click(atualizar)
 
@@ -2213,10 +2270,55 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'Esta missão já foi concluída e não pode ser reagendada. Atualize para ver o estado atual.',
       )
       expect(within(card(7)).queryByTestId('reschedule-toggle')).not.toBeInTheDocument()
-      fireEvent.click(within(card(7)).getByTestId('mission-reschedule-reload'))
+      const atualizar = within(card(7)).getByRole('button', {
+        name: `Atualizar o quadro a missão: ${pendente.instructions}`,
+      })
+      expect(atualizar).toHaveAttribute('data-testid', 'mission-reschedule-reload')
+      fireEvent.click(atualizar)
       await waitFor(() => {
         expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
       })
+    })
+
+    it('a recarga do reagendamento usa o enunciado atual devolvido pelo Iniciar', async () => {
+      const atualizada: Mission = { ...iniciada, instructions: 'Revisar o capitulo atualizado' }
+      const relida: Mission = {
+        ...atualizada,
+        state: 'concluida',
+        availability: 'concluida',
+        completed_at: '2026-10-05T18:00:00Z',
+        verification: 'autodeclarada',
+      }
+      const fetchMock = routeFetch({
+        'GET /api/missions': (_, call) => Response.json(call === 1 ? [pendente] : [relida]),
+        'POST /api/missions/7/start': () => Response.json(atualizada),
+        'POST /api/missions/7/reschedule': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      fireEvent.click(within(card(7)).getByTestId('mission-start'))
+      await waitFor(() => {
+        expect(within(card(7)).getByTestId('mission-instructions')).toHaveTextContent(
+          'Revisar o capitulo atualizado',
+        )
+      })
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('mission-reschedule-error')
+
+      expect(within(card(7)).getByTestId('mission-reschedule-reload')).toHaveAccessibleName(
+        'Atualizar o quadro a missão: Revisar o capitulo atualizado',
+      )
+      fireEvent.click(
+        within(card(7)).getByRole('button', {
+          name: 'Atualizar o quadro a missão: Revisar o capitulo atualizado',
+        }),
+      )
+      await waitFor(() => {
+        expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Concluída')
+      })
+      expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      expect(within(card(7)).queryByTestId('mission-reschedule-error')).not.toBeInTheDocument()
     })
 
     it('iniciar e depois reagendar: o cartao fica em andamento E com o prazo novo', async () => {
@@ -2319,6 +2421,9 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
 
       expect(atualizar).toBeDisabled()
       expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(atualizar).toHaveAccessibleName(
+        `Aguardando o pedido em andamento… a missão: ${B.instructions}`,
+      )
       expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
         'Aguardando o pedido em andamento para atualizar o quadro.',
       )
@@ -2356,6 +2461,9 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
 
       expect(atualizar).toBeDisabled()
       expect(atualizar).toHaveTextContent('Aguardando o pedido em andamento…')
+      expect(atualizar).toHaveAccessibleName(
+        `Aguardando o pedido em andamento… a missão: ${B.instructions}`,
+      )
       expect(atualizar).not.toHaveTextContent('conclusão')
       expect(screen.getByTestId('missions-reload-status')).toHaveTextContent(
         'Aguardando o pedido em andamento para atualizar o quadro.',

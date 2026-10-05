@@ -8,6 +8,49 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Recarga identificada pela missão — 163(b) — 2026-10-05
+
+**Base:** main `5ba81c3`, branch `wt/recarga-missao-acessivel`. Design limitado
+aprovado por delegação do dono: melhorar o nome acessível da recarga sem mudar
+rótulo visível, callback, disabled, espera ou contrato. Esta é uma feature
+própria; as demais publicações e o checkpoint do PR #20 permanecem preservados.
+
+`MissionCard` acrescenta o trecho `sr-only` "a missão: <instructions>" ao
+botão de recarga da conclusão e ao `RefreshNotice` de Iniciar/Reagendar.
+`EvaluationPanel` faz o mesmo na recuperação da avaliação. O nome inclui a
+missão também durante "Aguardando o pedido em andamento…", mantendo o botão
+desabilitado e a região viva original. O helper privado recebe somente
+`instructions: string` dos dois consumidores; não há interface pública nova.
+Os rótulos contextuais do ciclo (hoje, ontem e especial) permanecem visíveis.
+`CampaignTrail` tem somente recarga do plano inteiro, sem cartão por missão;
+essa recarga global permanece intacta e não recebe uma missão enganosa.
+
+**Executado nesta sessão:** baseline dos três módulos de teste, EXIT 0,
+196 testes em 2,81 s. Antes de alterar produção, expectativas de nome acessível
+reprovaram: 16 falhas e 181 aprovados (197 no total), em 5,23 s. O cenário novo
+usa dois cartões com instruções diferentes, identifica os dois botões pelo
+nome e confirma a leitura seguinte: os dois estados concluídos, dois GETs e
+POSTs das missões corretas. Os existentes reforçam recuperação de concluir,
+iniciar, reagendar e avaliar, ciclo hoje/ontem/especial, disabled e espera;
+as queries exatas mudam porque o nome acessível é o comportamento deste
+incremento, sem acomodar erro do produto. Negativos do contexto usam prefixo
+para continuarem detectando um rótulo incorreto mesmo com o novo sufixo.
+
+Depois da mudança, o mesmo comando
+`npm --prefix frontend run test -- src/features/missions/MissionList.test.tsx src/features/missions/CycleSection.test.tsx src/features/missions/EvaluationPanel.test.tsx`
+passou: EXIT 0, 198 testes em 2,88 s. `npm --prefix frontend run typecheck`
+passou. Nenhuma dependência, payload, rota, regra de recuperação ou gate mudou.
+Um segundo cenário confirma o enunciado atual devolvido por Iniciar: a recarga
+do reagendamento usa essa instrução e mostra o estado relido. A mutação válida
+que repassava o enunciado antigo da listagem compilou e reprovou exatamente
+no nome acessível (um teste filtrado); restauração em `finally` e SHA idêntico
+precederam o GREEN final acima.
+
+Revisão, gate completo, fontes congeladas e publicação ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-recarga-missao-acessivel/progress.md` e
+seus logs. Os registros abaixo permanecem históricos; as partes 163(c–e)
+continuam pendentes e esta fatia não afirma validação em leitor de tela real.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -5457,7 +5500,13 @@ ledger; nenhum é bug esquecido.
     está em voo é um Iniciar ou um Reagendar; o texto neutro seria "o pedido em
     andamento".~~ **(a) Resolvida na rodada de correção da revisão final do F:** o
     botão e a região viva dizem "Aguardando o pedido em andamento…" (e "… para
-    atualizar o quadro."), com teste do Iniciar e do Reagendar em voo. (b) Os botões de recarga não dizem de qual missão são. (c) O foco,
+    atualizar o quadro."), com teste do Iniciar e do Reagendar em voo.
+    ~~(b) Os botões de recarga não dizem de qual missão são.~~ **(b) Resolvida
+    na feature `wt/recarga-missao-acessivel`:** nome acessível acrescenta
+    `instructions` na recarga da conclusão, Iniciar/Reagendar e avaliação,
+    inclusive esperando; rótulos visíveis e recarga global da trilha intactos.
+    RED 16/181 e mutação do enunciado antigo detectada, GREEN 198 nesta sessão; integração main/publicação no ledger.
+    (c) O foco,
     depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
     (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
     sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem

@@ -280,7 +280,8 @@ function EvidenceAndEvaluation({
             onClick={onReload}
             className={REQUEST_BUTTON_CLASS}
           >
-            {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+            {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
+            <span className="sr-only">a missão: {mission.instructions}</span>
           </button>
         )}
         <div role="status" data-testid="evaluation-status" className="text-sm text-sky-200">

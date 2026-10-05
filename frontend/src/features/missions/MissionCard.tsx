@@ -171,7 +171,8 @@ function CompletionControls({
           onClick={onReload}
           className={RELOAD_BUTTON_CLASS}
         >
-          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
+          <span className="sr-only">a missão: {mission.instructions}</span>
         </button>
       )}
       <div
@@ -250,12 +251,14 @@ function RefreshNotice({
   onReload,
   reloadWaiting,
   reloadLabel,
+  instructions,
 }: {
   message: string
   testId: string
   onReload: () => void
   reloadWaiting: boolean
   reloadLabel: string
+  instructions: string
 }) {
   return (
     <>
@@ -266,7 +269,8 @@ function RefreshNotice({
         onClick={onReload}
         className={RELOAD_BUTTON_CLASS}
       >
-        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}
+        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
+        <span className="sr-only">a missão: {instructions}</span>
       </button>
       <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
         {message}
@@ -320,6 +324,7 @@ function StartControls({
         <RefreshNotice
           message={failure.message}
           testId="mission-start"
+          instructions={mission.instructions}
           onReload={onReload}
           reloadWaiting={reloadWaiting}
           reloadLabel={reloadLabel}
@@ -606,6 +611,7 @@ export function MissionCard({
           <RefreshNotice
             message={rescheduleFailure.message}
             testId="mission-reschedule"
+            instructions={mission.instructions}
             onReload={onReload}
             reloadWaiting={reloadWaiting}
             reloadLabel={reloadLabel}

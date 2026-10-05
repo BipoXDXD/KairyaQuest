@@ -1496,7 +1496,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   da especial, porque a seção da especial já usa `<h3>` para o próprio
   título, e um `<h3>` aninhado quebraria a hierarquia de cabeçalhos.
   `reloadLabel?: string` (padrão `"Atualizar o quadro"`, repassado a
-  `CompletionControls`) troca o rótulo do botão de recuperação — os dois
+  `CompletionControls`) troca o rótulo do botão de recuperação — os
   cartões do ciclo usam `"Atualizar a missão de hoje"` (a diária de hoje),
   `"Atualizar a diária de ontem"` e `"Atualizar a missão especial"`, cada um
   com o rótulo do próprio cartão. O parágrafo da
@@ -1504,6 +1504,15 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   região viva **desde o primeiro render** (o mesmo padrão do painel da
   Tifa, acima), para que uma mudança de sequência ao concluir uma missão
   seja anunciada por leitor de tela.
+
+  **Nome acessível da recarga por missão (163(b)):** `CompletionControls`,
+  o `RefreshNotice` privado de Iniciar/Reagendar e `EvidenceAndEvaluation`
+  acrescentam "a missão: <instructions>" em `span.sr-only`, após o rótulo
+  visível contextual. `RefreshNotice` recebe somente `instructions: string`
+  dos dois consumidores, usando a missão atual do cartão. O sufixo permanece
+  no estado de espera; disabled, callbacks e regiões vivas não mudam.
+  `CampaignTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
+  botão global não recebe identificação de uma missão.
 
   Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no
