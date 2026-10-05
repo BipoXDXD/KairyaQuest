@@ -3,12 +3,967 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
+
+## Estado corrente — composição das fases #7–#24
+
+Fotografia: 2026-10-05T01:46:22-03:00 (`America/Sao_Paulo`). Branch `wt/composicao-autonoma`,
+base `5ba81c3dcc4b4916c63e4e9da2967f989c4039bb` (main após PR #6).
+Nenhuma fase #7–#24 foi mesclada na main. Esta branch reúne os patches
+publicados para verificar o conjunto antes da decisão crítica de merge;
+não fecha nem substitui automaticamente as PRs individuais.
+
+O dono delegou decisões não críticas e autorizou commit assinado, push de uma
+ref e PR por fase, com hooks ativos, gate completo e cobertura de 100%.
+Cinco agentes GPT 6.1 Sol High dividem implementação e revisões. Só este
+implementador escreve nesta árvore; banco `focusquest_composicao-autonoma_test`
+e offset E2E 23 são exclusivos. Merge, gastos, credenciais, contratos públicos
+e políticas de custo/timeout continuam pendentes de decisão do dono.
+
+**Estado da validação desta composição:** baseline limpo executado nesta sessão,
+`make check` EXIT 0 em 341,40 s: 1436 Python, 990 frontend, 59 E2E, cobertura
+100% no backend e nas quatro métricas do frontend, Gitleaks sem vazamentos;
+349 fontes, HEAD e índice iguais antes/depois. Depois da aplicação, 22 arquivos
+de código/testes são byte a byte iguais aos respectivos heads publicados;
+13 planos exclusivos também preservam as fontes. Documentação foi conciliada
+sem apagar o corpo do checkpoint #20. O gate do conjunto ainda será executado:
+resultados, congelamento, revisão, hooks e publicação ficam no ledger ignorado
+`.superpowers/sdd/2026-10-05-composicao-fases/` e no PR da composição.
+O baseline e os gates das fases abaixo não aprovam automaticamente esta árvore.
+
+**Fases de origem, executadas e publicadas nesta sessão:** cada linha registra
+seu gate isolado Python/frontend/E2E, com cobertura 100%, commit assinado e
+hooks normais. Os dois runs de cada linha foram consultados: cada um terminou
+com `check-web`, `check-api`, `check-e2e`, `check-secrets` e `quality-gate`
+aprovados. As fases #17 e #20 são deltas sobre #7 e #8, respectivamente;
+a aplicação preserva essa dependência. Nenhuma destas contagens é do conjunto.
+
+| PR | Fatia | Head completo | Base da fase | Gate isolado P/F/E | CI: cinco jobs em cada run |
+| --- | --- | --- | --- | --- | --- |
+| [#7](https://github.com/BipoXDXD/FocusQuest/pull/7) | Conclusão × Tifa — 167 | `0cb4cc2d6d0f223faed20244ccdb4c6e709fab20` | main `5ba81c3` | 1438/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37253643264) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37254207163) |
+| [#8](https://github.com/BipoXDXD/FocusQuest/pull/8) | Continuidade pós-PR6 | `009d9f7d2652a7a14cde4b237abe1f43df0a64df` | main `5ba81c3` | 1436/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37255680687) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37255788003) |
+| [#9](https://github.com/BipoXDXD/FocusQuest/pull/9) | Oráculo AST core — 103 | `3e4f0cb112345f501c7224d47f652cf992a2b451` | main `5ba81c3` | 1443/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37255819846) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37255885576) |
+| [#10](https://github.com/BipoXDXD/FocusQuest/pull/10) | Espera de reagendamento — 160 parcial | `802646cb4227b65e41b0bd6f4d59a37990f5f4e1` | main `5ba81c3` | 1438/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37256292622) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37256383718) |
+| [#11](https://github.com/BipoXDXD/FocusQuest/pull/11) | Motivos compartilhados — 161(a) | `10ec49017f852230478cb475c404f389c2313b08` | main `5ba81c3` | 1436/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37257244278) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37257292946) |
+| [#12](https://github.com/BipoXDXD/FocusQuest/pull/12) | Plano em seis consultas — 166 | `42fd9eb7501921d43837df3d273b4c30adf7caca` | main `5ba81c3` | 1438/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37257779540) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37257834491) |
+| [#13](https://github.com/BipoXDXD/FocusQuest/pull/13) | Diagnóstico HTTP — 100 parcial | `90f1cf0b0bb74ea7a7b69214ce6272da5e580e77` | main `5ba81c3` | 1448/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37257959004) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37258094533) |
+| [#14](https://github.com/BipoXDXD/FocusQuest/pull/14) | Início na virada civil — 160 parcial | `2247845334541f69bc5dbf3d0351d18ccf914b1e` | main `5ba81c3` | 1438/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37258667000) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37258731925) |
+| [#15](https://github.com/BipoXDXD/FocusQuest/pull/15) | Avaliação antes do usuário — 104 parcial | `2304b38e83a11e5537d5235b4c418d0d22292231` | main `5ba81c3` | 1437/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259396682) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259432342) |
+| [#16](https://github.com/BipoXDXD/FocusQuest/pull/16) | Oráculo SDK/retries | `d4843d9e00c3330e3ac9a988871fdbd21b1ca830` | main `5ba81c3` | 1443/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259586682) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259692422) |
+| [#17](https://github.com/BipoXDXD/FocusQuest/pull/17) | Diagnóstico do worker da Tifa | `cb939c4c6c7d71393931ae2fded291d5e9501556` | PR #7 | 1440/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259873886) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37259925877) |
+| [#18](https://github.com/BipoXDXD/FocusQuest/pull/18) | Identidade do XP — 97/T-M4 | `2ff2661dae511030f794b7a1fea49f1118ebac30` | main `5ba81c3` | 1437/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37260770479) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37260832065) |
+| [#19](https://github.com/BipoXDXD/FocusQuest/pull/19) | Conclusão tardia após espera — F25/160 parcial | `feed0b694fb34ade77eff1b12379b634b504398a` | main `5ba81c3` | 1438/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37261507937) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37261540310) |
+| [#20](https://github.com/BipoXDXD/FocusQuest/pull/20) | Checkpoint documental | `b7af5d83ba5864f7fa937ac6c43d931826fc7c21` | PR #8 | 1436/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37261565820) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37261619392) |
+| [#21](https://github.com/BipoXDXD/FocusQuest/pull/21) | GeneratorExit — 97/T-M5 | `be9fde4dee76d10b587fb01c221133a8e11d0634` | main `5ba81c3` | 1437/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37262272101) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37262309871) |
+| [#22](https://github.com/BipoXDXD/FocusQuest/pull/22) | Registro da migração populada — 83 | `0d3f0521c52db3d4354ae5c8aeeca7dbd39b6eca` | main `5ba81c3` | 1436/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37263023867) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37263089029) |
+| [#23](https://github.com/BipoXDXD/FocusQuest/pull/23) | Recusa de chave com evidência — 97/T-M1 parcial | `ece4bbea377320cf3c68ad6e1a606950aff0ac1a` | main `5ba81c3` | 1436/990/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37263120912) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37263149572) |
+| [#24](https://github.com/BipoXDXD/FocusQuest/pull/24) | Nome acessível da recarga — 163(b) | `7701fb15972d541542aed7675b278289c6d14ce0` | main `5ba81c3` | 1436/992/59 | [push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37264072942) / [PR](https://github.com/BipoXDXD/FocusQuest/actions/runs/37264105468) |
+
+**Resultado reunido e limites:** motivos de reagendamento compartilham o tipo
+(161(a)); leitura fria do plano carrega as três relações em seis consultas
+(166); erro HTTP final do SDK registra apenas status e classe (100 parcial);
+recarga por missão identifica o enunciado atual no nome acessível (163(b)).
+Os testes acrescentam esperas PostgreSQL observadas, relógio após a trava,
+ordem local da avaliação, distinção entre retries físicos e geração lógica,
+identidade bruta de XP/FKs, `GeneratorExit` e evidência intacta ao recusar
+reutilização de operação. Contratos, dependências, migrações de produção,
+timeouts, retry policy e gate não foram alterados.
+
+160 permanece parcial: reagendar, início na virada civil e conclusão tardia
+após espera não provam a matriz global nem refresh onde o holder não muda a
+linha. 104 prova uma ordem concreta e não toda a matriz de deadlocks. Em 97,
+T-M4 fecha identidade no roundtrip populado específico e T-M5 fecha a lacuna
+`GeneratorExit`; T-M1 segue parcial (a nova recusa observa SQL antes do
+rollback na mesma sessão, sem reivindicar uma sessão nova). S-M6 não tem
+requisito rastreável recuperado, portanto não foi inventado um teste.
+161(b), 163(c–e), validação por leitor de tela real, demais itens 97 e a
+classificação pública de erros continuam pendentes. A arquitetura 91 foi
+alinhada à amostra real já registrada; nenhuma chamada paga foi repetida.
+O primeiro pre-push da fase #12 falhou no oráculo antigo de retries; a causa
+original não foi demonstrada, e o diagnóstico posterior não a transforma em
+certeza. A fase #16 torna explícita a diferença entre receipt HTTP e geração.
+
+Context7 e Dometrain responderam nesta sessão. Rodin expõe ferramentas, mas
+sua execução funcional não foi confirmada e não houve geração paga. Os blocos
+seguintes são registros históricos: frases antigas de execução ou publicação
+futura descrevem seu instante original, sem reabrir trabalho já concluído.
+
+## Recarga identificada pela missão — 163(b) — 2026-10-05
+
+**Base:** main `5ba81c3`, branch `wt/recarga-missao-acessivel`. Design limitado
+aprovado por delegação do dono: melhorar o nome acessível da recarga sem mudar
+rótulo visível, callback, disabled, espera ou contrato. Esta é uma feature
+própria; as demais publicações e o checkpoint do PR #20 permanecem preservados.
+
+`MissionCard` acrescenta o trecho `sr-only` "a missão: <instructions>" ao
+botão de recarga da conclusão e ao `RefreshNotice` de Iniciar/Reagendar.
+`EvaluationPanel` faz o mesmo na recuperação da avaliação. O nome inclui a
+missão também durante "Aguardando o pedido em andamento…", mantendo o botão
+desabilitado e a região viva original. O helper privado recebe somente
+`instructions: string` dos dois consumidores; não há interface pública nova.
+Os rótulos contextuais do ciclo (hoje, ontem e especial) permanecem visíveis.
+`CampaignTrail` tem somente recarga do plano inteiro, sem cartão por missão;
+essa recarga global permanece intacta e não recebe uma missão enganosa.
+
+**Executado nesta sessão:** baseline dos três módulos de teste, EXIT 0,
+196 testes em 2,81 s. Antes de alterar produção, expectativas de nome acessível
+reprovaram: 16 falhas e 181 aprovados (197 no total), em 5,23 s. O cenário novo
+usa dois cartões com instruções diferentes, identifica os dois botões pelo
+nome e confirma a leitura seguinte: os dois estados concluídos, dois GETs e
+POSTs das missões corretas. Os existentes reforçam recuperação de concluir,
+iniciar, reagendar e avaliar, ciclo hoje/ontem/especial, disabled e espera;
+as queries exatas mudam porque o nome acessível é o comportamento deste
+incremento, sem acomodar erro do produto. Negativos do contexto usam prefixo
+para continuarem detectando um rótulo incorreto mesmo com o novo sufixo.
+
+Depois da mudança, o mesmo comando
+`npm --prefix frontend run test -- src/features/missions/MissionList.test.tsx src/features/missions/CycleSection.test.tsx src/features/missions/EvaluationPanel.test.tsx`
+passou: EXIT 0, 198 testes em 2,88 s. `npm --prefix frontend run typecheck`
+passou. Nenhuma dependência, payload, rota, regra de recuperação ou gate mudou.
+Um segundo cenário confirma o enunciado atual devolvido por Iniciar: a recarga
+do reagendamento usa essa instrução e mostra o estado relido. A mutação válida
+que repassava o enunciado antigo da listagem compilou e reprovou exatamente
+no nome acessível (um teste filtrado); restauração em `finally` e SHA idêntico
+precederam o GREEN final acima.
+
+Revisão, gate completo, fontes congeladas e publicação ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-recarga-missao-acessivel/progress.md` e
+seus logs. Os registros abaixo permanecem históricos; as partes 163(c–e)
+continuam pendentes e esta fatia não afirma validação em leitor de tela real.
+## Registros das fases reunidas
+
+Os blocos abaixo conservam a execução isolada de cada fase e suas bases.
+O estado corrente da composição e sua validação são registrados no topo;
+frases de gate ou publicação futura nos registros descrevem seu instante
+original. A presença destes registros não significa merge na main.
+
+### Retomada — pendência 167, confirmação da Tifa × conclusão
+
+O dono solicitou retomar a pausa. Trabalho no worktree `wt/tifa-conclusao`,
+base `5ba81c3`, banco exclusivo `focusquest_tifa-conclusao_test` e offset 6.
+O dono autorizou commit, push e abertura de PR desta fatia. A publicação será
+feita com os hooks ativos; commit/PR e resultados do CI ficam no ledger e no
+próprio PR após execução. O merge continua dependendo de autorização própria.
+Os seis outros worktrees e os checkpoints continuam preservados. As três
+alterações documentais não commitadas do principal foram copiadas para esta
+branch antes da atualização, preservando os registros anteriores.
+
+**Entrega:** `tests/integration/test_tutoring_conclusao_concorrencia.py`, dois
+cenários com conexões PostgreSQL reais. A sessão que espera mantém uma missão
+pré-carregada; o teste observa `pg_blocking_pids` e só depois libera o commit
+vencedor. Conclusão primeiro: ação `falhou/reagendamento_invalido`, prazo
+original, sem elo nem operação de reagendamento. Tifa primeiro: conclusão
+devolve o prazo novo, ação executada e um elo de origem Tifa anterior à
+conclusão. Ambos persistem uma só operação de conclusão e um crédito de 40 XP.
+Sem mudança permanente no código de produção, contrato, dependência ou banco.
+
+**Comandos executados nesta retomada:** `make db-up` somente no principal;
+`make check` de baseline no worktree, EXIT 0 (1436 Python, 990 frontend,
+59 E2E e cobertura 100%); Ruff lint/format e mypy no arquivo novo, aprovados;
+pytest do módulo, 2 aprovados; suíte relacionada (o módulo novo,
+`test_tutoring_reagendamento.py` e `test_acompanhamento_concorrencia.py`),
+55 aprovados. Mutação temporária `populate_existing=False`: os dois cenários
+reprovaram (EXIT 1); arquivo de produção restaurado em `finally` e conferido
+por SHA-256; reexecução, 2 aprovados. O gate final da implementação passou:
+1438 Python, 990 frontend, 59 E2E, cobertura 100%, EXIT 0 e 351 arquivos/HEAD/índice
+estáveis. O gate da publicação e o CI terão resultados próprios no ledger e no
+PR; aquele resultado não aprova revisões posteriores.
+
+Plano: `docs/superpowers/plans/2026-10-04-tifa-conclusao-concorrencia.md`.
+Ledger e logs: `.superpowers/sdd/2026-10-04-tifa-conclusao-concorrencia/`.
+**Revisão independente:** nenhum achado crítico ou importante. Uma melhoria
+de diagnóstico dos testes ficou adiada: exceção antecipada da thread pode
+aparecer como timeout antes de o controlador ler o futuro. O teste reprova
+e a limpeza libera as travas, mas a causa original fica menos visível.
+
+**Limite:** a prova passa pelos serviços e pelo banco; não simula duas abas
+do navegador nem uma chamada real à Anthropic. A pendência 160, de outros
+testes cuja detecção depende do escalonador, não é encerrada por esta fatia.
+
+### Histórico da pausa — 2026-10-04 21:48:53 -03
+
+O dono pediu pausa para reiniciar e salvar tudo. Alterações documentais locais,
+registros de leitura e sete worktrees preservados. Principal na branch
+`docs/estado-pos-pr6`, HEAD `5ba81c3`; nenhum novo commit, push ou PR.
+O worktree `wt/tifa-conclusao` foi preparado para a pendência 167, sem edição
+de produto ou testes. Seu gate de baseline foi interrompido (código 130):
+frontend 990/990 e 100%, Python incompleto, E2E não executado. Não aprovado.
+A nota desta pausa é posterior ao gate anterior da documentação.
+
+Retomada detalhada em `docs/RETOMADA-2026-10-04.md`, bloco "Histórico da pausa";
+checkpoint em `.superpowers/sdd/2026-10-04-estabilizacao/evidence/pausa-reinicio-20261004-214853/`.
+Pausa encerrada pelo pedido do dono: "retome de onde parou". A continuação está no bloco acima.
+
+### Estado atual — PR #6 integrado em 2026-10-04
+
+O dono autorizou o merge do [PR #6](https://github.com/BipoXDXD/FocusQuest/pull/6).
+O GitHub confirmou a integração na `main` pelo commit
+`5ba81c3dcc4b4916c63e4e9da2967f989c4039bb`, às 21:01:55 de 2026-10-04
+em `America/Sao_Paulo`. Seus pais são `469e149` e `43ff5f7`: os incrementos
+E/F/G e as vinte fatias de estabilização estão integrados.
+
+Antes do merge, `make check` foi executado novamente: EXIT 0, 285,43 s,
+1436 testes Python, 990 frontend e 59 E2E, cobertura de 100% no backend
+e nas quatro métricas do frontend. As 349 fontes, HEAD e índice permaneceram
+iguais durante o comando. A árvore do merge é idêntica à da ponta validada.
+Os dez checks da ponta do PR estavam aprovados no momento da integração.
+
+O [CI pós-merge](https://github.com/BipoXDXD/FocusQuest/actions/runs/37245877941)
+também foi conferido: `check-web`, `check-api`, `check-e2e`, `check-secrets`
+e `quality-gate` concluíram com sucesso sobre `5ba81c3`.
+A `main` local foi atualizada por fast-forward; os worktrees auxiliares,
+a branch do PR e os checkpoints anteriores foram preservados.
+Comandos, snapshots e resultados estão no registro mais recente de
+`.superpowers/sdd/2026-10-04-estabilizacao/progress.md`, com evidências em
+`evidence/merge-pr6/` e `evidence/pos-merge-pr6/`.
+
+**Retomada:** partir da `main` integrada e trabalhar em nova branch, conforme
+o AGENTS.md. O plano de estabilização está concluído; os estados de publicação
+e as pendências antigas abaixo são históricos e precisam ser confrontados
+com o código atual antes de iniciar outra fatia. Não reimplementar E/F/G
+a partir daqueles registros. Consultas ao acervo feitas na estabilização
+estão descritas em `docs/REVISAO-2026-10-04.md`; esse registro não comprova
+leitura anterior ao início do projeto nem de livros específicos de Python.
+
+### Histórico da conciliação do PR #6 — 2026-10-04
+
+Este bloco descreve a preparação anterior ao commit `43ff5f7` e ao merge;
+o estado corrente é o da seção acima.
+
+### Fatia fronteira-core — restos da pendência 103
+
+Branch `wt/fronteira-core`, base `5ba81c3` (PR #6 já integrado), banco de teste
+exclusivo e offset 7. O objetivo é rejeitar achados espúrios do verificador
+AST de `core/`, sem modificar produção, contratos, dependências ou o gate.
+A autorização autônoma do dono foi repassada pelo coordenador; commit,
+push e PR serão coordenados após revisão e gate. Nenhum merge nesta fatia.
+
+**Alterações:** conjuntos esperados exatos, sete novos casos de
+aliases/misturas/prefixos e limite explícito dos imports dinâmicos em
+`tests/unit/test_core_sem_modulos.py`. A arquitetura deixou de declarar os
+três furos já corrigidos pelo lote MB. O detector não mudou.
+
+**Comandos executados nesta fatia:** `uv run pre-commit install --install-hooks`
+EXIT 0; baseline focado 13 aprovados; Ruff lint e format check aprovados.
+Em cópia isolada, a mutação de achado extra passou nos 11 casos antigos e
+reprovou 11 casos da versão fortalecida (7 controles verdes); SHA-256 da
+fonte versionada permaneceu igual durante cada mutação. A execução real
+posterior passou, 20 testes. Não foi necessário restaurar a fonte porque
+somente cópias ignoradas foram mutadas; nenhuma produção foi tocada.
+
+**Gate completo e revisão:** resultados posteriores ficam em
+`.superpowers/sdd/2026-10-05-fronteira-core/progress.md` e seus logs de
+evidência. Este bloco foi escrito antes dessas etapas; os testes focados
+não aprovam a publicação. Plano:
+`docs/superpowers/plans/2026-10-05-fronteira-core.md`.
+
+**Limite:** imports dinâmicos continuam fora desta prova AST; a fatia não
+acrescenta isolamento em runtime. Nenhum endpoint, biblioteca ou serviço novo.
+Os registros de conciliação e publicação abaixo são históricos e não
+substituem a revisão-base desta fatia.
+
+### Reagendamento durante espera — resolução parcial da pendência 160
+
+Fatia independente na branch `wt/reagendamento-espera`, base `5ba81c3`, banco
+exclusivo `focusquest_reagendamento-espera_test` e offset 8. O dono delegou
+as decisões não críticas e autorizou commit/push/PR por fase; publicação
+condicionada à revisão independente e ao gate completo da árvore final.
+Merge continua dependendo de autorização própria.
+
+**Entrega:** `tests/integration/test_reagendamento_espera_deterministica.py`,
+dois cenários de reagendamento direto com conexões PostgreSQL reais. A sessão
+perdedora retém a missão pré-carregada; `pg_blocking_pids` identifica o PID
+vencedor antes do commit. O relógio injetado retorna imediatamente e só avança
+após essa observação. Se o prazo proposto venceu durante a espera, o serviço
+recusa com `PrazoExpiradoError`: antes do rollback, operações, histórico e
+prazo já são conferidos, sem escrita perdedora. Se continua futuro, grava
+um segundo elo encadeado e o instante posterior à espera, devolvendo o prazo
+novo. Ambos preservam a missão pendente, sem início, conclusão ou crédito XP.
+Nenhuma alteração permanente de produção, contrato, dependência ou configuração;
+os testes antigos e a fatia 167 são preservados.
+
+**Comandos/resultados desta sessão:** hooks instalados; `make migrate-test`
+inicial falhou somente porque o banco exclusivo ainda não existia; a fixture
+protegida criou/migrou o banco no baseline. `make check` de baseline, EXIT 0:
+1436 Python, 990 frontend, 59 E2E e cobertura 100%. Ruff lint/format e mypy do
+módulo novo aprovados; módulo, 2 aprovados. Mutações independentes: relógio
+antes da trava, 2 reprovados; sem trava, 2 reprovados; sem `populate_existing`,
+1 reprovado no encadeamento e 1 aprovado (a recusa por prazo vencido não depende
+da releitura do prazo anterior). Cada arquivo restaurado em `finally`, SHA-256
+igual ao original, e reexecução com 2 aprovados. Uma quarta mutação escreveu
+uma operação antes da recusa: 1 reprovado na leitura anterior ao rollback,
+1 aprovado; bytes restaurados. Suíte relacionada com o módulo novo,
+`test_acompanhamento_concorrencia.py` e `test_reagendar_missao.py`: 46 aprovados.
+
+**Limites:** resolução parcial da 160; testes de início, demais corridas e as
+medições históricas abaixo continuam com seus limites. A prova passa pelos
+serviços e banco, sem navegador, HTTP ou provedor real. O baseline não aprova
+os arquivos novos. Gate final, revisão, commit, push e PR têm evidências próprias
+no ledger `.superpowers/sdd/2026-10-05-reagendamento-espera/progress.md` e logs
+em `evidence/`. Plano: `docs/superpowers/plans/2026-10-05-reagendamento-espera.md`.
+
+### Fatia rótulos de reagendamento — pendência 161(a)
+
+Branch `wt/rotulos-reagendamento`, base `5ba81c3` (PR #6 já integrado), banco
+exclusivo e offset 10. Objetivo: a tutoria consumir o tipo e o mapa de
+motivos já compartilhados no frontend, mantendo os textos e o contrato.
+A autorização autônoma do dono foi repassada pelo coordenador; commit,
+push e PR seguem após revisão e gate. Nenhum merge nesta fatia.
+
+**Alterações:** o tipo `RescheduleReason` vem diretamente de
+`shared/types/mission.ts` em `tutoring/types.ts`; o cartão da proposta
+importa o mapa compartilhado diretamente. A union e o mapa locais saíram,
+sem reexport nem import entre features. Nenhum teste, texto, payload,
+dependência, configuração ou gate foi alterado.
+
+**Verificação:** hooks instalados com EXIT 0. O baseline correto dos três
+módulos de testes existentes passou, 45 testes; R2 exercita os três motivos
+do cartão, junto aos testes do formulário e histórico. A primeira chamada
+pela raiz não carregou a configuração do frontend e falhou; o diagnóstico
+foi preservado e somente o comando foi corrigido. Após a refatoração, os
+mesmos 45 testes passaram novamente (EXIT 0), e
+`npm --prefix frontend run typecheck` terminou com EXIT 0, sem erros.
+Os resultados posteriores de revisão, gate completo e publicação ficam no
+ledger `.superpowers/sdd/2026-10-05-rotulos-reagendamento/progress.md` e seus
+logs. Este bloco foi escrito antes dessas etapas; a verificação focada não
+aprova a publicação. Plano:
+`docs/superpowers/plans/2026-10-05-rotulos-reagendamento.md`.
+
+**Limites:** o espelho de textos entre Python e frontend da pendência 32 e o
+`kind` desconhecido da 161(b) permanecem. Nenhum comportamento novo.
+Os registros de conciliação abaixo são históricos e não substituem o estado
+desta fatia.
+
+### Diagnóstico HTTP do provedor — 2026-10-05
+
+Fatia da pendência 100, baseada na `main` em `5ba81c3`, na branch
+`wt/diagnostico-provedor`. Ainda não integrada à `main`. O dono delegou as
+decisões não críticas e autorizou commit, push e PR por fase com cobertura de
+100%; merge, chamadas pagas e alterações críticas continuam pendentes.
+
+`_traduzir_erros`, compartilhado por conversa e avaliação, registra um
+`WARNING` para `anthropic.APIStatusError` com apenas o status HTTP real e o
+nome do tipo SDK. Não inclui mensagem da exceção, corpo, URL, headers,
+traceback nem stack. Timeout, falha de conexão/transporte e `APIError` sem
+resposta preservam a tradução anterior e não fabricam um status. Classe
+pública, mensagem pública e identidade da causa original permanecem iguais.
+Não entram biblioteca, endpoint, serviço, migração ou chamada real ao provedor.
+
+Validação focada executada: baseline de tradução/log, 23 testes aprovados;
+RED, sete falhas HTTP sem diagnóstico e cinco controles aprovados; GREEN,
+35 testes aprovados (12 novos mais os 23 existentes). Três mutações temporárias
+(status errado, mensagem privada e traceback) reprovaram os sete casos HTTP,
+com cinco controles aprovados em cada execução; os bytes corretos foram
+restaurados. A revisão reforçou o oráculo para exigir a mensagem completa,
+sem aceitar prefixos de status/tipo incorretos. Os resultados posteriores do
+gate completo, hooks e publicação pertencem ao ledger da fase e ao PR; esta
+validação focada não os substitui. Não foi feita chamada paga de diagnóstico.
+
+Decisão: melhorar o diagnóstico no adaptador sem mudar os códigos públicos
+ou textos da interface. A eventual distinção de 4xx de configuração no
+contrato público é outra decisão e permanece pendente na 100.
+
+### Início diário na virada civil — 2026-10-05
+
+**Fatia da pendência 160, base `5ba81c3`.** O responsável delegou a continuação
+em incrementos e autorizou commit assinado, push de uma ref e PR após revisão
+independente e gate completo; nenhum merge. Worktree `wt/inicio-virada-dia`,
+banco `focusquest_inicio-virada-dia_test`, offset 12. Hooks instalados nesta
+sessão, banco exclusivo preparado por `make reset-test-db`/`make migrate-test`;
+nenhum compose executado fora do principal. PR10 e a fatia 167 preservadas.
+
+**Alteração:** novo `test_inicio_virada_dia_concorrencia.py`, plano
+`docs/superpowers/plans/2026-10-05-inicio-virada-dia.md` e descrição arquitetural.
+Produção, contratos, dependências, configuração e testes antigos permanecem
+iguais à base. Duas diárias pendentes cruzam quarta 23:59:59 → quinta 00:00:00
+em São Paulo durante uma espera real por `FOR UPDATE`. A sessão dona apenas
+retém a linha; a perdedora mantém a missão pré-carregada. O relógio retorna
+imediatamente e só muda depois de `pg_blocking_pids` comprovar o bloqueio pelos
+PIDs distintos, antes da liberação da linha.
+
+A diária de quarta é recusada com `MissaoExpiradaError`; consultas com autoflush
+na transação viva, antes do rollback, conferem ausência de operação/XP e missão
+pendente sem início ou conclusão. A de quinta, antes oculta, inicia e devolve
+estado/`started_at` iguais aos persistidos, no instante exato da meia-noite,
+com uma única operação `start` e sem XP. `finally` libera a linha antes da espera
+do executor; a fixture remove somente as missões do plano próprio e seus efeitos
+por CASCADE, depois o plano.
+
+**Evidência executada nesta sessão:** baseline `make check` EXIT 0, 1436 Python,
+990 frontend, 59 E2E e cobertura 100%. Ruff lint/format e mypy do módulo aprovados;
+focado 2 passed. Mutação válida apenas em `iniciar_missao`, lendo relógio antes da
+busca travada, reprova ambos: quarta inicia indevidamente; quinta levanta
+`MissaoNaoEncontradaError`. Nenhuma falha por sintaxe ou timeout. Bytes restaurados
+em `finally` e SHA-256 da produção conferido igual à base; GREEN 2 passed.
+Suíte relacionada (módulo novo, `test_iniciar_missao.py` e
+`test_acompanhamento_concorrencia.py`): 39 passed. Os resultados de revisão final,
+gate da árvore final e publicação ficam no ledger ao terminarem; o baseline
+não aprova estes arquivos novos.
+
+**Limites:** prova específica da permissão de início pelo dia civil após espera,
+sem depender do escalonador. O dono não altera estado/prazo, então não prova
+remoção de `populate_existing` ou atualização concorrente da missão. Não mede
+HTTP, Tifa, reagendamento, conclusão nem todas as combinações da 160; os testes
+de mecanismo existentes continuam necessários e a pendência permanece parcial.
+
+### Avaliação antes do usuário — prova parcial da 104 — 2026-10-05
+
+**Base:** `5ba81c3` (main), branch `wt/avaliacao-ordem-usuario`. Esta fatia
+acrescenta somente um teste de integração e documentação; não altera produção,
+contratos, dependências ou gates. Os registros abaixo permanecem históricos;
+esta branch ainda precisa de gate completo e publicação, sem merge autorizado.
+
+O provedor controlado segura a resposta depois do commit da tentativa. Outra
+conexão trava somente `MissionEvaluation`; `pg_blocking_pids` confirma a
+transação 2 bloqueada nessa escrita. Na terceira conexão, a missão recusa
+`FOR KEY SHARE NOWAIT`, enquanto o usuário aceita `FOR SHARE NOWAIT`.
+Após liberar a avaliação, o teste confere tentativa, modelo, veredito,
+feedback, instantes, evidência intacta, uma operação e créditos próprios da
+missão de 40 XP pela conclusão e 20 XP de bônus, sem duplicação.
+
+**Executado nesta sessão:** baseline do módulo, 5 testes aprovados;
+`uv run pytest tests/integration/test_evaluation_concorrencia.py`, depois da
+mudança, EXIT 0, 6 testes em 3,60 s. O cenário focal passou (1 teste em 0,43 s).
+Ruff lint/formato e mypy do teste passaram. Uma mutação temporária válida,
+aprovada pelo mypy, antecipa `registrar_bonus` antes de `registrar_resultado`:
+o cenário reprova por `psycopg.LockNotAvailable` na sonda do usuário
+(1 falha, 5 desmarcados), sem timeout. Produção foi restaurada em `finally`,
+com SHA-256 idêntico, antes do GREEN.
+
+**Limite:** prova a missão retida enquanto a escrita da avaliação aguarda e
+a escrita antes da trava do usuário. Hoje a avaliação bloqueia no
+`UPDATE`/flush; esta prova não demonstra a matriz inteira de concorrência nem
+a ordem global de todos os fluxos. A pendência 104 continua parcial.
+Plano: `docs/superpowers/plans/2026-10-05-avaliacao-ordem-usuario.md`.
+Revisão, gate completo, snapshots das fontes e publicação ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-avaliacao-ordem-usuario/progress.md` e
+seus logs; esses resultados não são antecipados por este registro.
+
+### Oráculo das retentativas SDK — 2026-10-05
+
+Fase exclusiva `wt/sdk-retries-oraculo`, baseada na `main` em `5ba81c3`,
+ainda não integrada. O dono autorizou decisões não críticas e commit/push/PR
+por fase com gate completo e cobertura de 100%; merge continua pendente.
+
+O primeiro pre-push da fase de consultas do plano, publicada depois no
+[PR #12](https://github.com/BipoXDXD/FocusQuest/pull/12), reprovou na contagem
+física de chamadas de um teste de encerramento válido. A resposta, o SSE e a
+ação gravada estavam corretos. **A causa daquela execução não foi identificada
+definitivamente**, pois o log não capturou os headers de retry. Uma reprodução
+controlada confirmou a mesma falha com atraso de 0,35 s antes dos headers,
+timeout de 0,3 s e retentativas SDK `[0, 1]`; não chamou a leitura do plano.
+A fase de consultas preservou seus bytes/commit e publicou após uma segunda
+execução normal autorizada do hook. Esta correção do teste é uma fase própria.
+
+A expectativa `len(recebidas) == 1` confundia geração lógica com tentativa
+HTTP, embora a política existente permita duas retentativas antes do stream.
+Esta fase muda essa expectativa deliberadamente: exige sequência exata dos
+contadores de retry e JSON idêntico em cada tentativa, limitada a
+`1 + TENTATIVAS`. Preserva o observador de um gerador e seu fechamento, todos
+os eventos SSE, estados, ações e efeitos no banco. Um reenvio explícito
+continua sendo duas gerações, com grupos separados e dois geradores fechados.
+O teste SDK com `max_retries=0` mantém a contagem física exata.
+
+Sete cenários adicionais usam 500 imediato na primeira tentativa e sucesso
+na seguinte, com o SDK/adaptador, HTTP e banco reais locais. O tratador é
+local ao módulo; não muda o roteiro global, timeout, retries ou produção.
+O cenário exige ao menos duas requisições para não passar sem exercitar retry.
+Não entram dependência, endpoint, infraestrutura, migração ou chamada paga.
+Context7 confirmou a política de retentativas na documentação/código oficial;
+o header `x-stainless-retry-count` foi confirmado no SDK instalado e no HTTP.
+
+Comandos executados antes desta fotografia: baseline do módulo, 10 aprovados;
+RED após acrescentar o 500 com o oráculo antigo, sete falhas de contagem e dez
+controles aprovados; GREEN, 17 aprovados. Mutações externas, sem edição de
+fontes, executaram duas gerações reais (duas falhas causais no oráculo) e
+alteraram `max_tokens` no envio da retentativa (uma falha causal na igualdade
+do corpo). As verificações de SSE/estado/ação anteriores continuaram passando
+nessas mutações. Depois, o módulo e as provas dedicadas de retry/timeout do
+adaptador passaram: 46 testes em 31,91 s, sem plugin de mutação. Resultados do
+gate final congelado, hooks e publicação serão registrados no ledger e PR;
+estes testes focados não os substituem.
+
+Limites: o cenário determinístico usa 500; a ocorrência original de timeout
+não está explicada de forma definitiva. O header de contagem pertence ao SDK
+e pode mudar numa atualização, exigindo rever o teste. Não afirma uma medição
+de desempenho nem altera o comportamento de retentativas no meio do stream.
+
+### Identidade do XP na migração 0005 — 2026-10-05
+
+**T-M4 da pendência 97(j), base `5ba81c3`.** O responsável aprovou a fatia
+estreita e autorizou commit assinado, push de uma ref e PR após revisão
+independente e gate completo; nenhum merge. Branch `wt/migracao-xp-identidade`,
+banco `focusquest_migracao-xp-identidade_test`, offset 17. Hooks instalados nesta
+sessão, preparo por `make reset-test-db`/`make migrate-test`, sem compose fora do
+principal. Fontes da PR14 e das outras fases preservadas.
+
+**Correção documental principal:** a T-M4 não era ausência total de cobertura.
+`test_progression_migration.py` já sobe 0003 → head, atravessa a 0005 e confere
+valores, fonte, datas e conquistas vinculadas. Seu roundtrip da 0004 compara
+progressão sem IDs, pois essa migração a reconstrói. Faltava comparar a
+identidade e as FKs brutas das linhas existentes antes e depois da 0005.
+Nenhum defeito de produção foi encontrado: a 0005 apenas altera UNIQUE/CHECK
+do livro-razão; permanece byte a byte igual à base, assim como os serviços.
+
+**Alteração:** um único teste em `test_evaluation_migration.py`, plano
+`docs/superpowers/plans/2026-10-05-migracao-xp-identidade.md` e arquitetura.
+SQL no esquema 0004 cria dois usuários próprios, cada um com missão concluída,
+XP e conquista. Os snapshots medem todas as colunas de `xp_entries`, a PK/FK e
+o conteúdo de `user_achievements`, vínculos lógicos por JOIN e somatórios por
+usuário. Upgrade para 0005 e downgrade para 0004 mantêm tudo exatamente;
+finally restaura head e remove só os usuários próprios e seus dados por CASCADE.
+A cobertura já existente de UNIQUE/bônus foi preservada, sem repetir seus probes.
+
+**Evidência executada nesta sessão:** baseline `make check` EXIT 0, 1436 Python,
+990 frontend, 59 E2E e cobertura 100%; árvore limpa durante e ao fim. Ruff
+lint/format e mypy do módulo aprovados; novo caso 1 passed. Mutação válida no
+upgrade renumera entradas na janela entre as UNIQUEs, religa as conquistas às
+cópias e apaga originais, mantendo valores, ordem relativa e FKs válidas. O teste
+novo reprova na identidade (`id` 1 → 4), após conteúdo/totais/vínculos passarem;
+nenhuma falha de FK/UNIQUE, sintaxe ou timeout. O teste existente de valores do
+backfill continua aprovado contra essa mesma mutação (1 passed). Migração
+restaurada em finally, SHA-256 igual à base; GREEN 1 passed. Módulos relacionados
+`test_evaluation_migration.py` e `test_progression_migration.py`: 25 passed.
+Gate da árvore final, revisão e publicação são registrados no ledger ao
+terminarem; o baseline não aprova estes arquivos novos.
+
+**Limites:** preservação das linhas e vínculos legados no roundtrip 0004↔0005;
+não mede sequences, índices ou todo o schema. Completa somente T-M4 da 97(j);
+T-M5, S-M6 e a metade restante de T-M1 continuam pendentes. Nenhuma migração,
+schema, produção, contrato, dependência ou configuração mudou permanentemente.
+
+### Janela tardia depois da espera — 2026-10-05
+
+Fatia de prova da F25 e da pendência 160, em `wt/conclusao-tardia-espera`,
+baseada na `main` em `5ba81c3` e ainda não integrada. O dono autorizou
+continuação autônoma, decisões não críticas e commit/push/PR por fase com
+cobertura de 100%; merge e decisões críticas continuam pendentes.
+
+Dois cenários iniciam e commitam uma diária de quarta às 23:50 em São Paulo.
+Outra conexão mantém a missão em `FOR UPDATE`. O worker retém a missão
+carregada e o relógio retorna imediatamente; só depois de observar o PID do
+holder em `pg_blocking_pids` o controlador avança o instante e libera a trava.
+No limite sexta 00:00, a conclusão é recusada. No último segundo de quinta,
+é permitida, com conclusão, evidência e 40 XP creditados no instante posterior
+à espera. Início, operação e missão próprios permanecem identificados.
+
+A recusa consulta SQL com autoflush **antes do rollback** e depois numa
+sessão nova: missão ainda em andamento, início original, sem conclusão,
+evidência ou XP, e somente a operação de início. Assim uma escrita indevida
+não fica escondida pelo rollback do teste. O sucesso verifica timestamps,
+conteúdo da evidência, fonte/quantidade de XP e operações exatas. Finalmente,
+a trava é liberada antes do executor esperar a thread; a limpeza apaga só
+as missões do plano criado e o próprio plano.
+
+Validação focada executada: baseline de prazo e concorrência, 29 aprovados;
+novos cenários, dois aprovados. Mutação que antecipa o relógio à trava:
+duas falhas causais (conclusão indevida fora da janela e timestamp anterior).
+Mutação que grava evidência antes de recusar: uma falha na consulta anterior
+ao rollback e um controle aprovado. Bytes do serviço restaurados no `finally`
+e SHA confirmado; produção sem diff. Depois da restauração/formatação,
+31 testes relacionados aprovados em 3,56 s. Gate completo, hooks e publicação
+serão registrados no ledger e PR; estes resultados focados não os substituem.
+
+Limite: o holder não muda estado ou dados da linha. Esta prova confirma a
+janela e os efeitos do relógio posterior à espera, sem provar releitura do
+identity map, todas as corridas da 160, HTTP ou ocultação pública. Nenhuma
+biblioteca, endpoint, migração, infraestrutura ou chamada paga entrou.
+
+### Registro do roundtrip populado da 0004 — 2026-10-05
+
+**Correção documental da pendência 83, base `5ba81c3`.** A estabilização já
+registrava abaixo que o teste populado fechava a 83, mas a lista de pendências
+continuava afirmando ausência desse caso. Esta fatia reconcilia os registros e
+explicita a cobertura existente; nenhum código, teste, migração, configuração,
+contrato ou dependência foi alterado.
+
+`test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao`, em
+`test_progression_migration.py`, exige que todas as tabelas legadas medidas
+estejam não vazias e que existam XP/conquistas. Desce até 0003, compara o legado,
+sobe para head e compara o legado novamente e a progressão reconstruída. Também
+confere que as missões pendentes não recebem XP/conquistas. O teste estrutural
+de criação/remoção de tabelas permanece na suíte.
+
+**Limites:** o snapshot do legado mede suas colunas de 0003, inclusive IDs das
+linhas; `fallback_model`, posterior, fica fora da comparação de mensagens.
+XP/conquistas são reconstruídos e comparados por conteúdo/vínculo lógico com a
+missão, normalizando `xp_entries.id` e `user_achievements.xp_entry_id`. Esta prova
+não afirma identidade bruta da progressão, sequences, índices ou todo o schema;
+não se confunde com a T-M4 da 0005 e nenhuma outra pendência foi modificada.
+
+**Evidência desta sessão:** o arquivo do teste é byte a byte igual à main e ao
+que integrou a suíte relacionada de 25 testes aprovada na fase T-M4. Esse comando
+incluía o módulo inteiro de progressão e o caso novo da outra fase; não aprova
+esta árvore documental. Neste worktree, hooks foram instalados explicitamente,
+banco exclusivo preparado e baseline `make check` aprovado: 1436 Python,
+990 frontend, 59 E2E, cobertura 100%, fontes/HEAD/índice estáveis. Gate da árvore
+final, revisão e publicação ficam no ledger ao terminarem.
+
+Branch `wt/docs-roundtrip-populado`, banco `focusquest_docs-roundtrip-populado_test`,
+offset 20. O responsável autorizou somente esta fatia documental, com commit
+assinado, push de uma ref e PR após revisão e gate completo. Nenhum compose
+executado fora do principal; PR18 e outros checkpoints preservados; nenhum merge.
+
+### Reuso de chave com evidência recusada — 2026-10-05
+
+Fatia de prova da pendência 97(j)/T-M1 em `wt/reuso-evidencia-recusada`,
+baseada na `main` em `5ba81c3` e ainda não integrada. O dono autorizou
+continuação autônoma, decisões não críticas e commit/push/PR por fase com
+cobertura de 100%; merge e decisões críticas continuam pendentes.
+
+Dois testes de serviço existentes foram fortalecidos, sem duplicar cenários:
+concluir usando a chave de início da mesma missão e concluir usando a chave
+de conclusão de outra missão. Ambos enviam `NovaEvidencia` no pedido recusado.
+Consultas SQL com autoflush **antes do rollback** exigem ausência de evidência
+e XP novos, estado, início, conclusão e operações exatos. No segundo caso,
+a missão de origem já tem evidência própria e 40 XP: conteúdo, link, horário,
+dono, fonte e operação permanecem na origem; a destinatária fica pendente.
+
+Baseline dos três módulos relacionados aprovado. Mutação temporária só em
+torno de `_exigir_mesma_operacao`: ao receber `OperacaoReutilizadaError`,
+atribui a evidência do pedido à missão e relança o erro real. Os 71 testes
+antigos desses módulos passaram em 1,45 s sob a mutação. As verificações
+fortalecidas produziram duas falhas causais na evidência indevida anterior
+ao rollback, em 0,74 s. O serviço foi restaurado no `finally`, com SHA igual
+à base e produção sem diff. Depois, os 71 relacionados passaram em 2,13 s.
+A correção de organização de imports foi exigida pelo lint; formatação
+aprovada. Gate completo, revisão, hooks e publicação serão registrados no
+ledger e PR; resultados focados e caracterização não os substituem.
+
+Limites: prova reuso **sequencial** de chave entre tipos ou missões, com
+consulta antes do rollback. Não prova estado numa sessão nova após rollback,
+`_mesma_evidencia`, corrida pela UNIQUE em `_gravar_operacao`, HTTP, demais
+recusas ou o T-M1 inteiro. A expiração após espera e a transição ilegal são
+provas distintas; não são incorporadas ou aprovadas em conjunto por esta
+fase. Nenhuma produção, biblioteca, endpoint, migração ou infraestrutura mudou.
+
+
+## Oráculo de GeneratorExit no tradutor — 2026-10-05
+
+Fatia de teste em `wt/tradutor-generator-exit`, base/main `5ba81c3`, banco
+`focusquest_tradutor-generator-exit_test` e offset19. O responsável aprovou a
+adoção somente se a suíte antiga deixasse passar a mutação e o caso novo a
+reprovasse; essa condição foi medida abaixo. Commit/push/PR por fase dependem
+da revisão e gate completos com hooks normais. Merge continua pendente.
+
+**Mudança:** um teste de erro real em `test_traducao_de_erros.py` exige que
+`GeneratorExit` atravesse `_traduzir_erros` conservando a mesma instância e
+`__cause__` None. O teste existente de ValueError permanece literal e intacto.
+Nenhum mock, alteração permanente de produção, contrato externo, dependência
+ou migração. A docstring da produção já prometia essa passagem; o ganho é um
+oráculo específico do contrato fino, sem alteração no comportamento do produto.
+
+**Controle antigo:** o caso novo ficou em `/tmp`, fora de `tests/`, até o
+controle completo. Aplicou-se temporariamente `except GeneratorExit: return`
+no tradutor. Os testes antigos foram executados por `pytest tests`, sem filtro,
+exclusão ou skip; os hashes de todos os arquivos de teste foram comparados com
+a base antes de adicionar o novo caso. O mutante não é código aprovado para
+uso: apenas caracterização isolada. Bytes de produção restaurados em `finally`
+e SHA-256 conferido; diff de `src/` vazio. O cancelamento por `close()` e os
+outros oráculos existentes não denunciavam essa supressão específica.
+
+Comandos executados nesta sessão, no ambiente exclusivo:
+
+| Comando | Resultado observado |
+|---|---|
+| Script oficial de novo worktree e instalação normal dos hooks | EXIT0; HEAD `5ba81c3`, árvore inicialmente limpa, banco/portas próprios; sem compose |
+| `uv run pytest tests --collect-only -v` antes da mutação | 1436 casos antigos coletados, teste novo somente fora de `tests/` |
+| `uv run pytest tests/unit tests/integration/test_anthropic_provider.py tests/integration/test_tutoring_service.py tests/integration/test_tutoring_desconexao.py -v` sob mutação | 482 aprovados; 45,80s |
+| `uv run pytest tests -v` inteiro sob mutação, ainda sem caso novo na árvore | 1436 aprovados; 208,51s; testes antigos com hashes intactos |
+| Caso novo adicionado ao unitfile somente após controle; execução explícita dele sob mutante | RED: 1 falha, `DID NOT RAISE GeneratorExit`; 1,80s |
+| Produção restaurada em finally/SHA e `uv run pytest tests/unit/test_traducao_de_erros.py -v` | GREEN: 8 aprovados; 1,98s; nenhum diff de produção |
+| Ruff lint/format e mypy no arquivo unit | Aprovados, sem achados |
+
+A prova distingue a supressão de GeneratorExit; não mede todas as falhas de
+cancelamento, liberação de recursos do SDK nem uma correção de produto.
+O controle mutante não é gate oficial nem afirma cobertura da árvore mutante.
+Teste novo nesta feature, ainda fora da `main`. Revisão independente final,
+gate da árvore final, commit, push, PR e CI ainda pendentes neste ponto do
+registro; resultados posteriores no ledger ignorado
+`.superpowers/sdd/2026-10-05-tradutor-generator-exit/` e no PR. Plano:
+`docs/superpowers/plans/2026-10-05-tradutor-generator-exit.md`.
+
+## Diagnóstico do worker da Tifa — 2026-10-05
+
+Fatia de testes em `wt/tifa-diagnostico`, baseada no head `0cb4cc2` do
+[PR #7](https://github.com/BipoXDXD/FocusQuest/pull/7), com banco
+`focusquest_tifa-diagnostico_test` e offset15. A `main` permanece na revisão
+`5ba81c3`; este teste da feature não é declarado integrado nela. O responsável
+aprovou design, implementação e publicação por fase com revisão/gate/hooks;
+merge permanece pendente. O PR desta fatia será empilhado contra
+`wt/tifa-conclusao`, sem alterar aquela árvore nem reescrever branches publicadas.
+
+**Mudança:** o mesmo harness de disputa/limpeza serve aos dois cenários originais
+e às falhas injetadas. As esperas pelo pré-carregamento e pelo bloqueio observam
+`Future.done()` e propagam `Future.result()`: a exceção do worker não é mais
+substituída por timeout opaco. Finalização sem a condição esperada falha
+explicitamente. A consulta `pg_blocking_pids`, PIDs distintos, clocks fixos,
+pré-carregamento retido e efeitos das duas ordens originais permanecem.
+O `finally` mantém rollback do vencedor e liberação do evento antes do shutdown
+do executor. Nenhum arquivo de produção, contrato, dependência ou migração muda.
+
+**Provas reais:** dois workers com Session e Future reais falham antes/depois do
+sinal. Cada worker trava e altera o payload da ação sem commit; após o sinal, o
+vencedor já executou uma conclusão real, ainda sem commit. Ambos exigem a MESMA
+instância do erro sentinela. Depois de as sessões saírem, outra conexão usa
+`FOR UPDATE NOWAIT` na missão e ação e verifica estado/prazo/payload originais,
+campos da ação intactos e ausência de operações, XP e histórico. Isso cobre
+falhas antecipadas do worker; não mede uma falha do coordenador enquanto o
+worker já está bloqueado. A ordem de liberação desse caminho foi preservada
+pela refatoração, sem alegar uma matriz completa de falhas.
+
+Comandos executados nesta sessão, no banco exclusivo:
+
+| Comando | Resultado observado |
+|---|---|
+| Script oficial de novo worktree, conferência de base/branch vazia/remoto ausente e rebase vazio autorizado sobre PR7; instalação normal dos hooks | EXIT0, HEAD `0cb4cc2`, árvore inicialmente limpa; sem compose |
+| `uv run pytest tests/integration/test_tutoring_conclusao_concorrencia.py -v` após extração sem mudança de waits | 2 aprovados |
+| Mesmo módulo com as novas regressões, antes da mudança dos helpers | RED: 2 falhas por esperas opacas, 2 aprovados; 20,73s |
+| Mesmo módulo após polling do Future | GREEN: 4 aprovados; 0,52s |
+| Mutações isoladas: retirar polling do sinal / retirar polling do bloqueio / commit no lugar do rollback do vencedor / commit do worker antes da sentinela | Todas EXIT1: erro opaco nos dois primeiros, missão concluída indevida no terceiro, payload alterado indevido no quarto. Bytes restaurados em `finally` e SHA-256 conferido; módulo restaurado aprovado |
+| Ruff lint/format e mypy no arquivo de teste | Aprovados, sem achados |
+| `uv run pytest` com este módulo, `test_tutoring_acoes.py`, `test_missions_concorrencia.py`, `test_acompanhamento_concorrencia.py` | 43 aprovados; 9,10s |
+
+Revisão independente final, `make check` da árvore final, commit, push e PR ainda
+pendentes neste ponto do registro. Resultados posteriores ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-tifa-diagnostico/` e no PR, sem converter
+histórico em resultado de outra árvore. Plano:
+`docs/superpowers/plans/2026-10-05-tifa-diagnostico.md`.
+
+## Pendência 166 — leitura da trilha sem N+1 (2026-10-05)
+
+Registro da implementação em `wt/plano-consultas`, base `5ba81c3`, banco
+exclusivo `focusquest_plano-consultas_test` e offset 9. A consulta de
+`_ler_plano` antecipa evidência, avaliação e histórico de prazos com
+`selectinload`; são relações que `PlanRead` serializa em cada missão revelada.
+Nenhum contrato, dependência, migração ou regra de negócio foi acrescentado.
+`ler_ciclo` já usa snapshot de colunas em um comando e foi preservado.
+A implementação desta branch não significa integração na `main`.
+
+**Prova nesta sessão:** `uv run pytest tests/integration/test_plans_leitura_consultas.py`
+contra a produção anterior: EXIT 1, domingo com 27 consultas em vez de 6,
+segunda já com 6; todas as assertivas de conteúdo passaram antes da contagem.
+Após a correção: 2 aprovados, 6 consultas nos dois cenários. A contagem inclui
+`ler_plano_atual`, `PlanRead.da_leitura` e `model_dump`, com identidades do
+preparo descartadas. Confere IDs, dias, prazos, ocultação, disponibilidade,
+evidências e avaliações distintas, especial e ausência de reagendamentos.
+Seis comandos: plano, missões, histórico e três relações; o custo das relações
+é por lote, não por missão revelada. As oito missões do plano são carregadas,
+inclusive as ainda ocultas, que continuam sem conteúdo na resposta.
+
+**Força do teste:** retirar cada `selectinload` isoladamente fez o domingo
+reprovar com 13 consultas; três mutações EXIT 1. Bytes restaurados em `finally`
+e SHA-256 conferido a cada rodada; módulo restaurado, 2 aprovados.
+Ruff lint/format e mypy do incremento passaram. A suíte relacionada (novo
+módulo, `test_cycle_service.py`, `test_cycle_api.py`, `test_cycle_consistency.py`
+e `test_missions_listagem_consultas.py`) passou com 85 testes.
+
+Hooks instalados nesta sessão. O primeiro `make check` terminou EXIT 0
+(1436 Python, 990 frontend, 59 E2E, cobertura 100%), mas o teste novo foi criado
+durante ele e não foi coletado: esse comando é diagnóstico, não aprovação da
+árvore final. Revisão independente, gate da árvore final e publicação têm
+registros próprios em `.superpowers/sdd/2026-10-05-plano-consultas/` e no PR.
+Plano: `docs/superpowers/plans/2026-10-05-plano-consultas.md`.
+Commit, push e PR por fase foram autorizados; o controlador coordena a
+publicação com os hooks ativos. Merge continua pendente.
+
+## Histórico do checkpoint — fases autônomas — 2026-10-05
+
+**Snapshot:** 2026-10-05T00:39:33-03:00 (`America/Sao_Paulo`).
+
+A pausa foi encerrada. O dono autorizou decisões não críticas e, por fase
+aprovada, commit assinado, push de uma ref e PR com hooks ativos e gate
+completo de 100%. Merge e decisões críticas permanecem pendentes. Preferência:
+cinco agentes GPT 6.1 Sol, esforço High, com responsabilidades e worktrees separados.
+
+**Base integrada:** a main permanece em `5ba81c3` (PR #6, E/F/G e
+estabilização). As entregas abaixo estão em PRs abertas; não estão integradas
+na main. Esta branch documental parte de `009d9f7` (PR #8), na branch
+`wt/checkpoint-autonomo`, e sua PR tem base `docs/estado-pos-pr6`. Ela
+atualiza a continuidade sobre o PR #8 sem duplicar suas alterações.
+
+Os gates da tabela foram executados nesta sessão pelos implementadores de
+cada fase, registrados nos respectivos ledgers e conferidos no registro
+central e no CI por head. Todos têm cobertura de 100%, 990 testes frontend e
+59 E2E; a coluna registra os testes Python. Esses gates individuais não
+aprovam um resultado combinado das features.
+
+| PR | Fase / branch | Head | Base | Gate Python | CI push e PR |
+|---|---|---|---|---|---|
+| [#7](https://github.com/BipoXDXD/FocusQuest/pull/7) | Tifa × conclusão — 167 / `wt/tifa-conclusao` | [0cb4cc2](https://github.com/BipoXDXD/FocusQuest/commit/0cb4cc2d6d0f223faed20244ccdb4c6e709fab20) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#8](https://github.com/BipoXDXD/FocusQuest/pull/8) | Continuidade pós-PR6 / `docs/estado-pos-pr6` | [009d9f7](https://github.com/BipoXDXD/FocusQuest/commit/009d9f7d2652a7a14cde4b237abe1f43df0a64df) | `main` | 1436 | cinco jobs SUCCESS em cada execução |
+| [#9](https://github.com/BipoXDXD/FocusQuest/pull/9) | Fronteira core — 103 / `wt/fronteira-core` | [3e4f0cb](https://github.com/BipoXDXD/FocusQuest/commit/3e4f0cb112345f501c7224d47f652cf992a2b451) | `main` | 1443 | cinco jobs SUCCESS em cada execução |
+| [#10](https://github.com/BipoXDXD/FocusQuest/pull/10) | Espera do reagendamento — 160 parcial / `wt/reagendamento-espera` | [802646c](https://github.com/BipoXDXD/FocusQuest/commit/802646cb4227b65e41b0bd6f4d59a37990f5f4e1) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#11](https://github.com/BipoXDXD/FocusQuest/pull/11) | Motivos compartilhados — 161(a) / `wt/rotulos-reagendamento` | [10ec490](https://github.com/BipoXDXD/FocusQuest/commit/10ec49017f852230478cb475c404f389c2313b08) | `main` | 1436 | cinco jobs SUCCESS em cada execução |
+| [#12](https://github.com/BipoXDXD/FocusQuest/pull/12) | Consultas do plano — 166 / `wt/plano-consultas` | [42fd9eb](https://github.com/BipoXDXD/FocusQuest/commit/42fd9eb7501921d43837df3d273b4c30adf7caca) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#13](https://github.com/BipoXDXD/FocusQuest/pull/13) | Diagnóstico HTTP — 100 parcial / `wt/diagnostico-provedor` | [90f1cf0](https://github.com/BipoXDXD/FocusQuest/commit/90f1cf0b0bb74ea7a7b69214ce6272da5e580e77) | `main` | 1448 | cinco jobs SUCCESS em cada execução |
+| [#14](https://github.com/BipoXDXD/FocusQuest/pull/14) | Início na virada civil — 160 parcial / `wt/inicio-virada-dia` | [2247845](https://github.com/BipoXDXD/FocusQuest/commit/2247845334541f69bc5dbf3d0351d18ccf914b1e) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#15](https://github.com/BipoXDXD/FocusQuest/pull/15) | Avaliação antes do usuário — 104 parcial / `wt/avaliacao-ordem-usuario` | [2304b38](https://github.com/BipoXDXD/FocusQuest/commit/2304b38e83a11e5537d5235b4c418d0d22292231) | `main` | 1437 | cinco jobs SUCCESS em cada execução |
+| [#16](https://github.com/BipoXDXD/FocusQuest/pull/16) | Oráculo SDK/retries / `wt/sdk-retries-oraculo` | [d4843d9](https://github.com/BipoXDXD/FocusQuest/commit/d4843d9e00c3330e3ac9a988871fdbd21b1ca830) | `main` | 1443 | cinco jobs SUCCESS em cada execução |
+| [#17](https://github.com/BipoXDXD/FocusQuest/pull/17) | Diagnóstico de falhas da prova Tifa / `wt/tifa-diagnostico` | [cb939c4](https://github.com/BipoXDXD/FocusQuest/commit/cb939c4c6c7d71393931ae2fded291d5e9501556) | `wt/tifa-conclusao` | 1440 | cinco jobs SUCCESS em cada execução |
+
+**Não repetir entregas:** implementação, mutações, gates de publicação e
+pushes concluídos pertencem à feature e ao head da tabela. Consultar o ledger
+da fase e o CI atual para continuar; não reaplicar E/F/G ou refazer a
+estabilização a partir dos blocos antigos. Gates continuam obrigatórios para
+qualquer mudança nova e para uma integração futura autorizada.
+
+**Limites preservados:** a 103 cobre imports sintáticos por AST, sem garantia
+sobre imports dinâmicos; as duas provas da 160 cobrem entrelaçamentos
+específicos, não a matriz inteira; a 104 prova missão retida enquanto a escrita
+da avaliação aguarda e escrita antes da trava do usuário, com bloqueio atual
+no UPDATE/flush, não ordem global. A 161(b), os rótulos desconhecidos e o
+espelho Python/frontend da 32 continuam pendentes. O diagnóstico da 100 só
+acrescenta evidência técnica de erro final, sem mudar textos ou contrato.
+
+**Dependência explícita:** o PR #17 parte do head `0cb4cc2` do PR #7 e tem
+base `wt/tifa-conclusao`. Ele acrescenta diagnóstico de exceções reais do
+worker antes e depois do sinal, rollback e sondas NOWAIT em conexão nova;
+não substitui a prova original da 167. Falha do coordenador com worker já
+bloqueado e a matriz completa de limpeza permanecem fora desta fatia.
+
+**Oráculo SDK/retries:** a falha do primeiro pre-push da fase 166 foi
+preservada; o resultado funcional estava correto e a causa daquela execução
+não foi comprovada. O segundo push passou sem mudar o commit da 166. A fase
+SDK posterior torna o teste explícito quanto a retries e payload, observando
+as requisições HTTP e detectando geração duplicada ou payload alterado.
+É uma mudança de teste, sem alterar retries ou timeout do produto.
+
+**Fases em andamento neste snapshot:** prova da conclusão tardia F25 com
+espera controlada (offset 18) e migração/identidade do XP, pendência 97
+(offset 17). São fatias próprias de teste; os estados de execução não afirmam
+publicação nem CI aprovado. Confrontar seus ledgers e o GitHub antes de
+continuar, sem editar a árvore de outro implementador.
+
+**Críticas pendentes:** merge/main, mudança de produto ou contrato, custos e
+prazos da avaliação (106/192), autenticação/exposição, geração paga e
+substituição das chaves historicamente expostas ficam com o dono. A 91 já
+está riscada no estado corrente; não reabri-la por um registro antigo.
+
+Context7 e Dometrain responderam às chamadas de leitura nesta sessão. Rodin
+expõe sete ferramentas, mas a execução funcional não foi validada sem um
+identificador de geração existente; nenhuma geração foi iniciada.
+
+O gate e a revisão próprios deste checkpoint são registrados separadamente.
+Fontes, comandos, resultados e publicação ficam no ledger ignorado
+`.superpowers/sdd/2026-10-05-checkpoint-autonomo/progress.md`; inventário por
+SHA e CI em `evidence/prs-current.json`. Esta tabela retrata o snapshot acima;
+publicações posteriores terão atualização própria. Os registros abaixo são históricos e
+não revogam a autorização corrente; preservar todos os checkpoints.
+
+## Histórico da primeira continuação autônoma — publicação da pendência 167
+
+A pausa dos MCPs foi encerrada pelo pedido de retomada. A `main` consultada
+permanece em `5ba81c3`; a prova da pendência 167 está no commit assinado
+`0cb4cc2`, branch `wt/tifa-conclusao`, no [PR #7](https://github.com/BipoXDXD/FocusQuest/pull/7).
+O push terminou com os hooks ativos. Não repetir sua implementação nem o push.
+
+Nesta sessão, `make check` foi executado no worktree da Tifa: EXIT 0,
+1438 testes Python, 990 frontend, 59 E2E e cobertura de 100%. O
+[CI do push](https://github.com/BipoXDXD/FocusQuest/actions/runs/37253643264)
+passou nos cinco jobs, incluindo `quality-gate`. Na abertura, o CI próprio
+do PR estava em andamento; seu resultado fica no ledger da fatia e no GitHub. Esse gate não
+aprova as alterações documentais do principal, cujo resultado será registrado
+em `.superpowers/sdd/2026-10-05-continuidade-documental/`.
+
+O dono se ausentou e autorizou decisões não críticas, commit, push e PR por
+fase, sempre com `make check` e cobertura de 100%. Merge na `main`, mudanças
+críticas de produto ou infraestrutura e gastos ficam pendentes para sua volta.
+Preferência atual: cinco agentes GPT 6.1 Sol, esforço High, com responsabilidades
+separadas e um implementador por worktree. Novas fases investigam os restos da
+pendência 103 e parte da 160; resultados só entram após execução e revisão.
+
+Context7 e Dometrain responderam às chamadas de leitura nesta sessão. As sete
+ferramentas remotas do Rodin estão expostas; sua execução funcional não foi
+validada, pois as leituras exigem um identificador de geração existente. Não
+houve geração nem gasto para testar a conexão. Os blocos abaixo preservam o
+histórico; os checkpoints e os outros worktrees permanecem intactos.
+
+## Histórico da pausa dos MCPs
+
+O dono pediu salvar para iniciar outra sessão: os MCPs continuam sem
+funcionar nesta conversa, embora uma nova instância do cliente Codex tenha
+validado Dometrain e Rodin após os ajustes. Ver o início de
+`docs/RETOMADA-2026-10-04.md` e o checkpoint
+`.superpowers/sdd/2026-10-04-pausa-mcps/`.
+Tifa está no commit assinado `0cb4cc2`, com push iniciado e PR ainda não
+criado no momento do checkpoint. Conferir o ledger do worktree da Tifa e
+o remoto antes de continuar. Não iniciar gate concorrente nem merge.
+Esta nota é posterior ao gate da documentação do principal; não publicada.
+
 ## Objetivo
 
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
-## Conciliação do PR #6 — 2026-10-04
+## Histórico da primeira continuação no worktree da pendência 167
+
+O dono encerrou a pausa com "retome de onde parou". A continuação está na
+branch `wt/tifa-conclusao`, no worktree `FocusQuest-tifa-conclusao`, sobre
+`5ba81c3`. Consulte o `docs/HANDOFF.md` **desse worktree** e seu ledger
+`.superpowers/sdd/2026-10-04-tifa-conclusao-concorrencia/progress.md` para o
+resultado atual; não repetir o baseline interrompido nem a estabilização.
+
+O baseline inteiro foi refeito e aprovado: 1436 Python, 990 frontend,
+59 E2E e cobertura 100%. Dois novos testes controlam a confirmação da Tifa
+× conclusão nas duas ordens, com missão pré-carregada e bloqueio observado
+no PostgreSQL. Os dois passaram e ambos reprovaram na mutação temporária
+sem `populate_existing`; bytes de produção restaurados por SHA-256, seguida
+de execução verde. Suíte relacionada: 55 aprovados. Revisão independente:
+nenhum bloqueador; uma melhoria de diagnóstico de exceções antecipadas das
+threads foi registrada no handoff da fatia. O gate final é registrado no
+ledger ao terminar. Esta branch do principal preserva as três alterações
+documentais da pausa e só acrescenta a indicação de continuidade; o teste e
+o plano novos estão no worktree da fatia. Nenhum commit/push desta retomada.
+
+## Histórico da pausa — 2026-10-04 21:48:53 -03
+
+O dono pediu pausa para reiniciar e salvar tudo. Alterações documentais locais,
+registros de leitura e sete worktrees preservados. Principal na branch
+`docs/estado-pos-pr6`, HEAD `5ba81c3`; nenhum novo commit, push ou PR.
+O worktree `wt/tifa-conclusao` foi preparado para a pendência 167, sem edição
+de produto ou testes. Seu gate de baseline foi interrompido (código 130):
+frontend 990/990 e 100%, Python incompleto, E2E não executado. Não aprovado.
+A nota desta pausa é posterior ao gate anterior da documentação.
+
+Retomada detalhada em `docs/RETOMADA-2026-10-04.md`, bloco "Histórico da pausa — reinicialização solicitada pelo dono";
+checkpoint em `.superpowers/sdd/2026-10-04-estabilizacao/evidence/pausa-reinicio-20261004-214853/`.
+Pausa encerrada pelo pedido de retomada; estado corrente no bloco acima.
+
+## Estado atual — PR #6 integrado em 2026-10-04
+
+O dono autorizou o merge do [PR #6](https://github.com/BipoXDXD/FocusQuest/pull/6).
+O GitHub confirmou a integração na `main` pelo commit
+`5ba81c3dcc4b4916c63e4e9da2967f989c4039bb`, às 21:01:55 de 2026-10-04
+em `America/Sao_Paulo`. Seus pais são `469e149` e `43ff5f7`: os incrementos
+E/F/G e as vinte fatias de estabilização estão integrados.
+
+Antes do merge, `make check` foi executado novamente: EXIT 0, 285,43 s,
+1436 testes Python, 990 frontend e 59 E2E, cobertura de 100% no backend
+e nas quatro métricas do frontend. As 349 fontes, HEAD e índice permaneceram
+iguais durante o comando. A árvore do merge é idêntica à da ponta validada.
+Os dez checks da ponta do PR estavam aprovados no momento da integração.
+
+O [CI pós-merge](https://github.com/BipoXDXD/FocusQuest/actions/runs/37245877941)
+também foi conferido: `check-web`, `check-api`, `check-e2e`, `check-secrets`
+e `quality-gate` concluíram com sucesso sobre `5ba81c3`.
+A `main` local foi atualizada por fast-forward; os worktrees auxiliares,
+a branch do PR e os checkpoints anteriores foram preservados.
+Comandos, snapshots e resultados estão no registro mais recente de
+`.superpowers/sdd/2026-10-04-estabilizacao/progress.md`, com evidências em
+`evidence/merge-pr6/` e `evidence/pos-merge-pr6/`.
+
+**Retomada:** partir da `main` integrada e trabalhar em nova branch, conforme
+o AGENTS.md. O plano de estabilização está concluído; os estados de publicação
+e as pendências antigas abaixo são históricos e precisam ser confrontados
+com o código atual antes de iniciar outra fatia. Não reimplementar E/F/G
+a partir daqueles registros. Consultas ao acervo feitas na estabilização
+estão descritas em `docs/REVISAO-2026-10-04.md`; esse registro não comprova
+leitura anterior ao início do projeto nem de livros específicos de Python.
+
+## Histórico da conciliação do PR #6 — 2026-10-04
+
+Este bloco descreve a preparação anterior ao commit `43ff5f7` e ao merge;
+o estado corrente é o da seção acima.
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
 e abertura do PR e pediu continuar
@@ -4613,12 +5568,20 @@ C".
     `progression/service.py` (não em `domain.py` nem em `schemas.py`), de
     acordo com a interface que o plano definiu para a Task 3 — vale
     registrar para quem for procurar por eles.
-83. **O teste de ida-e-volta da migração 0004 roda com as tabelas vazias.**
+83. ~~**O teste de ida-e-volta da migração 0004 roda com as tabelas vazias.**
     `test_a_0004_cria_as_tabelas_e_o_downgrade_as_remove` prova que
     `upgrade`/`downgrade` funcionam, mas sem dado nenhum; o round-trip com
     dado populado só acontece dentro do `setup`/`finally` de cada teste que
     usa a fixture `cenario` (que sempre termina em `head`), não como
-    afirmação própria de um teste.
+    afirmação própria de um teste.~~ **Já resolvida pela estabilização na base
+    `5ba81c3`; registro alinhado em 2026-10-05:** o teste explícito
+    `test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao`
+    exige legado/XP/conquistas não vazios, preserva o legado em 0003↔head e
+    compara a progressão reconstruída, excluindo pendentes. O legado conserva
+    suas colunas de 0003; `fallback_model` posterior não participa do snapshot.
+    IDs das entradas de XP e suas FKs nas conquistas são normalizados: não é
+    prova de identidade bruta da progressão, sequences, índices ou todo o schema.
+    Nenhum teste redundante foi acrescentado nesta correção documental.
 84. ~~**`progression/router.py` reescreve `Annotated[Session,
     Depends(get_session)]`** em vez de reaproveitar `SessaoDaRequisicao`, o
     alias que `missions/router.py` já define para a mesma dependência.
@@ -4876,10 +5839,27 @@ ledger; nenhum é bug esquecido.
     `downgrade` da `0005` fixava `0004`~~ **resolvida pelo MB** (item 5; resta que,
     com uma `0006` que tenha guarda própria, o `RuntimeError` do teste pode vir da
     `0006`, o que o `match=tabela` só distingue para evidência e avaliação, não
-    para o bônus); (j) não feitos, fora do brief das ondas: T-M5 (`GeneratorExit`
-    atravessando `_traduzir_erros`), S-M6, "o upgrade preserva os `xp_entries`
-    existentes" (T-M4) e a segunda metade do T-M1 (falha de conclusão com
-    evidência não deixa linha em `mission_evidence`).
+    para o bônus); (j) **Provas desta composição, ainda fora da main:**
+    ~~T-M5 (`GeneratorExit` atravessando `_traduzir_erros`)~~ tem oráculo novo
+    no PR #21: a suíte antiga inteira passou o mutante, o novo caso o detectou,
+    produção restaurada passou. **S-M6 permanece pendente:** somente o rótulo
+    foi recuperado, sem descrição verificável do requisito; não inferir um
+    teste a partir dele. **T-M1 continua parcial:** o PR #19 verifica ausência
+    de evidência antes do rollback na recusa `MissaoExpiradaError` e estado
+    persistido numa sessão nova; o PR #23 verifica ausência antes do rollback
+    no reuso sequencial de chave entre tipo ou missão, sem prova numa sessão
+    nova. Não cobrem todas as falhas, `_mesma_evidencia`, disputa da UNIQUE ou
+    HTTP. **T-M4
+    completada em 2026-10-05:** a preservação de valores/fonte/datas/conquistas
+    já era coberta indiretamente por `test_progression_migration.py`; faltava
+    identidade/FKs brutas. O novo roundtrip populado de `test_evaluation_migration.py`
+    compara IDs, conteúdo, vínculos e somatórios em 0004↔0005. Mutação válida de
+    renumeração reprova somente no ID, com payload/FKs preservados; restauração
+    byte a byte e GREEN confirmados. Nenhum defeito de produção observado.
+    **Prova parcial em branch, 2026-10-05:** `wt/reuso-evidencia-recusada`
+    fortalece dois casos sequenciais de chave reutilizada com evidência,
+    verificando ausência de escrita antes do rollback. Não fecha todo T-M1
+    nem significa integração na `main`; detalhes e limites no topo.
 98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1
@@ -4917,18 +5897,18 @@ ledger; nenhum é bug esquecido.
     (data não consultada nesta sessão) — por isso a data de revisão abaixo.
     **Revisitar em 2026-12-01:** subir para a versão seguinte de propósito,
     num PR que rode o gate inteiro nela (o comentário no workflow repete a data).
-100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
-    log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
-    funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
-    401, 403, 404, 400 e 429 (chave inválida ou revogada, modelo inexistente,
-    corpo recusado, limite de taxa), e a mensagem leva só o **nome** da
-    exceção. **É comportamento anterior ao E, do chat, estendido à avaliação**
-    (ruling do ledger: pendência nova, não correção agora; o custo é um diagnóstico pior de chave inválida até lá). Consequência: uma chave
-    inválida aparece na tela como "A Tifa está fora do ar" e no servidor como
-    `502 provedor_indisponivel`, sem rastro do status real; quem diagnostica
-    precisa reproduzir a chamada. Uma correção registraria o status e o tipo
-    da causa no log (nunca o corpo nem a chave) e talvez distinguisse os 4xx
-    de configuração dos de rede.
+100. **Distinção pública das falhas de configuração do provedor**
+    (S-I3 da caça a falhas silenciosas). A fatia `wt/diagnostico-provedor`,
+    baseada em `5ba81c3` e ainda não integrada à `main`, resolve o diagnóstico
+    local: `_traduzir_erros` registra status HTTP real e tipo SDK em `WARNING`,
+    sem corpo, mensagem, chave, URL, headers ou traceback. Os casos 400, 401,
+    403, 404, 429, 500 e `APIStatusError` base são cobertos por testes reais de
+    log; falhas sem resposta não inventam status. O comportamento público
+    continua sendo `ProvedorIndisponivelError`, inclusive para 4xx, e a tela
+    continua mostrando "A Tifa está fora do ar". **Pendente:** decidir se os
+    4xx de configuração merecem códigos/textos públicos próprios, considerando
+    que chat e avaliação compartilham o tradutor. A integração e o CI desta
+    fatia são estados separados da validação focada registrada acima.
 101. **O rascunho guardado pode ficar inacessível para a pessoa** (M10 da
     pré-revisão opus). Numa falha `refresh` da conclusão (`transicao_ilegal`, por
     exemplo quando a primeira tentativa foi gravada, a pessoa editou o texto e a
@@ -4948,18 +5928,28 @@ ledger; nenhum é bug esquecido.
     pegava `from focusquest import modules`, o import relativo, nem subpasta.~~
     **Resolvida pelo lote MB** (`b1a7184`): `imports_proibidos` cobre os três
     (`rglob`, o `level` resolvido contra o pacote, `from a import b` expandido).
-    **Restos** (revisão do lote MB): o teste parametrizado assere `>= esperado`
-    e depois só `bool(...)`, e um `==` diria exatamente o conjunto e pegaria um
-    achado espúrio extra (sem falso positivo hoje); e a regra não cobre
-    `importlib.import_module("focusquest.modules...")` nem `__import__`, o que é
-    aceitável para uma regra de AST, mas merece um comentário.
-104. **A ordem das travas na transação 2 da avaliação não é provada por
-    teste** (mutação M3 da Task 5, equivalente nos testes). Mover
-    `registrar_bonus` para antes de `registrar_resultado` só inverte a ordem
-    missão → usuário, um risco de espera circular com outra conclusão
-    simultânea que nenhum teste exercita. O código está na ordem certa
-    (missão → avaliação → usuário) e o documento a declara; um teste teria de
-    montar duas transações em conflito cruzado.
+    **Restos resolvidos na fatia fronteira-core (2026-10-05):** o teste
+    parametrizado agora exige conjuntos literais exatos, preservando a base
+    e os candidatos expandidos de `from`. Novos casos cobrem aliases
+    múltiplos, imports permitidos misturados aos proibidos e prefixos
+    semelhantes. A mutação em cópia adicionou um achado espúrio aos
+    resultados positivos: os 11 casos antigos aceitaram a mutação; a versão
+    fortalecida reprovou os 11 positivos e manteve os 7 negativos verdes.
+    O módulo real passou, 20 testes. Imports dinâmicos por
+    `importlib.import_module` e `__import__` continuam fora da prova AST;
+    o limite aceito está comentado e descrito na arquitetura. Nenhuma mudança
+    no detector ou no produto. Gate completo e revisão registrados no ledger
+    desta fatia após execução; a aprovação focada não os substitui.
+104. **A ordem das travas na transação 2 da avaliação — prova parcial.**
+    A mutação M3 da Task 5 era equivalente nos testes anteriores. A fatia
+    `wt/avaliacao-ordem-usuario` observa a missão retida e o usuário ainda livre
+    enquanto a escrita da avaliação está bloqueada por outra conexão. Antecipar
+    `registrar_bonus` antes de `registrar_resultado` agora reprova por
+    `LockNotAvailable` na sonda `User FOR SHARE NOWAIT`; código restaurado e
+    módulo com 6 testes aprovados nesta sessão. A avaliação bloqueia no
+    `UPDATE`/flush atual, e a missão é sondada com `FOR KEY SHARE NOWAIT`.
+    **Resta:** a matriz de conflitos cruzados com outros fluxos e a prova da
+    ordem global ação → missão → avaliação → usuário; esta fatia não as cobre.
 105. ~~**Depois de remontar o cartão com a chave retida, o botão diz
     "Concluir"** (re-revisão da PF-front).~~ **Resolvida pelo lote MF**
     (`10f4747`): o rótulo lê `isRetryPending` do registro e diz "Tentar de novo".
@@ -5414,21 +6404,44 @@ ledger; nenhum é bug esquecido.
     cruzam, a consulta de idempotência já recusa), e por isso existe a variante
     determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
     os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
-    a única garantia determinística dele.
-161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
-    liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
-    **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
-    `tutoring/context.py` (o que o modelo lê), `RESCHEDULE_REASON_LABELS` em
-    `frontend/src/shared/types/mission.ts` (o cartão e o formulário) e uma
-    **cópia local** em `frontend/src/features/tutoring/types.ts` (o cartão da
-    proposta), com o comentário de espelho da 32. O comentário do código justifica a
-    cópia da tutoria (o cartão só precisa do texto, e a lista é curta), e a Task 9
-    correu em paralelo à Task 8, que criou a versão de `shared/` (relatório da
-    Task 9); depois do merge, a `tutoring` poderia importar de `shared/` (ela já
-    importa `formatDeadline` e `MAX_DIFFICULTY` de lá) e a cópia sairia. Um motivo novo no backend exige
-    escrever o rótulo nos três lugares: o `tsc` pega os dois do frontend
-    (`Record` exaustivo sobre o tipo), mas **não** o desencontro entre frontend e
-    backend. (b) **`kind` de ação desconhecido**: uma API mais nova que a tela
+    a garantia geral medida naquele incremento. **Resolução parcial em 2026-10-05:**
+    `test_inicio_virada_dia_concorrencia.py` acrescenta duas permissões de início
+    diário após bloqueio comprovado: a diária perdida é recusada sem escrita e a
+    revelada inicia na meia-noite civil. A mutação válida de relógio antes da trava
+    reprova os dois casos; restauração byte a byte e GREEN confirmados. O dono não
+    altera a linha, portanto não prova `populate_existing` nem todas as corridas;
+    os cenários antigos e a pendência continuam com seus limites restantes.
+    **Resolução parcial em 2026-10-05:** o módulo
+    `test_reagendamento_espera_deterministica.py` controla a ordem de dois
+    reagendamentos diretos, observa o PID bloqueador e avança um relógio
+    injetado não bloqueante somente depois da espera comprovada. Prazo que
+    vence durante a espera é recusado sem escrita perdedora (verificado antes
+    do rollback); prazo ainda futuro gera dois elos encadeados com o instante
+    posterior. Mutações de relógio antecipado e sem trava reprovam os dois
+    cenários; sem releitura reprova o encadeamento. Os testes antigos de
+    corrida não foram reescritos e os limites de início/demais combinações
+    permanecem: **a pendência 160 não está encerrada integralmente**.
+    **Complemento nesta fatia (`wt/conclusao-tardia-espera`, base `5ba81c3`,
+    ainda não integrada):** dois cenários determinísticos da conclusão tardia
+    F25 observam a espera real, cruzam ou preservam o limite de sexta 00:00 SP
+    e verificam efeitos/timestamps após a liberação. Relógio antecipado
+    reprova ambos; evidência gravada antes da recusa é detectada antes do
+    rollback. Esta prova parcial não substitui as medições históricas acima
+    nem cobre a matriz inteira de início/reagendamento ou releitura de linha.
+161. **Rótulos de motivo e `kind` desconhecido** (liga à pendência 32).
+    (a) ~~**Cópia local do tipo e dos rótulos de reagendamento na tutoria.**~~
+    **Resolvida na fatia rotulos-reagendamento (2026-10-05):**
+    `tutoring/types.ts` importa `RescheduleReason` como tipo diretamente de
+    `shared/types/mission.ts`, e `RescheduleProposalCard.tsx` importa o mapa
+    compartilhado diretamente. A union e o mapa locais saíram, sem reexport
+    nem import de `features/missions/`. Os textos e os payloads não mudaram.
+    Os testes existentes R2 do cartão verificam os três motivos; formulário,
+    histórico e TypeScript verificam os demais consumidores. Resultados
+    executados nesta fatia estão no bloco de estado e no ledger dela.
+    **Limite preservado:** o mapa Python `ROTULO_DO_MOTIVO` do contexto enviado
+    ao modelo continua separado do mapa frontend; esta fatia não resolve a
+    sincronização entre backend e frontend da pendência 32.
+    (b) **`kind` de ação desconhecido**: uma API mais nova que a tela
     entrega um `kind` que o `ActionRead` não lista; o `ProposalCard` mostra o
     texto neutro "Proposta que esta versão não sabe mostrar." (`tutor-proposal-unknown`),
     sem botão e sem o `kind` cru, e a conversa continua. Esse texto é decisão do
@@ -5457,7 +6470,13 @@ ledger; nenhum é bug esquecido.
     está em voo é um Iniciar ou um Reagendar; o texto neutro seria "o pedido em
     andamento".~~ **(a) Resolvida na rodada de correção da revisão final do F:** o
     botão e a região viva dizem "Aguardando o pedido em andamento…" (e "… para
-    atualizar o quadro."), com teste do Iniciar e do Reagendar em voo. (b) Os botões de recarga não dizem de qual missão são. (c) O foco,
+    atualizar o quadro."), com teste do Iniciar e do Reagendar em voo.
+    ~~(b) Os botões de recarga não dizem de qual missão são.~~ **(b) Resolvida
+    na feature `wt/recarga-missao-acessivel`:** nome acessível acrescenta
+    `instructions` na recarga da conclusão, Iniciar/Reagendar e avaliação,
+    inclusive esperando; rótulos visíveis e recarga global da trilha intactos.
+    RED 16/181 e mutação do enunciado antigo detectada, GREEN 198 nesta sessão; integração main/publicação no ledger.
+    (c) O foco,
     depois do sucesso do reagendamento, usa `.focus()` sem `preventScroll`.
     (d) `isoToSaoPauloCivil` trunca os segundos: um prazo com segundos, reenviado
     sem mexer no campo, vira **outro** instante em vez de `prazo_inalterado`; sem
@@ -5494,15 +6513,23 @@ ledger; nenhum é bug esquecido.
     custo de uma migração nova e de espelho no modelo. Sem efeito hoje: só o
     serviço escreve, e a spec (seção "Modelo de dados") já declara essa garantia,
     junto com "só avulsa não concluída", como do serviço.
-166. **`reschedules` é carregado sob demanda em `GET /api/plans/current` e em
+166. ~~**`reschedules` é carregado sob demanda em `GET /api/plans/current` e em
     `GET /api/cycle`** (revisão final do F, m4). O `MissionRead` lê
     `missao.reschedules` (`lazy="select"`), e o `selectinload` do merge (pendência
     96) cobre só a listagem: a trilha da semana (8 missões) e o ciclo (até 3) pagam
     **uma consulta a mais por missão**, sempre vazia para diária e especial. É o
     mesmo N+1 que `evidence` e `evaluation` já tinham ali, e o custo é pequeno e
     fixo. Resolver: `selectinload` nas consultas de `cycle_service.py`, com um teste
-    de contagem de consultas como o de `test_missions_listagem_consultas.py`.
-167. **Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
+    de contagem de consultas como o de `test_missions_listagem_consultas.py`.~~
+    **Corrigida nesta branch (2026-10-05):** `_ler_plano` usa `selectinload`
+    para `evidence`, `evaluation` e `reschedules`. A leitura mais serialização
+    custa 6 consultas na segunda e no domingo (antes, 27 no domingo); três
+    mutações vistas reprovando com 13 consultas cada, bytes restaurados.
+    O trecho sobre `GET /api/cycle` era histórico: o ciclo atual já usa cópias
+    transientes de um SELECT de colunas, com prova própria de um comando.
+    Sem alterar esse snapshot; integração desta correção na `main` depende
+    do PR. Escopo, comandos e resultados no registro da fatia acima.
+167. ~~**Sem teste de concorrência entre a confirmação da Tifa e a conclusão pela
     tela** (revisão final do F, m6). Há confirmação × reagendamento direto,
     reagendamento × conclusão e a mesma confirmação em paralelo, mas não uma
     confirmação de reagendamento junto com a conclusão da mesma missão. A ordem das
@@ -5511,7 +6538,23 @@ ledger; nenhum é bug esquecido.
     prova por conexões reais, no padrão do cenário "reagendamento × conclusão" de
     `test_acompanhamento_concorrencia.py`: nunca um elo gravado depois da conclusão,
     e, se os dois vencem, a conclusão viu o prazo novo. Liga-se à pendência 160 (a
-    detecção de corrida depende do escalonador).
+    detecção de corrida depende do escalonador).~~
+    **Resolvida na retomada de 2026-10-04:**
+    `test_tutoring_conclusao_concorrencia.py` controla as duas ordens por
+    conexões reais, observa o PID bloqueador antes do commit e mantém a missão
+    antiga no identity map da sessão que espera. Confere ação, prazo devolvido,
+    elo/histórico, operações e crédito único de XP. Ambos os casos vistos
+    reprovando sem `populate_existing`; bytes restaurados e teste verde.
+    O cenário não depende de quem ganha uma corrida; os limites de outros
+    testes da pendência 160 permanecem abertos. Comandos/resultados no topo.
+
+    **Implementada na feature; integração pendente:** o commit `0cb4cc2`
+    acrescenta `test_tutoring_conclusao_concorrencia.py`, com as duas ordens
+    controladas e bloqueio observado no PostgreSQL. Publicado no PR #7; a
+    `main` em `5ba81c3` ainda não contém esse módulo. O gate desta retomada
+    passou com 1438 Python, 990 frontend, 59 E2E e 100%; a pendência 160
+    permanece aberta. Os limites e as provas históricas de mutação estão no
+    handoff e no ledger do worktree da Tifa.
 168. ~~**O E2E do F tem prazos fixos que vencem, e o gate reprova sozinho a partir
     de 2027-01-10** (revisão final do F, I2). O `check-e2e` roda com o relógio real
     da API (`system_now`, pendência 116), e dois cenários de

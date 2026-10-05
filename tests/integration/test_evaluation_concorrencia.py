@@ -20,20 +20,24 @@ leem "nenhuma avaliacao" juntas, e a segunda esbarra na UNIQUE de
 import dataclasses
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Self
 
 import pytest
+from psycopg.errors import LockNotAvailable
 from sqlalchemy import Engine, delete, event, func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.errors import AvaliacaoEmAndamentoError
-from focusquest.modules.evaluation.service import avaliar_missao
+from focusquest.modules.evaluation.service import ResultadoDaAvaliacao, avaliar_missao
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
     FalhaDaAvaliacao,
+    MissionState,
     Veredito,
 )
 from focusquest.modules.missions.evaluation_records import (
@@ -43,14 +47,20 @@ from focusquest.modules.missions.evaluation_records import (
     registrar_falha,
     registrar_resultado,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+    MissionOperation,
+    User,
+)
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
     criar_missao,
 )
-from focusquest.modules.progression.models import FONTE_BONUS, XpEntry
+from focusquest.modules.progression.models import FONTE_BONUS, FONTE_CONCLUSAO, XpEntry
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.provider import EventoDoProvedor, Ferramenta, Turno
 from focusquest.modules.tutoring.service import Tutoria
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
@@ -519,3 +529,204 @@ def test_abrir_tentativa_rele_a_avaliacao_ja_carregada_na_sessao(
         assert velha.state is EstadoDaAvaliacao.AVALIANDO
         assert velha.attempt == 2
         sessao.commit()
+
+
+def _aguardar_etapa_da_ordem(
+    condicao: Callable[[], bool],
+    tarefa: Future[ResultadoDaAvaliacao],
+    descricao: str,
+) -> None:
+    """Espera uma condicao observavel; falha da thread chega sem virar timeout."""
+    fim = time.monotonic() + SEGUNDOS_LIMITE
+    intervalo = threading.Event()
+    while not condicao():
+        if tarefa.done():
+            tarefa.result()
+            pytest.fail(f"a avaliacao terminou antes de {descricao}")
+        restante = fim - time.monotonic()
+        assert restante > 0, f"tempo esgotado esperando {descricao}"
+        intervalo.wait(min(0.01, restante))
+
+
+def test_avaliacao_aguarda_escrita_com_missao_retida_e_usuario_livre(
+    banco_migrado: Engine, missao_com_evidencia: int
+) -> None:
+    """Durante a escrita bloqueada, a missao esta travada e o usuario ainda nao."""
+    entrou_modelo = threading.Event()
+    devolver_resposta = threading.Event()
+    tx2_conectou = threading.Event()
+    pid_da_tx2: int | None = None
+    feedback = "O resumo atende ao criterio informado."
+    modelo = "modelo-da-prova-de-ordem"
+
+    class ProvedorDaOrdem:
+        def responder(self, turno: Turno) -> Generator[EventoDoProvedor]:
+            raise AssertionError("esta prova usa apenas a avaliacao")
+
+        def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any]:
+            entrou_modelo.set()
+            assert devolver_resposta.wait(SEGUNDOS_LIMITE), "resposta nao liberada"
+            return {"verdict": "atende", "feedback": feedback}
+
+    class SessaoObservada(Session):
+        def __enter__(self) -> Self:
+            nonlocal pid_da_tx2
+            sessao = super().__enter__()
+            if devolver_resposta.is_set() and not tx2_conectou.is_set():
+                self.execute(text("SET LOCAL statement_timeout = '15s'"))
+                pid_da_tx2 = int(
+                    self.execute(text("SELECT pg_backend_pid()")).scalar_one()
+                )
+                tx2_conectou.set()
+            return sessao
+
+    fabrica_observada = sessionmaker[Session](
+        bind=banco_migrado, expire_on_commit=False, class_=SessaoObservada
+    )
+    paciente = Tutoria(
+        provedor=ProvedorDaOrdem(),
+        historico=20,
+        limite=timedelta(seconds=60),
+        modelo=modelo,
+    )
+    with (
+        ThreadPoolExecutor(max_workers=1) as executor,
+        Session(bind=banco_migrado) as holder,
+        Session(bind=banco_migrado) as sonda,
+    ):
+        tarefa = executor.submit(
+            avaliar_missao,
+            fabrica_observada,
+            paciente,
+            user_id=ESTUDANTE,
+            mission_id=missao_com_evidencia,
+            clock=lambda: AGORA,
+        )
+        try:
+            _aguardar_etapa_da_ordem(entrou_modelo.is_set, tarefa, "entrada no modelo")
+            holder.execute(text("SET LOCAL statement_timeout = '15s'"))
+            pid_holder = int(
+                holder.execute(text("SELECT pg_backend_pid()")).scalar_one()
+            )
+            avaliando = holder.scalars(
+                select(MissionEvaluation)
+                .where(MissionEvaluation.mission_id == missao_com_evidencia)
+                .with_for_update()
+            ).one()
+            assert (avaliando.state, avaliando.attempt) == (
+                EstadoDaAvaliacao.AVALIANDO,
+                1,
+            )
+            assert avaliando.requested_at == AGORA
+
+            devolver_resposta.set()
+            _aguardar_etapa_da_ordem(
+                tx2_conectou.is_set, tarefa, "conexao da transacao2"
+            )
+            assert pid_da_tx2 is not None
+            pid_sonda = int(sonda.execute(text("SELECT pg_backend_pid()")).scalar_one())
+            assert len({pid_holder, pid_da_tx2, pid_sonda}) == 3
+            _aguardar_etapa_da_ordem(
+                lambda: (
+                    pid_holder
+                    in sonda.execute(
+                        text("SELECT pg_blocking_pids(:pid)"), {"pid": pid_da_tx2}
+                    ).scalar_one()
+                ),
+                tarefa,
+                "bloqueio da escrita da avaliacao pelo holder",
+            )
+
+            try:
+                with pytest.raises(OperationalError) as travada:
+                    sonda.execute(
+                        select(Mission.id)
+                        .where(Mission.id == missao_com_evidencia)
+                        .with_for_update(read=True, key_share=True, nowait=True)
+                    ).scalar_one()
+                assert isinstance(travada.value.orig, LockNotAvailable)
+            finally:
+                sonda.rollback()
+
+            try:
+                # SHARE conflita com NO KEY UPDATE do bonus; KEY SHARE nao.
+                assert (
+                    sonda.execute(
+                        select(User.id)
+                        .where(User.id == ESTUDANTE)
+                        .with_for_update(read=True, nowait=True)
+                    ).scalar_one()
+                    == ESTUDANTE
+                )
+            finally:
+                sonda.rollback()
+
+            holder.rollback()
+            resultado = tarefa.result(timeout=SEGUNDOS_LIMITE)
+        finally:
+            devolver_resposta.set()
+            holder.rollback()
+            sonda.rollback()
+            # O executor so aguarda a thread depois de liberar as travas.
+
+    assert resultado.avaliacao.state is EstadoDaAvaliacao.CONCLUIDA
+    assert resultado.avaliacao.attempt == 1
+    assert resultado.avaliacao.model == modelo
+    assert resultado.avaliacao.verdict is Veredito.ATENDE
+    assert resultado.avaliacao.feedback == feedback
+    assert resultado.avaliacao.finished_at == AGORA
+    assert resultado.recompensa is not None
+    assert resultado.recompensa.xp_awarded == 20
+    with Session(bind=banco_migrado) as leitura:
+        missao = leitura.get(Mission, missao_com_evidencia)
+        assert missao is not None
+        assert missao.state is MissionState.CONCLUIDA
+        assert missao.completed_at == AGORA
+        assert missao.instructions == "Ler o capitulo 3"
+        assert missao.difficulty == 2
+        assert missao.deadline == AGORA + timedelta(days=1)
+        assert missao.evidence is not None
+        assert missao.evidence.text == "Fiz o resumo"
+        assert missao.evidence.link is None
+        assert missao.evidence.submitted_at == AGORA
+        assert missao.evaluation is not None
+        assert missao.evaluation.id == resultado.avaliacao.id
+        assert (
+            missao.evaluation.state,
+            missao.evaluation.attempt,
+            missao.evaluation.model,
+            missao.evaluation.verdict,
+            missao.evaluation.feedback,
+            missao.evaluation.requested_at,
+            missao.evaluation.finished_at,
+            missao.evaluation.error_code,
+        ) == (
+            EstadoDaAvaliacao.CONCLUIDA,
+            1,
+            modelo,
+            Veredito.ATENDE,
+            feedback,
+            AGORA,
+            AGORA,
+            None,
+        )
+        operacoes = leitura.scalars(
+            select(MissionOperation).where(
+                MissionOperation.mission_id == missao_com_evidencia
+            )
+        ).all()
+        assert [(operacao.kind, operacao.operation_id) for operacao in operacoes] == [
+            ("complete", f"op-concorrencia-avaliacao-{missao_com_evidencia}")
+        ]
+        creditos = leitura.scalars(
+            select(XpEntry)
+            .where(XpEntry.mission_id == missao_com_evidencia)
+            .order_by(XpEntry.id)
+        ).all()
+        assert [
+            (credito.source, credito.amount, credito.credited_at)
+            for credito in creditos
+        ] == [
+            (FONTE_CONCLUSAO, 40, AGORA),
+            (FONTE_BONUS, 20, AGORA),
+        ]

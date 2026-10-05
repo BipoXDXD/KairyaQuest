@@ -6,11 +6,12 @@ o esquema para `head`.
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, delete, inspect, text
+from sqlalchemy import Connection, Engine, delete, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -215,3 +216,125 @@ def test_o_downgrade_falha_alto_com_evidencia_ou_avaliacao_gravada(
         assert unicas == {"uq_xp_entries_mission_id_source"}
     finally:
         command.upgrade(cfg, "head")
+
+
+def _livro_legado(
+    conexao: Connection, usuarios: list[int]
+) -> dict[str, list[tuple[Any, ...]]]:
+    """Mantem IDs e FKs brutos; os testes da 0004 normalizam esses campos."""
+    parametros = {"u1": usuarios[0], "u2": usuarios[1]}
+    consultas = {
+        "xp": (
+            "SELECT id, user_id, mission_id, amount, source, credited_at "
+            "FROM xp_entries WHERE user_id IN (:u1, :u2) ORDER BY mission_id"
+        ),
+        "conquistas": (
+            "SELECT user_id, code, unlocked_at, xp_entry_id "
+            "FROM user_achievements WHERE user_id IN (:u1, :u2) "
+            "ORDER BY user_id, code"
+        ),
+        "vinculos": (
+            "SELECT ua.user_id, ua.code, xe.user_id, xe.mission_id, m.user_id "
+            "FROM user_achievements ua JOIN xp_entries xe ON xe.id = ua.xp_entry_id "
+            "JOIN missions m ON m.id = xe.mission_id "
+            "WHERE ua.user_id IN (:u1, :u2) ORDER BY ua.user_id, ua.code"
+        ),
+        "totais": (
+            "SELECT user_id, sum(amount) FROM xp_entries "
+            "WHERE user_id IN (:u1, :u2) GROUP BY user_id ORDER BY user_id"
+        ),
+    }
+    return {
+        nome: [tuple(linha) for linha in conexao.execute(text(sql), parametros)]
+        for nome, sql in consultas.items()
+    }
+
+
+def test_ida_e_volta_0005_preserva_identidade_e_vinculos_do_xp_legado(
+    banco_migrado: Engine,
+) -> None:
+    """T-M4: preservacao exata, alem dos valores ja medidos atraves da 0004."""
+    cfg = alembic_config()
+    anterior = _anterior_a_0005()
+    usuarios: list[int] = []
+    try:
+        command.downgrade(cfg, anterior)
+        with banco_migrado.begin() as conexao:
+            # SQL no esquema legado: nao depende dos modelos/servicos de head.
+            for indice, valor in enumerate((37, 83)):
+                user_id = conexao.execute(
+                    text(
+                        "INSERT INTO users (display_name) VALUES (:nome) RETURNING id"
+                    ),
+                    {"nome": f"Legado XP {indice}"},
+                ).scalar_one()
+                usuarios.append(user_id)
+                mission_id = conexao.execute(
+                    text(
+                        "INSERT INTO missions (user_id, instructions, "
+                        "completion_criterion, difficulty, estimated_minutes, "
+                        "deadline, state, mission_type, completed_at) VALUES "
+                        "(:u, 'Ler', 'Resumo', 2, 30, :quando, 'concluida', "
+                        "'avulsa', :quando) RETURNING id"
+                    ),
+                    {"u": user_id, "quando": AGORA},
+                ).scalar_one()
+                creditado_em = AGORA + timedelta(seconds=indice + 1)
+                xp_id = conexao.execute(
+                    text(
+                        "INSERT INTO xp_entries (user_id, mission_id, amount, "
+                        "source, credited_at) VALUES (:u, :m, :a, "
+                        "'mission_completed', :quando) RETURNING id"
+                    ),
+                    {"u": user_id, "m": mission_id, "a": valor, "quando": creditado_em},
+                ).scalar_one()
+                conexao.execute(
+                    text(
+                        "INSERT INTO user_achievements "
+                        "(user_id, code, unlocked_at, xp_entry_id) "
+                        "VALUES (:u, 'first_steps', :quando, :xp)"
+                    ),
+                    {"u": user_id, "quando": creditado_em, "xp": xp_id},
+                )
+            antes = _livro_legado(conexao, usuarios)
+        assert len(antes["xp"]) == len(antes["conquistas"]) == 2
+        assert antes["totais"] == list(zip(usuarios, (37, 83), strict=True))
+        assert all(linha[4] == "mission_completed" for linha in antes["xp"])
+        assert all(
+            u == dono == dono_missao for u, _, dono, _, dono_missao in antes["vinculos"]
+        )
+
+        for destino in (REVISAO, anterior):
+            if destino == REVISAO:
+                command.upgrade(cfg, destino)
+            else:
+                command.downgrade(cfg, destino)
+            with banco_migrado.connect() as conexao:
+                assert (
+                    conexao.execute(
+                        text("SELECT version_num FROM alembic_version")
+                    ).scalar_one()
+                    == destino
+                )
+                depois = _livro_legado(conexao, usuarios)
+            # Antes do oraculo de identidade: payload e FKs logicas continuam iguais.
+            assert depois["totais"] == antes["totais"]
+            assert depois["vinculos"] == antes["vinculos"]
+            assert [linha[1:] for linha in depois["xp"]] == [
+                linha[1:] for linha in antes["xp"]
+            ]
+            assert [linha[:3] for linha in depois["conquistas"]] == [
+                linha[:3] for linha in antes["conquistas"]
+            ]
+            assert depois["xp"] == antes["xp"]
+            assert depois["conquistas"] == antes["conquistas"]
+    finally:
+        try:
+            command.upgrade(cfg, "head")
+        finally:
+            with banco_migrado.begin() as conexao:
+                # CASCADE remove so os dados dos usuarios proprios.
+                for user_id in usuarios:
+                    conexao.execute(
+                        text("DELETE FROM users WHERE id = :u"), {"u": user_id}
+                    )

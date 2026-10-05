@@ -11,6 +11,7 @@
  * aqui so pelo que o cartao mostra.
  */
 
+import type { RescheduleReason } from '../../shared/types/mission'
 import type { ActionKeys } from './useActionKeys'
 
 export type MessageRole = 'user' | 'tutor'
@@ -30,24 +31,6 @@ export interface MissionProposal {
   difficulty: number
   estimated_minutes: number
   deadline: string
-}
-
-/**
- * Os motivos de reagendamento. Espelham o enum do backend (`missions`), a mao
- * (pendencia 32). A copia e DESTA feature, e nao importada de
- * `shared/types/mission.ts`: o cartao so precisa do texto, e a lista e curta.
- */
-export type RescheduleReason = 'dificuldade' | 'falta_de_tempo' | 'mudanca_de_prioridade'
-
-/**
- * O texto de cada motivo, EXAUSTIVO sobre o tipo: um motivo novo reprova o
- * `tsc` ate ganhar texto. Espelha os rotulos da tela da missao, a mao
- * (pendencia 32).
- */
-export const RESCHEDULE_REASON_LABELS: Record<RescheduleReason, string> = {
-  dificuldade: 'Dificuldade',
-  falta_de_tempo: 'Falta de tempo',
-  mudanca_de_prioridade: 'Mudança de prioridade',
 }
 
 /**

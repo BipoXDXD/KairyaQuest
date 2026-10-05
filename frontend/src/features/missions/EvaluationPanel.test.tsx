@@ -348,7 +348,9 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
 
     fireEvent.click(botaoPedir())
 
-    const atualizar = await screen.findByRole('button', { name: 'Atualizar o quadro' })
+    const atualizar = await screen.findByRole('button', {
+      name: `Atualizar o quadro a missão: ${comEvidencia.instructions}`,
+    })
     expect(
       screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
     ).not.toBeInTheDocument()
@@ -375,6 +377,9 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
     const espera = await screen.findByTestId('evaluation-reload')
     expect(espera).toBeDisabled()
     expect(espera).toHaveTextContent('Aguardando o pedido em andamento…')
+    expect(espera).toHaveAccessibleName(
+      `Aguardando o pedido em andamento… a missão: ${comEvidencia.instructions}`,
+    )
     expect(espera).not.toHaveTextContent('Atualizar o quadro')
     fireEvent.click(espera)
     expect(onReload).not.toHaveBeenCalled()
@@ -385,7 +390,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
 
     render(<EvaluationPanel mission={comEvidencia} onReload={() => undefined} />)
 
-    expect(screen.queryByRole('button', { name: 'Atualizar o quadro' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Atualizar o quadro/ })).not.toBeInTheDocument()
   })
 
   it('resposta fresca atende com reward null (idempotente): diz que o bonus ja foi creditado', async () => {
