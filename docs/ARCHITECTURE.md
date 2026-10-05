@@ -610,10 +610,15 @@ só `evaluation` o levanta. Na revisão da Task 5 ele foi para
 `modules/evaluation/errors.py` — como `TransicaoIlegalError` mora em
 `missions/domain.py`. `SemEvidenciaError` e `AvaliacaoEmAndamentoError` ficaram
 em `core/errors.py`, porque `missions` e `evaluation` os levantam. A regra é
-verificada por `tests/unit/test_core_sem_modulos.py`, que lê com `ast` cada
-`*.py` de `core/` e exige que nenhum importe `focusquest.modules`. **O teste
-tem furos conhecidos** (pendência 103): não pega `from focusquest import
-modules`, nem import relativo, nem subpasta de `core/`.
+verificada por `tests/unit/test_core_sem_modulos.py`, que percorre também
+as subpastas de `core/` e examina com `ast` cada `*.py`. A prova cobre imports
+estáticos diretos, `from focusquest import modules`, aliases e imports
+relativos resolvidos contra o pacote do arquivo. Nos imports `from`, a base
+e os candidatos `base.nome` contam: o nome pode ser um submódulo. Os testes
+exigem o conjunto exato, incluindo casos mistos e prefixos semelhantes,
+para também detectar achados espúrios (pendência 103). A prova não executa
+código nem resolve chamadas dinâmicas a `importlib.import_module` ou
+`__import__`; esse limite é explícito, não garantia de isolamento em runtime.
 
 **Não há ciclo entre arquivos, mas há dependência nos dois sentidos entre
 pacotes.** Nenhum arquivo importa, direta ou indiretamente, um arquivo que o

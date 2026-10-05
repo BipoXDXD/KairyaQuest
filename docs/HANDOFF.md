@@ -8,7 +8,39 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
-## Conciliação do PR #6 — 2026-10-04
+## Fatia fronteira-core — restos da pendência 103
+
+Branch `wt/fronteira-core`, base `5ba81c3` (PR #6 já integrado), banco de teste
+exclusivo e offset 7. O objetivo é rejeitar achados espúrios do verificador
+AST de `core/`, sem modificar produção, contratos, dependências ou o gate.
+A autorização autônoma do dono foi repassada pelo coordenador; commit,
+push e PR serão coordenados após revisão e gate. Nenhum merge nesta fatia.
+
+**Alterações:** conjuntos esperados exatos, sete novos casos de
+aliases/misturas/prefixos e limite explícito dos imports dinâmicos em
+`tests/unit/test_core_sem_modulos.py`. A arquitetura deixou de declarar os
+três furos já corrigidos pelo lote MB. O detector não mudou.
+
+**Comandos executados nesta fatia:** `uv run pre-commit install --install-hooks`
+EXIT 0; baseline focado 13 aprovados; Ruff lint e format check aprovados.
+Em cópia isolada, a mutação de achado extra passou nos 11 casos antigos e
+reprovou 11 casos da versão fortalecida (7 controles verdes); SHA-256 da
+fonte versionada permaneceu igual durante cada mutação. A execução real
+posterior passou, 20 testes. Não foi necessário restaurar a fonte porque
+somente cópias ignoradas foram mutadas; nenhuma produção foi tocada.
+
+**Gate completo e revisão:** resultados posteriores ficam em
+`.superpowers/sdd/2026-10-05-fronteira-core/progress.md` e seus logs de
+evidência. Este bloco foi escrito antes dessas etapas; os testes focados
+não aprovam a publicação. Plano:
+`docs/superpowers/plans/2026-10-05-fronteira-core.md`.
+
+**Limite:** imports dinâmicos continuam fora desta prova AST; a fatia não
+acrescenta isolamento em runtime. Nenhum endpoint, biblioteca ou serviço novo.
+Os registros de conciliação e publicação abaixo são históricos e não
+substituem a revisão-base desta fatia.
+
+## Histórico da conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
 e abertura do PR e pediu continuar
@@ -4948,11 +4980,18 @@ ledger; nenhum é bug esquecido.
     pegava `from focusquest import modules`, o import relativo, nem subpasta.~~
     **Resolvida pelo lote MB** (`b1a7184`): `imports_proibidos` cobre os três
     (`rglob`, o `level` resolvido contra o pacote, `from a import b` expandido).
-    **Restos** (revisão do lote MB): o teste parametrizado assere `>= esperado`
-    e depois só `bool(...)`, e um `==` diria exatamente o conjunto e pegaria um
-    achado espúrio extra (sem falso positivo hoje); e a regra não cobre
-    `importlib.import_module("focusquest.modules...")` nem `__import__`, o que é
-    aceitável para uma regra de AST, mas merece um comentário.
+    **Restos resolvidos na fatia fronteira-core (2026-10-05):** o teste
+    parametrizado agora exige conjuntos literais exatos, preservando a base
+    e os candidatos expandidos de `from`. Novos casos cobrem aliases
+    múltiplos, imports permitidos misturados aos proibidos e prefixos
+    semelhantes. A mutação em cópia adicionou um achado espúrio aos
+    resultados positivos: os 11 casos antigos aceitaram a mutação; a versão
+    fortalecida reprovou os 11 positivos e manteve os 7 negativos verdes.
+    O módulo real passou, 20 testes. Imports dinâmicos por
+    `importlib.import_module` e `__import__` continuam fora da prova AST;
+    o limite aceito está comentado e descrito na arquitetura. Nenhuma mudança
+    no detector ou no produto. Gate completo e revisão registrados no ledger
+    desta fatia após execução; a aprovação focada não os substitui.
 104. **A ordem das travas na transação 2 da avaliação não é provada por
     teste** (mutação M3 da Task 5, equivalente nos testes). Mover
     `registrar_bonus` para antes de `registrar_resultado` só inverte a ordem
