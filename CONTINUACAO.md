@@ -1,6 +1,30 @@
 # Retomar o FocusQuest
 
-## Base integrada e continuação autônoma
+## Continuação corrente — checkpoint autônomo de 2026-10-05
+
+Snapshot: 2026-10-05T00:39:33-03:00 (`America/Sao_Paulo`); atualizações posteriores
+ficam nos ledgers por fase e no próximo checkpoint.
+
+A pausa está encerrada. A main consultada permanece em `5ba81c3` (PR #6);
+as fases autônomas estão publicadas nas PRs #7–17, com heads, bases, gates e
+CI no topo de [docs/HANDOFF.md](docs/HANDOFF.md). As features ainda não foram
+mescladas. Não repetir implementações, mutações ou pushes já concluídos;
+confrontar o head e seu ledger antes de continuar. Esta atualização documental
+parte do PR #8 (`009d9f7`) e sua PR usa base `docs/estado-pos-pr6`.
+
+O dono autorizou decisões não críticas e commit assinado, push de uma ref e PR
+por fase aprovada, sempre com hooks ativos, make check completo e cobertura de
+100%. Merge, decisões críticas e gastos permanecem pendentes. Preservar cinco
+agentes GPT 6.1 Sol, esforço High, um implementador por worktree e recursos
+isolados. Os gates de cada feature não aprovam a combinação entre elas.
+
+Context7 e Dometrain responderam nesta sessão; Rodin apenas expõe ferramentas,
+sem execução funcional confirmada ou geração paga. Gate, revisão e publicação
+próprios deste checkpoint ficam registrados em
+`.superpowers/sdd/2026-10-05-checkpoint-autonomo/progress.md`. Os blocos abaixo
+preservam a história, incluindo pausas já encerradas e ordens antigas.
+
+## Histórico da publicação do PR #7 e da primeira continuação autônoma
 
 O PR #6 foi integrado na `main` em `5ba81c3`, preservando E/F/G e as vinte
 fatias de estabilização. A prova da pendência 167 está no commit assinado

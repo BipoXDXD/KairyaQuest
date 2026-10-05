@@ -3,7 +3,91 @@
 Estado corrente para qualquer agente (Kimi, Codex, Claude) que assumir o trabalho.
 Sem credenciais, sem caminhos pessoais.
 
-## Continuação autônoma — publicação da pendência 167
+## Checkpoint corrente — fases autônomas — 2026-10-05
+
+**Snapshot:** 2026-10-05T00:39:33-03:00 (`America/Sao_Paulo`).
+
+A pausa foi encerrada. O dono autorizou decisões não críticas e, por fase
+aprovada, commit assinado, push de uma ref e PR com hooks ativos e gate
+completo de 100%. Merge e decisões críticas permanecem pendentes. Preferência:
+cinco agentes GPT 6.1 Sol, esforço High, com responsabilidades e worktrees separados.
+
+**Base integrada:** a main permanece em `5ba81c3` (PR #6, E/F/G e
+estabilização). As entregas abaixo estão em PRs abertas; não estão integradas
+na main. Esta branch documental parte de `009d9f7` (PR #8), na branch
+`wt/checkpoint-autonomo`, e sua PR tem base `docs/estado-pos-pr6`. Ela
+atualiza a continuidade sobre o PR #8 sem duplicar suas alterações.
+
+Os gates da tabela foram executados nesta sessão pelos implementadores de
+cada fase, registrados nos respectivos ledgers e conferidos no registro
+central e no CI por head. Todos têm cobertura de 100%, 990 testes frontend e
+59 E2E; a coluna registra os testes Python. Esses gates individuais não
+aprovam um resultado combinado das features.
+
+| PR | Fase / branch | Head | Base | Gate Python | CI push e PR |
+|---|---|---|---|---|---|
+| [#7](https://github.com/BipoXDXD/FocusQuest/pull/7) | Tifa × conclusão — 167 / `wt/tifa-conclusao` | [0cb4cc2](https://github.com/BipoXDXD/FocusQuest/commit/0cb4cc2d6d0f223faed20244ccdb4c6e709fab20) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#8](https://github.com/BipoXDXD/FocusQuest/pull/8) | Continuidade pós-PR6 / `docs/estado-pos-pr6` | [009d9f7](https://github.com/BipoXDXD/FocusQuest/commit/009d9f7d2652a7a14cde4b237abe1f43df0a64df) | `main` | 1436 | cinco jobs SUCCESS em cada execução |
+| [#9](https://github.com/BipoXDXD/FocusQuest/pull/9) | Fronteira core — 103 / `wt/fronteira-core` | [3e4f0cb](https://github.com/BipoXDXD/FocusQuest/commit/3e4f0cb112345f501c7224d47f652cf992a2b451) | `main` | 1443 | cinco jobs SUCCESS em cada execução |
+| [#10](https://github.com/BipoXDXD/FocusQuest/pull/10) | Espera do reagendamento — 160 parcial / `wt/reagendamento-espera` | [802646c](https://github.com/BipoXDXD/FocusQuest/commit/802646cb4227b65e41b0bd6f4d59a37990f5f4e1) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#11](https://github.com/BipoXDXD/FocusQuest/pull/11) | Motivos compartilhados — 161(a) / `wt/rotulos-reagendamento` | [10ec490](https://github.com/BipoXDXD/FocusQuest/commit/10ec49017f852230478cb475c404f389c2313b08) | `main` | 1436 | cinco jobs SUCCESS em cada execução |
+| [#12](https://github.com/BipoXDXD/FocusQuest/pull/12) | Consultas do plano — 166 / `wt/plano-consultas` | [42fd9eb](https://github.com/BipoXDXD/FocusQuest/commit/42fd9eb7501921d43837df3d273b4c30adf7caca) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#13](https://github.com/BipoXDXD/FocusQuest/pull/13) | Diagnóstico HTTP — 100 parcial / `wt/diagnostico-provedor` | [90f1cf0](https://github.com/BipoXDXD/FocusQuest/commit/90f1cf0b0bb74ea7a7b69214ce6272da5e580e77) | `main` | 1448 | cinco jobs SUCCESS em cada execução |
+| [#14](https://github.com/BipoXDXD/FocusQuest/pull/14) | Início na virada civil — 160 parcial / `wt/inicio-virada-dia` | [2247845](https://github.com/BipoXDXD/FocusQuest/commit/2247845334541f69bc5dbf3d0351d18ccf914b1e) | `main` | 1438 | cinco jobs SUCCESS em cada execução |
+| [#15](https://github.com/BipoXDXD/FocusQuest/pull/15) | Avaliação antes do usuário — 104 parcial / `wt/avaliacao-ordem-usuario` | [2304b38](https://github.com/BipoXDXD/FocusQuest/commit/2304b38e83a11e5537d5235b4c418d0d22292231) | `main` | 1437 | cinco jobs SUCCESS em cada execução |
+| [#16](https://github.com/BipoXDXD/FocusQuest/pull/16) | Oráculo SDK/retries / `wt/sdk-retries-oraculo` | [d4843d9](https://github.com/BipoXDXD/FocusQuest/commit/d4843d9e00c3330e3ac9a988871fdbd21b1ca830) | `main` | 1443 | cinco jobs SUCCESS em cada execução |
+| [#17](https://github.com/BipoXDXD/FocusQuest/pull/17) | Diagnóstico de falhas da prova Tifa / `wt/tifa-diagnostico` | [cb939c4](https://github.com/BipoXDXD/FocusQuest/commit/cb939c4c6c7d71393931ae2fded291d5e9501556) | `wt/tifa-conclusao` | 1440 | cinco jobs SUCCESS em cada execução |
+
+**Não repetir entregas:** implementação, mutações, gates de publicação e
+pushes concluídos pertencem à feature e ao head da tabela. Consultar o ledger
+da fase e o CI atual para continuar; não reaplicar E/F/G ou refazer a
+estabilização a partir dos blocos antigos. Gates continuam obrigatórios para
+qualquer mudança nova e para uma integração futura autorizada.
+
+**Limites preservados:** a 103 cobre imports sintáticos por AST, sem garantia
+sobre imports dinâmicos; as duas provas da 160 cobrem entrelaçamentos
+específicos, não a matriz inteira; a 104 prova missão retida enquanto a escrita
+da avaliação aguarda e escrita antes da trava do usuário, com bloqueio atual
+no UPDATE/flush, não ordem global. A 161(b), os rótulos desconhecidos e o
+espelho Python/frontend da 32 continuam pendentes. O diagnóstico da 100 só
+acrescenta evidência técnica de erro final, sem mudar textos ou contrato.
+
+**Dependência explícita:** o PR #17 parte do head `0cb4cc2` do PR #7 e tem
+base `wt/tifa-conclusao`. Ele acrescenta diagnóstico de exceções reais do
+worker antes e depois do sinal, rollback e sondas NOWAIT em conexão nova;
+não substitui a prova original da 167. Falha do coordenador com worker já
+bloqueado e a matriz completa de limpeza permanecem fora desta fatia.
+
+**Oráculo SDK/retries:** a falha do primeiro pre-push da fase 166 foi
+preservada; o resultado funcional estava correto e a causa daquela execução
+não foi comprovada. O segundo push passou sem mudar o commit da 166. A fase
+SDK posterior torna o teste explícito quanto a retries e payload, observando
+as requisições HTTP e detectando geração duplicada ou payload alterado.
+É uma mudança de teste, sem alterar retries ou timeout do produto.
+
+**Fases em andamento neste snapshot:** prova da conclusão tardia F25 com
+espera controlada (offset 18) e migração/identidade do XP, pendência 97
+(offset 17). São fatias próprias de teste; os estados de execução não afirmam
+publicação nem CI aprovado. Confrontar seus ledgers e o GitHub antes de
+continuar, sem editar a árvore de outro implementador.
+
+**Críticas pendentes:** merge/main, mudança de produto ou contrato, custos e
+prazos da avaliação (106/192), autenticação/exposição, geração paga e
+substituição das chaves historicamente expostas ficam com o dono. A 91 já
+está riscada no estado corrente; não reabri-la por um registro antigo.
+
+Context7 e Dometrain responderam às chamadas de leitura nesta sessão. Rodin
+expõe sete ferramentas, mas a execução funcional não foi validada sem um
+identificador de geração existente; nenhuma geração foi iniciada.
+
+O gate e a revisão próprios deste checkpoint são registrados separadamente.
+Fontes, comandos, resultados e publicação ficam no ledger ignorado
+`.superpowers/sdd/2026-10-05-checkpoint-autonomo/progress.md`; inventário por
+SHA e CI em `evidence/prs-current.json`. Esta tabela retrata o snapshot acima;
+publicações posteriores terão atualização própria. Os registros abaixo são históricos e
+não revogam a autorização corrente; preservar todos os checkpoints.
+
+## Histórico da primeira continuação autônoma — publicação da pendência 167
 
 A pausa dos MCPs foi encerrada pelo pedido de retomada. A `main` consultada
 permanece em `5ba81c3`; a prova da pendência 167 está no commit assinado
