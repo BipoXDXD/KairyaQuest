@@ -16,401 +16,53 @@ Documentar como existente algo que não existe seria afirmação falsa, e este
 projeto trata afirmação falsa em documentação como defeito grave. Por isso
 os dois blocos nunca se misturam.
 
+Referências a decisões e achados de incrementos anteriores usam os IDs
+preservados no [HANDOFF](HANDOFF.md). Relatos completos de implementação e
+resultados antigos estão no Git em `ca3b03c:docs/HANDOFF.md`; não são
+instruções para repetir fases concluídas.
+
 ## 1. O que existe hoje
 
-Árvore real dos arquivos versionados, gerada com `git ls-files` ao fim das
-Tasks 0–6 do Incremento C, mais o fix round 1 da Task 5 (`9c2bd1e..e195128`),
-e acrescida dos três arquivos que a Frente 0 (gate paralelo) criou
-(`scripts/novo-worktree.sh`, `tests/integration/test_novo_worktree.py` e
-`frontend/tests/unit/servers.test.ts`), e agora também dos arquivos do
-Incremento D (a progressão de RPG), acrescentados ou modificados entre
-`a53733f` e `HEAD` — o módulo `progression` no backend e no frontend, a
-migração `0004`, `shared/types/reward.ts` e os testes correspondentes; ver
-"Alterações do Incremento D" em `docs/HANDOFF.md`. Os Incrementos B, C e D
-estão na `main`: o PR #13 (B) foi mesclado em `b0f9e8f`, o PR #14 (C) em
-`8ab91ce` e o PR #17 (D) em `af6f50d`, os três em 2026-09-25; o PR #18
-acrescentou o `CONTINUACAO.md` na raiz (ver "Revisão-base" em
-`docs/HANDOFF.md`).
-Ao fim, o que o **Incremento E** (entrega com evidência e avaliação) criou
-entre `fe37820` e o código final do incremento (`79fa4e5`): a migração `0005`, o `core/usuario_unico.py`, os
-modelos e os schemas da entrega, o módulo `evaluation` e os registros da
-avaliação em `missions/evaluation_records.py`, o método `avaliar` do
-provedor e a tela da evidência e da avaliação, com os testes
-correspondentes, o E2E da avaliação e o `reloadWaiting.ts` (ver "Alterações do
-Incremento E" em `docs/HANDOFF.md`).
-Ao fim, o que o **Incremento F** (acompanhar a execução: iniciar e reagendar
-missões) criou entre `05da900` (a `main` com o PR #3) e o código final do
-incremento: a migração `0006`, os serviços, as duas rotas e o histórico de prazos
-de `missions`, a ferramenta `reschedule_mission` da tutoria, os arquivos do
-frontend (iniciar, reagendar, histórico de prazos e o cartão da proposta de
-reagendamento), o E2E do acompanhamento e os scripts da camada 3 (ver
-"Alterações do Incremento F" em `docs/HANDOFF.md`). A árvore também ganhou os
-três arquivos do PR #3 que faltavam (`MissionCard.difficulty.test.tsx`,
-`ProposalCard.difficulty.test.tsx` e `test_missions_listagem_consultas.py`).
-Ficam de fora os caminhos ignorados pelo git — dependências
-(`node_modules/`, `.venv/`), ferramentas baixadas (`.tools/`), saída de build
-e de teste (`frontend/dist/`, `frontend/coverage/`,
-`frontend/test-results/`, `htmlcov/`, `coverage.xml`), caches, estado de IDE
-(`.idea/`), os `.env` locais e `.superpowers/`. Eles existem na máquina de
-desenvolvimento, mas não chegam a um clone.
+Mapa dos diretórios implementados, atualizado após o redesign desktop
+(PR #30, `ca3b03c`). Para a lista exata de arquivos, consulte `git ls-files`;
+a documentação descreve responsabilidades sem duplicar esse inventário.
 
 ```text
 FocusQuest/
-├── .github/
-│   └── workflows/
-│       └── quality.yml            # o gate no GitHub Actions: um job por alvo de verificação do Makefile
-├── alembic/                       # migrações do banco
-│   ├── versions/
-│   │   ├── 0001_esquema_inicial.py  # users, missions e mission_operations; semeia o usuário único
-│   │   ├── 0002_tutoria.py        # tutor_messages e tutor_actions, com as restrições da tutoria
-│   │   ├── 0003_ciclo_diario.py   # weekly_plans; mission_type/plan_id/day em missions; deadline vira nulável (B)
-│   │   ├── 0004_progressao.py     # xp_entries e user_achievements, com o backfill retroativo por cópias congeladas (D8) (D)
-│   │   ├── 0005_entrega_avaliacao.py  # mission_evidence e mission_evaluations; xp_entries único por (mission_id, source) e o CHECK de source com evaluation_bonus (E, decisões E14 e EM2)
-│   │   ├── 0006_acompanhamento.py  # mission_reschedules (o histórico de prazos, só de inserção); ck_mission_operations_kind; reschedule_mission no ck_tutor_actions_kind; ck_missions_em_andamento_iniciada e ck_missions_inicio_antes_da_conclusao; o downgrade falha alto com histórico ou ação de reagendar gravados (F, decisão F23)
-│   │   └── 0007_fallback_model.py # tutor_messages.fallback_model, o modelo substituto que serviu a resposta, com o CHECK de só a Tifa tê-lo (pendência 174)
-│   ├── README
-│   ├── env.py                     # resolve a URL do banco; `-x test=true` aponta para o banco de teste
-│   └── script.py.mako             # modelo de migração nova
-├── docs/                          # documentação viva do projeto
-│   ├── ARCHITECTURE.md            # este arquivo
-│   ├── HANDOFF.md                 # estado corrente: decisões, alterações, pendências
-│   ├── QUALITY.md                 # o gate: comandos, cobertura, limitações
-│   └── superpowers/               # planos e specs do processo de execução por incrementos
-│       ├── plans/
-│       └── specs/
-├── frontend/                      # a aplicação React; TODO código de interface mora aqui
-│   ├── public/                    # arquivos servidos sem passar pelo bundler
-│   │   ├── favicon.svg
-│   │   └── icons.svg
-│   ├── src/                       # código-fonte da aplicação (denominador da cobertura)
-│   │   ├── app/                    # inicialização e navegação (C); ver docs/ARCHITECTURE.md §5 regra 6
-│   │   │   ├── areas.ts           # type Area, AREAS (rótulos "Quartel-General"/"Campanhas") (C, Task 1)
-│   │   │   ├── SideNav.test.tsx
-│   │   │   └── SideNav.tsx        # nav aria-label="Áreas"; aria-current + marcador ▸; barra no topo/coluna lg:sticky (C, Task 1)
-│   │   ├── features/
-│   │   │   ├── campaigns/         # a trilha da semana (C); consome shared/types/mission.ts e shared/lib/civilDate.ts
-│   │   │   │   ├── availability.test.ts
-│   │   │   │   ├── availability.ts       # AVAILABILITY_DISPLAY: Record<Availability, {label, icon}>, exaustivo (C, Task 3)
-│   │   │   │   ├── CampaignTrail.test.tsx
-│   │   │   │   ├── CampaignTrail.tsx     # a trilha: 7 dias, baú fechado, especial, trail-stale (C, Tasks 3 e 5)
-│   │   │   │   ├── types.ts              # Plan, PlanDay, PlanSpecial, CurrentPlan (C, Task 2)
-│   │   │   │   ├── useCurrentPlan.test.tsx
-│   │   │   │   └── useCurrentPlan.ts     # busca GET /api/plans/current; reload/refresh/refreshFailed (C, Tasks 2 e 5)
-│   │   │   ├── missions/          # a feature de missões: tipos, hooks de leitura e de conclusão, componente
-│   │   │   │   ├── CycleSection.test.tsx  # (B, Task 8, commit 08b3dcc); o bônus da avaliação da diária chega ao onMissionCompleted (E, Task 7)
-│   │   │   │   ├── CycleSection.tsx       # a "Missão de hoje", sequência, progresso/especial (B, Task 8); onMissionCompleted opcional avisa o painel de progressão (D, Task 8) O Iniciar e o Reagendar dos cartões da Missão de hoje recebem o registro e o recarregamento do quadro; a seção "Diária de ontem — iniciada a tempo" mostra a `late_daily` (F, Tasks 10 e F25)
-│   │   │   │   ├── EvaluationPanel.test.tsx
-│   │   │   │   ├── EvaluationPanel.tsx    # o selo de verificação, a evidência, o botão "Pedir avaliação da Tifa" e os estados da avaliação (avaliando, concluída, falhou, fora do ar); o veredito em texto e ícone e o rótulo fixo de interpretação do modelo; sem `section` rotulada (landmark-unique) (E, Task 7)
-│   │   │   │   ├── EvidenceForm.test.tsx
-│   │   │   │   ├── EvidenceForm.tsx       # o disclosure "Entregar com evidência (opcional)": texto e link controlados, contador, erro do link; recolhido, os campos ficam fora do DOM (E, Task 7, decisão E17); durante um retry pendente os campos ficam readOnly, com aviso ligado por aria-describedby (E, onda pré-final)
-│   │   │   │   ├── MissionCard.difficulty.test.tsx  # o "de {MAX_DIFFICULTY}" do cartão (lote de pendências, pendência 66) (F, Task 10) o Iniciar ("Iniciando…", "Iniciada em"), o disclosure Reagendar prazo e o histórico de prazos; duas regiões vivas (mission-start-status, mission-reschedule-status); um envio de cada vez no cartão (Iniciar, Reagendar e Concluir se desabilitam entre si); o cartão mostra a missão devolvida pelo último iniciar ou reagendar
-│   │   │   │   ├── MissionCard.tsx        # o cartão de missão, extraído de MissionList.tsx (B, Task 8); mission-completion-status virou <div role="status"> com um <p data-testid="mission-completion-text"> filho e o RewardAnnouncement dentro da mesma região (D, decisão P4); guarda o rascunho da evidência no registro, liga o EvidenceForm e o EvaluationPanel e explica por que o Concluir está bloqueado, por aria-describedby (E, Task 7); leva o foco ao título do cartão depois de concluir, se ele estava no body (E, onda pré-final)
-│   │   │   │   ├── MissionList.test.tsx
-│   │   │   │   ├── MissionList.tsx  # o quadro "Outras missões — tarefas com prazo" (B, decisão P8); expõe MissionListHandle (reload) por useImperativeHandle; onMissionCompleted repassado a cada MissionCard (D, Task 8)
-│   │   │   │   ├── evaluationFailure.test.ts
-│   │   │   │   ├── evaluationFailure.ts # mapa exaustivo code → mensagem e recovery (retry, refresh, unavailable) da avaliação; describeEvaluationErrorCode também para o error_code de uma avaliação `falhou` vinda da API (E, Tasks 6 e 7)
-│   │   │   │   ├── evidenceLimit.test.ts
-│   │   │   │   ├── evidenceLimit.ts     # describeEvidence: tetos de 4000 e 2000 em pontos de código, o formato do link, o contador a partir de 3600 (E, Task 6); stripEnds recorta o mesmo conjunto de espaços que o servidor, medido (25 pontos de código), e o teto vale depois do recorte (E, onda pré-final)
-│   │   │   │   ├── completionFailure.test.ts
-│   │   │   │   ├── completionFailure.ts # code de erro → mensagem e ação da tela; ganhou missao_expirada (B); 422 sem code conhecido tem mensagem própria, libera a chave e mantém o rascunho (E, onda pré-final)
-│   │   │   │   ├── RescheduleForm.test.tsx
-│   │   │   │   ├── RescheduleForm.tsx      # o formulário do disclosure "Reagendar prazo": campo datetime-local em horário de Brasília (F21), o fieldset "Por que reagendar?" com três botões de opção, "Salvar novo prazo"; fecha no sucesso de forma derivada, sem efeito (F, Task 10)
-│   │   │   │   ├── RescheduleHistory.test.tsx
-│   │   │   │   ├── RescheduleHistory.tsx   # "Reagendada N vezes" e o <details> "Histórico de prazos", uma linha por reagendamento, motivo e origem em texto; tolera `reschedules` ausente (pendência 162) (F, Task 10)
-│   │   │   │   ├── RewardAnnouncement.test.tsx
-│   │   │   │   ├── RewardAnnouncement.tsx # "+XP", a subida de nível e as conquistas destravadas; role="status", motion-safe: (D, Task 7, decisão D16)
-│   │   │   │   ├── rescheduleDraft.ts       # deadlineForDraft preserva o ISO original sem edição; sameDraft compara civil, motivo e prazo efetivo para a chave (163(d)); RescheduleDraft mora em types.ts
-│   │   │   │   ├── rescheduleFailure.test.ts
-│   │   │   │   ├── rescheduleFailure.ts     # mapa exaustivo code → mensagem e saída (corrigir, atualizar, nova chave, mesma chave) do reagendamento (F, Task 8)
-│   │   │   │   ├── startFailure.test.ts
-│   │   │   │   ├── startFailure.ts          # o mesmo mapa para o Iniciar (F, Task 8)
-│   │   │   │   ├── types.ts             # (E, Task 6: EvaluationErrorCode, EvaluationResult e EvidenceDraft) Cycle e MissionErrorCode; Mission/MissionState/MissionType/Availability/MISSION_STATE_LABELS/DAYS_PER_MILESTONE subiram para shared/types/mission.ts, sem reexport (C, Ruling R3)
-│   │   │   │   ├── reloadWaiting.ts     # RELOAD_WAITING_LABEL, o texto de espera compartilhado pelo botão de recarga da conclusão e o da avaliação; num arquivo próprio para o MissionCard e o EvaluationPanel não se importarem em círculo (E, lote MF)
-│   │   │   │   ├── useCompleteMission.test.tsx
-│   │   │   │   ├── useCompleteMission.ts # (E: complete(evidence?), com rascunho inválido sem POST; o rascunho só sai no sucesso, decisões E17/RE4) conclui uma missão; ganhou onCompleted opcional (B, Task 8); guarda reward ausente/nulo no estado completed (D, Task 7, Ruling R6)
-│   │   │   │   ├── useCompletionRegistry.test.tsx
-│   │   │   │   ├── useCompletionRegistry.ts # chaves por missão, acima dos cartões; a recarga que espera; o rascunho da evidência por missão (draftFor/saveDraft/discardDraft), com release só da chave (E, Task 6 e fix round da Task 7); isRetryPending/markRetryPending guardam a chave retida, que sobrevive à remontagem do cartão (E, onda pré-final) (F: as chaves do Iniciar e do Reagendar moram aqui, por missão e por tipo — actionKeyFor e releaseActionKey —, porque a UNIQUE é por chave e a recarga do quadro remonta os cartões, decisão F20)
-│   │   │   │   ├── useCycle.test.tsx      # (B, Task 7, commit 242d677)
-│   │   │   │   ├── useCycle.ts            # busca GET /api/cycle; refresh sem passar por carregando (B, P9); atualiza sozinho na volta à aba (C, Task 5); só a resposta do pedido mais recente decide (C, fix round 1, commit e195128)
-│   │   │   │   ├── useMissions.test.tsx
-│   │   │   │   ├── useMissions.ts
-│   │   │   │   ├── useRequestEvaluation.test.tsx
-│   │   │   │   ├── useRequestEvaluation.ts # pede a avaliação; guarda de voo; onRewarded só com reward != null; callback que lança não vira falha (E, Tasks 6 e 6m)
-│   │   │   │   ├── useRescheduleMission.test.tsx
-│   │   │   │   ├── useRescheduleMission.ts # reagendar via postJson, com guarda de voo, validação do rascunho antes de gastar chave e `lastRescheduled` (o último sucesso sobrevive a uma falha seguinte) (F, Tasks 8 e 10)
-│   │   │   │   ├── useStartMission.test.tsx
-│   │   │   │   └── useStartMission.ts      # iniciar via postJson, com guarda de voo e onStarted opcional (F, Task 8)
-│   │   │   ├── progression/       # saldo, nível e conquistas (D); o contrato do reward da conclusão mora em shared/types/reward.ts e é consumido por missions, não por esta feature
-│   │   │   │   ├── ProgressPanel.test.tsx
-│   │   │   │   ├── ProgressPanel.tsx      # role="progressbar" com aria-label (Ruling R13) e aria-valuetext; a lista de conquistas; ProgressPanelHandle.refresh via useImperativeHandle (D, Tasks 6 e 8)
-│   │   │   │   ├── types.ts               # o contrato de GET /api/progress (D, Task 6)
-│   │   │   │   ├── unlockedDate.test.ts
-│   │   │   │   ├── unlockedDate.ts        # data da conquista em America/Sao_Paulo, sem conversão de fuso do navegador (D, decisão P5)
-│   │   │   │   ├── useProgress.test.tsx
-│   │   │   │   └── useProgress.ts         # busca GET /api/progress; mesmo desenho do useCycle (reload/refresh/refreshFailed, guarda de sequência, useRefreshOnReturn) (D, Task 6)
-│   │   │   └── tutoring/          # a Tifa na tela (1b-2); importa só de shared/, nunca de features/missions/
-│   │   │       ├── DecisionControls.tsx    # Confirmar e Recusar (e o link "Ver no Quartel-General", BoardLink), extraídos do ProposalCard e compartilhados pelos dois cartões (F, Task 9)
-│   │   │       ├── ProposalCard.test.tsx
-│   │   │       ├── ProposalCard.tsx       # o cartão de proposta: Confirmar/Recusar, um ramo por Outcome (F: escolhe o cartão pelo `kind` da ação; o da criação virou MissionProposalCard, e um `kind` fora do tipo cai no texto neutro "Proposta que esta versão não sabe mostrar.", sem botão)
-│   │   │       ├── ProposalCard.difficulty.test.tsx  # o "de {MAX_DIFFICULTY}" da proposta (lote de pendências, pendência 66)
-│   │   │       ├── RescheduleProposalCard.test.tsx
-│   │   │       ├── RescheduleProposalCard.tsx  # o cartão "Proposta de reagendamento": a missão (retrato do backend), "Prazo atual" e "Prazo proposto" em <time>, o motivo em texto; executada → "Prazo reagendado"; falhou → texto por error_code (F, Task 9, decisão F22)
-│   │   │       ├── TutorConversation.tsx  # a conversa: histórico, campo, região viva de status; a região rolável ganhou role="region", aria-label="Conversa com a Tifa" e tabIndex={0} (D, Ruling R13 — defeito latente, anterior ao D, achado pela integração da Task 8)
-│   │   │       ├── TutorPanel.test.tsx
-│   │   │       ├── TutorPanel.tsx         # o painel: lateral (desktop) ou folha modal (celular), hooks no topo
-│   │   │       ├── actionFailure.test.ts
-│   │   │       ├── actionFailure.ts       # mapa exaustivo BY_CODE (describeActionFailure) para confirmar/recusar (F: `reagendamento_invalido`, a saída `invalidated` e o texto da falha de rede que depende do `kind`)
-│   │   │       ├── answerOutcome.test.ts
-│   │   │       ├── answerOutcome.ts       # announceAnswer (a região viva no fim da resposta: terminou ou cortada) e unansweredNote (a nota do "Tentar de novo" pelo motivo: resposta_longa, resposta_recusada ou geral) — pendências 120–122
-│   │   │       ├── conversationHistory.test.ts
-│   │   │       ├── conversationHistory.ts # appendTurn, settleInterrupted, pendingFromHistory, replaceAction, latestAnswerTo
-│   │   │       ├── messageFailure.test.ts
-│   │   │       ├── messageFailure.ts      # mapas PRE_STREAM e IN_STREAM para o envio de pergunta; a recusa (resposta_recusada) descarta o parcial (discardsPartial)
-│   │   │       ├── panelPreference.test.ts
-│   │   │       ├── panelPreference.ts     # localStorage do painel aberto/fechado, tolerante a exceção
-│   │   │       ├── questionLimit.test.ts
-│   │   │       ├── questionLimit.ts       # MAX_QUESTION_LENGTH, COUNTER_VISIBLE_FROM, describeQuestionLength
-│   │   │       ├── types.ts               # contrato da API e os três code (PreStream/Stream/Action) (F: ActionRead é a união CreateMissionAction | RescheduleMissionAction; RescheduleReason importado de shared/types/mission.ts, sem reexport; o cartão lê o mapa compartilhado diretamente, pendência 161(a))
-│   │   │       ├── useActionKeys.test.tsx
-│   │   │       ├── useActionKeys.ts       # chaves de confirmação por ação, no topo do TutorPanel
-│   │   │       ├── useDecideAction.test.tsx
-│   │   │       ├── useDecideAction.ts     # confirmar/recusar via postJson, reusando o CodigoDeErro do A (F: `invalidated` grava `falhou` com o error_code certo, sem outra ida à rede)
-│   │   │       ├── useIsDesktop.test.tsx
-│   │   │       ├── useIsDesktop.ts        # useSyncExternalStore sobre matchMedia (min-width: 1024px)
-│   │   │       ├── useTutorConversation.test.tsx
-│   │   │       ├── useTutorConversation.ts # histórico, rascunho, envio por postStream, reenvio idempotente
-│   │   │       ├── useTutorStatus.test.tsx
-│   │   │       └── useTutorStatus.ts      # disponibilidade da Tifa, error separado de unavailable
-│   │   ├── pages/
-│   │   │   ├── Campaigns.test.tsx
-│   │   │   ├── Campaigns.tsx      # o main de Campanhas: h1 focável + <CampaignTrail /> (C, Tasks 1 e 4)
-│   │   │   ├── headings.ts        # HEADQUARTERS_HEADING_ID, CAMPAIGNS_HEADING_ID (C, Task 1)
-│   │   │   ├── Headquarters.test.tsx
-│   │   │   └── Headquarters.tsx   # o Quartel-General: compõe missions e tutoring; CycleSection acima de MissionList (B); hidden na raiz e no main quando Campanhas está aberta (C, K2); ProgressPanel no topo, com refreshProgress (ref, decisão P3) repassado ao onCompleted de CycleSection e MissionList (D, Task 8)
-│   │   ├── shared/
-│   │   │   ├── api/
-│   │   │   │   ├── client.test.ts
-│   │   │   │   └── client.ts      # o cliente HTTP único: postJson e postStream; componente nenhum chama fetch
-│   │   │   ├── hooks/              # hooks genéricos com mais de um usuário entre features (C, docs/ARCHITECTURE.md §5)
-│   │   │   │   ├── useRefreshOnReturn.test.tsx
-│   │   │   │   └── useRefreshOnReturn.ts  # refresh silencioso em visibilitychange/focus; usado por useCycle e useCurrentPlan (C, Task 5, decisão K7)
-│   │   │   ├── lib/                # funções puras com mais de um usuário entre features (docs/ARCHITECTURE.md §5)
-│   │   │   │   ├── civilDate.test.ts      # (C, Task 2; movido de features/missions/, git mv, decisão K10)
-│   │   │   │   ├── civilDate.ts           # formatCivilDate; civilWeekday (o dia da semana, sem fuso) (C, Task 2)
-│   │   │   │   ├── deadline.test.ts
-│   │   │   │   └── deadline.ts     # formatDeadline em America/Sao_Paulo; usado pelo cartão da missão e o da proposta; saoPauloCivilDate (o dia civil de SP do instante, F25) (F: saoPauloCivilToIso e isoToSaoPauloCivil, a hora civil de SP ↔ instante com o Intl, sem deslocamento fixo, decisão F21)
-│   │   │   └── types/              # tipos compartilhados por mais de uma feature (C, docs/ARCHITECTURE.md §5)
-│   │   │       ├── mission.ts      # (E, Task 6: Verification, Verdict, EvaluationState, Evidence, EvaluationSummary e os campos verification/evidence/evaluation de Mission, sem bonus_xp, EM1) Mission, MissionState, MissionType, Availability, MISSION_STATE_LABELS, DAYS_PER_MILESTONE, MAX_DIFFICULTY (C, Task 2/3, decisão K10; movido de features/missions/types.ts, sem reexport) (F: RescheduleReason, RescheduleOrigin, Reschedule, Mission.reschedules e RESCHEDULE_REASON_LABELS)
-│   │   │       └── reward.ts       # Reward, UnlockedAchievement, MissionCompletion — o contrato do reward da conclusão, usado por features/missions (D, Task 7); reward é `Reward | null | undefined` de propósito (Ruling R6)
-│   │   ├── test/                  # infraestrutura de teste, não código de aplicação (docs/QUALITY.md §3)
-│   │   │   ├── fetchRoutes.ts     # routeFetch: fetch falso roteado por metodo/URL, um Response novo por chamada
-│   │   │   ├── setup.ts           # liga o modo de teste do React; limpa o DOM entre testes
-│   │   │   ├── sse.ts             # quadros e corpos SSE falsos, sem rede
-│   │   │   └── viewport.ts        # stubViewport: matchMedia falso (jsdom não implementa)
-│   │   ├── App.test.tsx
-│   │   ├── App.tsx                # o roteador de duas áreas, por estado local (C15, decisão K1); ver docs/ARCHITECTURE.md §5 regra 6
-│   │   ├── index.css              # estilos globais (Tailwind), importado por main.tsx; @keyframes reward-in, usado só sob motion-safe: (D, Task 7)
-│   │   ├── main.test.tsx
-│   │   └── main.tsx
-│   ├── tests/
-│   │   ├── e2e/                   # Playwright + axe-core; fora da coleta do Vitest
-│   │   │   ├── cycle.spec.ts      # semeia o plano pela API, conclui a diária de hoje, axe (B, Task 9); Campanhas pela navegação, axe nas duas áreas, teclado e celular (C, Task 6); só a resposta mais recente decide (C, fix round 1); lê GET /api/progress antes de concluir e confere o reward/painel contra antes + xp da missão (D, Task 9, decisão P6); espera a opacidade do anúncio chegar a 1 antes do axe (D, Ruling R12)
-│   │   │   ├── evaluation.spec.ts # o E2E da entrega e da avaliação: conclui com evidência, pede a avaliação, vê o veredito, o rótulo de interpretação do modelo, o bônus e o total do painel, confere o pedido ao falso (tool_choice auto, strict, sistema; EM3), axe no cartão avaliado e a leitura depois do reload (E, Task 8; docs/QUALITY.md §9)
-│   │   │   ├── falso.ts           # cliente do controle do falso: definirRoteiro, liberar, reiniciar, requisicoes; o tipo Bloco aceita tool_name (E, Task 4)
-│   │   │   ├── headquarters.spec.ts # concluir pela tela confere reward-xp e (num cenário) reward-level-up, além do texto fixo em mission-completion-text (D, Ruling R11); axe do painel de progresso carregado e do estado de erro
-│   │   │   ├── servers.ts         # fonte única das portas do E2E (API 8100, frontend 5273, falso 8150) mais FOCUSQUEST_E2E_PORT_OFFSET (Frente 0)
-│   │   │   ├── reschedule-focus-scroll.spec.ts # Chromium: retorno de foco após reagendar sem deslocar scroll; controle 422 conserva rascunho/foco, HTTPs de apresentação (163(c))
-│   │   │   ├── tracking.spec.ts   # o E2E do acompanhamento: iniciar e concluir com a duração real, reagendar pela tela com o histórico, e a proposta de reagendamento da Tifa confirmada, com axe (F, Task 11)
-│   │   │   └── tutoring.spec.ts   # oito cenários da tutoria contra o falso como processo (docs/QUALITY.md §9), inclusive a cortada por tamanho nos dois motivos e a recusa (pendência 120)
-│   │   └── unit/                  # Vitest da infraestrutura do E2E, fora de tests/e2e/ para o Playwright não coletar
-│   │       └── servers.test.ts    # ambiente node: validação do deslocamento e as portas do playwright.config.ts (Frente 0)
-│   ├── .env.example               # VITE_API_URL e o alvo do proxy; modelo do frontend/.env
-│   ├── .gitignore
-│   ├── .prettierignore
-│   ├── .prettierrc.json
-│   ├── README.md
-│   ├── eslint.config.js
-│   ├── index.html                 # lang="pt-BR" e interactive-widget=resizes-content (1b-2, Task 4)
-│   ├── package-lock.json
-│   ├── package.json               # também define os scripts que o Makefile chama
-│   ├── playwright.config.ts       # servidores dedicados do E2E, sem reuso, sem retentativa; três webServer, portas todas derivadas de servers.ts
-│   ├── tsconfig.json
-│   ├── tsconfig.app.json
-│   ├── tsconfig.e2e.json          # faz o `tsc -b` alcançar tests/e2e e tests/unit
-│   ├── tsconfig.node.json
-│   └── vite.config.ts             # build, proxy de /api, coleta de teste e limiares de cobertura
-├── scripts/                       # lógica de shell do gate, compartilhada entre local e CI
-│   ├── check-push.sh              # valida o topo de cada ref enviada, em worktree isolado
-│   ├── e2e-env.sh                 # sobe a API do E2E; guarda de loopback e chave fictícia (1b-2); guarda do banco compartilhada com tests/integration/banco_de_teste.py (B, Task 6)
-│   ├── init-test-db.sql           # cria o focusquest_test (compose e CI usam o mesmo arquivo)
-│   ├── install-gitleaks.sh        # baixa o Gitleaks fixado, verificado por dois SHA-256
-│   ├── novo-worktree.sh           # worktree irmão com banco de teste e portas do E2E próprios (Frente 0)
-│   └── push-env.sh                # lista de permissão que o pre-push usa para exportar FOCUSQUEST_*; banco e portas próprios do gate do push (Frente 0)
-├── src/
-│   └── focusquest/                # o pacote Python da API, instalado em modo editável — o 1b-2 não muda nada aqui
-│       ├── core/                  # infraestrutura comum a todos os módulos
-│       │   ├── __init__.py
-│       │   ├── base.py            # base declarativa do SQLAlchemy
-│       │   ├── clock.py           # o relógio injetável: Clock, system_now e a dependência get_clock
-│       │   ├── config.py          # Settings (pydantic-settings), prefixo FOCUSQUEST_; ConfiguracaoDeLog, o nível de log lido sem exigir banco, que o Settings herda (pendência 13)
-│       │   ├── database.py        # engine e sessão por requisição; SessaoDaRequisicao, o alias Annotated[Session, Depends(get_session)] escrito uma vez (E, Task 5a)
-│       │   ├── errors.py          # erros de domínio comuns a mais de um módulo; SemEvidenciaError e AvaliacaoEmAndamentoError (E). Sem import de modules/: o teste tests/unit/test_core_sem_modulos.py o exige PrazoDerivadoError, PrazoInalteradoError e ReagendamentoInvalidoError (F)
-│       │   ├── log.py             # configurar_logging: handler no stderr só se a raiz não tiver um, nível só no logger focusquest (pendência 13)
-│       │   ├── usuario_unico.py   # USUARIO_UNICO = 1, o recorte A2, com o motivo na docstring; saiu de missions/router.py (E, decisão E16)
-│       │   └── validation.py      # TextoPersistivel: rejeita U+0000 em entradas textuais destinadas ao PostgreSQL
-│       ├── modules/
-│       │   ├── __init__.py
-│       │   ├── evaluation/        # o processo de avaliar uma entrega (E); ver §3, "O módulo evaluation e a direção única das dependências"
-│       │   │   ├── __init__.py
-│       │   │   ├── errors.py      # AvaliacaoFalhouError(falha): a falha JÁ gravada, que main.py traduz em 502/504; mora aqui e não em core/, porque só evaluation a levanta
-│       │   │   ├── router.py      # POST /api/missions/{id}/evaluation; sem sessão da requisição (abre as próprias transações, E9); 503 antes de tocar no banco
-│       │   │   ├── rubric.py      # o prompt de sistema da avaliação (versionado, README §5), FERRAMENTA_DA_AVALIACAO (esquema estrito, EM3) e montar_turno_da_avaliacao (a evidência como JSON, dado e não instrução)
-│       │   │   ├── schemas.py     # EvaluationOutput (a saída do modelo, validada antes de qualquer escrita) e EvaluationResultRead
-│       │   │   └── service.py     # avaliar_missao: duas transações e a chamada ao modelo entre elas; o limite total; a falha gravada antes de virar erro
-│       │   ├── missions/
-│       │   │   ├── __init__.py
-│       │   │   ├── cycle_domain.py  # regras puras do ciclo: dia, semana, disponibilidade, sequencia, marco, janela (B); limite_da_conclusao_tardia, com_inicio_a_tempo e na_conclusao_tardia (F25)
-│       │   │   ├── cycle_router.py  # POST /api/plans, GET /api/plans/current, GET /api/cycle (B)
-│       │   │   ├── cycle_schemas.py # contratos do plano semanal e do ciclo (B)
-│       │   │   ├── cycle_service.py # criar plano, ler plano/ciclo/missao, historico, ocultacao (B); a diária de ontem iniciada a tempo (`late_daily`, F25)
-│       │   │   ├── evaluation_records.py  # as funções de escrita da avaliação, que evaluation chama (E11): abrir_tentativa, registrar_resultado, registrar_falha; travam a missão primeiro; o relógio é lido depois da trava
-│       │   │   ├── domain.py      # estados/transições/XP de missão; MissionType e xp_da_missao (B); Veredito, EstadoDaAvaliacao, FalhaDaAvaliacao, Verificacao, verificacao_da_missao e a tabela de transições da avaliação (E) — sem FastAPI nem SQLAlchemy (F: TipoDeOperacao, MotivoDoReagendamento, OrigemDoReagendamento, ProblemaDoNovoPrazo, prazo_em_utc, problema_do_novo_prazo e validar_reagendamento, puros)
-│       │   │   ├── models.py      # User, Mission (mission_type/plan_id/day, B), MissionOperation e WeeklyPlan (B); MissionEvidence e MissionEvaluation, com os relacionamentos Mission.evidence/evaluation (E, decisão E11: os dados da entrega moram aqui) (F: MissionReschedule, o histórico de prazos, e os dois TypeDecorator de motivo e origem)
-│       │   │   ├── router.py      # as três rotas de /api/missions; concluir devolve MissionCompletionRead, com reward reconstruído do banco depois do commit (D, decisão D10) e passa evidencia= ao serviço (E); USUARIO_UNICO e SessaoDaRequisicao vêm de core/ (F: são cinco — `POST .../start` e `POST .../reschedule` chamam `iniciar_missao` e `reagendar_missao`, commitam e devolvem `MissionRead`)
-│       │   │   ├── schemas.py     # contratos de entrada e saída; MissionRead com mission_type/day/availability (B); MissionCompletionRead(MissionRead) com reward: RewardRead (D); EvidenceIn/EvidenceRead, EvaluationSummaryRead e os campos verification/evidence/evaluation do MissionRead, sem bonus_xp (E, decisão EM1) (F: MissionStart, MissionRescheduleIn — extra=forbid —, RescheduleRead e MissionRead.reschedules)
-│       │   │   └── service.py     # casos de uso: criar, listar (só avulsas, B), concluir (ocultação e regra do dia, B); concluir_missao chama progression.registrar_conclusao depois do try/flush da MissionOperation (D, decisão P1); ganhou o parâmetro evidencia (NovaEvidencia): reenvio com evidência diferente é operacao_reutilizada, e a linha de mission_evidence é gravada na transição (E, decisão E1) (F: iniciar_missao, reagendar_missao e missao_reagendavel; CONCLUSAO, INICIO e REAGENDAMENTO viram TipoDeOperacao; buscar_para_escrever relê a linha travada com populate_existing)
-│       │   ├── progression/       # saldo, nível e conquistas (D); ver §3, "O módulo progression e a direção das dependências"
-│       │   │   ├── __init__.py
-│       │   │   ├── domain.py      # (E: bonus_da_avaliacao(veredito, xp), a regra única do bônus) puro: xp_para_o_nivel/nivel_do_saldo (curva D4, aritmética inteira), faixa_do_nivel, Codigo, CATALOGO, conquistas_satisfeitas, maior_sequencia — sem banco nem relógio
-│       │   │   ├── models.py      # XpEntry (o livro-razão, D2) e UserAchievement (D5), com os nomes de restrição do plano; FONTE_BONUS e a unicidade por (mission_id, source) (E, decisão E14)
-│       │   │   ├── router.py      # GET /api/progress, sem commit (é leitura); USUARIO_UNICO de core/ (E)
-│       │   │   ├── schemas.py     # AchievementRead, ProgressRead, UnlockedAchievementRead, RewardRead
-│       │   │   └── service.py     # registrar_conclusao (o crédito, D3), recompensa_da_missao (reconstruída do banco, D10; filtra source = mission_completed, E14), ler_progresso; registrar_bonus e recompensa_do_bonus, o bônus da avaliação (E7, E15), e _saldo_antes; lê missions.models/cycle_service/cycle_domain/domain e tutoring.models/domain, nunca escreve neles
-│       │   └── tutoring/          # a Tifa (1b-1); depende de missions, nunca o contrário
-│       │       ├── __init__.py
-│       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação (F: TipoDeAcao.REAGENDAR_MISSAO e REAGENDAMENTO_INVALIDO)
-│       │       ├── models.py      # TutorMessage, TutorAction
-│       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12) (F: Proposta(nome, entrada), para saber qual ferramenta foi chamada, decisão F18)
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E); falhas HTTP registram só status e tipo, sem dados da requisição/resposta (pendência 100) (F: oferece as duas ferramentas, create_mission e reschedule_mission, ainda com uma chamada por resposta e sem strict; esquema_do_reagendamento); responder pelo endpoint beta com o fallback da recusa (pendência 174)
-│       │       ├── persona.py     # o prompt de sistema da Tifa (README §5) (F: o bloco "Reagendar" — só com o motivo conversado, ajuda antes de adiar, nunca culpa pela contagem; a diária e a especial nunca são reagendadas, só lembradas até o limite, pendência 117)
-│       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; as missões do ciclo em conclusão tardia (tardias_do_ciclo, sobre o ler_ciclo; pendência 117), sem #id; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15) (F: cada pendente com o estado, o início e "reagendada N vez(es); último motivo"; ROTULO_DO_MOTIVO; o texto da ação por tipo)
-│       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo) (F: RescheduleProposal, com StrictInt no id e o prazo só em texto ISO, e RetratoDoReagendamento)
-│       │       ├── service.py     # preparar, transmitir, listar, confirmar, recusar; a Tutoria ganhou o campo `modelo` (E) (F: valida a proposta pelo NOME da ferramenta; confere a pré-condição do reagendamento na hora da proposta; confirmar despacha pelo `kind` e revalida tudo)
-│       │       ├── sse.py         # formato do evento SSE e o invólucro que fecha o gerador na desconexão
-│       │       ├── dependencies.py  # get_tutoria() -> Tutoria | None ("sem chave" é None, não exceção); leva settings.tutor_model à Tutoria e ao adaptador (E)
-│       │       └── router.py      # as cinco rotas de /api/tutoring
-│       ├── __init__.py
-│       └── main.py                # app FastAPI, tradução de erro em status, /health, /ready, a tutoria e a progressão (include_router de progression.router, D)
-├── tests/
-│   ├── conftest.py                 # guarda de sessão: nenhum teste alcança a Anthropic de verdade
-│   ├── integration/               # contra PostgreSQL real (o banco de teste do worktree, focusquest_test por padrão), nunca SQLite
-│   │   ├── __init__.py
-│   │   ├── banco_de_teste.py    # guarda do banco de teste + recriar_esquema, compartilhada com make reset-test-db e scripts/e2e-env.sh (B, Task 6); criar_banco_se_ausente (Frente 0)
-│   │   ├── camada3.py             # grava a referência da camada 3 (chamada real, manual, do dono; nunca no gate) (1b-2)
-│   │   ├── camada3_da_avaliacao.py  # grava referencia_da_avaliacao_real.json pelo adaptador de produção (chamada real, manual, do dono; nunca no gate) (pendência 91)
-│   │   ├── camada3_da_conclusao_tardia.py  # a diária de ontem em conclusão tardia no contexto, pelo adaptador de produção com o fallback ligado (chamada real, manual; não grava nada) (pendência 180)
-│   │   ├── camada3_do_reagendamento.py  # a conversa com duas ferramentas pelo adaptador de produção (chamada real, manual; regrava a referência só se a sequência mudar) (pendência 109)
-│   │   ├── conftest.py            # engine de teste, que cria o banco se faltar (Frente 0); banco_migrado usa banco_de_teste.recriar_esquema + upgrade (B); fixtures da tutoria (`falso`, `fabrica`, `tutoria`, `conversa`)
-│   │   ├── espiao.py              # o Espiao (transporte que copia o corpo cru e o decodifica) e provedor_espionado (o ProvedorAnthropic de produção, com max_retries=0) (pendências 91 e 109)
-│   │   ├── falso_do_e2e.py        # o falso como processo próprio (1b-2): controle HTTP /_control/*, porta por --porta
-│   │   ├── provedor_falso.py      # o servidor HTTP falso da Anthropic, roteirizável, com o bloco de thinking da API real por padrão (não é teste)
-│   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
-│   │   ├── referencia_da_avaliacao_real.json  # a sequência de tipos de evento de uma avaliação real, sem conteúdo (gerada pelo camada3_da_avaliacao.py)
-│   │   ├── test_acompanhamento_concorrencia.py  # conexões reais, sem sleep: dois inícios, início × conclusão, dois reagendamentos encadeados, reagendamento × conclusão, o relógio lido depois da trava (F, Task 5)
-│   │   ├── test_reagendamento_espera_deterministica.py # parte da pendência 160: dois reagendamentos diretos com PIDs/espera comprovados e relógio injetado; prazo vence sem escrita ou gera segundo elo com histórico/instante posterior corretos; cleanup por CASCADE
-│   │   ├── test_inicio_virada_dia_concorrencia.py # início diário após espera comprovada: perdida recusa sem escrita; revelada inicia na meia-noite SP (160 parcial)
-│   │   ├── test_acompanhamento_migration.py  # a 0006: ida e volta, cada restrição nova dizendo não por INSERT cru, o downgrade que falha alto (F, Task 2)
-│   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio; cada stop_reason vira a Parada do Fim)
-│   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
-│   │   ├── test_camada3_da_avaliacao.py  # o falso da avaliação contra a referência real; a captura recusa gravar fora da API real (pendência 91)
-│   │   ├── test_camada3_da_conclusao_tardia.py  # o cenário da conclusão tardia contra o falso: a seção no contexto, a captura, o veredito e a guarda do endereço (pendência 180)
-│   │   ├── test_camada3_do_reagendamento.py  # o falso roteirizado com reschedule_mission contra a referência da conversa (pendência 109)
-│   │   ├── test_banco_de_teste.py  # a guarda recusa o banco de desenvolvimento; recriar_esquema apaga tudo do de teste (B, Task 6); criação sob demanda atrás da guarda (Frente 0)
-│   │   ├── test_completion_evidence.py  # concluir com evidência: grava, reenvio igual/diferente, os 422, a recompensa com um bônus gravado, MissionRead (E, Task 3)
-│   │   ├── test_cycle_api.py      # o contrato HTTP do ciclo: formas, recusas, códigos, ocultação por 404 (B, Task 5)
-│   │   ├── test_cycle_completion.py  # ocultação e regra do dia na conclusão, listagem só de avulsas (B, Task 4)
-│   │   ├── test_cycle_concorrencia.py  # a trava perto da virada do dia, provada por entrelaçamento (B, Task 4)
-│   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
-│   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
-│   │   ├── test_evaluation_api.py  # o contrato de POST /evaluation: o corpo da spec, reward nulo, o repetido, cada erro com status e code, as falhas do modelo já gravadas (E, Task 5)
-│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5); missão retida e usuário livre durante a escrita bloqueada da avaliação (104 parcial)
-│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2); snapshot populado preserva IDs/FKs brutos do XP e conquistas em 0004↔0005 (T-M4)
-│   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
-│   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
-│   │   ├── test_evaluation_service.py  # avaliar_missao contra o falso: os três vereditos com e sem bônus, o repetido sem chamar o falso, falhas gravadas antes do erro, o limite total, a injeção (E, Task 5)
-│   │   ├── test_evaluation_provider.py  # o adaptador avalia contra o falso: tool_choice auto e strict (EM3), max_tokens próprio, stop_reason, outra ferramenta, stream cortado, erro HTTP, demora (E, Task 4)
-│   │   ├── test_e2e_env.py        # guarda de loopback e chave fictícia do scripts/e2e-env.sh (1b-2)
-│   │   ├── test_espiao.py         # o Espiao e o provedor espionado: cópia do corpo, gzip, sem nova tentativa (pendências 91 e 109)
-│   │   ├── test_falso_do_e2e.py   # o contrato do controle HTTP do falso_do_e2e.py, do lado Python (1b-2); o bloco com tool_name e o padrão create_mission (E, Task 4)
-│   │   ├── test_health.py
-│   │   ├── test_iniciar_missao.py # iniciar: ordem trava, relógio, ocultação, reenvio, regra do dia; chave cruzada; a conclusão tardia da diária e da especial (F1–F5, F25)
-│   │   ├── test_install_gitleaks.py  # o script de download do Gitleaks, verificação de checksum e retentativa
-│   │   ├── test_migrations.py
-│   │   ├── test_novo_worktree.py  # scripts/novo-worktree.sh num repositório git temporário, com make falso (Frente 0)
-│   │   ├── test_missions_api.py    # ganhou test_reenviar_a_mesma_operacao_devolve_o_mesmo_200 conferindo reward também (D)
-│   │   ├── test_missions_concorrencia.py
-│   │   ├── test_missions_listagem_consultas.py  # a listagem custa um número fixo de consultas (selectinload de evidência, avaliação e reagendamentos) (pendência 96)
-│   │   ├── test_missions_models.py
-│   │   ├── test_missions_service.py
-│   │   ├── test_progression_api.py         # o contrato de GET /api/progress e o reward no 200 da conclusão e do reenvio (D, Task 4)
-│   │   ├── test_progression_concorrencia.py  # duas primeiras conclusões em paralelo destravam uma conquista só; falha injetada no crédito desfaz a conclusão; a trava do usuário é tomada (D, Task 3, conexões reais)
-│   │   ├── test_progression_migration.py   # a 0004: ida e volta, o backfill num banco populado, e a equivalência com o serviço de hoje (D8) (D, Tasks 2 e 3); roundtrip populado preserva legado e reconstrói progressão sem IDs brutos (83)
-│   │   ├── test_progression_service.py     # o crédito na conclusão, a recompensa reconstruída (inclusive o reenvio antigo) e a leitura (D, Task 3)
-│   │   ├── test_provedor_falso.py # camadas 1 e 2 do falso: contrato com o SDK real (docs/QUALITY.md)
-│   │   ├── test_push_env.py       # o mecanismo de lista de permissão de scripts/push-env.sh; o isolamento do gate do push (Frente 0)
-│   │   ├── test_reagendar_missao.py  # reagendar: cada recusa antes de qualquer escrita, o histórico encadeado, o reenvio e a chave gasta, a API (F6–F13)
-│   │   ├── test_sessao_em_utc.py  # sessão em UTC com PGTZ a leste e a oeste
-│   │   ├── test_tutoring_acoes.py # confirmar e recusar, inclusive concorrência real
-│   │   ├── test_tutoring_api.py   # rotas, códigos de erro, SSE, segredo
-│   │   ├── test_tutoring_desconexao.py  # desconexão com uvicorn real (M9: o TestClient não serve)
-│   │   ├── test_tutoring_models.py  # restrições do banco, uma por INSERT
-│   │   ├── test_tutoring_reagendamento.py  # a proposta de reagendamento (pré-condição, retrato, cortada por max_tokens) e a confirmação com cada desfecho, o reenvio e a concorrência (F, Task 7)
-│   │   └── test_tutoring_service.py  # preparar e transmitir um turno
-│   └── unit/                      # sem banco
-│       ├── __init__.py
-│       ├── test_acompanhamento_domain.py  # o domínio puro do início e do reagendamento, em tabela (F, Task 1)
-│       ├── test_clock.py
-│       ├── test_comandos_fora_da_raiz.py  # o alembic.ini acha os scripts de qualquer diretório corrente, com -c (pendência 29)
-│       ├── test_config.py         # inclui a regressão da guarda com a chave exportada no ambiente (1b-2, Task 8 Step 1)
-│       ├── test_core_sem_modulos.py  # nenhum arquivo de core/ importa focusquest.modules (E, Task 5)
-│       ├── test_cycle_domain.py   # dia, semana, disponibilidade, sequência, marco e janela, em tabela (B, Task 1)
-│       ├── test_cycle_invariantes.py  # MissaoLida, dia_da_diaria, leitura_da_avulsa (B, Task 2)
-│       ├── test_evaluation_domain.py  # bonus_da_avaliacao, verificacao_da_missao e a matriz completa de transições da avaliação (E, Tasks 1 e 5a)
-│       ├── test_evaluation_rubric.py  # o prompt, o esquema estrito da ferramenta, o turno em JSON e a evidência fora do sistema (E, Task 5)
-│       ├── test_log.py            # o nível de log, o handler único, terceiros fora do DEBUG, a configuração padrão do uvicorn aplicada por dictConfig, o desligamento que devolve o estado e nenhum segredo no stderr (pendência 13)
-│       ├── test_missions_domain.py
-│       ├── test_package.py
-│       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
-│       ├── test_run_configs.py    # as configurações de .run/: XML, sem caminho pessoal, não ignoradas, e o que apontam existe (pendência 17)
-│       ├── test_diagnostico_do_provedor.py  # status HTTP e tipo da causa no WARNING, sem corpo/mensagem/header/URL/traceback; erros sem resposta não inventam status (pendência 100)
-│       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
-│       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
-│       ├── test_tutoring_domain.py   # enums e transição da ação
-│       ├── test_tutoring_persona.py  # o prompt cumpre as exigências do README §5/§6
-│       ├── test_tutoring_proposta_de_reagendamento.py  # RescheduleProposal: o esquema, as entradas inválidas (prazo em número ou em texto de dígitos) e o esquema da ferramenta (F, Tasks 6 e 7)
-│       ├── test_tutoring_router_sse.py  # o `finally: eventos.close()` de `_em_sse`
-│       └── test_tutoring_sse.py      # o invólucro `fechando_ao_cancelar`
-├── .run/                          # configurações de execução compartilhadas do PyCharm (README §4); ver "Configurações de execução do PyCharm" em §4
-│   ├── API.run.xml                # uvicorn focusquest.main:app em 127.0.0.1:8000, pelo .venv do projeto
-│   ├── Frontend.run.xml           # npm run dev (frontend/)
-│   ├── Gate.run.xml               # make check, no terminal da IDE
-│   ├── Testes_backend.run.xml     # pytest sobre tests/, pelo .venv do projeto
-│   └── Testes_frontend.run.xml    # npm run test (frontend/)
-├── .env.example                   # modelo do .env da raiz (banco e a tutoria); a chave da Anthropic fica vazia — a de verdade mora no Keychain (D-a, 1b-2)
-├── .gitignore
-├── .gitleaks.toml                 # configuração da varredura de segredos
-├── .pre-commit-config.yaml        # declara os hooks pre-commit, pre-merge-commit e pre-push
-├── .python-version
-├── AGENTS.md                      # regras comuns a todos os agentes
-├── CLAUDE.md                      # importa AGENTS.md e acrescenta o específico do Claude Code
-├── CONTINUACAO.md                 # roteiro curto para retomar num clone novo; aponta para AGENTS.md e docs/HANDOFF.md
-├── Makefile                       # a entrada única do gate e do ambiente local
-├── README.md                      # a especificação do produto; autoridade final
-├── alembic.ini
-├── compose.yaml                   # o PostgreSQL local: postgres:18.6-alpine na porta 55432 do host
-├── pyproject.toml                 # pacote focusquest, dependências (inclui anthropic, httpx2 e anyio, da tutoria) e configuração de Ruff, mypy, pytest e coverage
-└── uv.lock
+├── src/focusquest/
+│   ├── core/                  # configuração, banco e infraestrutura comum
+│   └── modules/
+│       ├── missions/          # ciclo, planos, missões, entregas e prazos
+│       ├── tutoring/          # conversa, provedor e propostas confirmáveis
+│       ├── progression/       # XP, níveis e conquistas
+│       └── evaluation/        # avaliação das evidências pela tutora
+├── alembic/                   # migrações; versões 0001 a 0007
+├── tests/                     # testes Python unitários e de integração
+├── frontend/
+│   ├── public/art/            # cenários e retratos locais; docs/ART.md
+│   ├── src/
+│   │   ├── app/               # navegação entre áreas
+│   │   ├── pages/             # composição de Quartel-General e Campanhas
+│   │   ├── features/          # campaigns, missions, progression e tutoring
+│   │   ├── shared/            # API, tipos, hooks e funções compartilhados
+│   │   └── test/              # infraestrutura dos testes de componentes
+│   └── tests/                 # E2E de navegador e testes de infraestrutura
+├── scripts/                   # gate, worktrees e diagnósticos operacionais
+├── docs/                      # arquitetura, qualidade, estado e arte
+│   └── superpowers/specs/     # contratos e decisões dos incrementos
+├── .github/workflows/         # CI: um job por alvo de verificação
+└── .run/                      # configurações compartilhadas do PyCharm
 ```
+
+Planos concluídos e relatos de execução antigos ficam no histórico Git.
+A fotografia anterior à limpeza está em `ca3b03c`; por exemplo,
+`git show ca3b03c:docs/HANDOFF.md` recupera decisões e alterações por incremento.
+O estado corrente e as pendências estão em [HANDOFF.md](HANDOFF.md).
+
+Dependências, caches, relatórios, configurações locais e worktrees são
+ignorados pelo Git. Novas worktrees ficam em `.claude/worktrees/` dentro do
+principal, com banco e portas próprios; criação e isolamento em
+[QUALITY.md](QUALITY.md#primeiro-uso-após-clonar).
 
 ### O que a árvore acima **não** tem
 

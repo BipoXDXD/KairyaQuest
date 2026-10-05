@@ -6,6 +6,12 @@ deliberadamente não mede), o que os alvos `check-api` e `check-e2e` fazem, a
 integração contínua, as limitações conhecidas sem eufemismo, e o
 procedimento de atualização do Gitleaks.
 
+As referências a decisões, pendências resolvidas e resultados de incrementos
+antigos remetem à fotografia `ca3b03c:docs/HANDOFF.md`, recuperável com
+`git show ca3b03c:docs/HANDOFF.md`. O [HANDOFF atual](HANDOFF.md) mantém os
+comandos, as decisões vigentes e os limites ainda abertos. Resultados
+históricos não substituem a execução do gate sobre a revisão atual.
+
 ## Primeiro uso após clonar
 
 Em um clone novo (ou um worktree novo), rode os comandos abaixo, **nesta
