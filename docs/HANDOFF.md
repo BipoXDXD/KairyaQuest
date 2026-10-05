@@ -8,6 +8,39 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Avaliação antes do usuário — prova parcial da 104 — 2026-10-05
+
+**Base:** `5ba81c3` (main), branch `wt/avaliacao-ordem-usuario`. Esta fatia
+acrescenta somente um teste de integração e documentação; não altera produção,
+contratos, dependências ou gates. Os registros abaixo permanecem históricos;
+esta branch ainda precisa de gate completo e publicação, sem merge autorizado.
+
+O provedor controlado segura a resposta depois do commit da tentativa. Outra
+conexão trava somente `MissionEvaluation`; `pg_blocking_pids` confirma a
+transação 2 bloqueada nessa escrita. Na terceira conexão, a missão recusa
+`FOR KEY SHARE NOWAIT`, enquanto o usuário aceita `FOR SHARE NOWAIT`.
+Após liberar a avaliação, o teste confere tentativa, modelo, veredito,
+feedback, instantes, evidência intacta, uma operação e créditos próprios da
+missão de 40 XP pela conclusão e 20 XP de bônus, sem duplicação.
+
+**Executado nesta sessão:** baseline do módulo, 5 testes aprovados;
+`uv run pytest tests/integration/test_evaluation_concorrencia.py`, depois da
+mudança, EXIT 0, 6 testes em 3,60 s. O cenário focal passou (1 teste em 0,43 s).
+Ruff lint/formato e mypy do teste passaram. Uma mutação temporária válida,
+aprovada pelo mypy, antecipa `registrar_bonus` antes de `registrar_resultado`:
+o cenário reprova por `psycopg.LockNotAvailable` na sonda do usuário
+(1 falha, 5 desmarcados), sem timeout. Produção foi restaurada em `finally`,
+com SHA-256 idêntico, antes do GREEN.
+
+**Limite:** prova a missão retida enquanto a escrita da avaliação aguarda e
+a escrita antes da trava do usuário. Hoje a avaliação bloqueia no
+`UPDATE`/flush; esta prova não demonstra a matriz inteira de concorrência nem
+a ordem global de todos os fluxos. A pendência 104 continua parcial.
+Plano: `docs/superpowers/plans/2026-10-05-avaliacao-ordem-usuario.md`.
+Revisão, gate completo, snapshots das fontes e publicação ficam no ledger
+ignorado `.superpowers/sdd/2026-10-05-avaliacao-ordem-usuario/progress.md` e
+seus logs; esses resultados não são antecipados por este registro.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -4953,13 +4986,16 @@ ledger; nenhum é bug esquecido.
     achado espúrio extra (sem falso positivo hoje); e a regra não cobre
     `importlib.import_module("focusquest.modules...")` nem `__import__`, o que é
     aceitável para uma regra de AST, mas merece um comentário.
-104. **A ordem das travas na transação 2 da avaliação não é provada por
-    teste** (mutação M3 da Task 5, equivalente nos testes). Mover
-    `registrar_bonus` para antes de `registrar_resultado` só inverte a ordem
-    missão → usuário, um risco de espera circular com outra conclusão
-    simultânea que nenhum teste exercita. O código está na ordem certa
-    (missão → avaliação → usuário) e o documento a declara; um teste teria de
-    montar duas transações em conflito cruzado.
+104. **A ordem das travas na transação 2 da avaliação — prova parcial.**
+    A mutação M3 da Task 5 era equivalente nos testes anteriores. A fatia
+    `wt/avaliacao-ordem-usuario` observa a missão retida e o usuário ainda livre
+    enquanto a escrita da avaliação está bloqueada por outra conexão. Antecipar
+    `registrar_bonus` antes de `registrar_resultado` agora reprova por
+    `LockNotAvailable` na sonda `User FOR SHARE NOWAIT`; código restaurado e
+    módulo com 6 testes aprovados nesta sessão. A avaliação bloqueia no
+    `UPDATE`/flush atual, e a missão é sondada com `FOR KEY SHARE NOWAIT`.
+    **Resta:** a matriz de conflitos cruzados com outros fluxos e a prova da
+    ordem global ação → missão → avaliação → usuário; esta fatia não as cobre.
 105. ~~**Depois de remontar o cartão com a chave retida, o botão diz
     "Concluir"** (re-revisão da PF-front).~~ **Resolvida pelo lote MF**
     (`10f4747`): o rótulo lê `isRetryPending` do registro e diz "Tentar de novo".

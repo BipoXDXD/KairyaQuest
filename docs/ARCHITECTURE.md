@@ -330,7 +330,7 @@ FocusQuest/
 │   │   ├── test_cycle_models.py   # restrições do ciclo no banco, uma por INSERT recusado e nomeado (B, Task 2)
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
 │   │   ├── test_evaluation_api.py  # o contrato de POST /evaluation: o corpo da spec, reward nulo, o repetido, cada erro com status e code, as falhas do modelo já gravadas (E, Task 5)
-│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5)
+│   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5); missão retida e usuário livre durante a escrita bloqueada da avaliação (104 parcial)
 │   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2)
 │   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
 │   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
@@ -1266,6 +1266,16 @@ avaliação só é escrita com a missão travada, e o usuário só é travado pe
 `registrar_bonus`, por último. Dois pedidos simultâneos: um avalia, o outro
 recebe `409 avaliacao_em_andamento`, e o livro-razão tem no máximo um
 `evaluation_bonus` por missão (`uq_xp_entries_mission_id_source`).
+
+`test_evaluation_concorrencia.py` prova um trecho dessa ordem em conexões
+reais: outra transação retém somente a avaliação, `pg_blocking_pids` observa
+a transação 2 esperando sua escrita, a missão recusa `FOR KEY SHARE NOWAIT`
+e o usuário ainda aceita `FOR SHARE NOWAIT`. A avaliação hoje bloqueia no
+`UPDATE`/flush, sem exigir um `SELECT FOR UPDATE` dela. Ao liberar a espera,
+o cenário confere avaliação e evidência persistidas, operação única e os
+créditos de conclusão e bônus da missão. Antecipar o bônus faz a sonda do
+usuário reprovar por `LockNotAvailable`. Esta prova parcial da pendência 104
+não cobre a matriz de conflitos cruzados nem a ordem global de todos os fluxos.
 
 
 ### O contrato HTTP do acompanhamento que existe (Incremento F)
