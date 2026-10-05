@@ -8,6 +8,35 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Diagnóstico HTTP do provedor — 2026-10-05
+
+Fatia da pendência 100, baseada na `main` em `5ba81c3`, na branch
+`wt/diagnostico-provedor`. Ainda não integrada à `main`. O dono delegou as
+decisões não críticas e autorizou commit, push e PR por fase com cobertura de
+100%; merge, chamadas pagas e alterações críticas continuam pendentes.
+
+`_traduzir_erros`, compartilhado por conversa e avaliação, registra um
+`WARNING` para `anthropic.APIStatusError` com apenas o status HTTP real e o
+nome do tipo SDK. Não inclui mensagem da exceção, corpo, URL, headers,
+traceback nem stack. Timeout, falha de conexão/transporte e `APIError` sem
+resposta preservam a tradução anterior e não fabricam um status. Classe
+pública, mensagem pública e identidade da causa original permanecem iguais.
+Não entram biblioteca, endpoint, serviço, migração ou chamada real ao provedor.
+
+Validação focada executada: baseline de tradução/log, 23 testes aprovados;
+RED, sete falhas HTTP sem diagnóstico e cinco controles aprovados; GREEN,
+35 testes aprovados (12 novos mais os 23 existentes). Três mutações temporárias
+(status errado, mensagem privada e traceback) reprovaram os sete casos HTTP,
+com cinco controles aprovados em cada execução; os bytes corretos foram
+restaurados. A revisão reforçou o oráculo para exigir a mensagem completa,
+sem aceitar prefixos de status/tipo incorretos. Os resultados posteriores do
+gate completo, hooks e publicação pertencem ao ledger da fase e ao PR; esta
+validação focada não os substitui. Não foi feita chamada paga de diagnóstico.
+
+Decisão: melhorar o diagnóstico no adaptador sem mudar os códigos públicos
+ou textos da interface. A eventual distinção de 4xx de configuração no
+contrato público é outra decisão e permanece pendente na 100.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -4917,18 +4946,18 @@ ledger; nenhum é bug esquecido.
     (data não consultada nesta sessão) — por isso a data de revisão abaixo.
     **Revisitar em 2026-12-01:** subir para a versão seguinte de propósito,
     num PR que rode o gate inteiro nela (o comentário no workflow repete a data).
-100. **Os 4xx de configuração do provedor viram `provedor_indisponivel`, sem
-    log da causa** (S-I3 da caça a falhas silenciosas). `_traduzir_erros`
-    funde em `ProvedorIndisponivelError` qualquer `anthropic.APIError`, inclusive
-    401, 403, 404, 400 e 429 (chave inválida ou revogada, modelo inexistente,
-    corpo recusado, limite de taxa), e a mensagem leva só o **nome** da
-    exceção. **É comportamento anterior ao E, do chat, estendido à avaliação**
-    (ruling do ledger: pendência nova, não correção agora; o custo é um diagnóstico pior de chave inválida até lá). Consequência: uma chave
-    inválida aparece na tela como "A Tifa está fora do ar" e no servidor como
-    `502 provedor_indisponivel`, sem rastro do status real; quem diagnostica
-    precisa reproduzir a chamada. Uma correção registraria o status e o tipo
-    da causa no log (nunca o corpo nem a chave) e talvez distinguisse os 4xx
-    de configuração dos de rede.
+100. **Distinção pública das falhas de configuração do provedor**
+    (S-I3 da caça a falhas silenciosas). A fatia `wt/diagnostico-provedor`,
+    baseada em `5ba81c3` e ainda não integrada à `main`, resolve o diagnóstico
+    local: `_traduzir_erros` registra status HTTP real e tipo SDK em `WARNING`,
+    sem corpo, mensagem, chave, URL, headers ou traceback. Os casos 400, 401,
+    403, 404, 429, 500 e `APIStatusError` base são cobertos por testes reais de
+    log; falhas sem resposta não inventam status. O comportamento público
+    continua sendo `ProvedorIndisponivelError`, inclusive para 4xx, e a tela
+    continua mostrando "A Tifa está fora do ar". **Pendente:** decidir se os
+    4xx de configuração merecem códigos/textos públicos próprios, considerando
+    que chat e avaliação compartilham o tradutor. A integração e o CI desta
+    fatia são estados separados da validação focada registrada acima.
 101. **O rascunho guardado pode ficar inacessível para a pessoa** (M10 da
     pré-revisão opus). Numa falha `refresh` da conclusão (`transicao_ilegal`, por
     exemplo quando a primeira tentativa foi gravada, a pessoa editou o texto e a

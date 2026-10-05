@@ -290,7 +290,7 @@ FocusQuest/
 │       │       ├── domain.py      # enums (Papel, StatusDaMensagem, EstadoDaAcao, TipoDeAcao, CodigoDoStream), transição da ação (F: TipoDeAcao.REAGENDAR_MISSAO e REAGENDAMENTO_INVALIDO)
 │       │       ├── models.py      # TutorMessage, TutorAction
 │       │       ├── provider.py    # o Protocol do provedor e seus eventos (Delta, Proposta, Fim) e erros; Ferramenta e o método avaliar(turno, ferramenta) (E, decisão E12) (F: Proposta(nome, entrada), para saber qual ferramenta foi chamada, decisão F18)
-│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E) (F: oferece as duas ferramentas, create_mission e reschedule_mission, ainda com uma chamada por resposta e sem strict; esquema_do_reagendamento); responder pelo endpoint beta com o fallback da recusa (pendência 174)
+│       │       ├── anthropic_provider.py  # o adaptador: única peça que importa o SDK `anthropic`; avaliar com tool_choice auto, strict e disable_parallel_tool_use (EM3), e _traduzir_erros compartilhado com responder (E); falhas HTTP registram só status e tipo, sem dados da requisição/resposta (pendência 100) (F: oferece as duas ferramentas, create_mission e reschedule_mission, ainda com uma chamada por resposta e sem strict; esquema_do_reagendamento); responder pelo endpoint beta com o fallback da recusa (pendência 174)
 │       │       ├── persona.py     # o prompt de sistema da Tifa (README §5) (F: o bloco "Reagendar" — só com o motivo conversado, ajuda antes de adiar, nunca culpa pela contagem; a diária e a especial nunca são reagendadas, só lembradas até o limite, pendência 117)
 │       │       ├── context.py     # monta o turno: persona, agora, missões pendentes, histórico fundido; as missões do ciclo em conclusão tardia (tardias_do_ciclo, sobre o ler_ciclo; pendência 117), sem #id; linha de progresso via progression.ler_progresso, no fim do contexto, só leitura (D, decisão D15) (F: cada pendente com o estado, o início e "reagendada N vez(es); último motivo"; ROTULO_DO_MOTIVO; o texto da ação por tipo)
 │       │       ├── schemas.py     # contratos de entrada e saída (chaves em inglês: contrato externo) (F: RescheduleProposal, com StrictInt no id e o prazo só em texto ISO, e RetratoDoReagendamento)
@@ -379,6 +379,7 @@ FocusQuest/
 │       ├── test_package.py
 │       ├── test_progression_domain.py  # a curva de nível (bordas 0/99/100/…/19000) e o catálogo de conquistas no limite (D, Task 1)
 │       ├── test_run_configs.py    # as configurações de .run/: XML, sem caminho pessoal, não ignoradas, e o que apontam existe (pendência 17)
+│       ├── test_diagnostico_do_provedor.py  # status HTTP e tipo da causa no WARNING, sem corpo/mensagem/header/URL/traceback; erros sem resposta não inventam status (pendência 100)
 │       ├── test_traducao_de_erros.py  # _traduzir_erros: cada meia-cláusula do except reprova o seu caso (E, Task 5b)
 │       ├── test_tutoring_context.py  # montagem do turno; a linha de progresso no contexto, e que pedir XP no chat não altera xp_entries (D, Task 5)
 │       ├── test_tutoring_domain.py   # enums e transição da ação
