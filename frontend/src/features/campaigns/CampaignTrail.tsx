@@ -81,15 +81,21 @@ function MissionContent({ mission }: { mission: Mission }) {
         <span className="text-slate-400">Critério de conclusão: </span>
         {mission.completion_criterion}
       </p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-300 sm:grid-cols-3">
-        <dt className="text-slate-400">Dificuldade</dt>
-        <dd data-testid="trail-difficulty">
-          {mission.difficulty} de {MAX_DIFFICULTY}
-        </dd>
-        <dt className="text-slate-400">Estimativa</dt>
-        <dd data-testid="trail-estimated-minutes">{mission.estimated_minutes} min</dd>
-        <dt className="text-slate-400">Recompensa</dt>
-        <dd data-testid="trail-xp">{mission.xp} XP</dd>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-300 sm:grid-cols-3">
+        <div>
+          <dt className="text-slate-400">Dificuldade</dt>
+          <dd data-testid="trail-difficulty">
+            {mission.difficulty} de {MAX_DIFFICULTY}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">Estimativa</dt>
+          <dd data-testid="trail-estimated-minutes">{mission.estimated_minutes} min</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">Recompensa</dt>
+          <dd data-testid="trail-xp">{mission.xp} XP</dd>
+        </div>
       </dl>
     </div>
   )
@@ -128,7 +134,7 @@ function HeadquartersHint({
 }
 
 const ITEM_CLASS =
-  'rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
+  'rpg-trail-card rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
   'focus-within:ring-2 focus-within:ring-emerald-400'
 
 function TrailDay({

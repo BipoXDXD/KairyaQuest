@@ -192,6 +192,13 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
   await expect(painel.getByTestId('progress-level')).toBeVisible()
 
   const conquistas = painel.getByTestId('progress-achievement')
+  const disclosure = painel.locator('summary').filter({ hasText: 'Conquistas' })
+  await expect(conquistas.first()).toBeHidden()
+  await expect(painel.getByTestId('progress-total')).toBeVisible()
+  await expect(painel.getByRole('progressbar')).toBeVisible()
+  await disclosure.focus()
+  await page.keyboard.press('Enter')
+  for (const conquista of await conquistas.all()) await expect(conquista).toBeVisible()
   const codigos = await conquistas.evaluateAll((itens) =>
     itens.map((item) => item.getAttribute('data-code')),
   )
@@ -214,6 +221,14 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
 
   const bloqueada = painel.locator('[data-testid="progress-achievement"][data-unlocked="false"]')
   await expect(bloqueada.first()).toContainText('Bloqueada:')
+
+  await disclosure.focus()
+  await page.keyboard.press('Space')
+  await expect(conquistas.first()).toBeHidden()
+  await expect(painel.getByTestId('progress-level')).toBeVisible()
+  await expect(painel.getByTestId('progress-total')).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(primeirosPassos).toBeVisible()
 
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])

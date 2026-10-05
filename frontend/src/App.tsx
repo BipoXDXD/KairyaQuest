@@ -40,7 +40,7 @@ function App() {
     document.getElementById(HEADING_OF[next])!.focus()
   }, [])
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 lg:flex">
+    <div className="app-shell min-h-screen bg-slate-950 text-slate-100 lg:flex">
       <SideNav active={area} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
         <Headquarters hidden={area !== 'headquarters'} />

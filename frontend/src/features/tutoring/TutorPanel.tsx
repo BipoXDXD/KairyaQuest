@@ -22,15 +22,22 @@ function liveText(send: SendState): string {
   return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : ''
 }
 
-/** Retrato PLACEHOLDER: iniciais em verde, nenhum asset dos jogos (README §7). */
-function Portrait() {
+/** Arte original decorativa; dimensões reservadas antes do download. */
+function Portrait({ scene }: { scene: boolean }) {
   return (
     <span
       data-testid="tutor-portrait"
       aria-hidden="true"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-sm font-bold text-white"
+      data-size={scene ? 'scene' : 'compact'}
+      className="tutor-portrait"
     >
-      TL
+      <img
+        src={scene ? '/art/tifa-mentor.webp' : '/art/tifa-avatar.webp'}
+        alt=""
+        width="1122"
+        height="1402"
+        decoding="async"
+      />
     </span>
   )
 }
@@ -213,7 +220,7 @@ export function TutorPanel({
       ref={panel}
       aria-label="Tifa"
       data-testid="tutor-panel"
-      className="lg:border-l lg:border-slate-800"
+      className="rpg-tutor lg:border-l lg:border-slate-800"
     >
       <p role="status" data-testid="tutor-live" className="sr-only">
         {liveText(conversation.send)}
@@ -223,13 +230,15 @@ export function TutorPanel({
         <div
           key="desktop"
           ref={captureLayout}
-          className={`flex h-screen flex-col gap-3 p-4 ${desktopOpen ? 'w-96' : 'w-20'}`}
+          className={`tutor-desktop flex h-screen flex-col gap-3 p-4 ${desktopOpen ? 'tutor-desktop-open w-96' : 'tutor-desktop-closed w-20'}`}
         >
-          <header className={`flex items-center gap-3 ${desktopOpen ? '' : 'flex-col'}`}>
-            <Portrait />
+          <Portrait scene={desktopOpen} />
+          <header
+            className={`tutor-heading flex items-center gap-3 ${desktopOpen ? '' : 'flex-col'}`}
+          >
             {desktopOpen && (
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-slate-50">Tifa</h2>
+                <h2 className="tutor-name text-lg font-semibold text-slate-50">Tifa</h2>
                 <p className="text-xs text-slate-400">sua tutora</p>
               </div>
             )}
@@ -265,7 +274,7 @@ export function TutorPanel({
               onClick={() => setSheetOpen(true)}
               className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
-              <Portrait />
+              <Portrait scene={false} />
               Falar com a Tifa
             </button>
           )}
@@ -286,7 +295,7 @@ export function TutorPanel({
                 className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85dvh] flex-col gap-3 rounded-t-2xl bg-slate-950 p-4"
               >
                 <header className="flex items-center gap-3">
-                  <Portrait />
+                  <Portrait scene={false} />
                   <h2 id="tutor-sheet-title" className="flex-1 text-lg font-semibold text-slate-50">
                     Tifa
                   </h2>

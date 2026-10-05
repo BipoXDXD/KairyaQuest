@@ -838,13 +838,25 @@ describe('TutorPanel: desktop', () => {
     expect(messageWith('Resposta pronta')).toBeInTheDocument()
   })
 
-  it('P26 o retrato e decorativo e nao usa asset nenhum', async () => {
+  it('P26 o retrato local e decorativo e reserva dimensoes antes de carregar', async () => {
     mountPanel({})
 
     const portrait = screen.getByTestId('tutor-portrait')
     expect(portrait).toHaveAttribute('aria-hidden', 'true')
-    expect(portrait).toHaveTextContent('TL')
-    expect(portrait.querySelector('img')).toBeNull()
+    const image = portrait.querySelector('img')
+    expect(image).toHaveAttribute('src', '/art/tifa-mentor.webp')
+    expect(image).toHaveAttribute('alt', '')
+    expect(image).toHaveAttribute('width', '1122')
+    expect(image).toHaveAttribute('height', '1402')
+    expect(portrait).toHaveAttribute('data-size', 'scene')
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'compact')
+    expect(screen.getByTestId('tutor-portrait').querySelector('img')).toHaveAttribute(
+      'src',
+      '/art/tifa-avatar.webp',
+    )
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'scene')
     expect(screen.getByRole('complementary', { name: 'Tifa' })).toBeInTheDocument()
     await ready()
   })
