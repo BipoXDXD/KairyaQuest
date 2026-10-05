@@ -8,6 +8,55 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Oráculo das retentativas SDK — 2026-10-05
+
+Fase exclusiva `wt/sdk-retries-oraculo`, baseada na `main` em `5ba81c3`,
+ainda não integrada. O dono autorizou decisões não críticas e commit/push/PR
+por fase com gate completo e cobertura de 100%; merge continua pendente.
+
+O primeiro pre-push da fase de consultas do plano, publicada depois no
+[PR #12](https://github.com/BipoXDXD/FocusQuest/pull/12), reprovou na contagem
+física de chamadas de um teste de encerramento válido. A resposta, o SSE e a
+ação gravada estavam corretos. **A causa daquela execução não foi identificada
+definitivamente**, pois o log não capturou os headers de retry. Uma reprodução
+controlada confirmou a mesma falha com atraso de 0,35 s antes dos headers,
+timeout de 0,3 s e retentativas SDK `[0, 1]`; não chamou a leitura do plano.
+A fase de consultas preservou seus bytes/commit e publicou após uma segunda
+execução normal autorizada do hook. Esta correção do teste é uma fase própria.
+
+A expectativa `len(recebidas) == 1` confundia geração lógica com tentativa
+HTTP, embora a política existente permita duas retentativas antes do stream.
+Esta fase muda essa expectativa deliberadamente: exige sequência exata dos
+contadores de retry e JSON idêntico em cada tentativa, limitada a
+`1 + TENTATIVAS`. Preserva o observador de um gerador e seu fechamento, todos
+os eventos SSE, estados, ações e efeitos no banco. Um reenvio explícito
+continua sendo duas gerações, com grupos separados e dois geradores fechados.
+O teste SDK com `max_retries=0` mantém a contagem física exata.
+
+Sete cenários adicionais usam 500 imediato na primeira tentativa e sucesso
+na seguinte, com o SDK/adaptador, HTTP e banco reais locais. O tratador é
+local ao módulo; não muda o roteiro global, timeout, retries ou produção.
+O cenário exige ao menos duas requisições para não passar sem exercitar retry.
+Não entram dependência, endpoint, infraestrutura, migração ou chamada paga.
+Context7 confirmou a política de retentativas na documentação/código oficial;
+o header `x-stainless-retry-count` foi confirmado no SDK instalado e no HTTP.
+
+Comandos executados antes desta fotografia: baseline do módulo, 10 aprovados;
+RED após acrescentar o 500 com o oráculo antigo, sete falhas de contagem e dez
+controles aprovados; GREEN, 17 aprovados. Mutações externas, sem edição de
+fontes, executaram duas gerações reais (duas falhas causais no oráculo) e
+alteraram `max_tokens` no envio da retentativa (uma falha causal na igualdade
+do corpo). As verificações de SSE/estado/ação anteriores continuaram passando
+nessas mutações. Depois, o módulo e as provas dedicadas de retry/timeout do
+adaptador passaram: 46 testes em 31,91 s, sem plugin de mutação. Resultados do
+gate final congelado, hooks e publicação serão registrados no ledger e PR;
+estes testes focados não os substituem.
+
+Limites: o cenário determinístico usa 500; a ocorrência original de timeout
+não está explicada de forma definitiva. O header de contagem pertence ao SDK
+e pode mudar numa atualização, exigindo rever o teste. Não afirma uma medição
+de desempenho nem altera o comportamento de retentativas no meio do stream.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit

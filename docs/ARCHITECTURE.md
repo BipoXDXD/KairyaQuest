@@ -1888,3 +1888,25 @@ sem afirmar paridade geral de todo o esquema. O teste de ida e volta da `0004`
 compara as nove colunas legadas de `tutor_messages` explicitamente: a coluna
 `fallback_model`, criada na `0007`, é removida pelo downgrade e não pertence
 ao contrato de preservação da `0004`. Migrações não foram alteradas.
+
+
+### Retentativas HTTP e geração nos testes de encerramento
+
+Na fatia `wt/sdk-retries-oraculo` (base `5ba81c3`, ainda não integrada à
+`main`), `test_tutoring_max_tokens.py` distingue uma geração lógica das
+retentativas HTTP que o SDK já permite. Um tratador local devolve 500 imediato
+na tentativa zero; as seguintes usam o mesmo servidor falso e stream real.
+Não muda o roteiro global nem depende de atraso artificial para obter retry.
+
+O oráculo exige entre uma e `1 + TENTATIVAS` requisições, sequência exata
+`x-stainless-retry-count` de zero em diante e o mesmo JSON em todas as
+tentativas da geração. No cenário 500, exige pelo menos duas requisições.
+O reenvio explícito delimita duas gerações, cada uma com seu próprio grupo,
+e continua exigindo dois geradores fechados. Status, SSE, proposta,
+persistência e efeitos anteriores permanecem verificados. O teste com
+`max_retries=0` continua exigindo uma única requisição física.
+
+O header é observabilidade do SDK instalado, confirmado no seu código e no
+HTTP real dos testes, não um contrato público do FocusQuest. Uma atualização
+do SDK pode exigir rever este oráculo. Nenhuma política de retentativa,
+timeout, adaptador de produção ou contrato do produto foi alterado.
