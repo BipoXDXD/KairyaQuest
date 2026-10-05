@@ -1,6 +1,29 @@
 # Retomar o FocusQuest
 
-## Continuação corrente — composição #7–#24
+## Continuação corrente — publicação concluída e prevenção de novas pastas irmãs
+
+Revisão-base deste incremento: main `769e02d` (PR #25), com os PRs #7–#28 mesclados e
+nenhum PR aberto na conclusão da publicação. Não repetir essas fases.
+O gate executado nessa main aprovou 1477 testes Python, 1001 frontend e
+63 E2E, cobertura 100%; cinco jobs aprovados no
+[CI da main](https://github.com/BipoXDXD/FocusQuest/actions/runs/37273721725).
+Evidência local: `.superpowers/sdd/2026-10-05-publicacao-final/final-result.json`.
+
+A continuação corrige o destino de `scripts/novo-worktree.sh` para
+`.claude/worktrees/<nome>` no principal e centraliza somente o scratch
+`sdd` dos novos worktrees. Os 24 worktrees já organizados e os cinco
+snapshots antigos com alterações permanecem preservados. A validação desta
+correção é própria; os números da main acima não a aprovam.
+
+Manter quatro auxiliares GPT 6.1 Sol High; preferência do responsável para
+a coordenação: GPT 6 Astra Medium, sem presumir a seleção efetiva a partir
+deste arquivo. Commit, push de uma ref, PR e merge foram autorizados nesta etapa; merge
+exige testes reforçados, gate completo e CI verde com base atualizada.
+Gastos e decisões críticas continuam fora dessa autorização.
+Leia o estado corrente de [docs/HANDOFF.md](docs/HANDOFF.md); os relatos
+abaixo são históricos e não reabrem fases já concluídas.
+
+## Histórico — fotografia da composição #7–#24
 
 Fotografia: 2026-10-05T01:46:22-03:00. Branch `wt/composicao-autonoma` sobre main `5ba81c3`.
 As PRs #7–#24 estão publicadas; cada gate isolado tem cobertura 100% e cada

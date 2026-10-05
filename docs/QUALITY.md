@@ -67,11 +67,12 @@ configurado,
 
 ```bash
 scripts/novo-worktree.sh <nome>                   # ou <nome> <deslocamento>, de 0 a 24
-cd ../FocusQuest-<nome>
+# entre no caminho absoluto impresso pelo script
+# no principal: cd .claude/worktrees/<nome>
 make check
 ```
 
-O script cria `../FocusQuest-<nome>` na branch nova `wt/<nome>` (a partir da
+O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
 `main`), escreve o `.env` a partir do do principal com um banco de teste
 próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
 roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
@@ -81,6 +82,18 @@ container (seção 6). O nome `push` é **reservado** (o banco dele seria o
 `focusquest_push_test`, o do gate do push do principal), e o script recusa um
 nome cujo banco, ou banco do push, já seja usado por um worktree registrado
 (`docs/HANDOFF.md`, decisão F12).
+
+O destino permanece dentro do checkout principal, mesmo quando o script é
+chamado por outro worktree. Containers do principal que sejam arquivos ou links são
+recusados antes da criação. O scratch `.superpowers/sdd` do novo worktree é
+um link relativo para `<principal>/.superpowers/sdd/worktree-ledgers/<nome>`;
+ledgers existentes não são reutilizados nem sobrescritos. Assim os relatórios
+ficam sob a exceção já existente do scanner, sem ampliar sua configuração:
+fontes e `.superpowers/notas` continuam sob varredura. A trava cobre a
+preparação de `.env` e do link, antes do bootstrap. Se o checkout trouxer
+`.superpowers` inseguro ou um `sdd` já existente, o script recusa sem
+sobrescrever: o worktree fica criado, mas o bootstrap não roda.
+
 
 ## 1. Comandos
 
