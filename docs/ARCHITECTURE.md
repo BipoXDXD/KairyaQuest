@@ -331,7 +331,7 @@ FocusQuest/
 │   │   ├── test_cycle_service.py  # criar o plano semanal e ler o ciclo derivado do relógio (B, Task 3)
 │   │   ├── test_evaluation_api.py  # o contrato de POST /evaluation: o corpo da spec, reward nulo, o repetido, cada erro com status e code, as falhas do modelo já gravadas (E, Task 5)
 │   │   ├── test_evaluation_concorrencia.py  # conexões reais: dois pedidos, um só avalia e há no máximo um bônus; a resposta atrasada contra a retomada da órfã; o relógio lido depois da trava (E, Task 5)
-│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2)
+│   │   ├── test_evaluation_migration.py  # a 0005: ida e volta, a unicidade (mission_id, source) do livro-razão e o downgrade que falha alto com bônus gravado (E, Task 2); snapshot populado preserva IDs/FKs brutos do XP e conquistas em 0004↔0005 (T-M4)
 │   │   ├── test_evaluation_models.py  # cada CHECK das duas tabelas dizendo não por INSERT cru, com o nome, o espelho modelo × migração (inclui xp_entries), a unicidade do livro-razão (E, Task 2)
 │   │   ├── test_evaluation_records.py  # as transações de missions/evaluation_records.py: ocultação, órfã e o corte, a tentativa superada, a hora depois da trava (E, Task 5)
 │   │   ├── test_evaluation_service.py  # avaliar_missao contra o falso: os três vereditos com e sem bônus, o repetido sem chamar o falso, falhas gravadas antes do erro, o limite total, a injeção (E, Task 5)
@@ -1379,6 +1379,16 @@ existe mais, concluída, prazo já igual, tipo derivado) → ação
 erro. A chave que a tela gastou num reagendamento idêntico não serve à
 confirmação da Tifa (`_exigir_elo_da_tifa`): ela é `operacao_reutilizada`.
 O `ConfirmRead` devolve `mission` = a missão reagendada.
+
+**Preservação do XP na 0005 (T-M4).**
+`test_evaluation_migration.py` acrescenta um roundtrip populado SQL em 0004↔0005:
+compara todas as colunas das entradas, IDs/FKs brutos das conquistas, vínculos
+lógicos e somatórios por dois usuários próprios. Conteúdo e vínculos são
+conferidos antes do oráculo de identidade; uma renumeração que mantém valores e
+FKs reprova no ID. Finally restaura head e limpa somente os usuários próprios por
+CASCADE. Complementa os testes da 0004 que já atravessam a 0005 e medem valores,
+fonte, datas e conquistas; não mede sequences, índices ou todo o schema, nem muda
+migração/produção permanentemente.
 
 **Ordem das travas (F14).** **Ação → missão → avaliação → usuário**, sempre.
 Iniciar e reagendar travam a missão **antes** de ler relógio, estado e prazo;

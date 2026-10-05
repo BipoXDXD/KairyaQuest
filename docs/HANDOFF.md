@@ -8,6 +8,50 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Identidade do XP na migração 0005 — 2026-10-05
+
+**T-M4 da pendência 97(j), base `5ba81c3`.** O responsável aprovou a fatia
+estreita e autorizou commit assinado, push de uma ref e PR após revisão
+independente e gate completo; nenhum merge. Branch `wt/migracao-xp-identidade`,
+banco `focusquest_migracao-xp-identidade_test`, offset 17. Hooks instalados nesta
+sessão, preparo por `make reset-test-db`/`make migrate-test`, sem compose fora do
+principal. Fontes da PR14 e das outras fases preservadas.
+
+**Correção documental principal:** a T-M4 não era ausência total de cobertura.
+`test_progression_migration.py` já sobe 0003 → head, atravessa a 0005 e confere
+valores, fonte, datas e conquistas vinculadas. Seu roundtrip da 0004 compara
+progressão sem IDs, pois essa migração a reconstrói. Faltava comparar a
+identidade e as FKs brutas das linhas existentes antes e depois da 0005.
+Nenhum defeito de produção foi encontrado: a 0005 apenas altera UNIQUE/CHECK
+do livro-razão; permanece byte a byte igual à base, assim como os serviços.
+
+**Alteração:** um único teste em `test_evaluation_migration.py`, plano
+`docs/superpowers/plans/2026-10-05-migracao-xp-identidade.md` e arquitetura.
+SQL no esquema 0004 cria dois usuários próprios, cada um com missão concluída,
+XP e conquista. Os snapshots medem todas as colunas de `xp_entries`, a PK/FK e
+o conteúdo de `user_achievements`, vínculos lógicos por JOIN e somatórios por
+usuário. Upgrade para 0005 e downgrade para 0004 mantêm tudo exatamente;
+finally restaura head e remove só os usuários próprios e seus dados por CASCADE.
+A cobertura já existente de UNIQUE/bônus foi preservada, sem repetir seus probes.
+
+**Evidência executada nesta sessão:** baseline `make check` EXIT 0, 1436 Python,
+990 frontend, 59 E2E e cobertura 100%; árvore limpa durante e ao fim. Ruff
+lint/format e mypy do módulo aprovados; novo caso 1 passed. Mutação válida no
+upgrade renumera entradas na janela entre as UNIQUEs, religa as conquistas às
+cópias e apaga originais, mantendo valores, ordem relativa e FKs válidas. O teste
+novo reprova na identidade (`id` 1 → 4), após conteúdo/totais/vínculos passarem;
+nenhuma falha de FK/UNIQUE, sintaxe ou timeout. O teste existente de valores do
+backfill continua aprovado contra essa mesma mutação (1 passed). Migração
+restaurada em finally, SHA-256 igual à base; GREEN 1 passed. Módulos relacionados
+`test_evaluation_migration.py` e `test_progression_migration.py`: 25 passed.
+Gate da árvore final, revisão e publicação são registrados no ledger ao
+terminarem; o baseline não aprova estes arquivos novos.
+
+**Limites:** preservação das linhas e vínculos legados no roundtrip 0004↔0005;
+não mede sequences, índices ou todo o schema. Completa somente T-M4 da 97(j);
+T-M5, S-M6 e a metade restante de T-M1 continuam pendentes. Nenhuma migração,
+schema, produção, contrato, dependência ou configuração mudou permanentemente.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -4877,9 +4921,14 @@ ledger; nenhum é bug esquecido.
     com uma `0006` que tenha guarda própria, o `RuntimeError` do teste pode vir da
     `0006`, o que o `match=tabela` só distingue para evidência e avaliação, não
     para o bônus); (j) não feitos, fora do brief das ondas: T-M5 (`GeneratorExit`
-    atravessando `_traduzir_erros`), S-M6, "o upgrade preserva os `xp_entries`
-    existentes" (T-M4) e a segunda metade do T-M1 (falha de conclusão com
-    evidência não deixa linha em `mission_evidence`).
+    atravessando `_traduzir_erros`), S-M6 e a segunda metade do T-M1 (falha de
+    conclusão com evidência não deixa linha em `mission_evidence`). **T-M4
+    completada em 2026-10-05:** a preservação de valores/fonte/datas/conquistas
+    já era coberta indiretamente por `test_progression_migration.py`; faltava
+    identidade/FKs brutas. O novo roundtrip populado de `test_evaluation_migration.py`
+    compara IDs, conteúdo, vínculos e somatórios em 0004↔0005. Mutação válida de
+    renumeração reprova somente no ID, com payload/FKs preservados; restauração
+    byte a byte e GREEN confirmados. Nenhum defeito de produção observado.
 98. **Nota: a numeração dos PRs recomeçou em #1.** O repositório foi
     recriado (`BipoXDXD/FocusQuest`, privado). **Medido em 2026-09-28:**
     `gh pr list --repo BipoXDXD/FocusQuest --state all` devolve só o #1
