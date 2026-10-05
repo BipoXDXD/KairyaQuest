@@ -316,6 +316,7 @@ FocusQuest/
 │   │   ├── referencia_da_api_real.json  # a sequência de tipos de evento de uma resposta real, sem conteúdo (gerada pelo camada3.py)
 │   │   ├── referencia_da_avaliacao_real.json  # a sequência de tipos de evento de uma avaliação real, sem conteúdo (gerada pelo camada3_da_avaliacao.py)
 │   │   ├── test_acompanhamento_concorrencia.py  # conexões reais, sem sleep: dois inícios, início × conclusão, dois reagendamentos encadeados, reagendamento × conclusão, o relógio lido depois da trava (F, Task 5)
+│   │   ├── test_reagendamento_espera_deterministica.py # parte da pendência 160: dois reagendamentos diretos com PIDs/espera comprovados e relógio injetado; prazo vence sem escrita ou gera segundo elo com histórico/instante posterior corretos; cleanup por CASCADE
 │   │   ├── test_acompanhamento_migration.py  # a 0006: ida e volta, cada restrição nova dizendo não por INSERT cru, o downgrade que falha alto (F, Task 2)
 │   │   ├── test_anthropic_provider.py  # o adaptador contra o servidor falso (inclui: o thinking não chega ao domínio; cada stop_reason vira a Parada do Fim)
 │   │   ├── test_camada3.py        # camada 3 do falso: a mesma sequência de eventos da API real (docs/QUALITY.md)
@@ -649,6 +650,19 @@ final, revertendo o que ficou pela metade.
 A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
+
+### Reagendamento direto durante espera (parte da pendência 160)
+
+`tests/integration/test_reagendamento_espera_deterministica.py` mantém a
+missão pré-carregada e retida na sessão perdedora e observa o PID vencedor em
+`pg_blocking_pids`. Só então avança o relógio injetado, que retorna sem esperar,
+e libera o primeiro commit. Verifica a recusa de um prazo que venceu sem
+escrita perdedora ainda antes do rollback, e dois elos encadeados quando o
+prazo continua futuro, com o instante posterior à espera. Lê prazo devolvido,
+estado persistido, operações/histórico e ausência de XP. A limpeza apaga somente
+a missão criada e seus efeitos por CASCADE; rollback libera a trava antes de
+aguardar o executor. O módulo complementa os cenários e sondas antigos de
+`test_acompanhamento_concorrencia.py`; não muda serviços nem fecha toda a 160.
 
 ### Logging (pendência 13)
 

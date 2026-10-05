@@ -8,6 +8,46 @@ Sem credenciais, sem caminhos pessoais.
 FocusQuest: plataforma de estudos gamificada com Tifa Lockhart como tutora
 interativa. Especificação completa em `README.md`. Entrega por incrementos.
 
+## Reagendamento durante espera — resolução parcial da pendência 160
+
+Fatia independente na branch `wt/reagendamento-espera`, base `5ba81c3`, banco
+exclusivo `focusquest_reagendamento-espera_test` e offset 8. O dono delegou
+as decisões não críticas e autorizou commit/push/PR por fase; publicação
+condicionada à revisão independente e ao gate completo da árvore final.
+Merge continua dependendo de autorização própria.
+
+**Entrega:** `tests/integration/test_reagendamento_espera_deterministica.py`,
+dois cenários de reagendamento direto com conexões PostgreSQL reais. A sessão
+perdedora retém a missão pré-carregada; `pg_blocking_pids` identifica o PID
+vencedor antes do commit. O relógio injetado retorna imediatamente e só avança
+após essa observação. Se o prazo proposto venceu durante a espera, o serviço
+recusa com `PrazoExpiradoError`: antes do rollback, operações, histórico e
+prazo já são conferidos, sem escrita perdedora. Se continua futuro, grava
+um segundo elo encadeado e o instante posterior à espera, devolvendo o prazo
+novo. Ambos preservam a missão pendente, sem início, conclusão ou crédito XP.
+Nenhuma alteração permanente de produção, contrato, dependência ou configuração;
+os testes antigos e a fatia 167 são preservados.
+
+**Comandos/resultados desta sessão:** hooks instalados; `make migrate-test`
+inicial falhou somente porque o banco exclusivo ainda não existia; a fixture
+protegida criou/migrou o banco no baseline. `make check` de baseline, EXIT 0:
+1436 Python, 990 frontend, 59 E2E e cobertura 100%. Ruff lint/format e mypy do
+módulo novo aprovados; módulo, 2 aprovados. Mutações independentes: relógio
+antes da trava, 2 reprovados; sem trava, 2 reprovados; sem `populate_existing`,
+1 reprovado no encadeamento e 1 aprovado (a recusa por prazo vencido não depende
+da releitura do prazo anterior). Cada arquivo restaurado em `finally`, SHA-256
+igual ao original, e reexecução com 2 aprovados. Uma quarta mutação escreveu
+uma operação antes da recusa: 1 reprovado na leitura anterior ao rollback,
+1 aprovado; bytes restaurados. Suíte relacionada com o módulo novo,
+`test_acompanhamento_concorrencia.py` e `test_reagendar_missao.py`: 46 aprovados.
+
+**Limites:** resolução parcial da 160; testes de início, demais corridas e as
+medições históricas abaixo continuam com seus limites. A prova passa pelos
+serviços e banco, sem navegador, HTTP ou provedor real. O baseline não aprova
+os arquivos novos. Gate final, revisão, commit, push e PR têm evidências próprias
+no ledger `.superpowers/sdd/2026-10-05-reagendamento-espera/progress.md` e logs
+em `evidence/`. Plano: `docs/superpowers/plans/2026-10-05-reagendamento-espera.md`.
+
 ## Conciliação do PR #6 — 2026-10-04
 
 **Resultado local aprovado para atualizar o PR #6.** O dono autorizou commit
@@ -5415,6 +5455,16 @@ ledger; nenhum é bug esquecido.
     determinística 7b. **Se ninguém mexer:** nada quebra; quem apagar ou afrouxar
     os dois testes de mecanismo achando que os de corrida já cobrem o relógio perde
     a única garantia determinística dele.
+    **Resolução parcial em 2026-10-05:** o módulo
+    `test_reagendamento_espera_deterministica.py` controla a ordem de dois
+    reagendamentos diretos, observa o PID bloqueador e avança um relógio
+    injetado não bloqueante somente depois da espera comprovada. Prazo que
+    vence durante a espera é recusado sem escrita perdedora (verificado antes
+    do rollback); prazo ainda futuro gera dois elos encadeados com o instante
+    posterior. Mutações de relógio antecipado e sem trava reprovam os dois
+    cenários; sem releitura reprova o encadeamento. Os testes antigos de
+    corrida não foram reescritos e os limites de início/demais combinações
+    permanecem: **a pendência 160 não está encerrada integralmente**.
 161. **A terceira cópia dos rótulos de motivo, e o `kind` desconhecido** (Task 9;
     liga à pendência 32). (a) O rótulo de cada motivo de reagendamento existe em
     **três** lugares escritos à mão: `ROTULO_DO_MOTIVO`, em
