@@ -53,3 +53,6 @@ npm-debug.log*
 # em um clone. E esta linha que sustenta a isencao de .superpowers/sdd/ no
 # .gitleaks.toml.
 .superpowers/
+
+# Artefatos OCI de publicação; não são imagens locais nem código-fonte.
+.docker-artifacts/

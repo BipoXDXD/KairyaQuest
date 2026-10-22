@@ -108,7 +108,7 @@ format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format
 
 db-up: ## Sobe o PostgreSQL e espera ficar saudavel
-	docker compose up -d --wait postgres
+	./scripts/docker-build.sh compose up -d --wait postgres
 
 db-down: ## Derruba o PostgreSQL, preservando o volume
 	docker compose down
@@ -121,3 +121,16 @@ migrate: ## Aplica as migracoes no banco de desenvolvimento
 # `make migrate` do jeito que FQ_DB=test se confundiria com esquecer de passar.
 migrate-test: ## Aplica as migracoes no banco de teste
 	uv run alembic -x test=true upgrade head
+
+# Local nativo; release portátil exportada sem sobrescrever imagens locais.
+IMAGE_TAG ?= dev
+
+.PHONY: image image-release
+image: ## Constrói API e frontend para o Docker local, com verificação de arquitetura
+	./scripts/docker-build.sh local -f docker/api.Dockerfile -t kairyaquest-api:$(IMAGE_TAG) .
+	./scripts/docker-build.sh local -f docker/web.Dockerfile -t kairyaquest-web:$(IMAGE_TAG) .
+
+image-release: ## Exporta API e frontend em OCI com AMD64 e ARM64, sem carregar no Docker local
+	mkdir -p .docker-artifacts
+	./scripts/docker-build.sh oci .docker-artifacts/kairyaquest-api.tar -f docker/api.Dockerfile -t kairyaquest-api:$(IMAGE_TAG) .
+	./scripts/docker-build.sh oci .docker-artifacts/kairyaquest-web.tar -f docker/web.Dockerfile -t kairyaquest-web:$(IMAGE_TAG) .
