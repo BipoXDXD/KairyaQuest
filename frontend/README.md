@@ -1,4 +1,4 @@
-# Frontend do FocusQuest
+# Frontend do KairyaQuest
 
 Interface de estudos em português brasileiro, com Quartel-General,
 Campanhas e conversa com a Tifa. Usa o frontend existente em React,

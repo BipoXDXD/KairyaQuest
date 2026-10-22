@@ -1,10 +1,10 @@
-# FocusQuest — ambiente, tutoria interativa e qualidade
+# KairyaQuest — ambiente, tutoria interativa e qualidade
 
 ## 1. Missão e ponto de partida
 
-Prepare o FocusQuest no macOS com PyCharm. **Node.js, React, TypeScript, Vite e Tailwind CSS já estão preparados.** Reaproveite o frontend existente; não reinicie o projeto. Complete apenas as ferramentas e integrações necessárias e entregue uma base executável, organizada e testada.
+Prepare o KairyaQuest no macOS com PyCharm. **Node.js, React, TypeScript, Vite e Tailwind CSS já estão preparados.** Reaproveite o frontend existente; não reinicie o projeto. Complete apenas as ferramentas e integrações necessárias e entregue uma base executável, organizada e testada.
 
-FocusQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Tifa Lockhart será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
+KairyaQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Tifa Lockhart será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
 
 Sou estudante de engenharia de software; usarei Kimi, Codex e Claude. Entregue incrementos, não o produto inteiro. Commit, push, merge, publicação e contratação exigem autorização.
 
@@ -33,7 +33,7 @@ Preserve React, TypeScript, Vite, Tailwind e o gerenciador já adotado. Mantenha
 Deixe a estrutura o mais organizada possível: responsabilidades explícitas, dependências previsíveis e nomes consistentes. Esta é a estrutura-alvo; crie cada módulo apenas quando houver implementação real:
 
 ```text
-focusquest/
+KairyaQuest/
   src/focusquest/
     main.py
     core/                   # configuração, conexão e infraestrutura comum

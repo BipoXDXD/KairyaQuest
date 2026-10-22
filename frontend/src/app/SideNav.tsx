@@ -36,7 +36,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
           ✦
         </span>
         <div>
-          <p className="rpg-wordmark">FocusQuest</p>
+          <p className="rpg-wordmark">KairyaQuest</p>
           <p className="rpg-brand-note">Sua jornada de estudos</p>
         </div>
       </div>
