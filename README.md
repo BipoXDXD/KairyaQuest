@@ -277,3 +277,20 @@ o comando verifica as duas plataformas no registry. Não substitua estes comando
 AMD64 com `--load` no Mac: para uma entrega offline, use o modo `oci ARQUIVO.tar`.
 A verificação isolada é `scripts/docker-build.sh check IMAGEM` (local) ou `published REGISTRY/IMAGEM` (release).
 Os Dockerfiles versionados ficam em `docker/`; a configuração privada do Nginx continua lendo `/run/secrets/access.htpasswd` no ambiente de publicação. `make db-up` usa a mesma seleção nativa.
+
+### Publicação automática no GHCR
+
+Cada push na `main` só publica depois dos quatro checks e do `quality-gate` aprovados.
+As imagens são `ghcr.io/bipoxdxd/kairyaquest-api` e `ghcr.io/bipoxdxd/kairyaquest-web`,
+com `linux/amd64` e `linux/arm64`. A tag `sha-<SHA completo>` identifica o commit;
+a referência `@sha256:...` identifica o conteúdo exato. `main` e `latest` só são
+promovidas depois de ambas as imagens terem índice e configs nativos conferidos.
+O resumo do job registra as referências por digest. Builds de PR não publicam.
+Reexecuções de commits antigos não alteram `main`/`latest`: a promoção consulta a
+`main` atual antes e depois de verificar as imagens.
+
+A publicação usa o `GITHUB_TOKEN` temporário do Actions, com `packages: write`
+restrito aos jobs de publicação. Não é necessário adicionar PAT ou segredo de produção.
+A visibilidade padrão dos novos packages é mantida. A conferência pode ser repetida
+com `IMAGE_REFERENCE=ghcr.io/bipoxdxd/kairyaquest-api@sha256:... make check-image-platforms`;
+para conferir uma tag móvel, informe também `IMAGE_DIGEST=sha256:...` aprovado.

@@ -112,7 +112,7 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
 | `make check` | Gate completo. Agrega `check-web`, `check-api`, `check-e2e` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
-| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic` e os dois scripts de publicação, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
 | `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
 | `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar arquivos **versionados**, e é manual. |
@@ -285,7 +285,7 @@ Cinco receitas, nesta ordem:
    (`extend-exclude`), porque a documentação mostra código deliberadamente
    errado.
 3. `uv run ruff format --check .` — formatação, sem modificar arquivo.
-4. `uv run mypy src tests alembic` — mypy com `strict = true` e o plugin do
+4. `uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py` — mypy com `strict = true` e o plugin do
    pydantic. `alembic/` entra junto porque as migrações escrevem DDL.
 5. `uv run pytest --cov ...` — a suíte `tests/unit` e `tests/integration`,
    com o limiar da seção 3.
@@ -522,7 +522,7 @@ lock) antes de commitar.
 O workflow `.github/workflows/quality.yml` é o mesmo gate, executado no
 GitHub Actions. Dispara em `push` e `pull_request` de qualquer branch, sem
 filtro de caminho, mais `workflow_dispatch` e `merge_group`; permissão
-mínima (`contents: read`), sem segredos, sem `continue-on-error`, e com
+mínima nos checks (`contents: read`), sem segredos de produção, sem `continue-on-error`, e com
 `cancel-in-progress: false` porque o README §12 proíbe cancelar
 verificações anteriores.
 
@@ -541,6 +541,26 @@ verificação executa **um** alvo, e nada além dele:
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `quality-gate` | nenhum alvo: agrega os quatro acima | — | 5 |
+
+Depois do gate, somente em push da `main`, `publish-api` e `publish-web`
+executam build e push de uma tag pelo commit com AMD64 e
+ARM64, seguidos da pós-condição `make check-image-platforms`. O alvo usa apenas
+Python da biblioteca padrão e Buildx para conferir o digest do índice, os dois
+descritores de runtime e a arquitetura real de cada config. Os testes dessa
+guarda entram no `check-api`; seu código também entra no mypy e Ruff.
+
+`promote-images` espera as duas publicações e executa `make promote-images`.
+O helper `scripts/promote_images.py` consulta o HEAD atual da `main` antes e
+depois do preflight; uma execução superada conserva sua tag por commit e não
+escreve os aliases. O alvo revalida os digests antes de
+atualizar `main`/`latest`; confere cada alias depois da escrita. São jobs de
+publicação, separados dos cinco jobs de qualidade da tabela. Só eles recebem
+`packages: write`, com autenticação pelo `GITHUB_TOKEN` temporário. Actions,
+QEMU e BuildKit usados na publicação ficam fixados por SHA/digest. A concorrência
+já existente da `main` cobre o workflow inteiro, incluindo publicação, sem
+cancelar a execução em andamento. Falha de publicação não promove os aliases
+antes das verificações; uma falha de transporte durante a promoção pode deixar
+apenas parte dos aliases atualizados e reprova o job, que pode ser reexecutado.
 
 A regra é o que impede o CI e a máquina local de divergirem. Um passo que
 existisse só no workflow (ou só no Makefile) criaria uma verificação que

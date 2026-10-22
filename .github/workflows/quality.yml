@@ -54,8 +54,10 @@ jobs:
     # com cache frio.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           cache: npm
@@ -95,12 +97,14 @@ jobs:
       FOCUSQUEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest
       FOCUSQUEST_TEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest_test
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # O catálogo de downloads do uv ainda não inclui o patch 3.14.9.
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
       - name: Instalar dependencias do backend
@@ -146,17 +150,19 @@ jobs:
       FOCUSQUEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest
       FOCUSQUEST_TEST_DATABASE_URL: postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/focusquest_test
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # O catálogo de downloads do uv ainda não inclui o patch 3.14.9.
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
       - name: Instalar dependencias do frontend
@@ -193,7 +199,9 @@ jobs:
     # e ~6 min, dentro deste teto.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # PREPARO de ambiente, nao verificacao: o job continua executando so o
       # `make check-secrets`. Motivo: no PR #5 o download do Gitleaks a cada
       # execucao reprovou o gate por uma queda de rede do GitHub
@@ -211,7 +219,7 @@ jobs:
       # reprova do mesmo jeito. Esta guarda tem teste:
       # tests/integration/test_install_gitleaks.py.
       - name: Cache do Gitleaks
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .tools
           key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/install-gitleaks.sh') }}
@@ -243,3 +251,132 @@ jobs:
             fi
           done
           echo "quality-gate aprovado"
+
+  # Publicação é posterior ao gate. Só a main publica.
+  publish-api:
+    needs: quality-gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      reference: ${{ steps.vars.outputs.name }}@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: vars
+        env:
+          IMAGE_TARGET: api
+        run: |
+          case "$IMAGE_TARGET" in api|web) ;; *) exit 1 ;; esac
+          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kairyaquest-$IMAGE_TARGET" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.vars.outputs.name }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: true
+          cache-from: type=gha,scope=kairyaquest-api
+          cache-to: type=gha,mode=max,scope=kairyaquest-api
+      - name: Conferir plataformas e configs reais publicados
+        env:
+          IMAGE_REFERENCE: ${{ steps.vars.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: make check-image-platforms
+
+  publish-web:
+    needs: quality-gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      reference: ${{ steps.vars.outputs.name }}@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: vars
+        env:
+          IMAGE_TARGET: web
+        run: |
+          case "$IMAGE_TARGET" in api|web) ;; *) exit 1 ;; esac
+          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kairyaquest-$IMAGE_TARGET" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.vars.outputs.name }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: true
+          cache-from: type=gha,scope=kairyaquest-web
+          cache-to: type=gha,mode=max,scope=kairyaquest-web
+      - name: Conferir plataformas e configs reais publicados
+        env:
+          IMAGE_REFERENCE: ${{ steps.vars.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: make check-image-platforms
+
+  promote-images:
+    needs: [publish-api, publish-web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promover somente os dois digests aprovados
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_REFERENCE: ${{ needs.publish-api.outputs.reference }}
+          WEB_REFERENCE: ${{ needs.publish-web.outputs.reference }}
+        run: make promote-images
