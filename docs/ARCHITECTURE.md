@@ -28,7 +28,7 @@ Mapa dos diretórios implementados, atualizado após o redesign desktop
 a documentação descreve responsabilidades sem duplicar esse inventário.
 
 ```text
-FocusQuest/
+KairyaQuest/
 ├── src/focusquest/
 │   ├── core/                  # configuração, banco e infraestrutura comum
 │   └── modules/
@@ -99,7 +99,7 @@ antes disso é a "camada vazia" que o README §3 proíbe. O que dela já existe
 está no §1; o restante continua contrato.
 
 ```text
-focusquest/
+KairyaQuest/
   src/focusquest/
     main.py
     core/                   # configuração, conexão e infraestrutura comum
@@ -1711,7 +1711,7 @@ persistência e efeitos anteriores permanecem verificados. O teste com
 `max_retries=0` continua exigindo uma única requisição física.
 
 O header é observabilidade do SDK instalado, confirmado no seu código e no
-HTTP real dos testes, não um contrato público do FocusQuest. Uma atualização
+HTTP real dos testes, não um contrato público do KairyaQuest. Uma atualização
 do SDK pode exigir rever este oráculo. Nenhuma política de retentativa,
 timeout, adaptador de produção ou contrato do produto foi alterado.
 

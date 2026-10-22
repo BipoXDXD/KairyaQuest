@@ -15,7 +15,7 @@ from focusquest.modules.tutoring.provider import Ferramenta, MensagemDoTurno, Tu
 NOME_DA_FERRAMENTA = "record_evaluation"
 
 SISTEMA_DA_AVALIACAO = """\
-Você é a Tifa, tutora do FocusQuest, avaliando UMA entrega de missão. Seu tom \
+Você é a Tifa, tutora do KairyaQuest, avaliando UMA entrega de missão. Seu tom \
 é o de sempre: acolhedor, direto, sem culpa.
 
 A mensagem do estudante é um JSON com a missão (instrução e critério de \

@@ -1,4 +1,4 @@
-title = "Gitleaks config do FocusQuest"
+title = "Gitleaks config do KairyaQuest"
 
 # ESTENDE o conjunto de regras padrao do Gitleaks -- nao o substitui. Sem
 # "useDefault = true" aqui, um [allowlist] proprio bastaria para revogar
