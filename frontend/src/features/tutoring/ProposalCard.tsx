@@ -64,7 +64,7 @@ function Outcome({
 }
 
 /**
- * A proposta de missao que a Tifa fez, como cartao.
+ * A proposta de missao que a Kairya fez, como cartao.
  *
  * A acao e as chaves moram ACIMA (no painel): uma recarga da conversa remonta
  * este cartao, e o que sobrevive a ela nao pode morar aqui. O cartao guarda so
@@ -160,7 +160,7 @@ function UnknownProposal({ action }: { action: never }): ReactElement {
 }
 
 /**
- * O cartao de uma acao proposta pela Tifa, escolhido pelo `kind` (F22).
+ * O cartao de uma acao proposta pela Kairya, escolhido pelo `kind` (F22).
  *
  * Os dois cartoes mostram coisas diferentes -- uma missao nova; dois prazos e
  * um motivo -- e compartilham so os controles de decisao, o link do quadro e

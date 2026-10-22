@@ -17,7 +17,7 @@ export interface UseRequestEvaluationResult {
 }
 
 /**
- * Pede a avaliacao da Tifa para a missao `missionId`.
+ * Pede a avaliacao da Kairya para a missao `missionId`.
  *
  * A guarda de voo mora AQUI, num `useRef`, alem do `disabled` do botao: o
  * `state` so muda no proximo render, e dois cliques no mesmo tick leriam

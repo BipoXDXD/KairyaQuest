@@ -1,9 +1,9 @@
-"""A dependencia da tutoria: o provedor configurado, ou `None` sem chave."""
+"""Tutoria de producao: exclusivamente Groq, ou `None` sem a chave dele."""
 
 from datetime import timedelta
 
 from focusquest.core.config import Settings
-from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.groq_provider import MODELO_GROQ, ProvedorGroq
 from focusquest.modules.tutoring.service import Tutoria
 
 _tutoria: Tutoria | None = None
@@ -20,19 +20,19 @@ def get_tutoria() -> Tutoria | None:
     global _tutoria
     if _tutoria is None:
         settings = Settings()
-        if settings.anthropic_api_key is None:
+        if (
+            settings.groq_api_key is None
+            or not settings.groq_api_key.get_secret_value().strip()
+        ):
             return None
         # Uma leitura so, para o adaptador e para a tutoria: o modelo que
         # chama e o que se grava como quem interpretou nao podem divergir.
-        modelo = settings.tutor_model
+        modelo = MODELO_GROQ
         _tutoria = Tutoria(
-            provedor=ProvedorAnthropic(
-                chave=settings.anthropic_api_key.get_secret_value(),
-                base_url=settings.anthropic_base_url,
-                modelo=modelo,
+            provedor=ProvedorGroq(
+                chave=settings.groq_api_key.get_secret_value(),
                 max_tokens=settings.tutor_max_tokens,
                 timeout_segundos=settings.tutor_timeout_seconds,
-                fallback=settings.tutor_fallback,
             ),
             historico=settings.tutor_history_messages,
             limite=timedelta(seconds=settings.tutor_timeout_seconds),

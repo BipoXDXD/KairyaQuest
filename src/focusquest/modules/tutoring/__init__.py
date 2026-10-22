@@ -1,1 +1,1 @@
-"""Tutoria: a conversa com a Tifa, as propostas dela e a confirmacao."""
+"""Tutoria: a conversa com a Kairya, as propostas dela e a confirmacao."""

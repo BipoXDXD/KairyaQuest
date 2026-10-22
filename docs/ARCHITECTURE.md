@@ -21,6 +21,23 @@ preservados no [HANDOFF](HANDOFF.md). Relatos completos de implementação e
 resultados antigos estão no Git em `ca3b03c:docs/HANDOFF.md`; não são
 instruções para repetir fases concluídas.
 
+## Tutoria de produção: Groq Free (2026-10-22)
+
+`dependencies.get_tutoria` monta exclusivamente `ProvedorGroq` com a chave
+`FOCUSQUEST_GROQ_API_KEY`; não importa nem instancia o adaptador Anthropic.
+`groq_provider.py` usa HTTPX2 já instalado, endpoint/modelo fixos, SSE e
+ferramentas locais com esquema gerado em `tool_definitions.py`. Sem chave,
+retorna `None`. Não há retry, redirect, proxy do ambiente ou fallback.
+As regras de autorização, confirmação, avaliação e XP continuam nos serviços.
+Erros HTTP e respostas interrompidas falham sem executar ferramentas.
+A gratuidade depende de manter a conta no plano Free: [GROQ.md](GROQ.md).
+
+O adaptador Anthropic e os roteiros de caracterização históricos permanecem
+para testes, sem caminho de seleção na dependência de produção. O navegador
+de testes usa `tests/integration/e2e_app.py`, chave fictícia e host loopback;
+essa entrada não é incluída no pacote da aplicação. As descrições antigas de
+fallback abaixo documentam somente esse comportamento legado.
+
 ## 1. O que existe hoje
 
 Mapa dos diretórios implementados, atualizado após o redesign desktop
@@ -202,7 +219,7 @@ real, e em qual módulo.
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
-| `provider.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
+| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
 **A dependência é `tutoring → missions`, nunca o contrário.**
@@ -231,7 +248,7 @@ dois enums, registrado como pendência 82 em `docs/HANDOFF.md`).
 (D15, README §6: "pedir pontos no chat não altera saldo").
 `tutoring.service` também chama `progression.ler_progresso` (só leitura,
 direto, sem HTTP), e `tutoring.context` recebe o `Progresso` para montar a
-linha de progresso do turno da Tifa (D15).
+linha de progresso do turno da Kairya (D15).
 
 **O módulo `evaluation` (Incremento E) e a direção única das dependências
 (E11).** As tabelas da entrega (`mission_evidence`, `mission_evaluations`) são
@@ -315,7 +332,7 @@ A regra que dá sentido à tabela: o modelo **solicita**, o backend **autoriza e
 executa** (README §6). Nenhuma camada acima do domínio pode conceder XP,
 concluir missão ou confirmar recompensa por conta própria.
 
-### Prova cruzada da confirmação da Tifa × conclusão (pendência 167)
+### Prova cruzada da confirmação da Kairya × conclusão (pendência 167)
 
 `tests/integration/test_tutoring_conclusao_concorrencia.py` concentra os dois
 vencedores possíveis, com conexões reais e dados commitados. A sessão que
@@ -533,14 +550,14 @@ mesmo padrão dos estados de `missions`
 | Tabela | O que guarda | Restrições que o banco garante |
 |---|---|---|
 | `tutor_messages` | Cada mensagem da conversa contínua (`role` `user`/`tutor`). | `ck_tutor_messages_role` (valor de `role`); `ck_tutor_messages_status` (valor de `status`); `ck_tutor_messages_forma` — um `CASE role WHEN 'user' THEN ... WHEN 'tutor' THEN ... ELSE true END`, não o `OR` que a spec original descrevia (ver "Emendas" da spec) — a forma exigida de cada papel, com a legalidade do próprio `role` delegada só a `ck_tutor_messages_role`; um índice único parcial por `reply_to_id WHERE status = 'completa'` (uma resposta viva por pergunta) e por `user_id WHERE status = 'gerando'` (uma geração por vez); `client_message_id` único entre as mensagens do usuário. `fallback_model` (0007, pendência 174): o modelo substituto que serviu a resposta depois de uma recusa, nulo quando foi o modelo pedido; `ck_tutor_messages_fallback_so_da_tutora` (`fallback_model IS NULL OR role = 'tutor'`). Coluna própria, e não o `error_code`: o fallback não é erro, e a resposta substituída **e** cortada precisa dos dois valores (pendência 170). |
-| `tutor_actions` | Uma proposta de ação da Tifa (`create_mission` e, desde o F, `reschedule_mission`) e o seu ciclo de vida. | `ck_tutor_actions_kind`; `ck_tutor_actions_state`; `ck_tutor_actions_missao_so_quando_executada` (`(state = 'executada') = (mission_id IS NOT NULL)`); `ck_tutor_actions_decisao_datada` (`(state = 'proposta') = (decided_at IS NULL)`); `operation_id` único. `mission_id` **sem** `ondelete` (decisão registrada em `docs/HANDOFF.md`: nem `SET NULL` nem `CASCADE` servem, e não existe exclusão de missão no produto). |
+| `tutor_actions` | Uma proposta de ação da Kairya (`create_mission` e, desde o F, `reschedule_mission`) e o seu ciclo de vida. | `ck_tutor_actions_kind`; `ck_tutor_actions_state`; `ck_tutor_actions_missao_so_quando_executada` (`(state = 'executada') = (mission_id IS NOT NULL)`); `ck_tutor_actions_decisao_datada` (`(state = 'proposta') = (decided_at IS NULL)`); `operation_id` único. `mission_id` **sem** `ondelete` (decisão registrada em `docs/HANDOFF.md`: nem `SET NULL` nem `CASCADE` servem, e não existe exclusão de missão no produto). |
 
 **As cinco rotas de `/api/tutoring`:**
 
 | Método e rota | Entrada | Saída |
 |---|---|---|
 | `GET /status` | — | `{"available": bool}` — `false` sem chave configurada (`get_tutoria()` devolve `None`) |
-| `GET /messages` | — | as últimas 50 mensagens, cronológicas, cada resposta da Tifa com as ações embutidas |
+| `GET /messages` | — | as últimas 50 mensagens, cronológicas, cada resposta da Kairya com as ações embutidas |
 | `POST /messages` | `{"client_message_id", "content"}` | `text/event-stream` (formato abaixo) |
 | `POST /actions/{action_id}/confirm` | `{"operation_id"}` | `{"action", "mission"}` |
 | `POST /actions/{action_id}/reject` | — | `{"action"}` |
@@ -565,8 +582,8 @@ tela, e volta ao contexto quando é reenviada. Um stream sem `done` nem
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
 
-**O fallback da recusa** (pendência 174, beta da Anthropic, ligado por
-padrão e desligável por `FOCUSQUEST_TUTOR_FALLBACK=false`): o adaptador chama
+**Fallback histórico, desativado em produção** (pendência 174, beta da
+Anthropic, preservado somente nos testes explícitos do adaptador legado): o adaptador chama
 `client.beta.messages.stream` com `fallbacks="default"` e o beta
 `server-side-fallback-2026-07-01` (`BETA_DO_FALLBACK`), e a API refaz a
 requisição recusada no modelo que a Anthropic recomenda para a categoria da
@@ -700,7 +717,7 @@ especial vale `3 × xp_para_dificuldade(5) = 660` (C9).
 **`GET /api/missions` (a rota do 1a) agora lista só avulsas** —
 `listar_missoes` filtra `Mission.mission_type == MissionType.AVULSA` — para
 não vazar a diária ainda não revelada nem a trilha da semana para quem só
-lista missões soltas. Isso também é o motivo da pendência nova sobre a Tifa
+lista missões soltas. Isso também é o motivo da pendência nova sobre a Kairya
 não ver o ciclo no contexto (`docs/HANDOFF.md`, pendência 55): o contexto da
 tutoria é montado com `listar_missoes`. Desde a pendência 117, o
 `preparar_turno` também lê o ciclo (`ler_ciclo`), mas só para a conclusão
@@ -881,7 +898,7 @@ e a avaliação são **dados da missão** — as tabelas ficam em
 nenhum módulo novo.
 
 **`POST /api/missions/{mission_id}/evaluation`** (o pedido da avaliação da
-Tifa, decisão E5; `request_reward_evaluation` do README §6). Sem corpo (um `{}`
+Kairya, decisão E5; `request_reward_evaluation` do README §6). Sem corpo (um `{}`
 é aceito e ignorado). Só a pessoa o chama, pela tela, depois da conclusão com
 evidência; o modelo nunca. Sem `operation_id`: a chave natural é a missão (E8).
 `mission_id` é inteiro de `1` a `2**31 - 1`, como nas outras rotas de missão.
@@ -1019,7 +1036,7 @@ entrada (o reenvio, lido do banco, tem de sair igual ao primeiro corpo). Reenvio
 com a mesma chave e o mesmo `(new_deadline, reason)` é o mesmo `200`; a mesma
 chave com outro conteúdo é `409 operacao_reutilizada` (F13). **Todas as
 recusas vêm antes da primeira escrita** — é o contrato que a confirmação da
-Tifa usa.
+Kairya usa.
 
 | Situação | Rota | Resposta |
 |---|---|---|
@@ -1043,7 +1060,7 @@ frontend espelha os `code` à mão (pendência 32).
 **`MissionRead.reschedules`.** Em toda leitura (listagem, ciclo, trilha,
 conclusão, confirmação), a lista do histórico em ordem de gravação: cada item
 tem `previous_deadline`, `new_deadline`, `reason`, `origin` (`usuario` ou
-`tifa`) e `rescheduled_at`. Lista vazia se nunca houve reagendamento (e sempre
+`kairya`) e `rescheduled_at`. Lista vazia se nunca houve reagendamento (e sempre
 vazia em diária e especial). O prazo **corrente** continua em
 `missions.deadline`; a listagem carrega o histórico com um `selectinload`, e o
 teste de contagem de consultas (`test_missions_listagem_consultas.py`) o prende.
@@ -1095,7 +1112,7 @@ existe mais, concluída, prazo já igual, tipo derivado) → ação
 `falhou`/`reagendamento_invalido` e `409`; chave reutilizada →
 `409 operacao_reutilizada`, sem gravar. A rota commita e **só então** levanta o
 erro. A chave que a tela gastou num reagendamento idêntico não serve à
-confirmação da Tifa (`_exigir_elo_da_tifa`): ela é `operacao_reutilizada`.
+confirmação da Kairya (`_exigir_elo_da_kairya`): ela é `operacao_reutilizada`.
 O `ConfirmRead` devolve `mission` = a missão reagendada.
 
 **Preservação do XP na 0005 (T-M4).**
@@ -1120,9 +1137,9 @@ nunca uma atualização perdida. Provado por conexões reais em
 ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
 tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
 testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
-A confirmação da Tifa × conclusão (pendência 167) ganhou uma prova das duas
+A confirmação da Kairya × conclusão (pendência 167) ganhou uma prova das duas
 ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
-`wt/tifa-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
+`wt/kairya-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
 a `main` em `5ba81c3` ainda não contém o módulo.
 
 **Início diário na virada civil (160 parcial).**
@@ -1165,7 +1182,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   Hoje há duas: `Headquarters.tsx`, o Quartel-General, e `Campaigns.tsx`,
   Campanhas (nasceu no C). O Quartel-General fica **montado e oculto**
   (`hidden` na raiz e no `<main>`, HTML só tolera um `main` sem `hidden`)
-  enquanto Campanhas está aberta — desmontá-lo abortaria um stream da Tifa
+  enquanto Campanhas está aberta — desmontá-lo abortaria um stream da Kairya
   em curso (decisão K2); Campanhas, ao contrário, desmonta ao sair, e cada
   abertura busca a trilha de novo. `Campaigns.tsx` tem o `<main>`, o `h1`
   "Campanhas — planos de estudo" e compõe `<CampaignTrail />` — o
@@ -1262,7 +1279,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   com o rótulo do próprio cartão. O parágrafo da
   sequência (`data-testid="cycle-streak"`) ganhou `role="status"`: é uma
   região viva **desde o primeiro render** (o mesmo padrão do painel da
-  Tifa, acima), para que uma mudança de sequência ao concluir uma missão
+  Kairya, acima), para que uma mudança de sequência ao concluir uma missão
   seja anunciada por leitor de tela.
 
   **Nome acessível da recarga por missão (163(b)):** `CompletionControls`,
@@ -1280,15 +1297,15 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   outro controle. O teste Chromium `reschedule-focus-scroll.spec.ts` segura o
   POST, estabelece scroll real com o disclosure fora da viewport e verifica
   payload, estado, prazo, histórico e foco antes da posição. Um controle de
-  sucesso com foco já na Tifa comprova que não há transferência de foco nem
+  sucesso com foco já na Kairya comprova que não há transferência de foco nem
   perda do rascunho enquanto o prazo/histórico mudam. O erro 422 mantém
-  rascunho, alerta, prazo e foco da Tifa; Routes pendentes são abortadas no
+  rascunho, alerta, prazo e foco da Kairya; Routes pendentes são abortadas no
   finally. HTTPs são fixtures de apresentação, sem prova de persistência;
   geometria controlada separa scroll por foco de scroll anchoring/colapso.
   Iniciar, Concluir e recuperação do ciclo não mudam. A prova não generaliza
   viewports ou leitor de tela real; jsdom não mede rolagem.
 
-  Em **`tutoring`** (nasceu no 1b-2), o painel da Tifa: `TutorPanel.tsx`
+  Em **`tutoring`** (nasceu no 1b-2), o painel da Kairya: `TutorPanel.tsx`
   compõe dois contêineres — lateral expansível no desktop, folha modal no
   celular (`useIsDesktop.ts`, `matchMedia`, não CSS responsivo: a semântica
   ARIA muda com o layout, e media query não tem gancho de JavaScript) — e uma
@@ -1351,7 +1368,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
 - **`src/shared/lib/`** *(existe, desde o 1b-2)* — funções puras com mais de
   um usuário entre features (§5 regra 3). Nasceu com `deadline.ts`
   (`formatDeadline`, fuso `America/Sao_Paulo`, README §8), usado pelo cartão
-  da missão e pelo cartão da proposta da Tifa. **Ganhou `civilDate.ts` no
+  da missão e pelo cartão da proposta da Kairya. **Ganhou `civilDate.ts` no
   C** (`git mv` de `features/missions/`, decisão K10, Ruling R3):
   `formatCivilDate` (já existia) e `civilWeekday` (novo — "quinta-feira" a
   partir de `"2026-09-24"`, sem conversão de fuso). Duas mutações mortas:
@@ -1407,7 +1424,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   semeado e o axe sem violações nas duas áreas; abrir Campanhas pelo
   teclado (Tab, Tab, Enter, foco no título); e um `describe('celular')` a
   390×844 (navegação visível, sem rolagem horizontal, sem sobreposição
-  entre "Falar com a Tifa" e os botões da navegação).
+  entre "Falar com a Kairya" e os botões da navegação).
 
 ### Como o frontend alcança a API
 
@@ -1448,7 +1465,7 @@ legitimamente pertence a ele — nunca antes.
 | Vou criar… | Vai em | Estado |
 |---|---|---|
 | Componente visual reutilizável, sem regra de negócio (botão, cartão, barra de progresso) | `frontend/src/shared/ui/<Componente>.tsx` | contrato |
-| Componente específico de uma feature (cartão de missão, painel da Tifa, trilha da semana, painel de progresso) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`, `campaigns` desde o C; `progression` desde o D) |
+| Componente específico de uma feature (cartão de missão, painel da Kairya, trilha da semana, painel de progresso) | `frontend/src/features/<feature>/<Componente>.tsx` | existe (`missions`, `tutoring`, `campaigns` desde o C; `progression` desde o D) |
 | Chamada HTTP | `frontend/src/shared/api/` — **sempre**. Componente nenhum chama `fetch` direto. | existe |
 | Tipo compartilhado por mais de uma feature | `frontend/src/shared/types/` | existe (`mission.ts`, desde o C; `reward.ts`, desde o D — o contrato do `reward` da conclusão, consumido por `missions`) |
 | Tipo usado só por uma feature | junto da feature, em `frontend/src/features/<feature>/` | existe (`missions/types.ts`, `tutoring/types.ts`, `campaigns/types.ts`) |
@@ -1524,9 +1541,9 @@ Decisões, com o motivo de cada uma:
   `.env` relativo ao diretório atual (`env_file=".env"`), então a API e os
   testes precisam partir da raiz para achar o banco.
 - **Sem segredo e sem variável de ambiente própria.** A configuração vem do
-  `.env` (ignorado pelo git) que o `Settings` lê sozinho. A chave da Tifa
+  `.env` (ignorado pelo git) que o `Settings` lê sozinho. A chave da Kairya
   **não** entra aqui: continua no Keychain, como no roteiro do
-  `docs/HANDOFF.md`; para a API com a Tifa, use o terminal.
+  `docs/HANDOFF.md`; para a API com a Kairya, use o terminal.
 - **O gate é o `make check` sem intermediário**, no terminal da IDE: assim
   herda o `PATH` do shell da pessoa (`uv`, `node`), que um processo lançado
   pela interface gráfica do macOS não tem. Não há configuração para

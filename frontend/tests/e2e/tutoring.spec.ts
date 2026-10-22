@@ -22,7 +22,7 @@ import { API_URL } from './servers'
 const EXECUCAO = randomUUID().slice(0, 8)
 
 /** O texto literal do estado indisponivel (spec, tabela "Estados"). */
-const INDISPONIVEL = 'A Tifa está fora do ar: falta configurar o provedor.'
+const INDISPONIVEL = 'A Kairya está fora do ar: falta configurar o provedor.'
 
 interface Mensagem {
   id: number
@@ -50,11 +50,11 @@ function proposta(rotulo: string) {
 /** O painel pronto: status disponivel e historico carregado (campo habilitado). */
 async function abrirPainel(page: Page): Promise<void> {
   await page.goto('/')
-  await expect(page.getByLabel('Sua mensagem para a Tifa')).toBeEnabled()
+  await expect(page.getByLabel('Sua mensagem para a Kairya')).toBeEnabled()
 }
 
 async function perguntar(page: Page, texto: string): Promise<void> {
-  await page.getByLabel('Sua mensagem para a Tifa').fill(texto)
+  await page.getByLabel('Sua mensagem para a Kairya').fill(texto)
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
 }
 
@@ -94,9 +94,9 @@ test('(a) perguntar, ver o texto chegar, confirmar e ver a missao no quadro', as
 
   // ESCREVENDO: o texto chegou pela metade, e a regiao viva anuncia o inicio.
   await expect(page.getByTestId('tutor-partial')).toContainText('Bora')
-  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa está escrevendo…')
+  await expect(page.getByTestId('tutor-live')).toHaveText('Kairya está escrevendo…')
   // O campo foi limpo pelo `user_message`: a pergunta esta gravada.
-  await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue('')
+  await expect(page.getByLabel('Sua mensagem para a Kairya')).toHaveValue('')
   await semViolacoes(page)
 
   await liberar()
@@ -104,7 +104,7 @@ test('(a) perguntar, ver o texto chegar, confirmar e ver a missao no quadro', as
   // PROPOSTA: o cartao, e o fim anunciado.
   const cartao = page.getByTestId('tutor-proposal').filter({ hasText: pedido.instructions })
   await expect(cartao).toBeVisible()
-  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
+  await expect(page.getByTestId('tutor-live')).toHaveText('Kairya terminou de responder.')
   await semViolacoes(page)
 
   // A API falou com o FALSO, uma vez, e com a chave FICTICIA.
@@ -151,7 +151,7 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   page,
 }) => {
   const pergunta = `Explica ponteiros pra mim (e2e ${EXECUCAO})`
-  // Os textos da Tifa tambem carregam o sufixo: a conversa acumula as
+  // Os textos da Kairya tambem carregam o sufixo: a conversa acumula as
   // respostas das execucoes anteriores (ate 50 na tela), e um "Começo" sem
   // sufixo casaria com a resposta cortada de ONTEM -- o cenario passaria
   // antes de o corte de hoje acontecer. Medido: na segunda execucao
@@ -173,7 +173,7 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
 
   const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco.trim() })
   await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta com falha')
-  await expect(page.getByRole('alert')).toContainText('A Tifa não conseguiu responder agora.')
+  await expect(page.getByRole('alert')).toContainText('A Kairya não conseguiu responder agora.')
 
   await definirRoteiro({ blocks: [{ text: [inteira] }] })
   await page.getByRole('button', { name: 'Tentar de novo', exact: true }).click()
@@ -211,7 +211,7 @@ for (const motivo of ['max_tokens', 'model_context_window_exceeded'] as const) {
     const cortada = page.getByTestId('tutor-message').filter({ hasText: comeco })
     await expect(cortada.getByTestId('tutor-message-mark')).toHaveText('Resposta interrompida')
     await expect(page.getByTestId('tutor-live')).toHaveText(
-      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+      'A resposta da Kairya ficou longa demais e foi cortada. Tente pedir por partes.',
     )
     await expect(page.getByTestId('tutor-history-retry-note')).toContainText(
       'A última resposta ficou longa demais e foi cortada. Tente pedir por partes',
@@ -232,7 +232,9 @@ test('(g) a resposta recusada: alerta proprio e o parcial fora da conversa', asy
 
   await perguntar(page, pergunta)
 
-  await expect(page.getByRole('alert')).toContainText('A Tifa não pôde responder a esta pergunta.')
+  await expect(page.getByRole('alert')).toContainText(
+    'A Kairya não pôde responder a esta pergunta.',
+  )
   await expect(page.getByText(parcial)).toHaveCount(0)
   await semViolacoes(page)
 
@@ -267,7 +269,7 @@ test('(h) a recusa no meio que o substituto continuou: o texto inteiro e a nota 
   await expect(resposta.getByTestId('tutor-message-fallback')).toHaveText(
     'Respondida por um modelo substituto (claude-opus-4-8), porque o modelo principal não pôde responder a esta pergunta.',
   )
-  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
+  await expect(page.getByTestId('tutor-live')).toHaveText('Kairya terminou de responder.')
   await semViolacoes(page)
 
   const mensagens = await conversa(page)
@@ -289,7 +291,7 @@ test('(d) indisponivel: o texto da spec, o campo desabilitado e o quadro funcion
   const semeada = (await (
     await api.post('/api/missions', {
       data: {
-        instructions: `Missão do quadro com a Tifa fora (e2e ${EXECUCAO})`,
+        instructions: `Missão do quadro com a Kairya fora (e2e ${EXECUCAO})`,
         completion_criterion: `Conferida (e2e ${EXECUCAO})`,
         difficulty: 1,
         estimated_minutes: 15,
@@ -303,7 +305,7 @@ test('(d) indisponivel: o texto da spec, o campo desabilitado e o quadro funcion
   await page.goto('/')
 
   await expect(page.getByTestId('tutor-unavailable')).toHaveText(INDISPONIVEL)
-  await expect(page.getByLabel('Sua mensagem para a Tifa')).toBeDisabled()
+  await expect(page.getByLabel('Sua mensagem para a Kairya')).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toBeDisabled()
   // O Quartel-General continua funcionando.
   await expect(
@@ -329,7 +331,7 @@ test.describe('(e) celular', () => {
     expect(await semRolagemHorizontal()).toBe(true)
 
     await page.getByTestId('tutor-sheet-open').click()
-    const folha = page.getByRole('dialog', { name: 'Tifa' })
+    const folha = page.getByRole('dialog', { name: 'Kairya' })
     await expect(folha).toBeVisible()
     await expect(folha.getByRole('button', { name: 'Enviar', exact: true })).toBeInViewport()
     expect(await semRolagemHorizontal()).toBe(true)
@@ -348,9 +350,9 @@ test.describe('(e) celular', () => {
     await page.route('**/api/tutoring/messages', (route) => route.fulfill({ json: [] }))
     await page.goto('/')
     await page.getByTestId('tutor-sheet-open').click()
-    const sheet = page.getByRole('dialog', { name: 'Tifa' })
+    const sheet = page.getByRole('dialog', { name: 'Kairya' })
     const close = sheet.getByRole('button', { name: 'Fechar a conversa' })
-    const history = sheet.getByRole('region', { name: 'Conversa com a Tifa' })
+    const history = sheet.getByRole('region', { name: 'Conversa com a Kairya' })
     await expect(sheet.getByTestId('tutor-unavailable')).toHaveText(INDISPONIVEL)
     await expect(close).toBeFocused()
     await page.keyboard.press('Tab')
@@ -382,7 +384,7 @@ test.describe('(e) celular', () => {
     await definirRoteiro({ blocks: [{ text: ['Vamos praticar!'] }, { tool_input: pedido }] })
     await page.goto('/')
     await page.getByTestId('tutor-sheet-open').click()
-    await expect(page.getByLabel('Sua mensagem para a Tifa')).toBeEnabled()
+    await expect(page.getByLabel('Sua mensagem para a Kairya')).toBeEnabled()
     await perguntar(page, `Missão para testar foco (e2e ${EXECUCAO})`)
     const card = page.getByTestId('tutor-proposal').filter({ hasText: pedido.instructions })
     await card.getByRole('button', { name: `Confirmar a proposta: ${pedido.instructions}` }).click()
@@ -402,9 +404,9 @@ test.describe('(e) celular', () => {
     await page.route('**/api/tutoring/messages', (route) => route.fulfill({ json: turn }))
     await page.reload()
     await page.getByTestId('tutor-sheet-open').click()
-    const sheet = page.getByRole('dialog', { name: 'Tifa' })
+    const sheet = page.getByRole('dialog', { name: 'Kairya' })
     const close = sheet.getByRole('button', { name: 'Fechar a conversa' })
-    const history = sheet.getByRole('region', { name: 'Conversa com a Tifa' })
+    const history = sheet.getByRole('region', { name: 'Conversa com a Kairya' })
     const link = sheet.getByRole('link', { name: 'Ver no Quartel-General' })
     await expect(sheet.getByTestId('tutor-unavailable')).toHaveText(INDISPONIVEL)
     await expect(close).toBeFocused()
@@ -539,7 +541,7 @@ for (const decision of ['executada', 'recusada', 'falhou'] as const) {
     await started
     await card.getByTestId(decision === 'recusada' ? 'proposal-reject' : 'proposal-confirm').click()
     await expect(card).toHaveAttribute('data-state', decision)
-    await page.getByLabel('Sua mensagem para a Tifa').fill('Rascunho após a decisão')
+    await page.getByLabel('Sua mensagem para a Kairya').fill('Rascunho após a decisão')
     release()
     await expect(
       page.getByText('Histórico atualizado pelo GET controlado', { exact: true }),
@@ -547,7 +549,9 @@ for (const decision of ['executada', 'recusada', 'falhou'] as const) {
     await expect(card).toHaveAttribute('data-state', decision)
     await expect(card.getByTestId('proposal-confirm')).toHaveCount(0)
     await expect(card.getByTestId('proposal-reject')).toHaveCount(0)
-    await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue('Rascunho após a decisão')
+    await expect(page.getByLabel('Sua mensagem para a Kairya')).toHaveValue(
+      'Rascunho após a decisão',
+    )
     await expect(
       card.getByTestId(
         decision === 'executada'

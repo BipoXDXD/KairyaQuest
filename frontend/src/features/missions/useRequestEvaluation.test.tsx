@@ -166,7 +166,7 @@ describe('useRequestEvaluation', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'A Tifa não conseguiu avaliar agora. Tente de novo.',
+          message: 'A Kairya não conseguiu avaliar agora. Tente de novo.',
           recovery: 'retry',
         },
       })

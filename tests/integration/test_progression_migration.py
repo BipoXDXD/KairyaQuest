@@ -43,15 +43,15 @@ from .conftest import alembic_config
 ESTUDANTE = 1
 
 # O cenario: uma avulsa isolada, um plano da semana com as 7
-# diarias e a especial, uma avulsa criada pela Tifa (tutor_actions), e uma
+# diarias e a especial, uma avulsa criada pela Kairya (tutor_actions), e uma
 # avulsa pendente que nao pode gerar lancamento.
 SEMANA = date(2026, 9, 14)
 DIAS_DA_SEMANA = [SEMANA + timedelta(days=i) for i in range(7)]
 PLANO_CRIADO_EM = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
 AVULSA1_CONCLUIDA = datetime(2026, 9, 10, 15, 0, tzinfo=UTC)
 ESPECIAL_CONCLUIDA = datetime(2026, 9, 21, 15, 0, tzinfo=UTC)
-TIFA_PROPOSTA_EM = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
-TIFA_CONCLUIDA = datetime(2026, 9, 22, 15, 0, tzinfo=UTC)
+KAIRYA_PROPOSTA_EM = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
+KAIRYA_CONCLUIDA = datetime(2026, 9, 22, 15, 0, tzinfo=UTC)
 
 # Um dia perdido depois do marco (a mutacao que troca a maior sequencia
 # pela sequencia ate o marco): sem ele,
@@ -68,7 +68,7 @@ def _as_utc(dia: date, hora: int = 15) -> datetime:
 def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
     """Insere o cenario na tabela crua, em 0003 (antes da migracao 0004).
 
-    A avulsa da Tifa nasce com id MENOR que o das diarias, embora conclua
+    A avulsa da Kairya nasce com id MENOR que o das diarias, embora conclua
     DEPOIS delas -- e o que torna discriminante a mutacao que ordena so
     por id (ORDER BY id, sem completed_at, daria uma ordem de processamento
     diferente da ordem cronologica).
@@ -92,7 +92,7 @@ def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
             "(:u, 'user', 'Preciso de um desafio', 'completa', "
             "'c-progressao-0004', :ts) RETURNING id"
         ),
-        {"u": ESTUDANTE, "ts": TIFA_PROPOSTA_EM},
+        {"u": ESTUDANTE, "ts": KAIRYA_PROPOSTA_EM},
     ).scalar_one()
     resposta_id = conexao.execute(
         text(
@@ -100,18 +100,18 @@ def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
             "reply_to_id, created_at) VALUES "
             "(:u, 'tutor', 'Aqui esta', 'completa', :pergunta, :ts) RETURNING id"
         ),
-        {"u": ESTUDANTE, "pergunta": pergunta_id, "ts": TIFA_PROPOSTA_EM},
+        {"u": ESTUDANTE, "pergunta": pergunta_id, "ts": KAIRYA_PROPOSTA_EM},
     ).scalar_one()
     ids["pergunta_id"] = pergunta_id
 
-    ids["tifa"] = conexao.execute(
+    ids["kairya"] = conexao.execute(
         text(
             "INSERT INTO missions (user_id, instructions, completion_criterion, "
             "difficulty, estimated_minutes, deadline, state, mission_type, "
-            "completed_at) VALUES (:u, 'Missao da Tifa', 'Resumo entregue', 3, "
+            "completed_at) VALUES (:u, 'Missao da Kairya', 'Resumo entregue', 3, "
             "45, :prazo, 'concluida', 'avulsa', :concl) RETURNING id"
         ),
-        {"u": ESTUDANTE, "prazo": TIFA_CONCLUIDA, "concl": TIFA_CONCLUIDA},
+        {"u": ESTUDANTE, "prazo": KAIRYA_CONCLUIDA, "concl": KAIRYA_CONCLUIDA},
     ).scalar_one()
 
     conexao.execute(
@@ -120,7 +120,7 @@ def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
             "mission_id, created_at, decided_at) VALUES "
             "(:msg, 'create_mission', '{}', 'executada', :missao, :ts, :ts)"
         ),
-        {"msg": resposta_id, "missao": ids["tifa"], "ts": TIFA_PROPOSTA_EM},
+        {"msg": resposta_id, "missao": ids["kairya"], "ts": KAIRYA_PROPOSTA_EM},
     )
 
     plano_id = conexao.execute(
@@ -164,7 +164,7 @@ def _popular_em_0003(conexao: Connection) -> dict[str, Any]:
             "VALUES (:u, 'Ainda nao', 'y', 1, 30, :prazo, 'pendente', 'avulsa') "
             "RETURNING id"
         ),
-        {"u": ESTUDANTE, "prazo": TIFA_CONCLUIDA + timedelta(days=30)},
+        {"u": ESTUDANTE, "prazo": KAIRYA_CONCLUIDA + timedelta(days=30)},
     ).scalar_one()
 
     plano2_id = conexao.execute(
@@ -217,7 +217,7 @@ def cenario(banco_migrado: Engine) -> Iterator[dict[str, Any]]:
                 "missions",
                 [
                     ids["avulsa1"],
-                    ids["tifa"],
+                    ids["kairya"],
                     *ids["diarias"],
                     ids["especial"],
                     ids["pendente"],
@@ -257,7 +257,7 @@ def test_o_backfill_lanca_o_xp_de_cada_missao_concluida_na_ordem_historica(
         cenario["avulsa1"],
         *diarias,
         cenario["especial"],
-        cenario["tifa"],
+        cenario["kairya"],
     ]
     valores_esperados = [40, 20, 20, 20, 20, 20, 20, 20, 660, 80]
 
@@ -269,7 +269,7 @@ def test_o_backfill_lanca_o_xp_de_cada_missao_concluida_na_ordem_historica(
         cenario["avulsa1"]: AVULSA1_CONCLUIDA,
         **{mid: _as_utc(dia) for mid, dia in zip(diarias, DIAS_DA_SEMANA, strict=True)},
         cenario["especial"]: ESPECIAL_CONCLUIDA,
-        cenario["tifa"]: TIFA_CONCLUIDA,
+        cenario["kairya"]: KAIRYA_CONCLUIDA,
     }
     for linha in linhas:
         assert linha.credited_at == completados[linha.mission_id]
@@ -299,7 +299,7 @@ def test_o_backfill_destrava_as_conquistas_na_data_em_que_a_condicao_valeu(
         Codigo.FIRST_STEPS.value,
         Codigo.STREAK_7.value,
         Codigo.VETERAN_10.value,
-        Codigo.TIFA_PARTNERSHIP.value,
+        Codigo.KAIRYA_PARTNERSHIP.value,
     }
 
     assert linhas[Codigo.FIRST_STEPS.value].unlocked_at == AVULSA1_CONCLUIDA
@@ -309,11 +309,11 @@ def test_o_backfill_destrava_as_conquistas_na_data_em_que_a_condicao_valeu(
     assert linhas[Codigo.STREAK_7.value].unlocked_at == _as_utc(domingo)
     assert linhas[Codigo.STREAK_7.value].mission_id == cenario["diarias"][6]
 
-    assert linhas[Codigo.VETERAN_10.value].unlocked_at == TIFA_CONCLUIDA
-    assert linhas[Codigo.VETERAN_10.value].mission_id == cenario["tifa"]
+    assert linhas[Codigo.VETERAN_10.value].unlocked_at == KAIRYA_CONCLUIDA
+    assert linhas[Codigo.VETERAN_10.value].mission_id == cenario["kairya"]
 
-    assert linhas[Codigo.TIFA_PARTNERSHIP.value].unlocked_at == TIFA_CONCLUIDA
-    assert linhas[Codigo.TIFA_PARTNERSHIP.value].mission_id == cenario["tifa"]
+    assert linhas[Codigo.KAIRYA_PARTNERSHIP.value].unlocked_at == KAIRYA_CONCLUIDA
+    assert linhas[Codigo.KAIRYA_PARTNERSHIP.value].mission_id == cenario["kairya"]
 
 
 def test_o_backfill_falha_alto_com_missao_concluida_sem_data(
@@ -391,7 +391,7 @@ def _popular_cenario_equivalente_em_0003(
             "(:u, 'user', 'Preciso de um desafio', 'completa', :cid, :ts) "
             "RETURNING id"
         ),
-        {"u": user_id, "cid": f"c-equivalencia-{user_id}", "ts": TIFA_PROPOSTA_EM},
+        {"u": user_id, "cid": f"c-equivalencia-{user_id}", "ts": KAIRYA_PROPOSTA_EM},
     ).scalar_one()
     resposta_id = conexao.execute(
         text(
@@ -399,18 +399,18 @@ def _popular_cenario_equivalente_em_0003(
             "reply_to_id, created_at) VALUES "
             "(:u, 'tutor', 'Aqui esta', 'completa', :pergunta, :ts) RETURNING id"
         ),
-        {"u": user_id, "pergunta": pergunta_id, "ts": TIFA_PROPOSTA_EM},
+        {"u": user_id, "pergunta": pergunta_id, "ts": KAIRYA_PROPOSTA_EM},
     ).scalar_one()
     ids["pergunta_id"] = pergunta_id
 
-    ids["tifa"] = conexao.execute(
+    ids["kairya"] = conexao.execute(
         text(
             "INSERT INTO missions (user_id, instructions, completion_criterion, "
             "difficulty, estimated_minutes, deadline, state, mission_type, "
-            "completed_at) VALUES (:u, 'Missao da Tifa', 'Resumo entregue', 3, "
+            "completed_at) VALUES (:u, 'Missao da Kairya', 'Resumo entregue', 3, "
             "45, :prazo, 'concluida', 'avulsa', :concl) RETURNING id"
         ),
-        {"u": user_id, "prazo": TIFA_CONCLUIDA, "concl": TIFA_CONCLUIDA},
+        {"u": user_id, "prazo": KAIRYA_CONCLUIDA, "concl": KAIRYA_CONCLUIDA},
     ).scalar_one()
 
     conexao.execute(
@@ -419,7 +419,7 @@ def _popular_cenario_equivalente_em_0003(
             "mission_id, created_at, decided_at) VALUES "
             "(:msg, 'create_mission', '{}', 'executada', :missao, :ts, :ts)"
         ),
-        {"msg": resposta_id, "missao": ids["tifa"], "ts": TIFA_PROPOSTA_EM},
+        {"msg": resposta_id, "missao": ids["kairya"], "ts": KAIRYA_PROPOSTA_EM},
     )
 
     plano_id = conexao.execute(
@@ -463,7 +463,7 @@ def _popular_cenario_equivalente_em_0003(
             "VALUES (:u, 'Ainda nao', 'y', 1, 30, :prazo, 'pendente', 'avulsa') "
             "RETURNING id"
         ),
-        {"u": user_id, "prazo": TIFA_CONCLUIDA + timedelta(days=30)},
+        {"u": user_id, "prazo": KAIRYA_CONCLUIDA + timedelta(days=30)},
     ).scalar_one()
 
     plano2_id = conexao.execute(
@@ -514,7 +514,7 @@ def _popular_cenario_equivalente_via_servico(
         content="Preciso de um desafio",
         status=StatusDaMensagem.COMPLETA,
         client_message_id=f"c-equivalencia-servico-{user_id}",
-        created_at=TIFA_PROPOSTA_EM,
+        created_at=KAIRYA_PROPOSTA_EM,
     )
     session.add(pergunta)
     session.flush()
@@ -524,31 +524,31 @@ def _popular_cenario_equivalente_via_servico(
         content="Aqui esta",
         status=StatusDaMensagem.COMPLETA,
         reply_to_id=pergunta.id,
-        created_at=TIFA_PROPOSTA_EM,
+        created_at=KAIRYA_PROPOSTA_EM,
     )
     session.add(resposta)
     session.flush()
     ids["pergunta_id"] = pergunta.id
 
-    tifa = criar_missao(
+    kairya = criar_missao(
         session,
         user_id=user_id,
-        instructions="Missao da Tifa",
+        instructions="Missao da Kairya",
         completion_criterion="Resumo entregue",
         difficulty=3,
         estimated_minutes=45,
-        deadline=TIFA_CONCLUIDA + timedelta(days=1),
+        deadline=KAIRYA_CONCLUIDA + timedelta(days=1),
     )
-    ids["tifa"] = tifa.id
+    ids["kairya"] = kairya.id
     session.add(
         TutorAction(
             message_id=resposta.id,
             kind=TipoDeAcao.CRIAR_MISSAO,
             payload={},
             state=EstadoDaAcao.EXECUTADA,
-            mission_id=tifa.id,
-            created_at=TIFA_PROPOSTA_EM,
-            decided_at=TIFA_PROPOSTA_EM,
+            mission_id=kairya.id,
+            created_at=KAIRYA_PROPOSTA_EM,
+            decided_at=KAIRYA_PROPOSTA_EM,
         )
     )
     session.flush()
@@ -587,7 +587,7 @@ def _popular_cenario_equivalente_via_servico(
         completion_criterion="y",
         difficulty=1,
         estimated_minutes=30,
-        deadline=TIFA_CONCLUIDA + timedelta(days=30),
+        deadline=KAIRYA_CONCLUIDA + timedelta(days=30),
     ).id
 
     plano2 = WeeklyPlan(
@@ -621,7 +621,7 @@ def _rotular(ids: dict[str, Any]) -> dict[int, str]:
     rotulos: dict[int, str] = {
         ids["avulsa1"]: "avulsa1",
         ids["especial"]: "especial",
-        ids["tifa"]: "tifa",
+        ids["kairya"]: "tifa",
     }
     for indice, mission_id in enumerate(ids["diarias"]):
         rotulos[mission_id] = f"diaria_{indice}"
@@ -674,7 +674,7 @@ def test_o_backfill_e_equivalente_ao_servico_de_hoje(banco_migrado: Engine) -> N
     Cada lado usa o SEU PROPRIO usuario (EQUIVALENCIA_A, EQUIVALENCIA_B): o
     backfill acumula fatos POR USUARIO, e usuarios diferentes nao disputam
     qual mission destravou uma conquista primeiro. A comparacao e por
-    ROTULO -- avulsa1, tifa, especial, diaria_0..6 -- porque o id bruto nasce
+    ROTULO -- avulsa1, kairya, especial, diaria_0..6 -- porque o id bruto nasce
     diferente nos dois espacos (um populado por SQL cru em 0003, o outro pelo
     `criar_missao`/`criar_plano`/`concluir_missao` de hoje em `head`).
     """
@@ -687,7 +687,7 @@ def test_o_backfill_e_equivalente_ao_servico_de_hoje(banco_migrado: Engine) -> N
 
         mission_ids_a = [
             ids_a["avulsa1"],
-            ids_a["tifa"],
+            ids_a["kairya"],
             ids_a["especial"],
             *ids_a["diarias"],
         ]
@@ -709,7 +709,7 @@ def test_o_backfill_e_equivalente_ao_servico_de_hoje(banco_migrado: Engine) -> N
             ("avulsa1", AVULSA1_CONCLUIDA),
             *[(f"diaria_{i}", _as_utc(dia)) for i, dia in enumerate(DIAS_DA_SEMANA)],
             ("especial", ESPECIAL_CONCLUIDA),
-            ("tifa", TIFA_CONCLUIDA),
+            ("kairya", KAIRYA_CONCLUIDA),
         ]
         with Session(banco_migrado) as sessao:
             for indice, (rotulo, quando) in enumerate(ordem):
@@ -724,7 +724,7 @@ def test_o_backfill_e_equivalente_ao_servico_de_hoje(banco_migrado: Engine) -> N
 
         mission_ids_b = [
             ids_b["avulsa1"],
-            ids_b["tifa"],
+            ids_b["kairya"],
             ids_b["especial"],
             *ids_b["diarias"],
         ]
@@ -759,7 +759,7 @@ def test_o_backfill_e_equivalente_ao_servico_de_hoje(banco_migrado: Engine) -> N
                     "missions",
                     [
                         ids["avulsa1"],
-                        ids["tifa"],
+                        ids["kairya"],
                         *ids["diarias"],
                         ids["especial"],
                         ids["pendente"],

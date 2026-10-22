@@ -1,7 +1,7 @@
 # Frontend do KairyaQuest
 
 Interface de estudos em português brasileiro, com Quartel-General,
-Campanhas e conversa com a Tifa. Usa o frontend existente em React,
+Campanhas e conversa com a Kairya. Usa o frontend existente em React,
 TypeScript, Vite e Tailwind; as versões reproduzíveis estão em
 `package-lock.json`.
 
@@ -34,7 +34,7 @@ defina `API_PROXY_TARGET` no ambiente do processo do Vite. Essa variável
 não é lida do `.env` por `process.env`; veja `vite.config.ts`.
 
 Não coloque chaves do provedor em variáveis `VITE_*`: elas chegam ao
-navegador. A disponibilidade da Tifa é decidida pelo backend; sem provedor
+navegador. A disponibilidade da Kairya é decidida pelo backend; sem provedor
 configurado, a interface informa indisponibilidade.
 
 ## Build e verificações
@@ -86,9 +86,9 @@ de aplicação em `src/`; o denominador e suas exclusões estão em
 substituem a inspeção visual de desktop/celular ou a validação num aparelho
 com teclado virtual.
 
-O painel usa um retrato gerado da Tifa com o traje clássico, acompanhado
+O painel usa um retrato gerado da Kairya com o traje clássico, acompanhado
 de cenários medievais. Não há assets extraídos do jogo, tutoria simulada de
 produção ou autenticação implementada. A entrega
-com evidência e a avaliação da Tifa estão implementadas; a avaliação é
+com evidência e a avaliação da Kairya estão implementadas; a avaliação é
 interpretação do modelo, identificada na tela. O roadmap e as limitações
 atuais estão no handoff.

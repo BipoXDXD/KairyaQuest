@@ -113,7 +113,7 @@ def test_a_chave_da_anthropic_e_opcional(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Sem chave, o Settings carrega: a ausencia e um estado do produto
-    (a Tifa indisponivel, README s14), nao configuracao esquecida."""
+    (a Kairya indisponivel, README s14), nao configuracao esquecida."""
     assert _settings_do_arquivo(monkeypatch, tmp_path, "").anthropic_api_key is None
 
 
@@ -123,7 +123,7 @@ def test_chave_vazia_no_env_conta_como_ausente(
     """A linha do .env.example e `FOCUSQUEST_ANTHROPIC_API_KEY=`, vazia.
 
     Sem `env_ignore_empty`, ela viraria `SecretStr("")`, e a tela diria que a
-    Tifa esta disponivel ate a primeira mensagem receber 401.
+    Kairya esta disponivel ate a primeira mensagem receber 401.
     """
     settings = _settings_do_arquivo(
         monkeypatch, tmp_path, "FOCUSQUEST_ANTHROPIC_API_KEY=\n"
@@ -163,12 +163,12 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.delenv("FOCUSQUEST_ANTHROPIC_BASE_URL", raising=False)
     settings = _settings_do_arquivo(monkeypatch, tmp_path, "")
     assert settings.anthropic_base_url == "https://api.anthropic.com"
-    assert settings.tutor_model == "claude-opus-5"
+    assert settings.tutor_model == "openai/gpt-oss-20b"
     assert settings.tutor_max_tokens == 2048
     assert settings.tutor_timeout_seconds == 60
     assert settings.tutor_history_messages == 20
-    # O fallback da recusa vem LIGADO por decisao do dono (pendencia 174).
-    assert settings.tutor_fallback is True
+    # Fallback legado nao e ativado pelo padrao nem pela dependencia real.
+    assert settings.tutor_fallback is False
 
 
 @pytest.mark.parametrize(("valor", "esperado"), [("false", False), ("true", True)])
@@ -348,3 +348,14 @@ def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
     limites = Settings.model_fields["e2e_port_offset"].metadata
     teto = next(m.le for m in limites if hasattr(m, "le"))
     assert 2 * reserva - 1 == teto
+
+
+@pytest.mark.parametrize("valor", ["", "groq-chave-ficticia"])
+def test_chave_groq_opcional_e_protegida(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str
+) -> None:
+    settings = _settings_do_arquivo(
+        monkeypatch, tmp_path, f"FOCUSQUEST_GROQ_API_KEY={valor}\n"
+    )
+    assert settings.groq_api_key == (SecretStr(valor) if valor else None)
+    assert "groq-chave-ficticia" not in repr(settings)

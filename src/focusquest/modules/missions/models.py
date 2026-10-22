@@ -395,7 +395,7 @@ class MissionEvidence(Base):
 
 
 class MissionEvaluation(Base):
-    """A avaliacao da Tifa sobre a evidencia (uma por missao, E9)."""
+    """A avaliacao da Kairya sobre a evidencia (uma por missao, E9)."""
 
     __tablename__ = "mission_evaluations"
 

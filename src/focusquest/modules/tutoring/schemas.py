@@ -77,7 +77,7 @@ class RescheduleProposal(BaseModel):
 
 class RetratoDoReagendamento(BaseModel):
     """O retrato que o backend grava ao lado da entrada do modelo (F16): o que
-    a missao era quando a Tifa propos. E o que o cartao mostra ("de ... para
+    a missao era quando a Kairya propos. E o que o cartao mostra ("de ... para
     ..."), sem a feature `tutoring` do frontend importar `missions`. Os campos
     sao exatamente `CAMPOS_DO_RETRATO` (um teste confere)."""
 

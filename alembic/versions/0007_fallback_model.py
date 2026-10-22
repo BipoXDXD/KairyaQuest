@@ -1,10 +1,10 @@
-"""Fallback da recusa: o modelo substituto que serviu a resposta da Tifa.
+"""Fallback da recusa: o modelo substituto que serviu a resposta da Kairya.
 
 Revision ID: 0007
 Revises: 0006
 
 Pendencia 174. A coluna e nula quando quem respondeu foi o modelo pedido, e
-so a resposta da Tifa pode te-la: a pergunta de quem estuda nao tem modelo.
+so a resposta da Kairya pode te-la: a pergunta de quem estuda nao tem modelo.
 Coluna propria, e nao o `error_code`: o fallback nao e erro, e uma resposta
 substituida E cortada precisa dos dois valores (pendencia 170).
 """

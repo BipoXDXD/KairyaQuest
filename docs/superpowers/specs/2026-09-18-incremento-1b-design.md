@@ -1,4 +1,4 @@
-# Spec de design — Incremento 1b: a Tifa, propor e confirmar uma missão, e o chat
+# Spec de design — Incremento 1b: a Kairya, propor e confirmar uma missão, e o chat
 
 **Data:** 2026-09-18
 **Estado:** desenhada com o dono, seção por seção, e aprovada por ele em cada
@@ -7,7 +7,7 @@ verde: **1b-1** (backend) e **1b-2** (frontend, E2E e a chamada real).
 
 ## O que o README pede
 
-- §14: "Com credenciais, Tifa propõe uma missão e a cria após confirmação. Sem
+- §14: "Com credenciais, Kairya propõe uma missão e a cria após confirmação. Sem
   elas, teste o contrato e mostre indisponibilidade; não simule tutoria real
   com dados fixos."
 - §6: o provedor é configurável; chamadas e credenciais ficam no backend, com
@@ -20,7 +20,7 @@ verde: **1b-1** (backend) e **1b-2** (frontend, E2E e a chamada real).
 - §5: a personalidade é acolhedora, enérgica e assertiva, sem culpa nem
   ameaças, com falas originais, sem inventar fontes, e com pistas graduais
   antes da solução.
-- §7: no desktop, um painel expansível da Tifa; no celular, a conversa não
+- §7: no desktop, um painel expansível da Kairya; no celular, a conversa não
   cobre botões, não prende o teclado e não exige rolagem horizontal; o texto
   digitado é preservado depois de falhas; o reenvio não duplica; o retrato é
   um placeholder até haver assets autorizados.
@@ -46,7 +46,7 @@ Já decidido antes, na spec do 1a: **provedor Anthropic**, modelo padrão
 - **A missão não tem título.** Os campos do `MissionCreate` são
   `instructions`, `completion_criterion`, `difficulty` (1 a
   `DIFICULDADE_MAXIMA` = 5), `estimated_minutes` e `deadline`, que é
-  **obrigatório**. A Tifa precisa propor um prazo, então recebe o "agora" do
+  **obrigatório**. A Kairya precisa propor um prazo, então recebe o "agora" do
   relógio injetável do Incremento A.
 - **O `Settings` recusa variável desconhecida** (pendência 12). Cada campo
   novo entra também no `.env.example`, com prefixo `FOCUSQUEST_`.
@@ -77,8 +77,8 @@ usuário único semeado pela `0001`.
 | `role` | `Text`, `CHECK role IN ('user', 'tutor')` |
 | `content` | `Text`, não nulo. Numa resposta `interrompida` ou `falhou`, o texto parcial, que pode ser vazio |
 | `status` | `Text`, `CHECK status IN ('gerando', 'completa', 'interrompida', 'falhou')`. A mensagem do usuário nasce `completa` |
-| `client_message_id` | `Text`, nulo nas mensagens da Tifa. **Único** entre as mensagens do usuário |
-| `reply_to_id` | FK `tutor_messages.id`, nulo nas mensagens do usuário. Na resposta da Tifa, aponta para a pergunta |
+| `client_message_id` | `Text`, nulo nas mensagens da Kairya. **Único** entre as mensagens do usuário |
+| `reply_to_id` | FK `tutor_messages.id`, nulo nas mensagens do usuário. Na resposta da Kairya, aponta para a pergunta |
 | `error_code` | `Text`, nulo. Preenchido quando `falhou` |
 | `created_at` | `timestamptz`, não nulo |
 
@@ -99,7 +99,7 @@ usuário único semeado pela `0001`.
 | Coluna | Tipo e regra |
 |---|---|
 | `id` | `Integer`, PK |
-| `message_id` | FK `tutor_messages.id`, não nulo: a resposta da Tifa que propôs |
+| `message_id` | FK `tutor_messages.id`, não nulo: a resposta da Kairya que propôs |
 | `kind` | `Text`, `CHECK kind IN ('create_mission')` |
 | `payload` | `JSONB`, não nulo. **Validado pelo `MissionCreate` antes de ser gravado**: uma proposta inválida nunca vira linha |
 | `state` | `Text`, `CHECK state IN ('proposta', 'executada', 'recusada', 'falhou')` |
@@ -124,7 +124,7 @@ já convertida em ação, chegam ao banco.
 | Método e rota | Entrada | Saída |
 |---|---|---|
 | `GET /api/tutoring/status` | — | `{"available": bool}`. `false` quando não há chave |
-| `GET /api/tutoring/messages` | — | as últimas 50 mensagens, em ordem cronológica, cada resposta da Tifa com as suas ações embutidas. **Sem paginação no 1b** (declarado em "Fora") |
+| `GET /api/tutoring/messages` | — | as últimas 50 mensagens, em ordem cronológica, cada resposta da Kairya com as suas ações embutidas. **Sem paginação no 1b** (declarado em "Fora") |
 | `POST /api/tutoring/messages` | `{"client_message_id", "content"}` | `text/event-stream` (ver abaixo) |
 | `POST /api/tutoring/actions/{id}/confirm` | `{"operation_id"}` | `{"action", "mission"}` |
 | `POST /api/tutoring/actions/{id}/reject` | — | `{"action"}` |
@@ -208,7 +208,7 @@ Respondem JSON comum, e **a pergunta não é gravada**:
 | Ação inexistente | `404 acao_nao_encontrada` |
 
 O `prazo_expirado` é a única pré-condição nova: o prazo proposto era futuro
-quando a Tifa o escreveu e pode ter passado quando você clica.
+quando a Kairya o escreveu e pode ter passado quando você clica.
 
 ## O provedor (1b-1)
 
@@ -323,7 +323,7 @@ pendência no HANDOFF, sem afirmar mais do que foi medido.
 
 ## A tela (1b-2)
 
-- **O painel da Tifa.** No desktop, fica à direita do Quartel-General,
+- **O painel da Kairya.** No desktop, fica à direita do Quartel-General,
   expansível, com o estado aberto ou fechado lembrado no `localStorage`. No
   celular, abre por um botão fixo como folha sobre a tela, com o campo de texto
   acima do teclado, sem esconder o enviar e sem rolagem horizontal. A
@@ -339,14 +339,14 @@ pendência no HANDOFF, sem afirmar mais do que foi medido.
 | Estado | O que a pessoa vê |
 |---|---|
 | Carregando o histórico | esqueleto das mensagens |
-| Indisponível (`available: false` ou `503 provedor_nao_configurado`) | "A Tifa está fora do ar: falta configurar o provedor." O campo fica desabilitado e o Quartel-General continua funcionando |
-| Vazio | uma saudação fixa **da interface**, não uma fala inventada da Tifa |
-| Escrevendo | o texto chega pelos `delta`. "Tifa está escrevendo…" numa região viva que **existe desde o primeiro render**; o leitor de tela anuncia o início e o fim, não cada palavra |
+| Indisponível (`available: false` ou `503 provedor_nao_configurado`) | "A Kairya está fora do ar: falta configurar o provedor." O campo fica desabilitado e o Quartel-General continua funcionando |
+| Vazio | uma saudação fixa **da interface**, não uma fala inventada da Kairya |
+| Escrevendo | o texto chega pelos `delta`. "Kairya está escrevendo…" numa região viva que **existe desde o primeiro render**; o leitor de tela anuncia o início e o fim, não cada palavra |
 | Interrompida ou falhou | o texto parcial fica visível e marcado; "Tentar de novo" reenvia o mesmo `client_message_id` |
 | Proposta | cartão com instruções, critério, dificuldade, minutos e prazo, e os botões Confirmar e Recusar |
 | Executada | "Missão criada" e um link para o Quartel-General; a lista do quadro recarrega, respeitando a espera do Incremento A se houver uma conclusão em voo |
 | Recusada | o cartão fica marcado como recusado, sem botões |
-| Falhou (`prazo_expirado`) | a explicação, e a sugestão de pedir outra proposta à Tifa |
+| Falhou (`prazo_expirado`) | a explicação, e a sugestão de pedir outra proposta à Kairya |
 
 **O texto digitado nunca se perde** (§7). O campo só é limpo quando o evento
 `user_message` confirma a gravação. Um `503` ou `409` antes do stream deixa o
@@ -428,8 +428,8 @@ chave.
   D5, que pode vir depois sem mudar o contrato das mensagens. Até lá,
   recarregar no meio de uma resposta a deixa `interrompida`, e a tela oferece
   "Tentar de novo".
-- O retrato definitivo e as expressões da Tifa.
-- Concessão de XP pela Tifa: continua determinística, pela conclusão (§6).
+- O retrato definitivo e as expressões da Kairya.
+- Concessão de XP pela Kairya: continua determinística, pela conclusão (§6).
 
 ## Riscos
 
@@ -471,7 +471,7 @@ original permanece intocado; a emenda fica ao lado.
 
 | Decisão | Motivo |
 |---|---|
-| `env_ignore_empty=True` no `Settings` | O `.env.example` traz `FOCUSQUEST_ANTHROPIC_API_KEY=` vazio. Sem a opção, a chave vazia viraria `SecretStr("")` — "configurada" — e a tela diria a Tifa disponível para, na primeira mensagem, receber 401. |
+| `env_ignore_empty=True` no `Settings` | O `.env.example` traz `FOCUSQUEST_ANTHROPIC_API_KEY=` vazio. Sem a opção, a chave vazia viraria `SecretStr("")` — "configurada" — e a tela diria a Kairya disponível para, na primeira mensagem, receber 401. |
 | `created_at` das mensagens da tutoria vem do **relógio injetável**, não do `now()` do banco | Aqui não é só auditoria: é entrada da regra do órfão. Misturar o `now()` do banco com o relógio dos testes faria a regra comparar dois relógios. |
 | `anthropic_base_url` padrão é o **literal** `https://api.anthropic.com`, não `None` | Consequência direta de M6: `None` deixaria uma variável solta do ambiente do shell (`ANTHROPIC_BASE_URL`, sem o prefixo `FOCUSQUEST_`) desviar a conversa em produção. |
 | Pergunta limitada a `TAMANHO_MAXIMO_DA_PERGUNTA = 4000` caracteres | Teto **técnico** de custo (cada caractere vai ao modelo, e volta nos turnos seguintes como histórico). Provisório; decisão de produto do dono (pendência em `docs/HANDOFF.md`). |

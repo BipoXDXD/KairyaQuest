@@ -10,7 +10,7 @@ import { stubViewport } from './test/viewport'
 
 /**
  * O que o Quartel-General busca na montagem: ciclo, missoes, status,
- * historico da Tifa e progresso; e o que Campanhas
+ * historico da Kairya e progresso; e o que Campanhas
  * busca ao abrir: a trilha da semana (`GET /api/plans/current`). O `plan` e
  * parametrizavel porque um teste precisa de um dia `disponivel` na trilha
  * (o botao "Ir ao Quartel-General"); os demais usam o padrao `null` ("sem
@@ -146,7 +146,7 @@ describe('App', () => {
     await screen.findByTestId('trail-no-plan')
   })
 
-  it('o rascunho da Tifa sobrevive a ida e volta por Campanhas, sem remontar nada', async () => {
+  it('o rascunho da Kairya sobrevive a ida e volta por Campanhas, sem remontar nada', async () => {
     const fetchMock = stubPage()
     render(<App />)
     await settleHeadquarters()
@@ -450,7 +450,7 @@ describe('App: retorno ao Quartel-General', () => {
       fireEvent.click(screen.getByTestId('nav-headquarters'))
     })
     expect(screen.getByText('Resposta completa')).toBeVisible()
-    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
     expect(requestsTo(fetchMock, 'GET /api/tutoring/messages')).toHaveLength(1)
     expect(screen.getByText('Diária de 2026-10-05')).toBeVisible()
   })

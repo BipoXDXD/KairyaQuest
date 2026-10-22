@@ -32,7 +32,7 @@ export type HistoryState =
  *   nem `error`, ou caiu no meio. Repetir com o mesmo id e seguro.
  *
  * `idle.answer` distingue "nada aconteceu ainda" (`null`, na montagem) de
- * "a Tifa acabou de responder" (a resposta do `done`): e o que deixa a regiao
+ * "a Kairya acabou de responder" (a resposta do `done`): e o que deixa a regiao
  * viva do painel anunciar o FIM da resposta (spec, "Escrevendo") -- e dizer se
  * ela chegou inteira ou cortada (pendencia 121).
  */
@@ -155,7 +155,7 @@ function retryTargetOf(send: SendState, history: HistoryState): PendingQuestion 
 }
 
 /**
- * A conversa com a Tifa: historico, rascunho, envio e reenvio.
+ * A conversa com a Kairya: historico, rascunho, envio e reenvio.
  *
  * Vive no TOPO do painel (`TutorPanel`), acima dos conteineres de desktop e de
  * celular: trocar de layout remonta o conteiner, e o rascunho e o stream

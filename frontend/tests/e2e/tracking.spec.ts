@@ -6,7 +6,7 @@ import { definirRoteiro, reiniciar, requisicoes } from './falso'
 
 /**
  * O acompanhamento ponta a ponta (Incremento F): iniciar, reagendar pela tela
- * e a proposta de reagendamento da Tifa confirmada pela pessoa. Navegador
+ * e a proposta de reagendamento da Kairya confirmada pela pessoa. Navegador
  * real, API real, banco real e o servidor falso da Anthropic como processo.
  *
  * O banco de teste e compartilhado e nao e limpo entre execucoes: cada missao
@@ -263,7 +263,7 @@ test('(2) reagendar pela tela com motivo: prazo novo, contagem e historico apos 
   await semViolacoes(page)
 })
 
-test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo novo', async ({
+test('(3) a Kairya propoe reagendar, a pessoa confirma e o quadro mostra o prazo novo', async ({
   page,
   request,
 }) => {
@@ -284,9 +284,9 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   })
 
   await page.goto('/')
-  await expect(page.getByLabel('Sua mensagem para a Tifa')).toBeEnabled()
+  await expect(page.getByLabel('Sua mensagem para a Kairya')).toBeEnabled()
   await page
-    .getByLabel('Sua mensagem para a Tifa')
+    .getByLabel('Sua mensagem para a Kairya')
     .fill(`Não vou conseguir a tempo, dá para mover? (e2e ${EXECUCAO})`)
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
 
@@ -302,7 +302,7 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   )
   await expect(proposta.getByTestId('reschedule-new-deadline')).toHaveText(naTela(novoPrazo))
   await expect(proposta.getByTestId('reschedule-reason')).toContainText('Mudança de prioridade')
-  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
+  await expect(page.getByTestId('tutor-live')).toHaveText('Kairya terminou de responder.')
   await semViolacoes(page)
 
   // A API chamou o falso uma vez, oferecendo as DUAS ferramentas.
@@ -326,7 +326,7 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   await cartao.getByTestId('mission-reschedule-history').getByText('Histórico de prazos').click()
   await expect(cartao.getByTestId('mission-reschedule-entry')).toHaveText([
     new RegExp(
-      `^${trechoDaTela(criada.deadline)} → ${trechoDaTela(novoPrazo)} · Mudança de prioridade · proposto pela Tifa$`,
+      `^${trechoDaTela(criada.deadline)} → ${trechoDaTela(novoPrazo)} · Mudança de prioridade · proposto pela Kairya$`,
     ),
   ])
 
@@ -340,12 +340,12 @@ test('(3) a Tifa propoe reagendar, a pessoa confirma e o quadro mostra o prazo n
   expect(todas.filter((m) => m.instructions === criada.instructions)).toHaveLength(1)
   await semViolacoes(page)
 
-  // Recarregar: o prazo novo e o historico "proposto pela Tifa" persistem.
+  // Recarregar: o prazo novo e o historico "proposto pela Kairya" persistem.
   await page.reload()
   await expect(cartao.getByTestId('mission-deadline')).toHaveText(naTela(novoPrazo))
   await cartao.getByTestId('mission-reschedule-history').getByText('Histórico de prazos').click()
   await expect(cartao.getByTestId('mission-reschedule-entry')).toHaveText([
-    /· Mudança de prioridade · proposto pela Tifa$/,
+    /· Mudança de prioridade · proposto pela Kairya$/,
   ])
 })
 

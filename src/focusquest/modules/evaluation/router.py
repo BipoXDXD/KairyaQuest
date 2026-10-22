@@ -40,11 +40,11 @@ def avaliar(
     engine: Annotated[Engine, Depends(get_engine)],
     clock: Annotated[Clock, Depends(get_clock)],
 ) -> EvaluationResultRead:
-    """Pede a avaliacao da Tifa (E5). Sem chave, 503 antes de tocar no banco:
+    """Pede a avaliacao da Kairya (E5). Sem chave, 503 antes de tocar no banco:
     a avaliacao ja concluida continua visivel pelo `MissionRead`. As falhas
     ja estao gravadas quando o erro sobe (E13)."""
     if tutoria is None:
-        raise ProvedorNaoConfiguradoError("a Tifa esta sem provedor configurado")
+        raise ProvedorNaoConfiguradoError("a Kairya esta sem provedor configurado")
     fabrica = sessionmaker(bind=engine, expire_on_commit=False)
     resultado = avaliar_missao(
         fabrica, tutoria, user_id=USUARIO_UNICO, mission_id=mission_id, clock=clock

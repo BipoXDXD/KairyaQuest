@@ -237,7 +237,7 @@ describe('CycleSection', () => {
     })
     render(<CycleSection onMissionCompleted={onMissionCompleted} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
 
     expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+20 XP de bônus')
     expect(onMissionCompleted).toHaveBeenCalledTimes(1)

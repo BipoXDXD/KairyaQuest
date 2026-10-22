@@ -17,7 +17,7 @@ import { useTutorStatus } from './useTutorStatus'
  */
 function liveText(send: SendState): string {
   if (send.status === 'sending' || send.status === 'writing') {
-    return 'Tifa está escrevendo…'
+    return 'Kairya está escrevendo…'
   }
   return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : ''
 }
@@ -32,7 +32,7 @@ function Portrait({ scene }: { scene: boolean }) {
       className="tutor-portrait"
     >
       <img
-        src={scene ? '/art/tifa-mentor.webp' : '/art/tifa-avatar.webp'}
+        src={scene ? '/art/kairya-mentor.webp' : '/art/kairya-avatar.webp'}
         alt=""
         width="1122"
         height="1402"
@@ -50,7 +50,7 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * O painel da Tifa no Quartel-General.
+ * O painel da Kairya no Quartel-General.
  *
  * Os DOIS hooks moram aqui, acima dos conteineres: no desktop a conversa e
  * uma coluna lateral expansivel; no celular, uma folha modal aberta por um
@@ -218,7 +218,7 @@ export function TutorPanel({
   return (
     <aside
       ref={panel}
-      aria-label="Tifa"
+      aria-label="Kairya"
       data-testid="tutor-panel"
       className="rpg-tutor lg:border-l lg:border-slate-800"
     >
@@ -238,7 +238,7 @@ export function TutorPanel({
           >
             {desktopOpen && (
               <div className="flex-1">
-                <h2 className="tutor-name text-lg font-semibold text-slate-50">Tifa</h2>
+                <h2 className="tutor-name text-lg font-semibold text-slate-50">Kairya</h2>
                 <p className="text-xs text-slate-400">sua tutora</p>
               </div>
             )}
@@ -246,14 +246,14 @@ export function TutorPanel({
               type="button"
               ref={desktopToggle}
               data-testid="tutor-panel-toggle"
-              aria-label={desktopOpen ? 'Recolher o painel da Tifa' : 'Abrir o painel da Tifa'}
-              title={desktopOpen ? 'Recolher o painel da Tifa' : 'Abrir o painel da Tifa'}
+              aria-label={desktopOpen ? 'Recolher o painel da Kairya' : 'Abrir o painel da Kairya'}
+              title={desktopOpen ? 'Recolher o painel da Kairya' : 'Abrir o painel da Kairya'}
               aria-expanded={desktopOpen}
               aria-controls="tutor-panel-body"
               onClick={toggleDesktop}
               className={`rounded border border-slate-600 text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ${desktopOpen ? 'px-2 py-1 text-xs' : 'flex h-11 w-11 items-center justify-center text-xl'}`}
             >
-              {desktopOpen ? 'Recolher o painel da Tifa' : <span aria-hidden="true">›</span>}
+              {desktopOpen ? 'Recolher o painel da Kairya' : <span aria-hidden="true">›</span>}
             </button>
           </header>
           {desktopOpen && (
@@ -275,7 +275,7 @@ export function TutorPanel({
               className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
               <Portrait scene={false} />
-              Falar com a Tifa
+              Falar com a Kairya
             </button>
           )}
           {sheetOpen && (
@@ -297,7 +297,7 @@ export function TutorPanel({
                 <header className="flex items-center gap-3">
                   <Portrait scene={false} />
                   <h2 id="tutor-sheet-title" className="flex-1 text-lg font-semibold text-slate-50">
-                    Tifa
+                    Kairya
                   </h2>
                   <button
                     ref={sheetClose}

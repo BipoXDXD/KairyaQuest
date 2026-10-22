@@ -139,8 +139,8 @@ async function readScroll(list: Locator) {
 
 for (const scenario of [
   { failed: false, movedFocus: false, name: 'bem sucedido devolve foco' },
-  { failed: false, movedFocus: true, name: 'bem sucedido conserva rascunho e foco da Tifa' },
-  { failed: true, movedFocus: true, name: 'recusado conserva rascunho e foco da Tifa' },
+  { failed: false, movedFocus: true, name: 'bem sucedido conserva rascunho e foco da Kairya' },
+  { failed: true, movedFocus: true, name: 'recusado conserva rascunho e foco da Kairya' },
 ]) {
   test(`reagendamento ${scenario.name} sem alterar a rolagem`, async ({ page }) => {
     const { card, list, toggle, requested, posts, unexpected, reply, cleanup } = await setup(page)
@@ -160,7 +160,7 @@ for (const scenario of [
           reason: 'falta_de_tempo',
         },
       ])
-      const field = page.getByLabel('Sua mensagem para a Tifa')
+      const field = page.getByLabel('Sua mensagem para a Kairya')
       if (movedFocus) await field.fill('Rascunho durante reagendamento')
       // Todas as ações que podem rolar já aconteceram. Depois desta foto,
       // apenas entregar HTTP e observar: não click/focus/scrollIntoView.

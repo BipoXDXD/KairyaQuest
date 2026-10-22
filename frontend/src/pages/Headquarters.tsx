@@ -13,13 +13,13 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  * e traduz o dado e a feature `missions` -- que nao sabe que esta pagina
  * existe. E por isso que trocar esta pagina nao mexe na feature.
  *
- * O §7 preve mais coisa aqui (proxima missao, painel da Tifa, navegacao
+ * O §7 preve mais coisa aqui (proxima missao, painel da Kairya, navegacao
  * lateral). Este e o recorte que o mesmo §7 autoriza: so o que tem API. O
- * quadro de missoes veio no 1a; o painel da Tifa entrou no 1b-2, ao lado do
+ * quadro de missoes veio no 1a; o painel da Kairya entrou no 1b-2, ao lado do
  * quadro; a missao de hoje e a sequencia entraram no B, acima do quadro de
  * avulsas; o nivel, o XP e as conquistas ganharam API no D (D14) e entraram
  * como o painel de progresso, acima da missao de hoje. A pagina continua sem
- * regra: compoe as features, e nenhuma delas sabe da outra -- quando a Tifa
+ * regra: compoe as features, e nenhuma delas sabe da outra -- quando a Kairya
  * cria uma missao, e a PAGINA que pede ao quadro para recarregar, pelo `ref`
  * do `MissionList`; quando qualquer missao e concluida (a diaria, a especial
  * ou uma avulsa), e a PAGINA que pede ao painel de progresso para se
@@ -28,9 +28,9 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  * interface que promete o que nao existe.
  *
  * `hidden`: desde o C, o `App` OCULTA esta pagina quando Campanhas esta
- * aberta, em vez de desmonta-la -- desmontar levaria junto o painel da Tifa,
+ * aberta, em vez de desmonta-la -- desmontar levaria junto o painel da Kairya,
  * com o rascunho e o stream em andamento (decisao K2 do plano do C). O
- * atributo vai na raiz (o painel da Tifa fica fora do `main`) e no proprio
+ * atributo vai na raiz (o painel da Kairya fica fora do `main`) e no proprio
  * `main`: o HTML proibe mais de um `main` sem `hidden` no documento.
  */
 export function Headquarters({ hidden = false }: { hidden?: boolean }) {
@@ -59,7 +59,7 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   }, [hidden, refreshProgress])
   return (
     <div hidden={hidden} className="headquarters-layout lg:flex">
-      {/* `pb-24` no celular: o botao fixo "Falar com a Tifa" fica no canto de
+      {/* `pb-24` no celular: o botao fixo "Falar com a Kairya" fica no canto de
           baixo, e sem a folga cobriria os botoes do ultimo cartao do quadro
           (README §7: a conversa nao cobre botoes). */}
       <main

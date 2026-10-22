@@ -120,7 +120,7 @@ def _fatos(session: Session, user_id: int) -> FatosDoUsuario:
         .select_from(Mission)
         .where(Mission.user_id == user_id, Mission.state == MissionState.CONCLUIDA)
     )
-    da_tifa = session.scalar(
+    da_kairya = session.scalar(
         select(func.count())
         .select_from(TutorAction)
         .join(Mission, Mission.id == TutorAction.mission_id)
@@ -134,7 +134,7 @@ def _fatos(session: Session, user_id: int) -> FatosDoUsuario:
     return FatosDoUsuario(
         missoes_concluidas=concluidas or 0,
         maior_sequencia=maior_sequencia(carregar_historico(session, user_id)),
-        concluiu_missao_da_tifa=bool(da_tifa),
+        concluiu_missao_da_kairya=bool(da_kairya),
     )
 
 

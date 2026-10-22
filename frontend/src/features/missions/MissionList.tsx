@@ -41,7 +41,7 @@ function MissionsContent({
     case 'empty':
       return (
         <p data-testid="missions-empty" className="text-sm text-slate-300">
-          Nenhuma missão no quadro. Peça uma nova campanha à Tifa para começar.
+          Nenhuma missão no quadro. Peça uma nova campanha à Kairya para começar.
         </p>
       )
 
@@ -96,7 +96,7 @@ function MissionsContent({
 
 /**
  * O que a PAGINA pode pedir ao quadro: recarregar (1b-2, a missao criada pela
- * Tifa).
+ * Kairya).
  *
  * Um `ref`, e nao um contador em prop observado por efeito: o efeito que chama
  * `setState` ao ver a prop mudar e o que o `react-hooks/set-state-in-effect`
@@ -118,7 +118,7 @@ export interface MissionListHandle {
  * cartoes: e o nivel que nao desmonta no reload. Todo pedido de recarga -- o
  * "Atualizar o quadro" de um cartao e o "Tentar novamente" do erro -- passa
  * por ele, e espera a conclusao em voo. A recarga pedida pela PAGINA (pelo
- * `ref`, quando a Tifa cria uma missao) tambem.
+ * `ref`, quando a Kairya cria uma missao) tambem.
  *
  * `onMissionCompleted` e o que a PAGINA pede para saber de toda conclusao de
  * uma avulsa -- repassado a cada `MissionCard` como `onCompleted` (para

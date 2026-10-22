@@ -433,7 +433,7 @@ def test_pedir_xp_no_chat_nao_altera_o_saldo(
     falso: ServidorAnthropicFalso,
     conversa: Conversa,
 ) -> None:
-    """README s6: pedir XP no chat nao altera o saldo. A Tifa so LE o
+    """README s6: pedir XP no chat nao altera o saldo. A Kairya so LE o
     progresso (D15) -- nenhuma ferramenta credita `xp_entries`."""
     falso.roteiro = Roteiro(blocos=(Texto(("Claro, aqui estão 1000 XP!",)),))
     with fabrica() as sessao:

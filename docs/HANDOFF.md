@@ -1,3 +1,70 @@
+# Groq Free para conversa e avaliação (2026-10-22)
+
+Objetivo autorizado: concluir o PR da renomeação com Groq Free para Kairya,
+sem consumir Anthropic nem usar fallback pago. Base: `72fc969`.
+
+A dependência de produção agora instancia somente `ProvedorGroq`, com a
+chave `FOCUSQUEST_GROQ_API_KEY`. Usa HTTPX2 já existente: nenhuma dependência,
+serviço adicional, migração ou contrato HTTP introduzido. Endpoint e modelo
+fixos (`api.groq.com`, `openai/gpt-oss-20b`); sem retries, redirects, proxy do
+ambiente, ferramentas pagas do servidor ou troca de modelo/provedor.
+Os esquemas das propostas foram extraídos para módulo sem SDK e permanecem
+os mesmos. Avaliação usa a rubrica existente e a confirmação das propostas
+continua obrigatória; XP e idempotência permanecem no domínio.
+
+Configuração antiga da Anthropic/modelo/fallback é aceita para não quebrar
+.env existentes, mas não pode ativar chamadas na dependência de produção.
+Os testes históricos preservam o adaptador antigo; o E2E o monta em entrada
+exclusiva de testes com chave fictícia e endereço loopback. O gate bloqueia
+tráfego real a Groq mesmo se existir uma chave no ambiente local.
+
+Limite operacional: a API de completions não informa o plano da conta.
+A conta Groq deve permanecer Free; não automatizar upgrade, cadastro de
+pagamento ou compra de cota. 429 falha fechado e não tenta outro serviço.
+Configuração detalhada e fontes primárias em [GROQ.md](GROQ.md).
+
+Provas iniciais: testes do adaptador falharam antes de existir implementação;
+o teste da dependência reproduziu seleção indevida da Anthropic antes da
+correção. Testes HTTP cobrem deltas, propostas, avaliação, cortes, recusa,
+JSON inválido, múltiplas ferramentas, 401/429/5xx, redirecionamento, timeout,
+cancelamento e ausência de reenvio. Integração com banco cobre proposta sem
+criação automática e avaliação com recompensa idempotente.
+Gate inicial aprovado: 1559 testes Python e 32 subtestes, 1002 frontend,
+66 E2E e cobertura de 100%. Revisão do contrato oficial do Groq acrescentou
+quatro casos de campos nulos, recusa explícita e erro em metadados: falharam
+antes da correção, depois os 37 testes do adaptador passaram. Os hooks
+obrigatórios validam novamente o conteúdo final antes de commit e push.
+CI e revisão exata publicada são verificadas no PR.
+Ativação e aceitação reais aguardam chave Groq Free fornecida localmente.
+
+# Identidade da personagem Kairya — 2026-10-22
+
+O responsável definiu Kairya como nome próprio da tutora e usará artes de sua
+autoria. Interface, mensagens acessíveis, prompts de conversa e avaliação,
+documentação corrente e testes usam Kairya. Os arquivos de retrato passaram a
+`kairya-avatar.webp` e `kairya-mentor.webp`, com os mesmos pixels e hashes;
+são placeholders até que as artes próprias sejam fornecidas. A procedência
+histórica está documentada em `docs/ART.md`, sem atribuir autoria nova aos
+retratos existentes.
+
+Os dois valores já persistidos (`tifa` em origens e `tifa_partnership` em
+conquistas) conservam seu contrato de armazenamento/API para que o histórico
+e os clientes existentes continuem legíveis. Os identificadores internos dos
+enums e todas as apresentações desses valores foram renomeados. Esta mudança
+não exige migração de banco nem altera XP, histórico ou credenciais.
+
+O usuário não autoriza consumir créditos da Anthropic neste projeto. Nenhuma
+chave foi instalada nem chamada paga foi efetuada. Alternativas sem consumir
+esse saldo foram pesquisadas em documentação primária: Ollama com modelo
+local e planos gratuitos de Groq/Gemini. O usuário selecionou Groq Free em seguida; a integração abaixo substitui
+a configuração de produção anterior. A instalação atual ainda depende da
+chave Free e de publicação para ativar a tutoria real.
+
+Validação desta revisão: `make check` EXIT 0 com 1.519 testes Python, 32
+subtestes, 1.002 testes do frontend e 66 E2E; cobertura de 100%, lint, tipos,
+formatação e scanner de segredos aprovados. Hooks e CI têm verificação própria
+na revisão publicada.
+
 # Publicação automática GHCR (2026-10-22)
 
 Objetivo autorizado: publicar API e web com Linux AMD64 e ARM64 após o CI e
@@ -66,7 +133,7 @@ com assinatura válida e hooks aprovados. Sua árvore é a mesma do merge.
 PR #29, correção dos worktrees internos, já está integrado; PRs #7–#28 também.
 Essas fases estão encerradas: não reimplementar nem abrir PRs duplicados.
 
-Entrega do PR #30: cenários medievais no QG/Campanhas, Tifa semirrealista no
+Entrega do PR #30: cenários medievais no QG/Campanhas, Kairya semirrealista no
 traje clássico escolhido pelo responsável, navegação e superfícies refinadas,
 conquistas em disclosure nativo com nível/XP visíveis, e pares dt/dd alinhados.
 Quatro WebP somam 668.608 bytes. Procedência, prompts e hashes em `docs/ART.md`.
@@ -179,7 +246,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Persistência | PostgreSQL em UTC por `SET TIME ZONE` nas conexões; `operation_id` vincula missão/tipo/conteúdo. Nas escritas diretas de missões, o commit pertence à rota; avaliação e worker SSE coordenam transações próprias. |
 | Ocultação | Missão alheia e inexistente têm o mesmo 404. Diárias futuras não vazam conteúdo. |
 | B/C | Plano semanal tem sete diárias; sequência perdida não remove XP/conclusões; marco de sete dias libera especial de dificuldade máxima e XP triplo. |
-| K2/K3/K5 | QG permanece montado/hidden; Campanhas remonta, sem painel Tifa. Navegação põe foco no h1; rascunho e stream ficam acima dos containers desktop/mobile. |
+| K2/K3/K5 | QG permanece montado/hidden; Campanhas remonta, sem painel Kairya. Navegação põe foco no h1; rascunho e stream ficam acima dos containers desktop/mobile. |
 | K7 | Refresh silencioso no retorno da aba/foco e, agora, no retorno interno ao QG; não desmontar cartões apenas para atualizar. |
 | D8 | Migrações congelam regras de XP/catálogo/sequência; não importam regras vivas da aplicação. |
 | D16/P4 | Recompensa pertence ao cartão/região viva da conclusão; painel mostra saldo atual, que pode diferir do reward reenviado. |
@@ -229,7 +296,7 @@ Implantar migrações 0004–0006 com API parada: migrar e reiniciar, sem mistur
 código antigo/esquema novo. Downgrade 0005 recusa evidência/avaliação/bônus;
 0006 recusa histórico/ações de reagendamento. Voltar após esses dados exige
 decisão humana sobre eles; não contornar as guardas.
-Migração 0007 acrescenta fallback_model/CHECK só na resposta Tifa; downgrade
+Migração 0007 acrescenta fallback_model/CHECK só na resposta Kairya; downgrade
 remove apenas essa atribuição de modelo, preservando o texto da resposta.
 
 ## Comandos
@@ -307,7 +374,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
 | 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
 | 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
-| 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Tifa em Campanhas/propose_plan permanecem adiados. |
+| 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
 | 93 | Sem contestação/reavaliação de veredito concluído; uma avaliação evita roleta de bônus. Falha pode repetir. |
@@ -341,7 +408,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 97/T-M1 | Provas de ausência de escrita antes do rollback são parciais; faltam todas as falhas, _mesma_evidencia, disputa UNIQUE e HTTP. Casos sequenciais não provam todos os entrelaçamentos. |
 | 104 | Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário. |
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
-| 164(a/c) | Reenvio direto pode aceitar chave de confirmação Tifa para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Tifa o recuse. Sem mudança de contrato decidida. |
+| 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
 
 ### Provedor, custo e diagnósticos

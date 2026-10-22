@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 
 /**
  * `matchMedia` falso: o jsdom nao implementa `window.matchMedia` (chamar
- * lanca TypeError). O painel da Tifa decide entre lateral e folha pelo
+ * lanca TypeError). O painel da Kairya decide entre lateral e folha pelo
  * `(min-width: 1024px)`, e todo teste que monta o painel -- inclusive os da
  * pagina, do App e do main -- precisa declarar em qual tela esta.
  *

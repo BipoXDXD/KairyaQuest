@@ -68,7 +68,7 @@ export interface RescheduleMissionAction extends ActionBase {
 }
 
 /**
- * Uma acao proposta pela Tifa, discriminada pelo `kind`: o `payload` so tem
+ * Uma acao proposta pela Kairya, discriminada pelo `kind`: o `payload` so tem
  * tipo depois de se saber o `kind`. Um `kind` novo reprova o `tsc` em quem
  * escolhe o cartao (`ProposalCard`).
  */

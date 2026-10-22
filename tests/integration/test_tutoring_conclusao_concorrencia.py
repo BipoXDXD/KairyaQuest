@@ -1,4 +1,4 @@
-"""Confirmacao de reagendamento da Tifa x conclusao, nas duas ordens (167).
+"""Confirmacao de reagendamento da Kairya x conclusao, nas duas ordens (167).
 
 Conexoes reais, missao commitada e pre-carregada na sessao que espera.
 O PostgreSQL confirma quem bloqueia quem antes de liberar o vencedor:
@@ -47,9 +47,9 @@ NOVO_PRAZO = AGORA + timedelta(days=5)
 PRIMEIRO_EM = AGORA + timedelta(minutes=1)
 SEGUNDO_EM = AGORA + timedelta(minutes=2)
 SEGUNDOS_LIMITE = 10
-OPERACAO_TIFA = "op-167-tifa"
+OPERACAO_KAIRYA = "op-167-kairya"
 OPERACAO_CONCLUSAO = "op-167-conclusao"
-Operacao = Literal["tifa", "conclusao"]
+Operacao = Literal["kairya", "conclusao"]
 
 
 @pytest.fixture
@@ -123,7 +123,7 @@ def _operar(
             clock=lambda: agora,
         )
     return confirmar_acao(
-        sessao, ESTUDANTE, acao_id, OPERACAO_TIFA, clock=lambda: agora
+        sessao, ESTUDANTE, acao_id, OPERACAO_KAIRYA, clock=lambda: agora
     )
 
 
@@ -209,13 +209,13 @@ def _concorrer(
     return resultado_primeiro, resultado_segundo
 
 
-@pytest.mark.parametrize("primeira", ["conclusao", "tifa"])
-def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
+@pytest.mark.parametrize("primeira", ["conclusao", "kairya"])
+def test_confirmacao_da_kairya_e_conclusao_releem_a_missao_apos_a_espera(
     banco_migrado: Engine, proposta_commitada: tuple[int, int], primeira: Operacao
 ) -> None:
-    """Conclusao primeiro invalida a proposta; Tifa primeiro muda o prazo lido."""
+    """Conclusao primeiro invalida a proposta; Kairya primeiro muda o prazo lido."""
     missao_id, acao_id = proposta_commitada
-    segunda: Operacao = "tifa" if primeira == "conclusao" else "conclusao"
+    segunda: Operacao = "kairya" if primeira == "conclusao" else "conclusao"
 
     def esperar(
         carregou: threading.Event, iniciar_pedido: threading.Event, pids: list[int]
@@ -247,7 +247,7 @@ def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
         assert final is not None and acao is not None
         assert final.state is MissionState.CONCLUIDA
         assert final.completed_at == conclusao_em
-        assert acao.operation_id == OPERACAO_TIFA
+        assert acao.operation_id == OPERACAO_KAIRYA
         operacoes = list(
             leitura.execute(
                 select(MissionOperation.operation_id, MissionOperation.kind)
@@ -289,15 +289,15 @@ def test_confirmacao_da_tifa_e_conclusao_releem_a_missao_apos_a_espera(
             assert acao.decided_at == PRIMEIRO_EM
             assert final.deadline == NOVO_PRAZO
             (elo,) = historico
-            assert elo.operation_id == OPERACAO_TIFA
+            assert elo.operation_id == OPERACAO_KAIRYA
             assert elo.previous_deadline == PRAZO_ATUAL
             assert elo.new_deadline == NOVO_PRAZO
-            assert elo.origin is OrigemDoReagendamento.TIFA
+            assert elo.origin is OrigemDoReagendamento.KAIRYA
             assert elo.rescheduled_at == PRIMEIRO_EM
             assert elo.rescheduled_at < final.completed_at
             assert operacoes == [
                 (OPERACAO_CONCLUSAO, "complete"),
-                (OPERACAO_TIFA, "reschedule"),
+                (OPERACAO_KAIRYA, "reschedule"),
             ]
 
 

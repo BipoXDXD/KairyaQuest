@@ -168,7 +168,7 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
 )
 def test_roteiro_invalido_e_recusado_com_o_motivo(dados: object, motivo: str) -> None:
     """Um roteiro mal escrito no cenario precisa reprovar ALTO, no PUT, e nao
-    virar uma resposta vazia que o cenario leria como "a Tifa nao disse nada"."""
+    virar uma resposta vazia que o cenario leria como "a Kairya nao disse nada"."""
     with pytest.raises(ValueError, match=motivo):
         roteiro_do_json(dados)
 

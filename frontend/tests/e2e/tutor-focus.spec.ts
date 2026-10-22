@@ -63,7 +63,7 @@ async function insideSheet(page: Page) {
   await expect
     .poll(() =>
       page
-        .getByRole('dialog', { name: 'Tifa' })
+        .getByRole('dialog', { name: 'Kairya' })
         .evaluate((node) => node.contains(document.activeElement)),
     )
     .toBe(true)
@@ -84,7 +84,7 @@ for (const available of [true, false]) {
     await expect(page.getByTestId('tutor-panel-toggle')).toBeVisible()
     await expect(page.getByTestId(available ? 'tutor-input' : 'tutor-panel-toggle')).toBeFocused()
     await page.setViewportSize({ width: 375, height: 844 })
-    await expect(page.getByRole('dialog', { name: 'Tifa' })).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Kairya' })).toBeVisible()
     await insideSheet(page)
     for (const key of ['Shift+Tab', 'Shift+Tab', 'Tab', 'Tab', 'Tab', 'Shift+Tab']) {
       await page.keyboard.press(key)
@@ -114,7 +114,7 @@ for (const available of [true, false]) {
   })
 }
 
-test('resize fechado só transfere foco que pertencia à Tifa e respeita recolhimento', async ({
+test('resize fechado só transfere foco que pertencia à Kairya e respeita recolhimento', async ({
   page,
 }) => {
   const unexpected = await fixtures(page)
@@ -228,7 +228,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
   await expect(page.getByTestId('tutor-sheet')).toHaveCount(1)
   await page.getByTestId('nav-headquarters').focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('dialog', { name: 'Tifa' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Kairya' })).toBeVisible()
   await expect(page.getByTestId('tutor-input')).toBeFocused()
   await expect(page.getByTestId('tutor-input')).toHaveValue('Rascunho seguinte')
   await expect(page.getByTestId('tutor-partial')).toHaveText(/Prefixo local/)
@@ -259,7 +259,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
     })
     state.finish()
   })
-  await expect(page.getByTestId('tutor-live')).toHaveText('Tifa terminou de responder.')
+  await expect(page.getByTestId('tutor-live')).toHaveText('Kairya terminou de responder.')
   await expect(page.getByText('Resposta local completa')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
@@ -319,7 +319,7 @@ test('fechar, backdrop e link do quadro liberam o teclado do fundo', async ({ pa
         .focus()
       await page.keyboard.press('Enter')
     }
-    await expect(page.getByRole('dialog', { name: 'Tifa' })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Kairya' })).toHaveCount(0)
     if (close === 'board') {
       await expect(page).toHaveURL(/#missions-heading$/)
       // O quadro atual tem controles E/F antes de Concluir: a folha
@@ -364,7 +364,7 @@ test('folha lembrada no QG oculto não bloqueia Campanhas e restaura foco ao vol
   await page.getByTestId('nav-headquarters').focus()
   await expect(page.getByTestId('nav-headquarters')).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('dialog', { name: 'Tifa' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Kairya' })).toBeVisible()
   await insideSheet(page)
   await expect(page.getByTestId('tutor-input')).toHaveValue('Rascunho entre áreas')
   await page.keyboard.press('Escape')

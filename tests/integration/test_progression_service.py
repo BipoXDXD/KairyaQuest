@@ -81,10 +81,10 @@ def _registrar_outro_usuario(session: Session) -> None:
     session.flush()
 
 
-def _acao_da_tifa(
+def _acao_da_kairya(
     session: Session, *, cid: str, missao: Mission | None, estado: EstadoDaAcao
 ) -> TutorAction:
-    """Cria a mensagem e a acao da Tifa, como `test_tutoring_acoes.py` faz."""
+    """Cria a mensagem e a acao da Kairya, como `test_tutoring_acoes.py` faz."""
     pergunta = TutorMessage(
         user_id=ESTUDANTE,
         role=Papel.USUARIO,
@@ -211,8 +211,8 @@ def test_a_sequencia_quebrada_mantem_streak_7_e_o_xp(session: Session) -> None:
     assert total == 9 * 20
 
 
-def test_tifa_partnership_so_com_create_mission_executada(session: Session) -> None:
-    proposta = _acao_da_tifa(
+def test_kairya_partnership_so_com_create_mission_executada(session: Session) -> None:
+    proposta = _acao_da_kairya(
         session, cid="c-proposta", missao=None, estado=EstadoDaAcao.PROPOSTA
     )
     assert proposta.state is EstadoDaAcao.PROPOSTA
@@ -223,15 +223,15 @@ def test_tifa_partnership_so_com_create_mission_executada(session: Session) -> N
             select(UserAchievement.code).where(UserAchievement.user_id == ESTUDANTE)
         )
     )
-    assert Codigo.TIFA_PARTNERSHIP.value not in ainda_sem
+    assert Codigo.KAIRYA_PARTNERSHIP.value not in ainda_sem
 
     # A acao executada criou a missao, mas ela ainda esta PENDENTE: concluir
     # OUTRA avulsa nao pode destravar a parceria (guarda Mission.state).
-    pendente_da_tifa = _avulsa(session)
-    _acao_da_tifa(
+    pendente_da_kairya = _avulsa(session)
+    _acao_da_kairya(
         session,
         cid="c-pendente",
-        missao=pendente_da_tifa,
+        missao=pendente_da_kairya,
         estado=EstadoDaAcao.EXECUTADA,
     )
     _concluir(session, _avulsa(session))
@@ -240,20 +240,23 @@ def test_tifa_partnership_so_com_create_mission_executada(session: Session) -> N
             select(UserAchievement.code).where(UserAchievement.user_id == ESTUDANTE)
         )
     )
-    assert pendente_da_tifa.state is MissionState.PENDENTE
-    assert Codigo.TIFA_PARTNERSHIP.value not in com_a_pendente
+    assert pendente_da_kairya.state is MissionState.PENDENTE
+    assert Codigo.KAIRYA_PARTNERSHIP.value not in com_a_pendente
 
-    missao_da_tifa = _avulsa(session)
-    _acao_da_tifa(
-        session, cid="c-executada", missao=missao_da_tifa, estado=EstadoDaAcao.EXECUTADA
+    missao_da_kairya = _avulsa(session)
+    _acao_da_kairya(
+        session,
+        cid="c-executada",
+        missao=missao_da_kairya,
+        estado=EstadoDaAcao.EXECUTADA,
     )
-    _concluir(session, missao_da_tifa)
+    _concluir(session, missao_da_kairya)
     depois = set(
         session.scalars(
             select(UserAchievement.code).where(UserAchievement.user_id == ESTUDANTE)
         )
     )
-    assert Codigo.TIFA_PARTNERSHIP.value in depois
+    assert Codigo.KAIRYA_PARTNERSHIP.value in depois
 
 
 def test_fatos_contam_so_o_usuario(session: Session) -> None:

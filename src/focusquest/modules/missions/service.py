@@ -330,7 +330,7 @@ def reagendar_missao(
     """Troca o prazo e grava o elo do historico (F6-F13).
 
     A ordem e a da conclusao (trava, relogio, ocultacao, reenvio), e TODAS as
-    recusas vem antes da primeira escrita: a confirmacao da Tifa (F17) grava a
+    recusas vem antes da primeira escrita: a confirmacao da Kairya (F17) grava a
     falha da acao depois de uma recusa daqui, na mesma transacao, e nada desta
     funcao pode ter ido ao banco antes dela.
 
@@ -338,7 +338,7 @@ def reagendar_missao(
     `MissionCreate.deadline`: com `expire_on_commit=False` a primeira resposta
     serializaria o instante COM o offset que o cliente mandou (`-03:00`), e o
     reenvio, lido do banco, o mesmo instante em `Z` -- o "mesmo corpo" (F13)
-    nao seria o mesmo. Normalizar aqui vale para a tela e para a Tifa.
+    nao seria o mesmo. Normalizar aqui vale para a tela e para a Kairya.
     `prazo_em_utc` recusa, com `ValueError` e antes de tudo, o instante sem fuso
     e o que nao cabe em UTC: `astimezone` sozinho aceitaria o primeiro com o
     fuso da maquina.
@@ -398,7 +398,7 @@ def reagendar_missao(
 def missao_reagendavel(
     session: Session, user_id: int, mission_id: int
 ) -> Mission | None:
-    """A missao que a Tifa pode propor reagendar (F16), ou `None`. Sem trava:
+    """A missao que a Kairya pode propor reagendar (F16), ou `None`. Sem trava:
     e so a pre-condicao da PROPOSTA; a confirmacao revalida tudo com a trava."""
     missao = session.get(Mission, mission_id)
     if (

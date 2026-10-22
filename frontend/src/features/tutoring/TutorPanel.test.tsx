@@ -16,9 +16,9 @@ const STATUS = 'GET /api/tutoring/status'
 const HISTORY = 'GET /api/tutoring/messages'
 const SEND = 'POST /api/tutoring/messages'
 
-const INPUT_LABEL = 'Sua mensagem para a Tifa'
+const INPUT_LABEL = 'Sua mensagem para a Kairya'
 const GREETING =
-  'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
+  'Aqui você conversa com a Kairya, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
 const HISTORY_RETRY_NOTE =
   'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.'
 const LONG_NOTE =
@@ -184,7 +184,7 @@ describe('TutorPanel: estados da conversa', () => {
     })
   })
 
-  it('P3 vazio: a saudacao da interface, e nao uma fala da Tifa', async () => {
+  it('P3 vazio: a saudacao da interface, e nao uma fala da Kairya', async () => {
     mountPanel({})
 
     expect(await screen.findByTestId('tutor-greeting')).toHaveTextContent(GREETING)
@@ -193,7 +193,7 @@ describe('TutorPanel: estados da conversa', () => {
   })
 
   it('P4 historico: perguntas e respostas com o autor, na ordem', async () => {
-    const q1 = question(1, 'Oi, Tifa', 'c1')
+    const q1 = question(1, 'Oi, Kairya', 'c1')
     const a2 = answer(2, 1, 'Oi! Bora estudar?')
     mountPanel({ [HISTORY]: () => Response.json([q1, a2]) })
 
@@ -201,8 +201,8 @@ describe('TutorPanel: estados da conversa', () => {
     const items = within(list).getAllByRole('listitem')
     expect(items.map((li) => li.getAttribute('data-message-id'))).toEqual(['1', '2'])
     expect(within(items[0] as HTMLElement).getByText('Você')).toBeInTheDocument()
-    expect(within(items[0] as HTMLElement).getByText('Oi, Tifa')).toBeInTheDocument()
-    expect(within(items[1] as HTMLElement).getByText('Tifa')).toBeInTheDocument()
+    expect(within(items[0] as HTMLElement).getByText('Oi, Kairya')).toBeInTheDocument()
+    expect(within(items[1] as HTMLElement).getByText('Kairya')).toBeInTheDocument()
     expect(within(items[1] as HTMLElement).getByText('Oi! Bora estudar?')).toBeInTheDocument()
     expect(screen.queryByTestId('tutor-greeting')).not.toBeInTheDocument()
   })
@@ -240,7 +240,7 @@ describe('TutorPanel: estados da conversa', () => {
     mountPanel({ [STATUS]: () => Response.json({ available: false }) })
 
     expect(await screen.findByTestId('tutor-unavailable')).toHaveTextContent(
-      'A Tifa está fora do ar: falta configurar o provedor.',
+      'A Kairya está fora do ar: falta configurar o provedor.',
     )
     expect(input()).toBeDisabled()
     expect(sendButton()).toBeDisabled()
@@ -253,7 +253,7 @@ describe('TutorPanel: estados da conversa', () => {
     await typeAndSend('Minha dúvida')
 
     expect(await screen.findByTestId('tutor-unavailable')).toHaveTextContent(
-      'A Tifa está fora do ar: falta configurar o provedor.',
+      'A Kairya está fora do ar: falta configurar o provedor.',
     )
     expect(input()).toHaveValue('Minha dúvida')
     expect(input()).toBeDisabled()
@@ -268,7 +268,7 @@ describe('TutorPanel: estados da conversa', () => {
     })
 
     expect(await screen.findByTestId('tutor-status-error')).toHaveTextContent(
-      'Não foi possível verificar se a Tifa está disponível.',
+      'Não foi possível verificar se a Kairya está disponível.',
     )
     expect(input()).toBeDisabled()
 
@@ -298,10 +298,10 @@ describe('TutorPanel: estados da conversa', () => {
     // Sem proposta nem Tentar de novo, a regiao que rola nao tem nada focavel
     // dentro: sem tabIndex, quem usa teclado nao consegue rolar o historico.
     mountPanel({
-      [HISTORY]: () => Response.json([question(1, 'Oi, Tifa', 'c1'), answer(2, 1, 'Oi!')]),
+      [HISTORY]: () => Response.json([question(1, 'Oi, Kairya', 'c1'), answer(2, 1, 'Oi!')]),
     })
 
-    const conversa = await screen.findByRole('region', { name: 'Conversa com a Tifa' })
+    const conversa = await screen.findByRole('region', { name: 'Conversa com a Kairya' })
     expect(conversa).toHaveAttribute('tabindex', '0')
     expect(within(conversa).getByTestId('tutor-messages')).toBeInTheDocument()
     expect(within(conversa).queryAllByRole('button')).toHaveLength(0)
@@ -324,7 +324,7 @@ describe('TutorPanel: o envio', () => {
     await waitFor(() => {
       expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora, vamos!')
     })
-    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa está escrevendo…')
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya está escrevendo…')
     expect(sendButton()).toHaveTextContent('Enviando…')
     expect(sendButton()).toBeDisabled()
   })
@@ -335,23 +335,23 @@ describe('TutorPanel: o envio', () => {
     const live = screen.getByTestId('tutor-live')
 
     await typeAndSend('Me dá uma missão')
-    expect(live).toHaveTextContent('Tifa está escrevendo…')
+    expect(live).toHaveTextContent('Kairya está escrevendo…')
     stream.push(sseFrame('user_message', question(1, 'Me dá uma missão', 'c1')))
     stream.push(sseFrame('delta', { text: 'Bora' }))
     await waitFor(() => {
       expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora')
     })
-    expect(live.textContent).toBe('Tifa está escrevendo…')
+    expect(live.textContent).toBe('Kairya está escrevendo…')
     stream.push(sseFrame('delta', { text: ', vamos!' }))
     await waitFor(() => {
       expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora, vamos!')
     })
-    expect(live.textContent).toBe('Tifa está escrevendo…')
+    expect(live.textContent).toBe('Kairya está escrevendo…')
 
     stream.push(sseFrame('done', answer(2, 1, 'Bora, vamos!')))
     stream.close()
     await waitFor(() => {
-      expect(live.textContent).toBe('Tifa terminou de responder.')
+      expect(live.textContent).toBe('Kairya terminou de responder.')
     })
     expect(screen.queryByTestId('tutor-partial')).not.toBeInTheDocument()
     expect(messageWith('Bora, vamos!')).toBeInTheDocument()
@@ -392,7 +392,7 @@ describe('TutorPanel: o envio', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(
-      'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+      'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
     )
     expect(within(messageWith('Meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
       'Resposta com falha',
@@ -400,7 +400,7 @@ describe('TutorPanel: o envio', () => {
 
     fireEvent.click(screen.getByTestId('tutor-retry'))
     await waitFor(() => {
-      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
     })
     expect(sent(fetchMock, 2).client_message_id).toBe(sent(fetchMock, 1).client_message_id)
     expect(sent(fetchMock, 2)).toEqual(sent(fetchMock, 1))
@@ -470,7 +470,7 @@ describe('TutorPanel: o envio', () => {
     stream.push(sseFrame('done', answer(12, 10, 'Nova resposta')))
     stream.close()
     await waitFor(() => {
-      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
     })
     expect(
       screen.getAllByTestId('tutor-message').map((li) => li.getAttribute('data-message-id')),
@@ -505,7 +505,7 @@ describe('TutorPanel: o envio', () => {
     await typeAndSend('Outra pergunta')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A Tifa ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
+      'A Kairya ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
     )
     expect(input()).toHaveValue('Outra pergunta')
     expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
@@ -547,7 +547,7 @@ describe('TutorPanel: o envio', () => {
       content: 'Pergunta antiga',
     })
     await waitFor(() => {
-      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
     })
   })
 
@@ -581,7 +581,7 @@ describe('TutorPanel: o envio', () => {
       'Resposta interrompida',
     )
     expect(screen.getByTestId('tutor-live')).toHaveTextContent(
-      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+      'A resposta da Kairya ficou longa demais e foi cortada. Tente pedir por partes.',
     )
     expect(screen.getByTestId('tutor-history-retry-note')).toHaveTextContent(LONG_NOTE)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -592,7 +592,7 @@ describe('TutorPanel: o envio', () => {
     })
     expect(sent(fetchMock, 2)).toEqual({ client_message_id: 'c1', content: 'Me explica recursao' })
     expect(screen.queryByTestId('tutor-history-retry-note')).not.toBeInTheDocument()
-    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
   })
 
   it('P34 depois de recarregar, a cortada por tamanho mostra a nota de pedir por partes', async () => {
@@ -624,7 +624,7 @@ describe('TutorPanel: o envio', () => {
     await typeAndSend('Pergunta recusada')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      'A Kairya não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
     )
     expect(screen.queryByText('Comeco recusado')).not.toBeInTheDocument()
     expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
@@ -659,7 +659,7 @@ describe('TutorPanel: o envio', () => {
     await ready()
 
     expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(
-      'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      'A Kairya não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
     )
     // A recusada e gravada sem texto: a bolha mostra o autor e a marca, sem
     // um paragrafo vazio no meio.
@@ -736,7 +736,7 @@ describe('TutorPanel: o envio', () => {
         partial: '',
         failure: {
           message:
-            'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+            'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
           recovery: 'retry',
         },
       },
@@ -753,7 +753,7 @@ describe('TutorPanel: o envio', () => {
   ] as const)(
     'P30b fora do ar, uma falha %s mostra o aviso e nao oferece Tentar de novo',
     (_name, send) => {
-      // Pelo painel, este estado ainda nao e alcancavel (so se envia com a Tifa
+      // Pelo painel, este estado ainda nao e alcancavel (so se envia com a Kairya
       // disponivel, e o status so recarrega a partir do erro); a conversa
       // desenhada nao tem estado proprio e e montada direto com ele. Sem a
       // guarda, o botao ofereceria um reenvio que so daria 503.
@@ -796,12 +796,12 @@ describe('TutorPanel: desktop', () => {
     const toggle = screen.getByTestId('tutor-panel-toggle')
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).toHaveAttribute('aria-controls', 'tutor-panel-body')
-    expect(toggle).toHaveAccessibleName('Recolher o painel da Tifa')
+    expect(toggle).toHaveAccessibleName('Recolher o painel da Kairya')
     expect(document.getElementById('tutor-panel-body')).not.toBeNull()
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(toggle).toHaveAccessibleName('Abrir o painel da Tifa')
+    expect(toggle).toHaveAccessibleName('Abrir o painel da Kairya')
     expect(document.getElementById('tutor-panel-body')).toBeNull()
     expect(localStorage.getItem(PANEL_OPEN_KEY)).toBe('false')
 
@@ -831,7 +831,7 @@ describe('TutorPanel: desktop', () => {
     stream.close()
 
     await waitFor(() => {
-      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Tifa terminou de responder.')
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
     })
 
     fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
@@ -844,7 +844,7 @@ describe('TutorPanel: desktop', () => {
     const portrait = screen.getByTestId('tutor-portrait')
     expect(portrait).toHaveAttribute('aria-hidden', 'true')
     const image = portrait.querySelector('img')
-    expect(image).toHaveAttribute('src', '/art/tifa-mentor.webp')
+    expect(image).toHaveAttribute('src', '/art/kairya-mentor.webp')
     expect(image).toHaveAttribute('alt', '')
     expect(image).toHaveAttribute('width', '1122')
     expect(image).toHaveAttribute('height', '1402')
@@ -853,11 +853,11 @@ describe('TutorPanel: desktop', () => {
     expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'compact')
     expect(screen.getByTestId('tutor-portrait').querySelector('img')).toHaveAttribute(
       'src',
-      '/art/tifa-avatar.webp',
+      '/art/kairya-avatar.webp',
     )
     fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
     expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'scene')
-    expect(screen.getByRole('complementary', { name: 'Tifa' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Kairya' })).toBeInTheDocument()
     await ready()
   })
 })
@@ -866,7 +866,7 @@ describe('TutorPanel: celular', () => {
   async function openSheet() {
     const open = screen.getByTestId('tutor-sheet-open')
     fireEvent.click(open)
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     await ready()
     return dialog
   }
@@ -878,9 +878,9 @@ describe('TutorPanel: celular', () => {
     expect(open).toBeVisible()
     expect(open).toHaveAttribute('aria-expanded', 'false')
     expect(open).toHaveAttribute('aria-controls', 'tutor-sheet')
-    expect(open).toHaveAccessibleName('Falar com a Tifa')
+    expect(open).toHaveAccessibleName('Falar com a Kairya')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    // Abre depois de o status responder: com a Tifa disponivel, o campo
+    // Abre depois de o status responder: com a Kairya disponivel, o campo
     // esta habilitado e pode receber o foco.
     await waitFor(() => {
       expect(requestsTo(fetchMock, STATUS)).toHaveLength(1)
@@ -890,7 +890,7 @@ describe('TutorPanel: celular', () => {
     })
 
     fireEvent.click(open)
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(dialog).toHaveAttribute('id', 'tutor-sheet')
     await waitFor(() => {
@@ -906,7 +906,7 @@ describe('TutorPanel: celular', () => {
     })
 
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     await within(dialog).findByTestId('tutor-unavailable')
     expect(input()).toBeDisabled()
     await waitFor(() => {
@@ -966,10 +966,10 @@ describe('TutorPanel: celular', () => {
   it('P33 indisponível: Tab alcança o histórico e Shift+Tab dá a volta', async () => {
     mountPanel({ [STATUS]: () => Response.json({ available: false }) }, 'mobile')
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     await screen.findByTestId('tutor-unavailable')
     const close = within(dialog).getByTestId('tutor-sheet-close')
-    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Kairya' })
     close.focus()
     expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(true)
     expect(fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })).toBe(false)
@@ -983,7 +983,7 @@ describe('TutorPanel: celular', () => {
 
     const dialog = await openSheet()
     expect(fireEvent.keyDown(dialog, { key: 'a' })).toBe(true)
-    expect(screen.getByRole('dialog', { name: 'Tifa' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Kairya' })).toBeInTheDocument()
   })
 
   it('P25 trocar de layout nao perde o rascunho nem o stream', async () => {
@@ -997,7 +997,7 @@ describe('TutorPanel: celular', () => {
     expect(screen.queryByTestId('tutor-panel-toggle')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
 
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     expect(within(dialog).getByLabelText(INPUT_LABEL)).toHaveValue('Rascunho')
   })
 })
@@ -1040,7 +1040,7 @@ describe('TutorPanel: a proposta de missao', () => {
     )
 
     const card = await screen.findByTestId('tutor-proposal')
-    // O cartao mora dentro da mensagem da Tifa que o propos.
+    // O cartao mora dentro da mensagem da Kairya que o propos.
     expect(within(messageWith('Proponho esta missão.')).getByTestId('tutor-proposal')).toBe(card)
     fireEvent.click(within(card).getByTestId('proposal-confirm'))
 
@@ -1074,11 +1074,11 @@ describe('TutorPanel: a proposta de missao', () => {
       'mobile',
     )
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
     await within(dialog).findByTestId('tutor-unavailable')
     const close = within(dialog).getByTestId('tutor-sheet-close')
-    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Kairya' })
     history.focus()
     expect(fireEvent.keyDown(history, { key: 'Tab' })).toBe(true)
     close.focus()
@@ -1091,10 +1091,10 @@ describe('TutorPanel: a proposta de missao', () => {
   it('P35 controles com tabIndex negativo não viram limites do ciclo', async () => {
     mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     await ready()
     const close = within(dialog).getByTestId('tutor-sheet-close')
-    const history = within(dialog).getByRole('region', { name: 'Conversa com a Tifa' })
+    const history = within(dialog).getByRole('region', { name: 'Conversa com a Kairya' })
     const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
     input().tabIndex = -1
     type('Mensagem')
@@ -1109,7 +1109,7 @@ describe('TutorPanel: a proposta de missao', () => {
     mountPanel({ [HISTORY]: historyWith(executed) }, 'mobile')
 
     fireEvent.click(screen.getByTestId('tutor-sheet-open'))
-    const dialog = screen.getByRole('dialog', { name: 'Tifa' })
+    const dialog = screen.getByRole('dialog', { name: 'Kairya' })
     await ready()
     const link = await within(dialog).findByRole('link', { name: 'Ver no Quartel-General' })
 

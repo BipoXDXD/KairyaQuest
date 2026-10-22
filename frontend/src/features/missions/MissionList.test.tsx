@@ -1052,7 +1052,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
   })
 
   it('o reload pelo ref recarrega o quadro, e espera a conclusao em voo', async () => {
-    // O ref e como a PAGINA pede a recarga depois de a Tifa criar uma missao.
+    // O ref e como a PAGINA pede a recarga depois de a Kairya criar uma missao.
     // Ele passa pelo mesmo `requestReload` do "Atualizar o quadro": com uma
     // conclusao em voo, espera.
     let resolver!: (response: Response) => void
@@ -1575,7 +1575,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     const painel = await within(card(7)).findByTestId('evaluation-panel')
     expect(within(painel).getByTestId('evaluation-verification')).toHaveTextContent('Com evidência')
     expect(
-      within(painel).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+      within(painel).getByRole('button', { name: 'Pedir avaliação da Kairya' }),
     ).toBeInTheDocument()
     expect(within(card(7)).queryByTestId('evidence-toggle')).not.toBeInTheDocument()
   })
@@ -1599,7 +1599,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     })
     render(<MissionList onMissionCompleted={onMissionCompleted} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
 
     expect(await screen.findByTestId('reward-xp')).toHaveTextContent('+50 XP de bônus')
     expect(onMissionCompleted).toHaveBeenCalledTimes(1)
@@ -1654,7 +1654,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
     })
     render(<MissionList />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Tifa' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
     fireEvent.click(
       await screen.findByRole('button', {
         name: `Atualizar o quadro a missão: ${pendenteComEvidencia.instructions}`,
@@ -1676,7 +1676,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       within(card(7)).getByRole('button', { name: 'Entregar com evidência (opcional)' }),
     ).toHaveAccessibleDescription(pendente.instructions)
     expect(
-      within(card(9)).getByRole('button', { name: 'Pedir avaliação da Tifa' }),
+      within(card(9)).getByRole('button', { name: 'Pedir avaliação da Kairya' }),
     ).toHaveAccessibleDescription('Revisar grafos')
   })
 })
@@ -2467,7 +2467,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       )
       const linhas = within(card(7)).getAllByTestId('mission-reschedule-entry')
       expect(linhas[0]).toHaveTextContent('· Falta de tempo · por você')
-      expect(linhas[1]).toHaveTextContent('· Falta de tempo · proposto pela Tifa')
+      expect(linhas[1]).toHaveTextContent('· Falta de tempo · proposto pela Kairya')
     })
 
     it('sem reagendamento, nada de historico', async () => {

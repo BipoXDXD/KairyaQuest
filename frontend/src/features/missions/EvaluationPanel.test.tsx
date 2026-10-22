@@ -7,7 +7,7 @@ import { EvaluationPanel } from './EvaluationPanel'
 import type { EvaluationResult } from './types'
 
 const KEY = 'POST /api/missions/7/evaluation'
-const ROTULO = 'Avaliação da Tifa — interpretação do modelo, não verificação automática'
+const ROTULO = 'Avaliação da Kairya — interpretação do modelo, não verificação automática'
 
 const concluida: Mission = {
   id: 7,
@@ -55,7 +55,7 @@ const bonus: Reward = {
 }
 
 function botaoPedir() {
-  return screen.getByRole('button', { name: 'Pedir avaliação da Tifa' })
+  return screen.getByRole('button', { name: 'Pedir avaliação da Kairya' })
 }
 
 describe('EvaluationPanel -- o que a missao concluida mostra', () => {
@@ -159,7 +159,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     vi.unstubAllGlobals()
   })
 
-  it('clicar anuncia "A Tifa está avaliando…" e desabilita; atende com reward mostra tudo', async () => {
+  it('clicar anuncia "A Kairya está avaliando…" e desabilita; atende com reward mostra tudo', async () => {
     let release: (r: Response) => void = () => undefined
     const fetchMock = routeFetch({
       [KEY]: () =>
@@ -174,7 +174,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     fireEvent.click(botaoPedir())
 
     expect(within(status).getByTestId('evaluation-status-text')).toHaveTextContent(
-      'A Tifa está avaliando…',
+      'A Kairya está avaliando…',
     )
     expect(botaoPedir()).toBeDisabled()
     fireEvent.click(botaoPedir())
@@ -246,7 +246,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     fireEvent.click(botaoPedir())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A Tifa está fora do ar: falta configurar o provedor.',
+      'A Kairya está fora do ar: falta configurar o provedor.',
     )
     expect(botaoPedir()).toBeEnabled()
     expect(screen.getByTestId('evaluation-status-text')).toBeEmptyDOMElement()
@@ -286,7 +286,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     expect(alerta).not.toHaveTextContent(/tente de novo|tentar de novo/i)
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
+      screen.queryByRole('button', { name: 'Pedir avaliação da Kairya' }),
     ).not.toBeInTheDocument()
   })
 
@@ -302,7 +302,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     fireEvent.click(botaoPedir())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A Tifa não conseguiu avaliar agora. Tente de novo.',
+      'A Kairya não conseguiu avaliar agora. Tente de novo.',
     )
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
 
@@ -320,7 +320,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     fireEvent.click(botaoPedir())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Esta missão não tem evidência para a Tifa avaliar.',
+      'Esta missão não tem evidência para a Kairya avaliar.',
     )
     expect(
       within(screen.getByTestId('evaluation-panel')).queryByRole('button'),
@@ -352,7 +352,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
       name: `Atualizar o quadro a missão: ${comEvidencia.instructions}`,
     })
     expect(
-      screen.queryByRole('button', { name: 'Pedir avaliação da Tifa' }),
+      screen.queryByRole('button', { name: 'Pedir avaliação da Kairya' }),
     ).not.toBeInTheDocument()
     fireEvent.click(atualizar)
     expect(onReload).toHaveBeenCalledTimes(1)

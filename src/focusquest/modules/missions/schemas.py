@@ -113,7 +113,7 @@ def _instante_representavel(prazo: datetime) -> datetime:
 
 
 # O instante com fuso e representavel em UTC: a regra do `deadline` da criacao,
-# com nome, porque o reagendamento (F9) e a proposta da Tifa (F15) usam a MESMA.
+# com nome, porque o reagendamento (F9) e a proposta da Kairya (F15) usam a MESMA.
 PrazoComFuso = Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
 
 
@@ -206,7 +206,7 @@ class EvidenceRead(BaseModel):
 
 
 class EvaluationSummaryRead(BaseModel):
-    """O resumo da avaliacao da Tifa que acompanha a missao (sem `bonus_xp`, EM1)."""
+    """O resumo da avaliacao da Kairya que acompanha a missao (sem `bonus_xp`, EM1)."""
 
     state: EstadoDaAvaliacao
     verdict: Veredito | None

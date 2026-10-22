@@ -177,7 +177,7 @@ describe('ProposalCard', () => {
     render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />)
 
     expect(screen.getByTestId('proposal-expired')).toHaveTextContent(
-      'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+      'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     )
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
@@ -186,7 +186,7 @@ describe('ProposalCard', () => {
     render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'outro' }} />)
 
     expect(screen.getByTestId('proposal-expired')).toHaveTextContent(
-      'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.',
+      'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.',
     )
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     // O `code` cru nunca vai para a tela.
@@ -257,7 +257,7 @@ describe('ProposalCard', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toBe(screen.getByTestId('proposal-expired'))
     expect(alert).toHaveTextContent(
-      'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+      'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     )
   })
 
@@ -277,7 +277,7 @@ describe('ProposalCard', () => {
     fireEvent.click(confirmButton())
 
     expect(await screen.findByTestId('proposal-expired')).toHaveTextContent(
-      'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+      'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     )
     expect(card()).toHaveAttribute('data-state', 'falhou')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()

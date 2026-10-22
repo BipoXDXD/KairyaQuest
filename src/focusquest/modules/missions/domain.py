@@ -139,7 +139,7 @@ class FalhaDaAvaliacao(StrEnum):
 
 class Verificacao(StrEnum):
     """Como a conclusao foi verificada (E4). DERIVADA, nunca gravada. A
-    avaliacao da Tifa nao e um terceiro valor aqui: ela e mostrada a parte,
+    avaliacao da Kairya nao e um terceiro valor aqui: ela e mostrada a parte,
     como interpretacao do modelo, sobre uma conclusao `com_evidencia`."""
 
     AUTODECLARADA = "autodeclarada"
@@ -201,10 +201,11 @@ class MotivoDoReagendamento(StrEnum):
 
 
 class OrigemDoReagendamento(StrEnum):
-    """Quem pediu: a pessoa pela tela, ou a Tifa por proposta confirmada."""
+    """Quem pediu: a pessoa pela tela, ou a Kairya por proposta confirmada."""
 
     USUARIO = "usuario"
-    TIFA = "tifa"
+    # Valor persistido legado: mantém o histórico de reagendamentos existente.
+    KAIRYA = "tifa"
 
 
 class ProblemaDoNovoPrazo(StrEnum):
@@ -227,7 +228,7 @@ def prazo_em_utc(prazo: datetime) -> datetime:
       (`9999-12-31T23:59:59-03:00`); o `OverflowError` cru viraria 500.
 
     A borda (`PrazoComFuso`, em `schemas.py`) usa esta mesma funcao; o servico
-    tambem a chama porque a Tifa chega a ele sem passar pela borda.
+    tambem a chama porque a Kairya chega a ele sem passar pela borda.
     """
     if prazo.utcoffset() is None:
         raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")

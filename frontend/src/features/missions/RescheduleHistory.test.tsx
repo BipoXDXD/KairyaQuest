@@ -51,7 +51,7 @@ describe('RescheduleHistory', () => {
       `${formatDeadline(primeiro.previous_deadline)} → ${formatDeadline(primeiro.new_deadline)} · Falta de tempo · por você`,
     )
     expect(linhas[1]).toHaveTextContent(
-      `${formatDeadline(segundo.previous_deadline)} → ${formatDeadline(segundo.new_deadline)} · Mudança de prioridade · proposto pela Tifa`,
+      `${formatDeadline(segundo.previous_deadline)} → ${formatDeadline(segundo.new_deadline)} · Mudança de prioridade · proposto pela Kairya`,
     )
   })
 

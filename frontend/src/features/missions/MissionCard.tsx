@@ -379,7 +379,7 @@ export function MissionCard({
   reloadWaiting: boolean
   onCompleted?: () => void
   /**
-   * O bonus da avaliacao da Tifa foi creditado. Quem usa o cartao liga ao
+   * O bonus da avaliacao da Kairya foi creditado. Quem usa o cartao liga ao
    * MESMO aviso da conclusao (P3 do D): o saldo mudou, o painel de progresso
    * atualiza.
    */

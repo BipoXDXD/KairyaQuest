@@ -11,7 +11,7 @@ import {
  */
 const ORIGIN_LABELS: Record<RescheduleOrigin, string> = {
   usuario: 'por você',
-  tifa: 'proposto pela Tifa',
+  tifa: 'proposto pela Kairya',
 }
 
 /** "Reagendada 1 vez" / "Reagendada 3 vezes". */

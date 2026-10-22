@@ -28,3 +28,26 @@ def _nenhum_teste_alcanca_a_anthropic() -> Iterator[None]:
     with pytest.MonkeyPatch.context() as ambiente:
         ambiente.setenv("FOCUSQUEST_ANTHROPIC_BASE_URL", ANTHROPIC_INALCANCAVEL)
         yield
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _nenhum_teste_alcanca_o_groq() -> Iterator[None]:
+    """Mesmo uma chave real no .env nao permite trafego Groq durante testes.
+
+    MockTransport nao usa HTTPTransport; testes do adaptador continuam
+    exercitando o cliente HTTP real, com resposta controlada em memoria.
+    """
+    import httpx2
+
+    original = httpx2.HTTPTransport.handle_request
+
+    def protegido(
+        self: httpx2.HTTPTransport, request: httpx2.Request
+    ) -> httpx2.Response:
+        if request.url.host == "api.groq.com":
+            raise AssertionError("teste tentou acessar Groq real")
+        return original(self, request)
+
+    with pytest.MonkeyPatch.context() as guarda:
+        guarda.setattr(httpx2.HTTPTransport, "handle_request", protegido)
+        yield

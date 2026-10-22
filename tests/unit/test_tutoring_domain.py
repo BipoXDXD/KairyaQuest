@@ -1,4 +1,4 @@
-"""As transicoes da acao proposta pela Tifa."""
+"""As transicoes da acao proposta pela Kairya."""
 
 import pytest
 

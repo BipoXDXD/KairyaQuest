@@ -11,7 +11,7 @@ import type { PreStreamErrorCode, StreamErrorCode } from './types'
  *   o id pertence a outro conteudo, e seria recusado para sempre.
  * - `edit`: nao ha o que repetir -- o corpo foi recusado (422). O texto fica no
  *   campo para a pessoa mudar.
- * - `unavailable`: a Tifa esta fora do ar (sem chave). O painel mostra o estado
+ * - `unavailable`: a Kairya esta fora do ar (sem chave). O painel mostra o estado
  *   indisponivel e desabilita o campo, com o texto preservado.
  */
 export type MessageRecovery = 'retry' | 'retry-with-new-id' | 'edit' | 'unavailable'
@@ -42,12 +42,12 @@ export const UNKNOWN_RESULT: MessageFailure = {
 /** Exaustivo sobre o tipo: um code novo reprova o `tsc` ate ganhar texto e acao. */
 const PRE_STREAM: Record<PreStreamErrorCode, MessageFailure> = {
   provedor_nao_configurado: {
-    message: 'A Tifa está fora do ar: falta configurar o provedor.',
+    message: 'A Kairya está fora do ar: falta configurar o provedor.',
     recovery: 'unavailable',
   },
   mensagem_em_andamento: {
     message:
-      'A Tifa ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
+      'A Kairya ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
     recovery: 'retry',
   },
   operacao_reutilizada: {
@@ -59,24 +59,24 @@ const PRE_STREAM: Record<PreStreamErrorCode, MessageFailure> = {
 const IN_STREAM: Record<StreamErrorCode, MessageFailure> = {
   provedor_indisponivel: {
     message:
-      'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+      'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
     recovery: 'retry',
   },
   tempo_esgotado: {
     message:
-      'A resposta da Tifa demorou demais. Tentar de novo é seguro: a pergunta não será duplicada.',
+      'A resposta da Kairya demorou demais. Tentar de novo é seguro: a pergunta não será duplicada.',
     recovery: 'retry',
   },
   proposta_invalida: {
     message:
-      'A Tifa tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
+      'A Kairya tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
     recovery: 'retry',
   },
   // Repetir e permitido (o classificador pode ter errado), mas o texto nao
   // promete que vai dar certo: o caminho provavel e perguntar de outro jeito.
   resposta_recusada: {
     message:
-      'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      'A Kairya não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
     recovery: 'retry',
     discardsPartial: true,
   },

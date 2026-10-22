@@ -137,7 +137,7 @@ export async function requestJson<T>(path: string, signal?: AbortSignal): Promis
 
 /**
  * O prazo, em milissegundos, que os POSTs que mudam estado da tela (Iniciar,
- * Reagendar, confirmar e recusar a proposta da Tifa) dao ao servidor.
+ * Reagendar, confirmar e recusar a proposta da Kairya) dao ao servidor.
  *
  * Sao operacoes de banco, sem modelo no caminho: 20 s e muito mais que o
  * normal, e ainda assim o botao nao fica preso para sempre num pedido que o

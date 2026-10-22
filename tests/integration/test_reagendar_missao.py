@@ -253,7 +253,7 @@ def test_antecipar_e_permitido(session: Session) -> None:
 def test_cada_recusa_vem_antes_de_qualquer_escrita(
     session: Session, preparo: str, prazo: datetime | str, erro: type[Exception]
 ) -> None:
-    """F17: a confirmacao da Tifa grava a falha DEPOIS da recusa; por isso
+    """F17: a confirmacao da Kairya grava a falha DEPOIS da recusa; por isso
     nenhuma recusa pode ter escrito nada antes."""
     missao = _avulsa(session)
     if preparo == "concluida":
@@ -284,7 +284,7 @@ def test_prazo_que_nao_e_instante_utc_e_recusado_sem_escrita(
     session: Session, prazo: datetime, mensagem: str
 ) -> None:
     """A borda (`PrazoComFuso`) ja recusa os dois, mas o
-    servico tambem e chamado pela Tifa. Recusado ANTES de normalizar e
+    servico tambem e chamado pela Kairya. Recusado ANTES de normalizar e
     de qualquer escrita, com `ValueError` -- nunca aceito com o fuso da
     maquina, nunca `OverflowError` cru."""
     missao = _avulsa(session)

@@ -28,7 +28,7 @@ const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
  * O prazo como a pessoa le: em `America/Sao_Paulo` (README §8, decisao A3).
  *
  * Mora em `shared/lib/` porque tem dois usuarios reais -- o cartao da missao e
- * o cartao da proposta da Tifa -- e a regra do fuso e UMA (`docs/ARCHITECTURE.md`
+ * o cartao da proposta da Kairya -- e a regra do fuso e UMA (`docs/ARCHITECTURE.md`
  * §5, regra 3). Uma copia por feature seria a segunda regra para divergir.
  */
 export function formatDeadline(iso: string): string {

@@ -37,7 +37,7 @@ class OperacaoReutilizadaError(DomainError):
 
 
 class MensagemEmAndamentoError(DomainError):
-    """Ja existe uma resposta da Tifa sendo gerada.
+    """Ja existe uma resposta da Kairya sendo gerada.
 
     A conversa e uma so: duas perguntas em paralelo intercalariam as
     respostas. O cliente espera a atual terminar -- ou o prazo do orfao.
@@ -55,11 +55,11 @@ class AcaoNaoEncontradaError(DomainError):
 
 
 class ProvedorNaoConfiguradoError(DomainError):
-    """Nao ha chave do provedor: a Tifa esta indisponivel (README s14)."""
+    """Nao ha chave do provedor: a Kairya esta indisponivel (README s14)."""
 
 
 class PrazoExpiradoError(DomainError):
-    """O prazo proposto pela Tifa ja passou na hora de confirmar -- ou o novo
+    """O prazo proposto pela Kairya ja passou na hora de confirmar -- ou o novo
     prazo de um reagendamento nao esta no futuro (F9): o mesmo `code` nos dois."""
 
 
@@ -100,7 +100,7 @@ class SemanaDistanteError(DomainError):
 
 
 class SemEvidenciaError(DomainError):
-    """A missao nao tem evidencia para a Tifa avaliar (inclui a nao concluida).
+    """A missao nao tem evidencia para a Kairya avaliar (inclui a nao concluida).
 
     O pedido esta certo; o estado da missao e que recusa -- 409, como a
     transicao ilegal. Autodeclarar nao da direito a avaliacao (E4).

@@ -19,18 +19,18 @@ export const REFUSED_ANSWER = 'resposta_recusada'
  */
 export function announceAnswer(answer: MessageRead): string {
   if (answer.status === 'completa') {
-    return 'Tifa terminou de responder.'
+    return 'Kairya terminou de responder.'
   }
   return answer.error_code === LONG_ANSWER
-    ? 'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.'
-    : 'A resposta da Tifa chegou incompleta.'
+    ? 'A resposta da Kairya ficou longa demais e foi cortada. Tente pedir por partes.'
+    : 'A resposta da Kairya chegou incompleta.'
 }
 
 const NOTES: Record<string, string> = {
   [LONG_ANSWER]:
     'A última resposta ficou longa demais e foi cortada. Tente pedir por partes, um tópico de cada vez. Tentar de novo refaz a mesma pergunta e pode cortar outra vez.',
   [REFUSED_ANSWER]:
-    'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+    'A Kairya não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
 }
 
 const GENERAL_NOTE =

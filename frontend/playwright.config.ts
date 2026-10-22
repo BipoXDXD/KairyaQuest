@@ -77,7 +77,7 @@ export default defineConfig({
     {
       // O script aponta FOCUSQUEST_DATABASE_URL para o banco de TESTE antes
       // de trocar de processo para o uvicorn. Ver scripts/e2e-env.sh.
-      command: `./scripts/e2e-env.sh uv run uvicorn focusquest.main:app --host 127.0.0.1 --port ${porta(API_URL)}`,
+      command: `./scripts/e2e-env.sh uv run uvicorn integration.e2e_app:app --host 127.0.0.1 --port ${porta(API_URL)}`,
       cwd: REPO_ROOT,
       // `/ready` e nao `/health`: o `/health` responde 200 sem tocar no banco,
       // entao ele aprovaria uma API que nao consegue consultar nada. O
@@ -94,6 +94,7 @@ export default defineConfig({
         // `scripts/e2e-env.sh` RECUSA subir com qualquer endereco fora do
         // loopback e impoe a chave ficticia -- a do .env nunca chega aqui.
         FOCUSQUEST_ANTHROPIC_BASE_URL: FALSO_URL,
+        PYTHONPATH: 'tests',
       },
     },
     {

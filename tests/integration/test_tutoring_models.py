@@ -223,7 +223,7 @@ _VIOLACOES: list[tuple[str, Caso]] = [
         lambda s: _acao(s, _resposta(s, _pergunta(s)), state=EstadoDaAcao.RECUSADA),
     ),
     (
-        # O modelo substituto so existe na resposta da Tifa (pendencia 174).
+        # O modelo substituto so existe na resposta da Kairya (pendencia 174).
         "ck_tutor_messages_fallback_so_da_tutora",
         lambda s: _pergunta(s, fallback_model="claude-opus-4-8"),
     ),

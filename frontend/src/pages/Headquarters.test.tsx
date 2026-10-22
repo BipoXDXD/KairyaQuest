@@ -17,7 +17,7 @@ function progressBody(xp: number, level = 1, floor = 0, next = 100): Progress {
 
 /**
  * A pagina busca cinco recursos na montagem: ciclo, missoes, status e
- * historico da Tifa, e o progresso.
+ * historico da Kairya, e o progresso.
  */
 function stubPage() {
   stubViewport('desktop')
@@ -121,13 +121,13 @@ describe('Headquarters', () => {
     await screen.findByTestId('progress-level')
   })
 
-  it('oculta, esconde o main e o painel da Tifa, sem desmontar', async () => {
+  it('oculta, esconde o main e o painel da Kairya, sem desmontar', async () => {
     stubPage()
 
     render(<Headquarters hidden />)
 
     // O `main` leva o proprio `hidden` (so um `main` sem ele por documento);
-    // o painel da Tifa, fora do `main`, some pela raiz.
+    // o painel da Kairya, fora do `main`, some pela raiz.
     expect(screen.getByTestId('headquarters')).toHaveAttribute('hidden')
     expect(screen.getByTestId('tutor-panel')).not.toBeVisible()
     // Montado: as features buscaram os dados mesmo ocultas.
@@ -136,12 +136,12 @@ describe('Headquarters', () => {
     await screen.findByTestId('progress-level')
   })
 
-  it('compoe o painel da Tifa ao lado do quadro', async () => {
+  it('compoe o painel da Kairya ao lado do quadro', async () => {
     stubPage()
 
     render(<Headquarters />)
 
-    expect(screen.getByRole('complementary', { name: 'Tifa' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Kairya' })).toBeInTheDocument()
     expect(screen.getByTestId('missions')).toBeInTheDocument()
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
@@ -362,7 +362,7 @@ describe('Headquarters', () => {
   })
 })
 
-describe('Headquarters: a missao criada pela Tifa', () => {
+describe('Headquarters: a missao criada pela Kairya', () => {
   const MISSIONS = 'GET /api/missions'
   const CONFIRM = 'POST /api/tutoring/actions/5/confirm'
   const COMPLETE = 'POST /api/missions/7/complete'
@@ -440,7 +440,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     vi.unstubAllGlobals()
   })
 
-  it('Q1 confirmar uma proposta da Tifa recarrega o quadro', async () => {
+  it('Q1 confirmar uma proposta da Kairya recarrega o quadro', async () => {
     stubViewport('desktop')
     const fetchMock = routeFetch({
       [MISSIONS]: () => Response.json([]),
@@ -460,7 +460,7 @@ describe('Headquarters: a missao criada pela Tifa', () => {
     await screen.findByTestId('missions-empty')
   })
 
-  it('Q2 com uma conclusao em voo, a recarga pedida pela Tifa espera', async () => {
+  it('Q2 com uma conclusao em voo, a recarga pedida pela Kairya espera', async () => {
     stubViewport('desktop')
     let resolver!: (response: Response) => void
     const post = new Promise<Response>((resolve) => {

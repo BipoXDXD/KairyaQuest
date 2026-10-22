@@ -1,4 +1,4 @@
-"""Confirmar e recusar uma proposta da Tifa: o "sim" deterministico (D2).
+"""Confirmar e recusar uma proposta da Kairya: o "sim" deterministico (D2).
 
 O clique vai direto ao backend, sem passar pelo modelo. A confirmacao cria a
 missao e grava `executada` na MESMA transacao, com a acao travada.

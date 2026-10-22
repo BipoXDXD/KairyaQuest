@@ -23,10 +23,10 @@ falta, o dono respondeu, em 2026-09-25:
   nível n para o n+1 custa 100·n XP.
 - **Conquistas:** as quatro famílias oferecidas — "Primeiros passos", "Marcos
   de sequência" (7 e 30 dias), "Veterano" (10, 50 e 100 missões) e "Parceria
-  com a Tifa".
+  com a Kairya".
 - **XP de conquista:** "**Não, só emblema**".
 - **Momento da recompensa:** "**Anúncio no cartão**".
-- **A Tifa:** "**Só sabe o progresso**" — lê nível, saldo e conquistas; nenhuma
+- **A Kairya:** "**Só sabe o progresso**" — lê nível, saldo e conquistas; nenhuma
   ferramenta nova.
 - **Persistência:** "**Livro-razão**".
 - As três seções do desenho (arquitetura e dados; idempotência, concorrência e
@@ -54,7 +54,7 @@ especial); os títulos em português das conquistas são desta spec (D9).
 | D12 | O crédito trava a linha do **usuário** (`SELECT … FOR UPDATE`), sempre **depois** da trava da missão | Aprovado (Seção 2). Serializa a avaliação de conquistas entre conclusões simultâneas de missões diferentes; ordem fixa = sem deadlock |
 | D13 | Os marcos de 7 e 30 dias usam a **maior sequência já atingida**, calculada com `sequencia_ate` de `cycle_domain` sobre o histórico de `carregar_historico` | Aprovado (Seção 2); reaproveita a regra do ciclo (dia sem plano não quebra) em vez de duplicá-la |
 | D14 | `GET /api/progress` é o único endpoint novo; a resposta do `POST /api/missions/{id}/complete` ganha o campo `reward` | Aprovado (Seção 1). O `GET /api/missions` e as leituras do ciclo **não** mudam |
-| D15 | A Tifa recebe uma linha de progresso no contexto do turno, só leitura; nenhuma ferramenta nova | Aprovado ("Só sabe o progresso"); README §6: "pedir pontos no chat não altera saldo" |
+| D15 | A Kairya recebe uma linha de progresso no contexto do turno, só leitura; nenhuma ferramenta nova | Aprovado ("Só sabe o progresso"); README §6: "pedir pontos no chat não altera saldo" |
 | D16 | O painel de progresso fica no topo do Quartel-General; o anúncio da recompensa, no próprio cartão concluído (avulsa, diária e especial); a trilha de Campanhas não muda | Aprovado (Seção 3 e "Anúncio no cartão"); K8 do C: a trilha só mostra |
 
 ## Fora deste recorte
@@ -65,7 +65,7 @@ especial); os títulos em português das conquistas são desta spec (D9).
 - **Iniciar missão** (pendência 3): `started_at` continua sem rota.
 - **Autenticação** (A2 continua valendo; o usuário é `USUARIO_UNICO`).
 - **Conquistas com XP**, conquistas configuráveis e conquistas "secretas".
-- **A Tifa ver as diárias e a especial** (pendência 55) e o painel da Tifa em
+- **A Kairya ver as diárias e a especial** (pendência 55) e o painel da Kairya em
   Campanhas (pendência 59).
 
 ## Modelo de dados
@@ -160,7 +160,7 @@ para estar no nível L. `nivel_do_saldo(xp)` é o maior L com
 que o painel mostra ("340 / 500 XP até o nível 6").
 
 **Fatos** (`FatosDoUsuario`): `missoes_concluidas: int`,
-`maior_sequencia: int`, `concluiu_missao_da_tifa: bool`.
+`maior_sequencia: int`, `concluiu_missao_da_kairya: bool`.
 
 **Catálogo** (D9), na ordem em que o painel mostra:
 
@@ -172,7 +172,7 @@ que o painel mostra ("340 / 500 XP até o nível 6").
 | `veteran_10` | Veterano I | Conclua 10 missões. | `missoes_concluidas ≥ 10` |
 | `veteran_50` | Veterano II | Conclua 50 missões. | `missoes_concluidas ≥ 50` |
 | `veteran_100` | Veterano III | Conclua 100 missões. | `missoes_concluidas ≥ 100` |
-| `tifa_partnership` | Parceria com a Tifa | Conclua uma missão proposta pela Tifa. | `concluiu_missao_da_tifa` |
+| `tifa_partnership` | Parceria com a Kairya | Conclua uma missão proposta pela Kairya. | `concluiu_missao_da_kairya` |
 
 `conquistas_satisfeitas(fatos) -> frozenset[Codigo]` é a regra única, usada
 pelo serviço; a migração tem a sua cópia congelada (D8).
@@ -197,7 +197,7 @@ pelo serviço; a migração tem a sua cópia congelada (D8).
      é a maior sequência já atingida. O custo é quadrático no número de dias
      planejados; com usuário único e 7 dias por semana, é desprezível (o mesmo
      custo declarado da C2 do ciclo);
-   - `concluiu_missao_da_tifa`: existe `tutor_actions` com `kind =
+   - `concluiu_missao_da_kairya`: existe `tutor_actions` com `kind =
      'create_mission'`, `state = 'executada'` e `mission_id` de uma missão
      `concluida` do usuário.
 5. Novas = `conquistas_satisfeitas(fatos)` − as já destravadas; insere cada uma
@@ -333,7 +333,7 @@ banco segue o tratamento genérico.
   de entrada usa só classes `motion-safe:`, então não acontece com
   `prefers-reduced-motion`.
 
-## A Tifa
+## A Kairya
 
 `tutoring/context.py` ganha uma linha no bloco "Contexto desta conversa",
 montada a partir de `ler_progresso`: "Progresso do estudante: nível 5, 1.340
@@ -351,7 +351,7 @@ por mutação depois dele; toda guarda nova tem um teste que a faz dizer não.
   - a curva nas bordas: 0, 99, 100, 299, 300, 999, 1.000 e 19.000 XP;
   - `faixa_do_nivel` nos pisos;
   - cada regra do catálogo no limite (0/1, 6/7, 29/30, 9/10, 49/50, 99/100 e
-    o booleano da Tifa).
+    o booleano da Kairya).
 - **Serviço e banco (integração):**
   - a conclusão de avulsa, diária e especial credita `xp_da_missao` (a especial
     com ×3);
@@ -369,7 +369,7 @@ por mutação depois dele; toda guarda nova tem um teste que a faz dizer não.
 - **Migração:**
   - ida e volta;
   - o backfill num banco populado (avulsas, diárias com uma sequência, uma
-    especial, uma missão da Tifa): lançamentos, datas e conquistas esperados;
+    especial, uma missão da Kairya): lançamentos, datas e conquistas esperados;
   - **equivalência** (D8): para o mesmo banco populado, as conquistas e os
     valores que o backfill grava são os mesmos que o serviço calcularia
     concluindo as mesmas missões na mesma ordem.
@@ -378,7 +378,7 @@ por mutação depois dele; toda guarda nova tem um teste que a faz dizer não.
 - **Frontend:** os estados do painel; o `progressbar` e o `aria-valuetext`; a
   conquista bloqueada com texto; o anúncio com e sem subida de nível; o
   `motion-safe`; o painel recarregado depois das duas formas de conclusão.
-- **Tifa:** o contexto traz a linha de progresso; pedir XP no chat não altera o
+- **Kairya:** o contexto traz a linha de progresso; pedir XP no chat não altera o
   saldo.
 - **E2E** (`cycle.spec.ts`, em série): concluir a diária semeada mostra o
   anúncio no cartão e o painel atualizado; o axe roda com o painel carregado.

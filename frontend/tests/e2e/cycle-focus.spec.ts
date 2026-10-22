@@ -153,10 +153,10 @@ test('erro silencioso conserva cartão e foco no Concluir', async ({ page }) => 
   expect(unexpected).toEqual([])
 })
 
-test('resposta não toma foco e rascunho da Tifa', async ({ page }) => {
+test('resposta não toma foco e rascunho da Kairya', async ({ page }) => {
   const { heading, refresh, unexpected } = await setup(page)
   const route = await refresh()
-  const field = page.getByLabel('Sua mensagem para a Tifa')
+  const field = page.getByLabel('Sua mensagem para a Kairya')
   await field.fill('Rascunho durante refresh da diária')
   await expect(field).toBeFocused()
   await route.fulfill({ json: cycle(nextDaily, '2026-10-05') })
@@ -195,7 +195,7 @@ test('GET pendente não atravessa folha modal móvel nem altera retorno do foco'
   await page.setViewportSize({ width: 375, height: 844 })
   await page.getByTestId('tutor-sheet-open').click()
   const dialog = page.getByRole('dialog')
-  const field = dialog.getByLabel('Sua mensagem para a Tifa')
+  const field = dialog.getByLabel('Sua mensagem para a Kairya')
   await expect(field).toBeFocused()
   await expect(page.getByTestId('headquarters')).toHaveAttribute('inert', '')
   await route.fulfill({ json: cycle(nextDaily, '2026-10-05') })
@@ -203,7 +203,7 @@ test('GET pendente não atravessa folha modal móvel nem altera retorno do foco'
   await expect(field).toBeFocused()
   await expect(heading).not.toBeFocused()
   await page.keyboard.press('Shift+Tab')
-  await expect(dialog.getByRole('region', { name: 'Conversa com a Tifa' })).toBeFocused()
+  await expect(dialog.getByRole('region', { name: 'Conversa com a Kairya' })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(dialog.getByTestId('tutor-sheet-close')).toBeFocused()
   await page.keyboard.press('Escape')
