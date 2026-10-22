@@ -1,3 +1,16 @@
+# Builds Docker nativos e releases portáveis (2026-10-22)
+
+As imagens temporárias AMD64 de publicação estavam aparecendo no Docker do Mac ARM64.
+O fluxo agora é versionado: `make image` usa os Dockerfiles em `docker/` e verifica a arquitetura
+do daemon; `make image-release` exporta OCI com AMD64 e ARM64 sem sobrescrever tags locais.
+`scripts/docker-build.sh` também protege builds personalizados e o `make db-up`. Não muda
+contratos de API, segredos, volumes ou configuração de publicação. As bases são índices
+multiplataforma fixados por digest, e a API mantém Python 3.14.8 declarado na main.
+A regressão em `tests/unit/test_docker_build.py` exercita builds scratch reais, a substituição
+de uma imagem estrangeira, a recusa de overrides e o conteúdo do OCI.
+Commit, push e abertura de PR foram autorizados; merge e deploy seguem fora desta etapa.
+
+
 # HANDOFF
 
 Estado para retomar o FocusQuest. Leia antes `README.md` e

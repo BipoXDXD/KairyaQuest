@@ -1,0 +1,23 @@
+# Lista de permissão: credenciais, .env, Git, caches e node_modules não vão ao builder.
+**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!alembic.ini
+!alembic/
+!alembic/**
+!docker/
+!docker/**
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig*.json
+!frontend/vite.config.ts
+!frontend/index.html
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+**/__pycache__/
+**/*.pyc

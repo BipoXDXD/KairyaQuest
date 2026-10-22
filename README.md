@@ -262,3 +262,18 @@ Entregue Dockerfile, Compose e comandos de setup, diagnóstico, execução, migr
 Informe versões, evidências e estados: aprovado, falhou, não executado ou pendente. Demonstre bloqueios por lint, testes e cobertura sem alterar o histórico principal. Confirme hooks e proteções remotas.
 
 Próximo incremento: missão completa, da delegação à recompensa. Não declare a base pronta para produção.
+
+## Builds Docker e arquitetura
+
+Use `make image` para construir e verificar imagens **nativas do daemon Docker ativo**.
+O comando ignora uma seleção antiga em `DOCKER_DEFAULT_PLATFORM`; não fixa o projeto em AMD64 ou ARM64.
+
+`make image-release` exporta arquivos em `.docker-artifacts/` com **linux/amd64 e linux/arm64**,
+sem carregar uma imagem estrangeira sobre a tag local. `IMAGE_TAG=...` escolhe a tag dos artefatos.
+
+Para builds personalizados, use `scripts/docker-build.sh local -f CAMINHO -t IMAGEM CONTEXTO`.
+Para publicar quando autorizado, use `scripts/docker-build.sh publish -f CAMINHO -t REGISTRY/IMAGEM CONTEXTO`;
+o comando verifica as duas plataformas no registry. Não substitua estes comandos por um build
+AMD64 com `--load` no Mac: para uma entrega offline, use o modo `oci ARQUIVO.tar`.
+A verificação isolada é `scripts/docker-build.sh check IMAGEM` (local) ou `published REGISTRY/IMAGEM` (release).
+Os Dockerfiles versionados ficam em `docker/`; a configuração privada do Nginx continua lendo `/run/secrets/access.htpasswd` no ambiente de publicação. `make db-up` usa a mesma seleção nativa.
