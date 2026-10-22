@@ -1,4 +1,4 @@
-"""Casos de uso da tutoria: a conversa com a Tifa e as acoes dela.
+"""Casos de uso da tutoria: a conversa com a Kairya e as acoes dela.
 
 O envio de uma pergunta tem DUAS fases, e a divisao e o que torna o stream
 seguro:
@@ -209,7 +209,7 @@ def preparar_turno(
         )
     )
     if em_andamento is not None:
-        raise MensagemEmAndamentoError("ja existe uma resposta da Tifa sendo gerada")
+        raise MensagemEmAndamentoError("ja existe uma resposta da Kairya sendo gerada")
 
     if pergunta is None:
         pergunta = TutorMessage(
@@ -507,7 +507,7 @@ def _confirmar_reagendamento(
     clock: Clock,
 ) -> ResultadoDaConfirmacao:
     """Executa a proposta de reagendamento pelo MESMO `reagendar_missao` da
-    tela, com `origin = tifa` e a chave da confirmacao (F15, F17).
+    tela, com `origin = kairya` e a chave da confirmacao (F15, F17).
 
     Revalida so os tres campos do modelo; o retrato (`CAMPOS_DO_RETRATO`) e o
     que a pessoa viu, e nao decide nada -- o `previous_deadline` do historico
@@ -533,7 +533,7 @@ def _confirmar_reagendamento(
             operation_id,
             novo_prazo=dados.new_deadline,
             motivo=dados.reason,
-            origem=OrigemDoReagendamento.TIFA,
+            origem=OrigemDoReagendamento.KAIRYA,
             clock=clock,
         )
     except PrazoExpiradoError:
@@ -544,7 +544,7 @@ def _confirmar_reagendamento(
         _gravar_falha(acao, REAGENDAMENTO_INVALIDO, operation_id, clock())
         session.flush()
         return ReagendamentoInvalido(acao)
-    _exigir_elo_da_tifa(session, operation_id)
+    _exigir_elo_da_kairya(session, operation_id)
     acao.state = EstadoDaAcao.EXECUTADA
     acao.mission_id = missao.id
     acao.operation_id = operation_id
@@ -553,14 +553,14 @@ def _confirmar_reagendamento(
     return Executada(acao, missao)
 
 
-def _exigir_elo_da_tifa(session: Session, operation_id: str) -> None:
-    """O elo desta chave tem de ser da Tifa.
+def _exigir_elo_da_kairya(session: Session, operation_id: str) -> None:
+    """O elo desta chave tem de ser da Kairya.
 
     O `reagendar_missao` trata a mesma chave, na mesma missao, com o mesmo
     prazo e o mesmo motivo como REENVIO, e devolve a missao sem gravar. Se a
     chave foi gasta pela TELA, a acao se diria executada por um reagendamento
     que a pessoa fez sozinha (`origin = usuario`): e chave gasta. Uma chave
-    gasta por outra confirmacao da Tifa ja foi recusada antes (ou o sera pela
+    gasta por outra confirmacao da Kairya ja foi recusada antes (ou o sera pela
     UNIQUE de `tutor_actions`).
     """
     origem = session.scalar(
@@ -568,7 +568,7 @@ def _exigir_elo_da_tifa(session: Session, operation_id: str) -> None:
             MissionReschedule.operation_id == operation_id
         )
     )
-    if origem is not OrigemDoReagendamento.TIFA:
+    if origem is not OrigemDoReagendamento.KAIRYA:
         raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id))
 
 

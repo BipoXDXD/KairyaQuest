@@ -8,7 +8,7 @@ describe('main', () => {
     document.body.innerHTML = '<div id="root"></div>'
     // O `fetch` e o `matchMedia` sao stubbados ANTES do import porque main.tsx
     // monta a arvore no proprio import: a arvore ja busca as missoes e o
-    // estado da Tifa, e o painel da Tifa pergunta a largura da tela. Sem o
+    // estado da Kairya, e o painel da Kairya pergunta a largura da tela. Sem o
     // stub, o teste faria um pedido de verdade a uma URL relativa dentro do
     // jsdom (e o jsdom nao implementa `matchMedia`).
     stubViewport('desktop')

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { definirRoteiro, reiniciar, requisicoes } from './falso'
 
 /**
- * A entrega com evidencia e a avaliacao da Tifa ponta a ponta (Incremento E):
+ * A entrega com evidencia e a avaliacao da Kairya ponta a ponta (Incremento E):
  * navegador real, API real, banco real e o servidor falso da Anthropic como
  * processo, roteirizado para responder com a ferramenta `record_evaluation`.
  *
@@ -88,12 +88,12 @@ test('conclui com evidencia, pede a avaliacao e ve o bonus e o painel', async ({
   await cartao.getByTestId('mission-complete').click()
   await expect(cartao.getByText('Com evidência')).toBeVisible()
 
-  await cartao.getByRole('button', { name: 'Pedir avaliação da Tifa' }).click()
+  await cartao.getByRole('button', { name: 'Pedir avaliação da Kairya' }).click()
   // `exact`: a regiao viva tambem diz "Avaliação concluída: Critério atendido.",
   // e o que se afere aqui e o selo do veredito.
   await expect(cartao.getByText('Critério atendido', { exact: true })).toBeVisible()
   await expect(
-    cartao.getByText('Avaliação da Tifa — interpretação do modelo, não verificação automática'),
+    cartao.getByText('Avaliação da Kairya — interpretação do modelo, não verificação automática'),
   ).toBeVisible()
   const bonus = Math.floor(missao.xp / 2)
   // O anuncio do bonus diz "de bônus" junto do XP, para nao

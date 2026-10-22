@@ -6,7 +6,7 @@ import type { Reward } from '../../shared/types/reward'
  * anunciada por todo leitor de tela. A entrada so anima sob `motion-safe:`
  * (README s7: movimento reduzido).
  *
- * `bonus` e o anuncio do bonus da avaliacao da Tifa (incremento E): o mesmo
+ * `bonus` e o anuncio do bonus da avaliacao da Kairya (incremento E): o mesmo
  * desenho, com "de bonus" junto do XP para nao parecer uma segunda conclusao.
  */
 export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; bonus?: boolean }) {

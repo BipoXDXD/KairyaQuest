@@ -113,7 +113,7 @@ def test_a_chave_da_anthropic_e_opcional(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Sem chave, o Settings carrega: a ausencia e um estado do produto
-    (a Tifa indisponivel, README s14), nao configuracao esquecida."""
+    (a Kairya indisponivel, README s14), nao configuracao esquecida."""
     assert _settings_do_arquivo(monkeypatch, tmp_path, "").anthropic_api_key is None
 
 
@@ -123,7 +123,7 @@ def test_chave_vazia_no_env_conta_como_ausente(
     """A linha do .env.example e `FOCUSQUEST_ANTHROPIC_API_KEY=`, vazia.
 
     Sem `env_ignore_empty`, ela viraria `SecretStr("")`, e a tela diria que a
-    Tifa esta disponivel ate a primeira mensagem receber 401.
+    Kairya esta disponivel ate a primeira mensagem receber 401.
     """
     settings = _settings_do_arquivo(
         monkeypatch, tmp_path, "FOCUSQUEST_ANTHROPIC_API_KEY=\n"

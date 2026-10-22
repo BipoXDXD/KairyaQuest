@@ -16,24 +16,27 @@ describe('describeEvaluationFailure', () => {
       'sem_evidencia',
       {
         message:
-          'Esta missão não tem evidência para a Tifa avaliar. Atualize para ver o estado atual.',
+          'Esta missão não tem evidência para a Kairya avaliar. Atualize para ver o estado atual.',
         recovery: 'refresh',
       },
     ],
     [
       'avaliacao_em_andamento',
       {
-        message: 'A Tifa já está avaliando esta entrega. Tente de novo em instantes.',
+        message: 'A Kairya já está avaliando esta entrega. Tente de novo em instantes.',
         recovery: 'retry',
       },
     ],
     [
       'provedor_nao_configurado',
-      { message: 'A Tifa está fora do ar: falta configurar o provedor.', recovery: 'unavailable' },
+      {
+        message: 'A Kairya está fora do ar: falta configurar o provedor.',
+        recovery: 'unavailable',
+      },
     ],
     [
       'provedor_indisponivel',
-      { message: 'A Tifa não conseguiu avaliar agora. Tente de novo.', recovery: 'retry' },
+      { message: 'A Kairya não conseguiu avaliar agora. Tente de novo.', recovery: 'retry' },
     ],
     [
       'tempo_esgotado',
@@ -41,7 +44,7 @@ describe('describeEvaluationFailure', () => {
     ],
     [
       'avaliacao_invalida',
-      { message: 'A Tifa respondeu fora da rubrica. Tente de novo.', recovery: 'retry' },
+      { message: 'A Kairya respondeu fora da rubrica. Tente de novo.', recovery: 'retry' },
     ],
     [
       'missao_nao_encontrada',

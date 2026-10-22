@@ -52,7 +52,7 @@ export const MAX_DIFFICULTY = 5
 /** Como a conclusao foi verificada: so declarada, ou entregue com evidencia. */
 export type Verification = 'autodeclarada' | 'com_evidencia'
 
-/** O veredito da Tifa sobre a evidencia (interpretacao do modelo, nao prova). */
+/** O veredito da Kairya sobre a evidencia (interpretacao do modelo, nao prova). */
 export type Verdict = 'atende' | 'parcial' | 'nao_atende'
 
 /** O estado do pedido de avaliacao: em curso, terminado ou falhado. */
@@ -80,7 +80,7 @@ export interface EvaluationSummary {
  */
 export type RescheduleReason = 'dificuldade' | 'falta_de_tempo' | 'mudanca_de_prioridade'
 
-/** Quem reagendou: a pessoa pela tela (`usuario`) ou a Tifa, por proposta confirmada. */
+/** Quem reagendou: a pessoa pela tela (`usuario`) ou a Kairya, por proposta confirmada. */
 export type RescheduleOrigin = 'usuario' | 'tifa'
 
 /**

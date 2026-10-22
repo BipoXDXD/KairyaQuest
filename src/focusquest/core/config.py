@@ -45,7 +45,7 @@ class Settings(ConfiguracaoDeLog):
 
     A excecao e a chave da Anthropic, e ela e deliberada. O README s14 manda
     mostrar indisponibilidade quando nao ha credencial: a ausencia dela e um
-    ESTADO do produto (a Tifa fora do ar, o Quartel-General funcionando), nao
+    ESTADO do produto (a Kairya fora do ar, o Quartel-General funcionando), nao
     uma configuracao esquecida. Por isso `anthropic_api_key` e opcional, e
     `SecretStr` a esconde do `repr` e dos logs.
 
@@ -90,7 +90,7 @@ class Settings(ConfiguracaoDeLog):
     # mandaria a conversa para outro endereco.
     anthropic_base_url: str = "https://api.anthropic.com"
     tutor_model: str = "claude-opus-5"
-    # O teto de SAIDA de uma resposta da Tifa. O `claude-opus-5` pensa por
+    # O teto de SAIDA de uma resposta da Kairya. O `claude-opus-5` pensa por
     # padrao (thinking adaptativo, sem `budget_tokens`: o adaptador nao manda
     # `thinking`), e o thinking gasta deste mesmo teto -- com 1024, respostas
     # comuns eram cortadas cedo. 2048 por decisao do dono (pendencia 173:

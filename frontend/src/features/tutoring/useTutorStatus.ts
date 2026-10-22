@@ -3,7 +3,7 @@ import { requestJson } from '../../shared/api/client'
 import type { StatusRead } from './types'
 
 /**
- * Se a Tifa esta disponivel (spec: `available: false` quando nao ha chave).
+ * Se a Kairya esta disponivel (spec: `available: false` quando nao ha chave).
  *
  * `error` e separado de `unavailable` porque pedem acoes diferentes: sem
  * chave, nao ha o que a pessoa faca pela tela; sem resposta do servidor,

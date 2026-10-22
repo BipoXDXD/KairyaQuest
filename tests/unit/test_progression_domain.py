@@ -102,17 +102,17 @@ def test_o_catalogo_tem_os_sete_codigos_na_ordem_do_painel() -> None:
         "Veterano I",
         "Veterano II",
         "Veterano III",
-        "Parceria com a Tifa",
+        "Parceria com a Kairya",
     ]
 
 
 def _fatos(
-    concluidas: int = 0, sequencia: int = 0, tifa: bool = False
+    concluidas: int = 0, sequencia: int = 0, kairya: bool = False
 ) -> FatosDoUsuario:
     return FatosDoUsuario(
         missoes_concluidas=concluidas,
         maior_sequencia=sequencia,
-        concluiu_missao_da_tifa=tifa,
+        concluiu_missao_da_kairya=kairya,
     )
 
 
@@ -125,7 +125,7 @@ def _fatos(
         (Codigo.VETERAN_10, _fatos(concluidas=9), _fatos(concluidas=10)),
         (Codigo.VETERAN_50, _fatos(concluidas=49), _fatos(concluidas=50)),
         (Codigo.VETERAN_100, _fatos(concluidas=99), _fatos(concluidas=100)),
-        (Codigo.TIFA_PARTNERSHIP, _fatos(tifa=False), _fatos(tifa=True)),
+        (Codigo.KAIRYA_PARTNERSHIP, _fatos(kairya=False), _fatos(kairya=True)),
     ],
 )
 def test_cada_regra_no_limite(

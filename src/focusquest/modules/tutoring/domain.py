@@ -32,7 +32,7 @@ class StatusDaMensagem(StrEnum):
 
 
 class EstadoDaAcao(StrEnum):
-    """O estado de uma acao proposta pela Tifa.
+    """O estado de uma acao proposta pela Kairya.
 
     Nao existe "confirmada e ainda nao executada": confirmar cria a missao na
     mesma transacao (spec do 1b, "Confirmacao e execucao sao um passo so").

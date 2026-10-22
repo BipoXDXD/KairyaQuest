@@ -43,32 +43,32 @@ escolhido.
    novo prazo e **o motivo** (dificuldade, falta de tempo ou mudança de
    prioridade) e salva. O prazo muda, e o cartão mostra o **histórico de
    prazos** — de quando para quando, por quê e por quem.
-3. Na conversa, quando a pessoa diz "estou sem tempo", a Tifa pergunta o
+3. Na conversa, quando a pessoa diz "estou sem tempo", a Kairya pergunta o
    motivo e **propõe** reagendar (`reschedule_mission`). A proposta aparece
    como cartão, com o prazo atual e o proposto; nada muda até a pessoa
    **confirmar**. Confirmada, o reagendamento entra no mesmo histórico, marcado
-   como proposto pela Tifa.
-4. A Tifa passa a ver, no contexto, o estado de cada pendente (pendente ou em
+   como proposto pela Kairya.
+4. A Kairya passa a ver, no contexto, o estado de cada pendente (pendente ou em
    andamento, desde quando) e quantas vezes foi reagendada, com o último
    motivo — é o que deixa ela **acompanhar** sem inventar.
 
 ## Recorte
 
-**Entra:** iniciar (pessoa, pela tela); reagendar (pessoa, pela tela; Tifa,
+**Entra:** iniciar (pessoa, pela tela); reagendar (pessoa, pela tela; Kairya,
 por proposta confirmada); o histórico de replanejamento; o motivo em três
-valores; o contexto e a persona da Tifa para essas duas coisas; a migração
+valores; o contexto e a persona da Kairya para essas duas coisas; a migração
 `0006`.
 
 **Não entra** (cada item com o motivo):
 
 - **Cobranças com preferências de intensidade, frequência, horários e pausa**
-  (README §5): ficam para o **Incremento G**. O F dá à Tifa o que cobrar
+  (README §5): ficam para o **Incremento G**. O F dá à Kairya o que cobrar
   (estado, início, reagendamentos); o G decide quando e com que força.
 - **Dividir missão** ("divida esta missão", README §5): pede criar várias
   missões a partir de uma e decidir o que acontece com a original (XP,
   histórico, avaliação). É outra ferramenta, com outro desenho.
 - **`propose_plan`** e ligar o ciclo diário à conversa (pendências 55 e 59):
-  continuam abertas; a Tifa só vê e só reagenda **avulsas**.
+  continuam abertas; a Kairya só vê e só reagenda **avulsas**.
 - **Pausar, retomar ou voltar a `pendente`**: `em_andamento` só vai para
   `concluida` (F5). Sessões de estudo com pausas são a entidade "sessão" do
   README §8, não implementada.
@@ -91,16 +91,16 @@ valores; o contexto e a persona da Tifa para essas duas coisas; a migração
 | F7 | **Só a avulsa se reagenda.** Diária e especial → `409 prazo_derivado`. | O prazo delas é **derivado** do ciclo (C10) e nunca gravado: o fim do dia da diária, a janela da especial. Não há coluna para mudar; mudar a regra do dia de uma missão só quebraria a sequência (B) e a trilha (C). | Mover a diária para outro dia: é replanejar a semana, trabalho de `propose_plan`. Pendência **113**. |
 | F8 | **Reagendar vale em `pendente` e `em_andamento`**, e não muda o estado nem o `started_at`; em `concluida` → `409 transicao_ilegal` ("não é possível reagendar uma missão concluída"). | "Estou sem tempo" acontece no meio da execução. O estado diz o que foi feito; o prazo diz até quando — são eixos separados, como o README §8 manda separar estimativa, prazo e duração. | Reagendar voltar a missão para `pendente`: perderia o início e a duração real. |
 | F9 | **O novo prazo:** com fuso (`AwareDatetime`, sem fuso → `422` do Pydantic), representável em UTC (a guarda `_instante_representavel` do `MissionCreate`), **estritamente no futuro** pelo relógio lido depois da trava (senão `422 prazo_expirado`, o **mesmo** `code` da proposta cujo prazo passou) e **diferente do atual** (senão `409 prazo_inalterado`). Antecipar é permitido. Não há teto de horizonte. | Um prazo no passado não é compromisso, é registro de atraso — e o F não o registra. O mesmo `code` de "prazo no passado" nos dois caminhos (proposta e reagendamento) é um texto só na tela. "Mesmo prazo" é um no-op que sujaria o histórico; é `409` porque depende do estado atual, não da forma do pedido. Antecipar é o caso "mudança de prioridade" para cima. O teto de horizonte do `MissionCreate` também não existe (decisão aberta do dono desde o 1a), e o F não inventa um só para o reagendamento. | Aceitar prazo passado "para registrar"; recusar antecipação; limitar a N dias. |
-| F10 | **O motivo é obrigatório e fechado em três valores:** `dificuldade`, `falta_de_tempo`, `mudanca_de_prioridade` (`MotivoDoReagendamento`). Sem texto livre. | É a distinção literal do README §5. Um enum a máquina distingue (a tela conta, a Tifa lê, o G poderá cobrar diferente); texto livre seria mais um dado não confiável dentro do prompt, sem ganho de decisão. Obrigatório porque um histórico sem "por quê" não é replanejamento, é só prazo mudado. | Motivo opcional; texto livre; um quarto valor "outro" (convida a não escolher). Registrado em "Para o dono decidir". |
-| F11 | **Sem limite de reagendamentos.** O número fica visível para a pessoa (no cartão) e para a Tifa (no contexto). | Um limite seria punição — o README §5 proíbe "perda destrutiva" e manda "ser firme sem humilhar". Com o histórico à vista, a cobrança do G tem o dado sem que o F precise bloquear ninguém. | Um teto (ex.: 3 por missão) com `409`: a pessoa com a vida real atropelando ficaria sem saída, ou abandonaria a missão. Pendência **110**; "Para o dono decidir". |
-| F12 | **O histórico é a tabela `mission_reschedules`, só de inserção:** uma linha por reagendamento, com `previous_deadline`, `new_deadline`, `reason`, `origin` (`usuario` ou `tifa`), `operation_id` e `rescheduled_at`. `missions.deadline` continua sendo o prazo **corrente**. O `MissionRead` ganha `reschedules`, a lista em ordem de gravação. | "Preserve histórico de replanejamento" (§8) pede os dois lados de cada mudança e o motivo. Uma tabela própria, sem `UPDATE` nem `DELETE` pelo serviço, é o histórico que não se reescreve. `previous_deadline` gravado (e não reconstruído da linha anterior) torna cada linha legível sozinha e prova, no teste de concorrência, que não houve atualização perdida. | Guardar só uma contagem; ou derivar o prazo corrente do histórico — o que obrigaria todo leitor atual (listagem, contexto, ordenação) a juntar tabelas. |
+| F10 | **O motivo é obrigatório e fechado em três valores:** `dificuldade`, `falta_de_tempo`, `mudanca_de_prioridade` (`MotivoDoReagendamento`). Sem texto livre. | É a distinção literal do README §5. Um enum a máquina distingue (a tela conta, a Kairya lê, o G poderá cobrar diferente); texto livre seria mais um dado não confiável dentro do prompt, sem ganho de decisão. Obrigatório porque um histórico sem "por quê" não é replanejamento, é só prazo mudado. | Motivo opcional; texto livre; um quarto valor "outro" (convida a não escolher). Registrado em "Para o dono decidir". |
+| F11 | **Sem limite de reagendamentos.** O número fica visível para a pessoa (no cartão) e para a Kairya (no contexto). | Um limite seria punição — o README §5 proíbe "perda destrutiva" e manda "ser firme sem humilhar". Com o histórico à vista, a cobrança do G tem o dado sem que o F precise bloquear ninguém. | Um teto (ex.: 3 por missão) com `409`: a pessoa com a vida real atropelando ficaria sem saída, ou abandonaria a missão. Pendência **110**; "Para o dono decidir". |
+| F12 | **O histórico é a tabela `mission_reschedules`, só de inserção:** uma linha por reagendamento, com `previous_deadline`, `new_deadline`, `reason`, `origin` (`usuario` ou `kairya`), `operation_id` e `rescheduled_at`. `missions.deadline` continua sendo o prazo **corrente**. O `MissionRead` ganha `reschedules`, a lista em ordem de gravação. | "Preserve histórico de replanejamento" (§8) pede os dois lados de cada mudança e o motivo. Uma tabela própria, sem `UPDATE` nem `DELETE` pelo serviço, é o histórico que não se reescreve. `previous_deadline` gravado (e não reconstruído da linha anterior) torna cada linha legível sozinha e prova, no teste de concorrência, que não houve atualização perdida. | Guardar só uma contagem; ou derivar o prazo corrente do histórico — o que obrigaria todo leitor atual (listagem, contexto, ordenação) a juntar tabelas. |
 | F13 | **Idempotência do reagendamento:** `mission_operations` com `kind = 'reschedule'`, e a linha do histórico ligada à operação (`operation_id` → `mission_operations.operation_id`, UNIQUE). Reenvio com a mesma chave e o **mesmo** `(new_deadline, reason)` → `200` com a missão como está agora; mesma chave com outro conteúdo → `409 operacao_reutilizada` (o desenho da evidência no E). | O mesmo mecanismo das outras duas escritas; a comparação de conteúdo é a regra "mesmo id, outro conteúdo é chave gasta" do 1b-1 e do E. Comparar instantes com fuso compara o instante, não a grafia (`-03:00` e `Z` do mesmo instante são iguais). | Idempotência pela chave natural `(missão, novo prazo)`: reagendar de volta para um prazo que já existiu é pedido legítimo, e seria confundido com reenvio. |
 | F14 | **Concorrência:** iniciar e reagendar travam a missão (`FOR UPDATE`, `buscar_para_escrever(travar=True)`) **antes** de ler relógio, estado e prazo. Dois reagendamentos simultâneos com chaves diferentes viram **dois elos encadeados** (o `previous_deadline` do segundo é o `new_deadline` do primeiro), nunca uma atualização perdida. A ordem global das travas passa a ser **ação → missão → avaliação → usuário**: a confirmação de uma proposta trava a ação e depois a missão; nenhum caminho trava na ordem inversa. | É o ponto de serialização que a conclusão já usa, e a hora lida depois da trava (C13). Declarar a ordem das travas é o que impede a espera circular entre a confirmação, o reagendamento direto, a conclusão e a avaliação. | Controle otimista (coluna de versão): mais uma coluna e um laço de repetição, sem ganho com um usuário. |
-| F15 | **A Tifa ganha `reschedule_mission`, ferramenta de proposta**, com a entrada `{mission_id, new_deadline, reason}` (`RescheduleProposal`). Vira uma `TutorAction` de `kind = 'reschedule_mission'` em `proposta`; **nada muda** até a pessoa confirmar. A confirmação executa pelo **mesmo** `reagendar_missao`, com `origin = 'tifa'` e o `operation_id` da confirmação. | README §6: "mudanças significativas exigem confirmação" e "automação depende de preferências explícitas" (que não existem até o G). Um caminho de execução só (o serviço de `missions`) e um histórico só, marcado pela origem. | Executar direto, sem confirmação: seria o modelo mudando compromissos da pessoa sozinho. |
+| F15 | **A Kairya ganha `reschedule_mission`, ferramenta de proposta**, com a entrada `{mission_id, new_deadline, reason}` (`RescheduleProposal`). Vira uma `TutorAction` de `kind = 'reschedule_mission'` em `proposta`; **nada muda** até a pessoa confirmar. A confirmação executa pelo **mesmo** `reagendar_missao`, com `origin = 'tifa'` e o `operation_id` da confirmação. | README §6: "mudanças significativas exigem confirmação" e "automação depende de preferências explícitas" (que não existem até o G). Um caminho de execução só (o serviço de `missions`) e um histórico só, marcado pela origem. | Executar direto, sem confirmação: seria o modelo mudando compromissos da pessoa sozinho. |
 | F16 | **Pré-condição na hora da proposta:** ao gravar a resposta com uma proposta de reagendamento, o backend confere que a missão existe, é do usuário, é avulsa e não está concluída; grava no `payload`, **além** da entrada do modelo, um **retrato** escrito pelo backend (`instructions` e `previous_deadline`). Se a pré-condição falhar, a resposta é gravada `falhou` com `proposta_invalida` — o mesmo destino da proposta fora do esquema. | O README §6 manda validar pré-condições; propor mudar uma missão que não existe (ou alheia, ou concluída) é saída inválida do modelo, não uma proposta. O retrato é o que o cartão mostra — "de 02/10 18:00 para 05/10 18:00" — sem a feature `tutoring` do frontend importar `missions` (`docs/ARCHITECTURE.md` §5, regra 1), e registra o que a pessoa viu quando decidiu. | Guardar só o `mission_id` e o cartão buscar a missão: dependência entre features no frontend, e o cartão mudaria de conteúdo depois de decidido. Custo aceito: o retrato pode estar velho na hora de confirmar (pendência **114**); a confirmação revalida tudo (F17). |
 | F17 | **Na confirmação, tudo é revalidado** pelo `reagendar_missao`, que confere **todas** as pré-condições antes da primeira escrita. Se o novo prazo já passou → a ação é gravada `falhou` com `prazo_expirado`, commit, `422 prazo_expirado` (o desenho que existe para a criação). Se a missão não pode mais ser reagendada (sumiu, concluída, prazo já igual, tipo derivado) → a ação é gravada `falhou` com `reagendamento_invalido`, commit, `409 reagendamento_invalido`. Chave reutilizada → `409 operacao_reutilizada`, sem gravar. O reenvio da confirmação com a mesma chave devolve o mesmo resultado, inclusive o mesmo erro. | Gravar a falha e só depois levantar é o desenho do `prazo_expirado` (1b-1) e da avaliação (E13): a proposta não fica pendurada como `proposta` sobre uma missão que já não aceita a mudança. Um `code` só para "a missão mudou" porque a tela oferece a mesma saída para todos os casos (pedir outra proposta); `transicao_ilegal` na confirmação já significa "a proposta já foi decidida", e reusá-lo aqui misturaria dois significados. | Deixar a ação `proposta` e devolver o erro da missão: a pessoa ficaria com um cartão que falha para sempre. |
 | F18 | **O provedor passa a dizer qual ferramenta foi chamada:** `Proposta(nome, entrada)`. O adaptador oferece **as duas** ferramentas na conversa (`create_mission` e `reschedule_mission`), ainda com **uma chamada por resposta** (`disable_parallel_tool_use`) e sem `strict`, como hoje. Nome fora das duas → `proposta_invalida`. | Com duas ferramentas, a entrada sozinha não diz o que o modelo pediu. Manter uma proposta por resposta preserva o cartão único por mensagem que a tela já sabe mostrar. Sem `strict` na conversa porque a validação é do backend (o schema), e mudar o modo da ferramenta de proposta é mudança de comportamento sem medida real (pendência **109**). | Uma ferramenta genérica `propose_action` com `kind` no corpo: esquema mais fraco para o modelo e para a validação. |
-| F19 | **O contexto e a persona:** cada pendente no contexto ganha o estado, o início (se houver) e "reagendada N vez(es), último motivo: …"; as ações antigas entram no histórico como texto **por tipo** ("[Proposta de reagendamento da missão #12 para … (falta de tempo) — executada]"). A persona ganha as regras: propor reagendar só com o motivo conversado; com "dificuldade", oferecer ajuda (pistas, exemplo) **antes** de adiar; nunca culpa pela contagem. | É o `get_study_context` (README §6) com o que a Tifa precisa para acompanhar, sem ferramenta nova de leitura. O texto por tipo impede que a proposta de reagendamento apareça ao modelo como "Proposta de missão" (o `_texto` de hoje lê `instructions` do payload). | Uma ferramenta de leitura `get_study_context`: o contexto já vai inteiro no sistema, e o README manda enviar só o relevante. |
+| F19 | **O contexto e a persona:** cada pendente no contexto ganha o estado, o início (se houver) e "reagendada N vez(es), último motivo: …"; as ações antigas entram no histórico como texto **por tipo** ("[Proposta de reagendamento da missão #12 para … (falta de tempo) — executada]"). A persona ganha as regras: propor reagendar só com o motivo conversado; com "dificuldade", oferecer ajuda (pistas, exemplo) **antes** de adiar; nunca culpa pela contagem. | É o `get_study_context` (README §6) com o que a Kairya precisa para acompanhar, sem ferramenta nova de leitura. O texto por tipo impede que a proposta de reagendamento apareça ao modelo como "Proposta de missão" (o `_texto` de hoje lê `instructions` do payload). | Uma ferramenta de leitura `get_study_context`: o contexto já vai inteiro no sistema, e o README manda enviar só o relevante. |
 | F20 | **A tela:** no cartão da missão, o botão **Iniciar** (pendente e disponível), a linha "Iniciada em …" (em andamento), o disclosure **Reagendar prazo** (avulsa não concluída) com o novo prazo em horário de Brasília e os três motivos, e o **histórico de prazos**. As chaves de iniciar e de reagendar moram no registro do quadro, **por missão e por tipo**; o rascunho do reagendamento mora no cartão. | As chaves no registro pelo mesmo motivo da pendência 35 (a recarga do quadro remonta os cartões e mataria a chave de uma tentativa com resultado desconhecido). Por tipo porque a UNIQUE é por chave: a chave do Concluir gasta num Iniciar faria o Concluir falhar com `operacao_reutilizada`. O rascunho do reagendamento (um instante e um botão de opção) no cartão: perder isso numa recarga custa dois cliques, e guardá-lo no registro dobraria a superfície do registro por um ganho pequeno. | Rascunho no registro, como a evidência (E17): pendência **112** se o dono quiser. |
 | F21 | **A hora civil de São Paulo vira instante no cliente**, por uma função pura de `shared/lib/deadline.ts` (`saoPauloCivilToIso`, e a inversa para preencher o campo), com o `Intl` e o fuso `America/Sao_Paulo` — **sem** deslocamento fixo. O campo é `datetime-local`, rotulado "horário de Brasília". | O README §8 manda apresentar em `America/Sao_Paulo`; o navegador pode estar em outro fuso, e o `datetime-local` só sabe o do navegador. São Paulo já teve horário de verão; o `cycle_domain.py` recusa deslocamento fixo pelo mesmo motivo. Mora em `shared/lib/` ao lado de `formatDeadline`, que é a mesma regra do fuso. | Mandar a hora sem fuso e o backend supor São Paulo: o backend recusa `deadline` sem fuso desde o 1a (defeito medido), e a regra continuaria a mesma. |
 | F22 | **O cartão de proposta de reagendamento é um componente próprio** da feature `tutoring` (`RescheduleProposalCard`), escolhido pelo `kind` da ação; o `ProposalCard` de hoje continua sendo o da criação. O retorno de confirmar continua chamando `onMissionCreated`, que passa a significar "o quadro mudou" (o nome fica, com o novo sentido no comentário). | Os dois cartões mostram coisas diferentes (uma missão nova; dois prazos e um motivo) e compartilham só os controles de decisão (`DecisionControls`, extraído). Renomear o callback mexeria em testes que não mudam de comportamento. | Um cartão único com ramos por tipo: o componente dobraria de tamanho e cada estado teria dois textos. |
@@ -268,7 +268,7 @@ de `tutor_actions`. As operações `start` e `reschedule` que ficarem em
 - `MotivoDoReagendamento(StrEnum)`: `DIFICULDADE = "dificuldade"`,
   `FALTA_DE_TEMPO = "falta_de_tempo"`, `MUDANCA_DE_PRIORIDADE =
   "mudanca_de_prioridade"`.
-- `OrigemDoReagendamento(StrEnum)`: `USUARIO = "usuario"`, `TIFA = "tifa"`.
+- `OrigemDoReagendamento(StrEnum)`: `USUARIO = "usuario"`, `KAIRYA = "tifa"`.
 - `ProblemaDoNovoPrazo(StrEnum)`: `NO_PASSADO`, `INALTERADO`.
 - `problema_do_novo_prazo(novo, atual, agora) -> ProblemaDoNovoPrazo | None`:
   `NO_PASSADO` se `novo <= agora` (vem primeiro: um prazo passado igual ao
@@ -302,7 +302,7 @@ Mission`**, na ordem:
 
 **`reagendar_missao(session, user_id, mission_id, operation_id, *, novo_prazo,
 motivo, origem, clock) -> Mission`**, na ordem — e **todas as recusas antes da
-primeira escrita** (é o contrato que a confirmação da Tifa usa, F17):
+primeira escrita** (é o contrato que a confirmação da Kairya usa, F17):
 
 1. trava; 2. relógio; 3. `ler_missao` (404 da oculta);
 4. operação já gravada → `_exigir_mesma_operacao(..., REAGENDAMENTO)`; a linha
@@ -336,7 +336,7 @@ pré-condição da proposta (F16), sem trava: a missão, se existe, é do usuár
   retrato.
 - `confirmar_acao`: despacha pelo `kind`. O reagendamento revalida o `payload`
   (os três campos do modelo) com `RescheduleProposal`, chama
-  `reagendar_missao(..., origem=TIFA, operation_id=<o da confirmação>)`,
+  `reagendar_missao(..., origem=KAIRYA, operation_id=<o da confirmação>)`,
   captura `PrazoExpiradoError` (→ `falhou`/`prazo_expirado`, devolve
   `PrazoExpirado`) e `MissaoNaoEncontradaError`, `NaoPertenceAoUsuarioError`,
   `TransicaoIlegalError`, `PrazoInalteradoError`, `PrazoDerivadoError` (→
@@ -387,12 +387,12 @@ No cartão da missão (`MissionCard`, quadro de avulsas e Missão de hoje):
 - **Histórico:** com pelo menos um reagendamento, a linha **"Reagendada 2
   vezes"** e um `<details>` "Histórico de prazos" com uma linha por
   reagendamento: "02/10/2026 18:00 → 05/10/2026 18:00 · Falta de tempo · por
-  você" (ou "· proposto pela Tifa"). Sem cor como único sinal.
-- **Na Tifa:** o cartão "Proposta de reagendamento" com a missão
+  você" (ou "· proposto pela Kairya"). Sem cor como único sinal.
+- **Na Kairya:** o cartão "Proposta de reagendamento" com a missão
   (`instructions` do retrato), "Prazo atual" e "Prazo proposto" (`<time>`), o
   motivo em texto, Confirmar e Recusar; executada → "Prazo reagendado" e "Ver
   no Quartel-General"; falhou → o texto do `prazo_expirado` ou "A missão mudou
-  desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.".
+  desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.".
 
 Textos de falha (mapas exaustivos por `code`, no padrão de
 `completionFailure.ts`):
@@ -428,14 +428,14 @@ nome na `Proposta`); tutoria (proposta válida, fora do esquema, com
 pré-condição falha, confirmação com cada desfecho, reenvio da confirmação);
 contexto e persona; frontend (hooks, mapas, cartão, cartão de proposta,
 conversão de fuso rodando com o processo em `Asia/Tokyo`); **E2E** do início,
-do reagendamento pela tela e da proposta da Tifa confirmada, com axe.
+do reagendamento pela tela e da proposta da Kairya confirmada, com axe.
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
 | O modelo real, com duas ferramentas, propor reagendamento onde devia propor missão (ou o contrário) | Nada muda sem confirmação (F15); a pré-condição recusa missão inexistente (F16). **Não medido por chamada real** (pendência 109) |
-| O retrato da proposta envelhecer antes da confirmação | A confirmação revalida tudo e grava `reagendamento_invalido` (F17); o cartão mostra o prazo "de quando a Tifa propôs" (pendência 114) |
+| O retrato da proposta envelhecer antes da confirmação | A confirmação revalida tudo e grava `reagendamento_invalido` (F17); o cartão mostra o prazo "de quando a Kairya propôs" (pendência 114) |
 | Espera circular entre confirmação, reagendamento, conclusão e avaliação | Ordem única das travas (F14), com os testes de concorrência cruzados |
 | A conversão de fuso errar num dia de horário de verão | Função pura, sem deslocamento fixo, com caso de teste em 2018 (SP em −02:00) e o processo de teste em `Asia/Tokyo` |
 | As guardas de `downgrade` da `0005` passarem a esbarrar na `0006` | Os testes da `0005` descem pela cadeia (`_anterior_a_0005`); a `0006` só recusa com dados dela, que aqueles testes não criam. Conferir que continuam verdes sem mudança (Task 2) |
@@ -455,7 +455,7 @@ do reagendamento pela tela e da proposta da Tifa confirmada, com axe.
 
 E o F **resolve** a pendência **3** (iniciar) e toca, sem resolver, a **47**
 (a confirmação revalida o `payload` guardado — agora também o do
-reagendamento), a **55** (a Tifa continua sem ver o ciclo) e a **96** (o N+1
+reagendamento), a **55** (a Kairya continua sem ver o ciclo) e a **96** (o N+1
 ganha a lista `reschedules`).
 
 ## Para o dono decidir

@@ -3,7 +3,7 @@ import { vi, type Mock } from 'vitest'
 /**
  * Um `fetch` falso roteado por metodo e URL.
  *
- * Existe porque, com o painel da Tifa, a pagina busca TRES recursos na
+ * Existe porque, com o painel da Kairya, a pagina busca TRES recursos na
  * montagem (missoes, status, historico), e o padrao antigo --
  * `vi.fn().mockResolvedValue(Response.json([]))` -- devolve o MESMO `Response`
  * a todas as chamadas: o corpo e consumido na primeira leitura e a segunda

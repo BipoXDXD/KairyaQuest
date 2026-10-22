@@ -4,7 +4,7 @@
 
 Prepare o KairyaQuest no macOS com PyCharm. **Node.js, React, TypeScript, Vite e Tailwind CSS já estão preparados.** Reaproveite o frontend existente; não reinicie o projeto. Complete apenas as ferramentas e integrações necessárias e entregue uma base executável, organizada e testada.
 
-KairyaQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Tifa Lockhart será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
+KairyaQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Kairya será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
 
 Sou estudante de engenharia de software; usarei Kimi, Codex e Claude. Entregue incrementos, não o produto inteiro. Commit, push, merge, publicação e contratação exigem autorização.
 
@@ -101,9 +101,9 @@ Configure Ruff, tipos, ESLint, PostgreSQL e Docker quando disponíveis; document
 
 Documente depuração da rota ao banco. Use API/frontend no host e PostgreSQL em container; vincule serviços locais ao loopback.
 
-## 5. Tifa: tutora com interação e ações reais
+## 5. Kairya: tutora com interação e ações reais
 
-Ligue a conversa aos objetivos, missões e progresso. Tifa deve entender o objetivo, propor um plano, negociar disponibilidade, delegar tarefas, acompanhar execução, avaliar entregas e conceder recompensas. Cada ação precisa alterar o estado real ou explicar a falha; texto não substitui execução.
+Ligue a conversa aos objetivos, missões e progresso. Kairya deve entender o objetivo, propor um plano, negociar disponibilidade, delegar tarefas, acompanhar execução, avaliar entregas e conceder recompensas. Cada ação precisa alterar o estado real ou explicar a falha; texto não substitui execução.
 
 - **Planejar:** dividir objetivos em etapas, identificar pré-requisitos, estimar esforço e considerar disponibilidade.
 - **Delegar:** criar missões com instruções, prazo, dificuldade, critério de conclusão e recompensa; explicar a prioridade.
@@ -121,7 +121,7 @@ Use falas originais, sem copiar diálogos. Não invente fontes nem trate explica
 
 ## 6. Integração da tutora com o backend
 
-Separe a IA da Tifa dos agentes de desenvolvimento. Assinaturas de Kimi, Codex e Claude não devem ser presumidas como acesso ou créditos de API do produto.
+Separe a IA da Kairya dos agentes de desenvolvimento. Assinaturas de Kimi, Codex e Claude não devem ser presumidas como acesso ou créditos de API do produto.
 
 Prepare um provedor configurável, com SDK oficial ou HTTPX. Sem credenciais, prepare o contrato e mostre indisponibilidade. Adaptador determinístico é para testes, não tutoria real.
 
@@ -143,7 +143,7 @@ Avalie entregas por evidências. Não execute código do estudante na API; futur
 
 Crie uma ferramenta de estudos com identidade de RPG, não uma landing page. Use azul-marinho profundo, superfícies escuras, prata, verde-mako e vermelho discreto. Defina tokens de cores, espaçamento, tipografia, bordas, foco e movimento; priorize contraste e hierarquia.
 
-No desktop, use navegação lateral, conteúdo principal e painel expansível da Tifa. No celular, a conversa não deve cobrir botões, prender o teclado ou exigir rolagem horizontal. Respeite movimento reduzido e não reproduza áudio automaticamente.
+No desktop, use navegação lateral, conteúdo principal e painel expansível da Kairya. No celular, a conversa não deve cobrir botões, prender o teclado ou exigir rolagem horizontal. Respeite movimento reduzido e não reproduza áudio automaticamente.
 
 Planeje estas áreas; implemente só o recorte inicial:
 
@@ -158,7 +158,7 @@ Combine termos temáticos e comuns, como “Campanhas — planos de estudo”. N
 
 Crie componentes de missão, progresso, recompensa, mensagem e confirmação. Cubra carregamento, vazio, erro, proposta e conclusão. Preserve texto digitado após falhas e permita reenvio sem duplicação.
 
-Prepare retrato e expressões da Tifa, com placeholder até receber assets autorizados. Não extraia imagens, músicas, vozes, fontes ou logotipos dos jogos. Registre procedência; não apresente o produto como oficial da Square Enix.
+Prepare retrato e expressões da Kairya, com placeholder até receber assets autorizados. Não extraia imagens, músicas, vozes, fontes ou logotipos dos jogos. Registre procedência; não apresente o produto como oficial da Square Enix.
 
 Inclua teclado, foco visível, rótulos, avisos além da cor e anúncio acessível de mensagens. Revise visualmente desktop e celular, além dos testes automatizados.
 
@@ -255,7 +255,7 @@ Mantenha `docs/HANDOFF.md` com objetivo, revisão-base, decisões, alterações,
 
 ## 14. Entrega verificável
 
-Entregue uma fatia pequena: API com liveness e readiness real do banco, migração útil, persistência testada, dashboard e chat ligados a um caso de uso. Com credenciais, Tifa propõe uma missão e a cria após confirmação. Sem elas, teste o contrato e mostre indisponibilidade; não simule tutoria real com dados fixos.
+Entregue uma fatia pequena: API com liveness e readiness real do banco, migração útil, persistência testada, dashboard e chat ligados a um caso de uso. Com credenciais, Kairya propõe uma missão e a cria após confirmação. Sem elas, teste o contrato e mostre indisponibilidade; não simule tutoria real com dados fixos.
 
 Entregue Dockerfile, Compose e comandos de setup, diagnóstico, execução, migração, formatação, testes e cobertura. Documente arquitetura, sistema visual e PyCharm. Mostre a estrutura final, o que foi reaproveitado no frontend e a justificativa das reorganizações. Confirme que não criou configurações ou dependências duplicadas.
 

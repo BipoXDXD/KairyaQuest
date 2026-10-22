@@ -237,7 +237,7 @@ describe('useTutorConversation: historico', () => {
     })
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     expect(result.current.canSubmit).toBe(false)
     act(() => {
@@ -254,26 +254,26 @@ describe('useTutorConversation: envio', () => {
     const { result, fetchMock } = await mountWith([], () => stream.response)
 
     act(() => {
-      result.current.setDraft('  Oi, Tifa \n')
+      result.current.setDraft('  Oi, Kairya \n')
     })
     act(() => {
       result.current.submit()
     })
 
-    expect(sent(fetchMock, 1)).toEqual({ client_message_id: ID_1, content: 'Oi, Tifa' })
+    expect(sent(fetchMock, 1)).toEqual({ client_message_id: ID_1, content: 'Oi, Kairya' })
     expect(result.current.send.status).toBe('sending')
-    expect(result.current.draft).toBe('  Oi, Tifa \n')
+    expect(result.current.draft).toBe('  Oi, Kairya \n')
   })
 
   it('o user_message limpa o campo e passa a escrevendo', async () => {
     const q1 = question(1, 'Antiga', 'c1')
     const a1 = answer(2, 1, 'Resposta antiga')
-    const q10 = question(10, 'Oi, Tifa', 'x')
+    const q10 = question(10, 'Oi, Kairya', 'x')
     const stream = controlledStream()
     const { result } = await mountWith([q1, a1], () => stream.response)
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -291,12 +291,12 @@ describe('useTutorConversation: envio', () => {
   })
 
   it('o user_message nao apaga o que foi digitado depois do envio', async () => {
-    const q10 = question(10, 'Oi, Tifa', 'x')
+    const q10 = question(10, 'Oi, Kairya', 'x')
     const stream = controlledStream()
     const { result } = await mountWith([], () => stream.response)
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -549,7 +549,7 @@ describe('useTutorConversation: envio', () => {
     const { result } = await mountWith([], preStreamError(503, 'provedor_nao_configurado'))
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -559,12 +559,12 @@ describe('useTutorConversation: envio', () => {
       expect(result.current.send.status).toBe('failed')
     })
     expect(result.current.send).toMatchObject({ failure: { recovery: 'unavailable' } })
-    expect(result.current.draft).toBe('Oi, Tifa')
+    expect(result.current.draft).toBe('Oi, Kairya')
     expect(result.current.retryTarget).toBeNull()
   })
 
   it('o 409 mensagem_em_andamento mantem o texto e reenvia com o mesmo id', async () => {
-    const q10 = question(10, 'Oi, Tifa', 'x')
+    const q10 = question(10, 'Oi, Kairya', 'x')
     const { result, fetchMock } = await mountWith([], (init, call) =>
       call === 1
         ? preStreamError(409, 'mensagem_em_andamento')(init, call)
@@ -572,7 +572,7 @@ describe('useTutorConversation: envio', () => {
     )
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -580,7 +580,7 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(result.current.send.status).toBe('failed')
     })
-    expect(result.current.draft).toBe('Oi, Tifa')
+    expect(result.current.draft).toBe('Oi, Kairya')
 
     act(() => {
       result.current.retry()
@@ -588,7 +588,7 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(result.current.send.status).toBe('idle')
     })
-    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_1, content: 'Oi, Tifa' })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_1, content: 'Oi, Kairya' })
   })
 
   it('o 409 operacao_reutilizada reenvia com id novo e o mesmo texto', async () => {
@@ -598,7 +598,7 @@ describe('useTutorConversation: envio', () => {
     )
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -610,7 +610,7 @@ describe('useTutorConversation: envio', () => {
     act(() => {
       result.current.retry()
     })
-    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_2, content: 'Oi, Tifa' })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_2, content: 'Oi, Kairya' })
   })
 
   it('enviar de novo o mesmo texto depois de operacao_reutilizada ganha id novo', async () => {
@@ -622,7 +622,7 @@ describe('useTutorConversation: envio', () => {
     )
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -634,15 +634,15 @@ describe('useTutorConversation: envio', () => {
     act(() => {
       result.current.submit()
     })
-    expect(sent(fetchMock, 1)).toEqual({ client_message_id: ID_1, content: 'Oi, Tifa' })
-    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_2, content: 'Oi, Tifa' })
+    expect(sent(fetchMock, 1)).toEqual({ client_message_id: ID_1, content: 'Oi, Kairya' })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_2, content: 'Oi, Kairya' })
   })
 
   it('o 422 pede edicao: texto mantido e nada a reenviar', async () => {
     const { result } = await mountWith([], () => Response.json({ detail: [] }, { status: 422 }))
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -653,7 +653,7 @@ describe('useTutorConversation: envio', () => {
     })
     expect(result.current.send).toMatchObject({ failure: { recovery: 'edit' } })
     expect(result.current.retryTarget).toBeNull()
-    expect(result.current.draft).toBe('Oi, Tifa')
+    expect(result.current.draft).toBe('Oi, Kairya')
   })
 
   it('a rede fora antes do stream e resultado desconhecido, com o texto mantido', async () => {
@@ -663,7 +663,7 @@ describe('useTutorConversation: envio', () => {
     )
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -673,7 +673,7 @@ describe('useTutorConversation: envio', () => {
       expect(result.current.send.status).toBe('unknown')
     })
     expect(result.current.send).toMatchObject({ question: null })
-    expect(result.current.draft).toBe('Oi, Tifa')
+    expect(result.current.draft).toBe('Oi, Kairya')
 
     act(() => {
       result.current.retry()
@@ -685,7 +685,7 @@ describe('useTutorConversation: envio', () => {
     const { result, fetchMock } = await mountWith([], preStreamError(409, 'mensagem_em_andamento'))
 
     act(() => {
-      result.current.setDraft('Oi, Tifa')
+      result.current.setDraft('Oi, Kairya')
     })
     act(() => {
       result.current.submit()
@@ -711,7 +711,7 @@ describe('useTutorConversation: envio', () => {
       expect(result.current.send.status).toBe('failed')
     })
 
-    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_1, content: 'Oi, Tifa' })
+    expect(sent(fetchMock, 2)).toEqual({ client_message_id: ID_1, content: 'Oi, Kairya' })
     expect(sent(fetchMock, 3)).toEqual({ client_message_id: ID_2, content: 'outra' })
   })
 

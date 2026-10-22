@@ -13,7 +13,7 @@ import { RewardAnnouncement } from './RewardAnnouncement'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
 
 /** O rotulo fixo de toda avaliacao concluida (README §5: o modelo interpreta). */
-const MODEL_LABEL = 'Avaliação da Tifa — interpretação do modelo, não verificação automática'
+const MODEL_LABEL = 'Avaliação da Kairya — interpretação do modelo, não verificação automática'
 
 /**
  * O que vira ancora: so `http`/`https`, sem diferenciar maiusculas (EM2). O
@@ -148,7 +148,7 @@ function currentView(
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo agora. */
 function statusText(view: EvaluationView): string {
   if (view.kind === 'requesting') {
-    return 'A Tifa está avaliando…'
+    return 'A Kairya está avaliando…'
   }
   return view.kind === 'concluded' && view.fresh
     ? `Avaliação concluída: ${VERDICT_DISPLAY[view.verdict].label}.`
@@ -207,7 +207,7 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
 }
 
 /**
- * A evidencia entregue e a avaliacao da Tifa sobre ela.
+ * A evidencia entregue e a avaliacao da Kairya sobre ela.
  *
  * A regiao `role="status"` existe desde o primeiro render, vazia (P4 do D), e
  * o `RewardAnnouncement` do bonus mora DENTRO dela, como o da conclusao.
@@ -269,7 +269,7 @@ function EvidenceAndEvaluation({
             aria-describedby={describedBy}
             className={REQUEST_BUTTON_CLASS}
           >
-            {failure?.recovery === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Tifa'}
+            {failure?.recovery === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Kairya'}
           </button>
         )}
         {failure?.recovery === 'refresh' && onReload !== undefined && (
@@ -309,7 +309,7 @@ function EvidenceAndEvaluation({
 
 /**
  * O painel do cartao concluido: o selo da verificacao e, com evidencia, a
- * evidencia e a avaliacao da Tifa (E4, E5, E18).
+ * evidencia e a avaliacao da Kairya (E4, E5, E18).
  *
  * Sem `verification` (uma API anterior ao incremento E) nao ha o que dizer, e
  * o painel nao aparece. Autodeclarada mostra so o selo: nao ha o que avaliar,
@@ -324,7 +324,7 @@ function EvidenceAndEvaluation({
  * voo, recarregar agora a atropelaria, entao o botao fica desabilitado e diz a
  * mesma espera.
  * `describedBy` e o id do titulo da missao, que descreve o botao de pedir a
- * avaliacao da Tifa sem mudar o nome exato dele.
+ * avaliacao da Kairya sem mudar o nome exato dele.
  */
 export function EvaluationPanel({
   mission,

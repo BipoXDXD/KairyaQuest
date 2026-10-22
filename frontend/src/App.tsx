@@ -22,7 +22,7 @@ const HEADING_OF: Record<Area, string> = {
  *
  * As duas areas nao se comportam igual, de proposito (decisao K2 do plano
  * do C): o Quartel-General fica MONTADO e oculto enquanto Campanhas esta
- * aberta, porque desmonta-lo levaria junto o painel da Tifa -- o rascunho e
+ * aberta, porque desmonta-lo levaria junto o painel da Kairya -- o rascunho e
  * o stream em andamento, que o backend gravaria como `interrompida`.
  * Campanhas, ao contrario, desmonta ao sair: cada abertura busca a trilha de
  * novo.

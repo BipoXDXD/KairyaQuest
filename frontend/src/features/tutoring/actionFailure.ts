@@ -39,12 +39,12 @@ const BY_CODE: Record<ActionErrorCode, ActionFailure> = {
     recovery: 'refresh',
   },
   prazo_expirado: {
-    message: 'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+    message: 'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     recovery: 'expired',
   },
   reagendamento_invalido: {
     message:
-      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',
+      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
     recovery: 'invalidated',
   },
 }
@@ -93,7 +93,7 @@ export function describeActionFailure(
   return attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
 }
 
-const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'
+const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'
 
 /**
  * O texto de uma acao que o backend gravou como `falhou`, pelo `error_code`

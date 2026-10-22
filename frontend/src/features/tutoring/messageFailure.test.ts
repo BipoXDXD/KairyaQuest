@@ -8,13 +8,13 @@ describe('describePreStreamFailure', () => {
       'provedor_nao_configurado',
       503,
       'unavailable',
-      'A Tifa está fora do ar: falta configurar o provedor.',
+      'A Kairya está fora do ar: falta configurar o provedor.',
     ],
     [
       'mensagem_em_andamento',
       409,
       'retry',
-      'A Tifa ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
+      'A Kairya ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
     ],
     [
       'operacao_reutilizada',
@@ -62,15 +62,15 @@ describe('describeStreamFailure', () => {
   it.each([
     [
       'provedor_indisponivel',
-      'A Tifa não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
+      'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
     ],
     [
       'tempo_esgotado',
-      'A resposta da Tifa demorou demais. Tentar de novo é seguro: a pergunta não será duplicada.',
+      'A resposta da Kairya demorou demais. Tentar de novo é seguro: a pergunta não será duplicada.',
     ],
     [
       'proposta_invalida',
-      'A Tifa tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
+      'A Kairya tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
     ],
   ])('traduz %s, sempre com reenvio pelo mesmo id', (code, message) => {
     expect(describeStreamFailure(code)).toEqual({ message, recovery: 'retry' })
@@ -80,7 +80,7 @@ describe('describeStreamFailure', () => {
     // A orientacao da API: o texto que veio antes da recusa nao e resposta.
     expect(describeStreamFailure('resposta_recusada')).toEqual({
       message:
-        'A Tifa não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+        'A Kairya não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
       recovery: 'retry',
       discardsPartial: true,
     })

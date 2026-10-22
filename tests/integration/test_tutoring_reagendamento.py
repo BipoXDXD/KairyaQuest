@@ -1,4 +1,4 @@
-"""A Tifa propoe reagendar, e a confirmacao executa (F14-F17).
+"""A Kairya propoe reagendar, e a confirmacao executa (F14-F17).
 
 Tres blocos, com tres redes de protecao diferentes:
 
@@ -573,7 +573,7 @@ def _linhas(session: Session, mission_id: int) -> list[MissionReschedule]:
     )
 
 
-def test_confirmar_reagenda_pela_tifa(session: Session) -> None:
+def test_confirmar_reagenda_pela_kairya(session: Session) -> None:
     missao = _avulsa(session)
     acao = _proposta(session, missao.id)
     resultado = _confirmar(session, acao.id, "op-t7-1")
@@ -582,7 +582,7 @@ def test_confirmar_reagenda_pela_tifa(session: Session) -> None:
     assert resultado.missao.id == missao.id
     assert resultado.missao.deadline == NOVO_PRAZO
     (linha,) = _linhas(session, missao.id)
-    assert linha.origin is OrigemDoReagendamento.TIFA
+    assert linha.origin is OrigemDoReagendamento.KAIRYA
     assert linha.operation_id == "op-t7-1"
     assert linha.reason is MotivoDoReagendamento.FALTA_DE_TEMPO
     assert (linha.previous_deadline, linha.new_deadline) == (PRAZO_ATUAL, NOVO_PRAZO)
@@ -700,7 +700,7 @@ def test_a_missao_mudou_depois_da_proposta(
     )
     assert resultado.acao.operation_id == "op-t7-6"
     assert resultado.acao.mission_id is None
-    # Nenhuma linha da Tifa: so a da tela, quando a mudanca foi ela.
+    # Nenhuma linha da Kairya: so a da tela, quando a mudanca foi ela.
     assert len(_linhas(session, mission_id)) == linhas_depois
     assert isinstance(_confirmar(session, acao.id, "op-t7-6"), ReagendamentoInvalido)
     with pytest.raises(TransicaoIlegalError):
@@ -1012,14 +1012,14 @@ def test_confirmacao_e_reagendamento_direto_juntos_encadeiam(
         return "tela"
 
     resultados = _em_paralelo(
-        [_confirmacao(acao_id, "op-c-tifa"), pela_tela], banco_migrado
+        [_confirmacao(acao_id, "op-c-kairya"), pela_tela], banco_migrado
     )
     assert resultados == ["executada", "tela"]
     primeiro, segundo = _historico_de(banco_migrado, mission_id)
     assert primeiro.previous_deadline == PRAZO_ATUAL
     assert segundo.previous_deadline == primeiro.new_deadline
     assert {primeiro.origin, segundo.origin} == {
-        OrigemDoReagendamento.TIFA,
+        OrigemDoReagendamento.KAIRYA,
         OrigemDoReagendamento.USUARIO,
     }
     with Session(bind=banco_migrado) as sessao:
@@ -1041,7 +1041,7 @@ def test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava(
     `SELECT ... FOR UPDATE`, mas, sem `populate_existing`, NAO sobrescreve um
     objeto que ja esta no identity map. A confirmacao carrega a missao antes?
     Hoje nao; este teste a carrega de proposito, deixa outra conexao
-    reagendar e commitar, e so entao confirma: o elo da Tifa tem de partir do
+    reagendar e commitar, e so entao confirma: o elo da Kairya tem de partir do
     prazo que a trava leu, nao do que estava em memoria -- senao o historico
     perde um elo e o prazo da tela e sobrescrito sem registro."""
     mission_id, acao_id = _proposta_commitada(banco_migrado, registro, "relida")
@@ -1062,16 +1062,16 @@ def test_a_missao_ja_carregada_na_sessao_e_relida_depois_da_trava(
             )
             tela.commit()
         resultado = confirmar_acao(
-            confirmacao, ESTUDANTE, acao_id, "op-relida-tifa", clock=relogio(AGORA)
+            confirmacao, ESTUDANTE, acao_id, "op-relida-kairya", clock=relogio(AGORA)
         )
         assert isinstance(resultado, Executada)
         confirmacao.commit()
-    tela_elo, tifa_elo = _historico_de(banco_migrado, mission_id)
+    tela_elo, kairya_elo = _historico_de(banco_migrado, mission_id)
     assert (tela_elo.previous_deadline, tela_elo.new_deadline) == (
         PRAZO_ATUAL,
         prazo_da_tela,
     )
-    assert (tifa_elo.previous_deadline, tifa_elo.new_deadline) == (
+    assert (kairya_elo.previous_deadline, kairya_elo.new_deadline) == (
         prazo_da_tela,
         NOVO_PRAZO,
     )
@@ -1138,7 +1138,7 @@ def test_duas_acoes_iguais_com_a_mesma_chave_em_paralelo_uma_vence(
     missao, prazo e motivo), confirmadas juntas com a MESMA chave. As travas
     de acao nao se cruzam; a segunda espera a trava da missao, o
     `reagendar_missao` a le como reenvio (mesma chave, mesmo conteudo) e a
-    guarda do elo passa (`tifa`). Quem recusa e a UNIQUE de `tutor_actions`
+    guarda do elo passa (`kairya`). Quem recusa e a UNIQUE de `tutor_actions`
     no `flush` da acao -- e o rollback leva tudo. Um elo so."""
     mission_id, primeira = _proposta_commitada(banco_migrado, registro, "gemea-1")
     with Session(bind=banco_migrado, expire_on_commit=False) as sessao:

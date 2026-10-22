@@ -16,19 +16,19 @@ const tutor = (status: MessageRead['status'], errorCode: string | null): Message
 })
 
 describe('announceAnswer', () => {
-  it('a resposta completa: a Tifa terminou', () => {
-    expect(announceAnswer(tutor('completa', null))).toBe('Tifa terminou de responder.')
+  it('a resposta completa: a Kairya terminou', () => {
+    expect(announceAnswer(tutor('completa', null))).toBe('Kairya terminou de responder.')
   })
 
   it('a cortada por tamanho diz o motivo e o que fazer (pendencias 121 e 122)', () => {
     expect(announceAnswer(tutor('interrompida', 'resposta_longa'))).toBe(
-      'A resposta da Tifa ficou longa demais e foi cortada. Tente pedir por partes.',
+      'A resposta da Kairya ficou longa demais e foi cortada. Tente pedir por partes.',
     )
   })
 
   it('outra resposta incompleta nao se diz terminada, nem inventa motivo', () => {
     expect(announceAnswer(tutor('interrompida', null))).toBe(
-      'A resposta da Tifa chegou incompleta.',
+      'A resposta da Kairya chegou incompleta.',
     )
   })
 })
@@ -42,7 +42,7 @@ describe('unansweredNote', () => {
 
   it('a recusada sugere perguntar de outro jeito (pendencia 120)', () => {
     expect(unansweredNote(tutor('falhou', 'resposta_recusada'))).toBe(
-      'A Tifa não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      'A Kairya não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
     )
   })
 

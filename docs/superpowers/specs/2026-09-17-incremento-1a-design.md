@@ -29,13 +29,13 @@ Estado no início:
 
 ## Decisão de decomposição
 
-O Incremento 1 original — fatia vertical **mais** a tutora Tifa — foi dividido
+O Incremento 1 original — fatia vertical **mais** a tutora Kairya — foi dividido
 em dois, por decisão do usuário após a apresentação do custo real:
 
 | | Entrega | Gate que nasce |
 |---|---|---|
 | **1a** (este) | API, PostgreSQL, Alembic, missão persistida, Quartel-General | `check-api` e `check-e2e`, contra a menor superfície possível |
-| **1b** | Tifa, o fluxo de propor e confirmar uma missão, o chat | nenhum novo; estende os existentes |
+| **1b** | Kairya, o fluxo de propor e confirmar uma missão, o chat | nenhum novo; estende os existentes |
 
 Motivo: o arnês de teste ponta a ponta — subir API e frontend em portas
 próprias, popular banco determinístico, derrubar tudo de forma confiável — é a
@@ -67,7 +67,7 @@ liveness e readiness; PostgreSQL em container; migração Alembic; o
 Quartel-General listando missões; os alvos `check-api` e `check-e2e` e seus jobs
 no CI.
 
-**Fora, explicitamente:** Tifa, provedor de IA, chat, conversas, ações da
+**Fora, explicitamente:** Kairya, provedor de IA, chat, conversas, ações da
 tutora, concessão de XP, autenticação, streaming, e as demais entidades do §8
 (plano, habilidade, pré-requisito, sessão, entrega, progresso, recompensa), que
 ficam documentadas sem tabela. O módulo `tutoring` **não nasce** neste

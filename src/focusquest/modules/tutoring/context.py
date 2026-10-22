@@ -55,14 +55,14 @@ def montar_turno(
 ) -> Turno:
     """O turno inteiro.
 
-    O "agora" vai no sistema porque a Tifa precisa propor um prazo, e o prazo
+    O "agora" vai no sistema porque a Kairya precisa propor um prazo, e o prazo
     e obrigatorio. As missoes pendentes sao o `get_study_context` do README s6,
     so leitura: no 1b entram no prompt, e nao viram ferramenta. O progresso e
-    a mesma coisa (D15): a Tifa SABE o nivel, o saldo e as conquistas, mas
+    a mesma coisa (D15): a Kairya SABE o nivel, o saldo e as conquistas, mas
     nenhuma ferramenta muda nada disso.
 
     As `tardias` sao as missoes do ciclo em conclusao tardia (F25,
-    `tardias_do_ciclo`): a Tifa sabe que ainda da para concluir, mas elas nao
+    `tardias_do_ciclo`): a Kairya sabe que ainda da para concluir, mas elas nao
     entram na lista de pendentes, que e a lista do reagendamento.
     """
     contexto = _contexto(agora, pendentes, tardias, progresso)
@@ -75,9 +75,9 @@ def tardias_do_ciclo(ciclo: CicloLido, agora: datetime) -> tuple[MissaoLida, ...
 
     `disponivel` depois do prazo e exatamente a conclusao tardia
     (`com_inicio_a_tempo`). A concluida com atraso fica fora: `ler_ciclo` a
-    mantem ate o limite para o cartao do Quartel-General, mas para a Tifa nao
+    mantem ate o limite para o cartao do Quartel-General, mas para a Kairya nao
     ha mais nada a lembrar. A especial ainda na janela tambem fica fora: ela e
-    o ciclo de hoje, que a Tifa continua sem ver (pendencia 55).
+    o ciclo de hoje, que a Kairya continua sem ver (pendencia 55).
     """
     candidatas = (ciclo.diaria_de_ontem, ciclo.especial)
     return tuple(

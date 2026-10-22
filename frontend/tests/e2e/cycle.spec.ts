@@ -322,7 +322,7 @@ test('Campanhas abre pelo teclado: Tab ate a navegacao, Enter, e o foco vai para
 test.describe('celular', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  test('a navegacao fica visivel no topo, sem rolagem horizontal, e nao cobre "Falar com a Tifa"', async ({
+  test('a navegacao fica visivel no topo, sem rolagem horizontal, e nao cobre "Falar com a Kairya"', async ({
     page,
   }) => {
     await page.goto('/')
@@ -330,16 +330,16 @@ test.describe('celular', () => {
     await expect(nav).toBeVisible()
     await expect.poll(async () => semRolagemHorizontal(page)).toBe(true)
 
-    // "Falar com a Tifa" so existe no Quartel-General (Campanhas nao tem
-    // painel da Tifa), e e ai que o pouso da pagina comeca.
-    const tifa = page.getByTestId('tutor-sheet-open')
-    await expect(tifa).toBeVisible()
-    const caixaTifa = await tifa.boundingBox()
+    // "Falar com a Kairya" so existe no Quartel-General (Campanhas nao tem
+    // painel da Kairya), e e ai que o pouso da pagina comeca.
+    const kairya = page.getByTestId('tutor-sheet-open')
+    await expect(kairya).toBeVisible()
+    const caixaKairya = await kairya.boundingBox()
     const botoesNav = await nav.getByRole('button').all()
     expect(botoesNav.length).toBe(2)
     for (const botao of botoesNav) {
       const caixaBotao = await botao.boundingBox()
-      expect(caixasSeSobrepoem(caixaTifa, caixaBotao)).toBe(false)
+      expect(caixasSeSobrepoem(caixaKairya, caixaBotao)).toBe(false)
     }
 
     // A mesma checagem na area de Campanhas: sem rolagem horizontal la

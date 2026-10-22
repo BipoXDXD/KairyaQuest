@@ -63,10 +63,10 @@ function Outcome({
 }
 
 /**
- * A proposta de reagendamento que a Tifa fez, como cartao (F22).
+ * A proposta de reagendamento que a Kairya fez, como cartao (F22).
  *
  * Mostra o RETRATO que o backend gravou com a proposta (F16): a missao pelas
- * `instructions` e o prazo "de quando a Tifa propos" (`previous_deadline`).
+ * `instructions` e o prazo "de quando a Kairya propos" (`previous_deadline`).
  * Nao busca a missao -- isso seria importar `missions` (`docs/ARCHITECTURE.md`
  * §5, regra 1) -- e por isso o "Prazo atual" pode estar velho na hora de
  * confirmar (pendencia 114). A confirmacao revalida tudo no backend (F17), e

@@ -80,7 +80,7 @@ usuário conquistou. O README §5 foi emendado junto com esta decisão. A regra
 O README decide a ordem, e uma versão anterior desta spec não citou o trecho que
 a decide:
 
-- §14, linha 258: a primeira fatia inclui "Com credenciais, Tifa propõe uma
+- §14, linha 258: a primeira fatia inclui "Com credenciais, Kairya propõe uma
   missão e a cria após confirmação" — isso ainda não existe. Sem credenciais, o
   README manda testar o contrato e mostrar indisponibilidade;
 - §14, linha 264: "**Próximo incremento: missão completa, da delegação à
@@ -88,14 +88,14 @@ a decide:
 - §8, linha 167: "Implemente só entidades do primeiro fluxo." O plano semanal não
   é do primeiro fluxo.
 
-O argumento anterior para fazer o ciclo antes da Tifa dizia que o `propose_plan`
+O argumento anterior para fazer o ciclo antes da Kairya dizia que o `propose_plan`
 dela precisaria de um plano semanal onde escrever. **Esse argumento não se
-sustenta.** O primeiro fluxo da Tifa é criar **uma** missão (§14), e o §6, linha
+sustenta.** O primeiro fluxo da Kairya é criar **uma** missão (§14), e o §6, linha
 130, manda implementar "apenas ferramentas do primeiro fluxo". Os outros dois
 argumentos (determinismo e relógio injetável) valem para qualquer ordem.
 
 **O que as duas ordens têm em comum.** O plano semanal é criado **só pela API**
-no Incremento B nas duas ordens, porque a Tifa escrever a semana
+no Incremento B nas duas ordens, porque a Kairya escrever a semana
 (`propose_plan`) está fora deste recorte e o primeiro fluxo dela cria uma
 missão só. Então nenhuma ordem faz "o plano nascer com um autor de verdade".
 Isso fica para um incremento posterior, que ligue o `propose_plan` ao plano. O
@@ -105,7 +105,7 @@ o plano entra no Incremento B de qualquer jeito. E nenhuma das duas entrega a
 recompensa"): XP total e avaliação da entrega ficam fora deste recorte.
 
 **O que as diferencia** é uma coisa só: se o incremento que vem depois do A é o
-da Tifa, como o §14 diz literalmente, ou o do ciclo.
+da Kairya, como o §14 diz literalmente, ou o do ciclo.
 
 O trabalho se divide em três incrementos, que qualquer ordem aproveita:
 
@@ -122,13 +122,13 @@ As duas ordens possíveis:
 
 | Ordem | Sequência | O que ganha | O que custa |
 |---|---|---|---|
-| **1 — a do README** | A → 1b (Tifa) → B → C | Segue o §14 como está: a Tifa, que é "central no produto" (README, abertura), chega antes. Quando o ciclo vier, ela já existe, e ligar o `propose_plan` ao plano fica a um incremento de distância. | O ciclo, que é o que o dono está desenhando agora, espera o 1b inteiro. |
+| **1 — a do README** | A → 1b (Kairya) → B → C | Segue o §14 como está: a Kairya, que é "central no produto" (README, abertura), chega antes. Quando o ciclo vier, ela já existe, e ligar o `propose_plan` ao plano fica a um incremento de distância. | O ciclo, que é o que o dono está desenhando agora, espera o 1b inteiro. |
 | **2 — ciclo antes** | A → B → C → 1b | O ciclo chega antes, e ele é determinístico: não depende de credencial nem de modelo. | Exige **emendar o §14**, que nomeia o próximo incremento. Até o 1b, só a API cria missões, e as semanas ocultas não surpreendem ninguém. |
 
 A recomendação era a Ordem 1, porque segue a autoridade do projeto sem emenda,
 e era uma recomendação fraca.
 
-**Decisão do dono, 2026-09-18: seguir o README — Ordem 1, A → 1b (Tifa) → B →
+**Decisão do dono, 2026-09-18: seguir o README — Ordem 1, A → 1b (Kairya) → B →
 C.** O próximo incremento é o A. O ciclo (B e C) vem depois do 1b.
 
 ### B3. O que a trilha mostra dos dias futuros
@@ -159,7 +159,7 @@ deles pelo `id` responde o **404 idêntico**, e não mais 409. O código
 - O Incremento 1a entregou missões avulsas: o usuário cria uma pela API
   (`POST /api/missions`), a lista aparece no Quartel-General, e a conclusão é
   idempotente e segura sob concorrência. A tela lista, mas ainda não conclui.
-- O README §6, linha 130, lista as ferramentas da Tifa: `get_study_context`,
+- O README §6, linha 130, lista as ferramentas da Kairya: `get_study_context`,
   `propose_plan`, `create_mission`, `submit_activity`, `reschedule_mission` e
   `request_reward_evaluation`. O §5 manda "propor retomar, dividir ou
   reagendar", e o §8 manda "preservar histórico de replanejamento".
@@ -187,7 +187,7 @@ deles pelo `id` responde o **404 idêntico**, e não mais 409. O código
 | C11 | **Tudo que ainda não foi revelado é inexistente para a API**: semanas futuras, dias futuros da semana atual e a especial bloqueada respondem o mesmo 404, com o mesmo corpo, de "missão inexistente" | "As missões das semanas seguintes permanecem ocultas", e os dias futuros aparecem como baú fechado (B3). Um status diferente revelaria que a missão existe. A trilha mostra os baús **sem `id` e sem conteúdo**, então nenhum endpoint afirma a existência de algo que outro nega. |
 | C12 | O corpo de erro ganha **`code`**: `{"detail": ..., "code": ...}` | Fecha a pendência 1. O frontend decide pelo `code` e mostra a sua própria mensagem em pt-BR. As mensagens do backend não têm acento, e a de transição expõe o valor cru do enum. |
 | C13 | **Relógio injetável**, por dependência do FastAPI, lido **depois** da trava da linha | Fecha a pendência 7. Viagem no tempo fica nos testes de integração, sem gancho de teste no código de produção. |
-| C14 | O plano é criado **só pela API** neste recorte, nas duas ordens; a tela lê, conclui e mostra a campanha | É o mesmo recorte do 1a, em que a tela listava e a criação era pela API. A Tifa escrever a semana (`propose_plan`) é um incremento posterior, em qualquer ordem (B2). Uma tela de "planejar a semana" não é o produto: o produto é a Tifa propor a semana. |
+| C14 | O plano é criado **só pela API** neste recorte, nas duas ordens; a tela lê, conclui e mostra a campanha | É o mesmo recorte do 1a, em que a tela listava e a criação era pela API. A Kairya escrever a semana (`propose_plan`) é um incremento posterior, em qualquer ordem (B2). Uma tela de "planejar a semana" não é o produto: o produto é a Kairya propor a semana. |
 | C15 | Navegação **lateral**, por estado local e sem biblioteca de rotas | O README §7 pede navegação lateral, e o §3 manda preferir estado local. São duas áreas, Quartel-General e Campanhas; a rota por URL entra quando houver a terceira. |
 | C16 | Depende da correção do fuso da sessão (`fix/sessao-em-utc`) | As regras comparam instantes lidos do banco, e a correção garante que eles voltem em UTC em qualquer servidor. |
 | C17 | O `check-e2e` passa a **começar de esquema limpo**, com a **mesma** guarda do banco de teste | O plano é único por semana, então um segundo plano igual dá **409**, e o `check-e2e` repetido reprovaria na segunda execução. A guarda `exigir_banco_de_teste` sai do `tests/integration/conftest.py` para um módulo compartilhado entre a suíte e esse passo. Hoje o `scripts/e2e-env.sh` **já duplica** a segunda condição dela num heredoc Python. Essa cópia é substituída pelo módulo compartilhado, e não multiplicada. A semeadura continua pela API. O critério de aceite é **`make check-e2e` duas vezes seguidas**, porque o `make check` roda o `check-api` antes e o `DROP SCHEMA` do pytest mascararia a falha. Efeito nas pendências: a **20** (o E2E acumula linhas) fecha, e a **19** (não rodar `check-api` e `check-e2e` ao mesmo tempo) continua, agora com dois `DROP SCHEMA` disputando o mesmo banco. |
@@ -474,7 +474,7 @@ a nega.
 
 ## Fora deste recorte
 
-- A Tifa escrever o plano (`propose_plan`) e replanejar (`reschedule_mission`).
+- A Kairya escrever o plano (`propose_plan`) e replanejar (`reschedule_mission`).
 - A tela de criar ou editar plano.
 - XP total, nível, conquistas e cobranças.
 - Autenticação (A2 continua valendo).

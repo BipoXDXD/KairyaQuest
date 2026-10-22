@@ -22,7 +22,7 @@ interface SideNavProps {
  * O layout muda so por CSS: no celular, uma barra no topo, no fluxo da
  * pagina (nada fixo que cubra botoes, e `flex-wrap` contra rolagem
  * horizontal); no desktop, uma coluna lateral. Ao contrario do painel da
- * Tifa, a semantica e a mesma nas duas larguras, entao media query basta.
+ * Kairya, a semantica e a mesma nas duas larguras, entao media query basta.
  */
 export function SideNav({ active, onNavigate }: SideNavProps) {
   return (

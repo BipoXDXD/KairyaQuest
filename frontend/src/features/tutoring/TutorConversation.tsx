@@ -7,10 +7,10 @@ import type { UseTutorConversationResult } from './useTutorConversation'
 import type { TutorStatus } from './useTutorStatus'
 
 /** O texto do estado indisponivel, literal da spec. */
-export const UNAVAILABLE_TEXT = 'A Tifa está fora do ar: falta configurar o provedor.'
+export const UNAVAILABLE_TEXT = 'A Kairya está fora do ar: falta configurar o provedor.'
 
 const GREETING =
-  'Aqui você conversa com a Tifa, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
+  'Aqui você conversa com a Kairya, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
 
 /**
  * A marca de cada estado de mensagem, EXAUSTIVA sobre o tipo: um estado novo
@@ -37,12 +37,14 @@ const BUTTON =
 
 function Author({ role }: { role: MessageRead['role'] }) {
   return (
-    <p className="mb-1 text-xs font-semibold text-slate-400">{role === 'user' ? 'Você' : 'Tifa'}</p>
+    <p className="mb-1 text-xs font-semibold text-slate-400">
+      {role === 'user' ? 'Você' : 'Kairya'}
+    </p>
   )
 }
 
 /**
- * Uma mensagem, e abaixo do texto da Tifa um cartao por acao que ela propos.
+ * Uma mensagem, e abaixo do texto da Kairya um cartao por acao que ela propos.
  *
  * Quem desenha o cartao e o painel (`renderAction`): e la que moram as chaves
  * de confirmacao e o endereco do quadro, que esta arvore nao conhece.
@@ -150,7 +152,7 @@ function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
     <li data-testid="tutor-partial" className={BUBBLE.tutor}>
       <Author role="tutor" />
       <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
-      <p className="mt-1 text-xs text-emerald-300">Tifa está escrevendo…</p>
+      <p className="mt-1 text-xs text-emerald-300">Kairya está escrevendo…</p>
     </li>
   )
 }
@@ -182,7 +184,7 @@ function FailureNotice({
   canRetry,
 }: {
   conversation: UseTutorConversationResult
-  /** Falso com a Tifa indisponivel ou sem status: reenviar so daria 503. */
+  /** Falso com a Kairya indisponivel ou sem status: reenviar so daria 503. */
   canRetry: boolean
 }) {
   const { send, retryTarget, retry } = conversation
@@ -238,7 +240,7 @@ export function TutorConversation({
   conversation: UseTutorConversationResult
   status: TutorStatus
   onReloadStatus: () => void
-  /** O cartao de uma acao proposta pela Tifa, montado pelo painel. */
+  /** O cartao de uma acao proposta pela Kairya, montado pelo painel. */
   renderAction: (action: ActionRead) => ReactElement
   inputRef?: Ref<HTMLTextAreaElement>
 }) {
@@ -257,7 +259,7 @@ export function TutorConversation({
           scrollable-region-focusable). O nome diz o que o foco alcancou. */}
       <div
         role="region"
-        aria-label="Conversa com a Tifa"
+        aria-label="Conversa com a Kairya"
         tabIndex={0}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
       >
@@ -268,7 +270,7 @@ export function TutorConversation({
         )}
         {status.status === 'error' && (
           <div data-testid="tutor-status-error" className="mb-3 text-sm text-red-200">
-            <p>Não foi possível verificar se a Tifa está disponível.</p>
+            <p>Não foi possível verificar se a Kairya está disponível.</p>
             <button
               type="button"
               data-testid="tutor-status-retry"
@@ -299,7 +301,7 @@ export function TutorConversation({
         }}
       >
         <label htmlFor={`${counterId}-input`} className="text-sm font-medium text-slate-200">
-          Sua mensagem para a Tifa
+          Sua mensagem para a Kairya
         </label>
         <textarea
           id={`${counterId}-input`}

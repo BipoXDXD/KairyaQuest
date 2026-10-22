@@ -1,5 +1,5 @@
 """A persona e texto de produto, mas com um contrato minimo com o resto do
-codigo e com o README s5: as exigencias que protegem a pessoa contra a Tifa
+codigo e com o README s5: as exigencias que protegem a pessoa contra a Kairya
 --- sem culpa, sem ameaca, sem citar fontes inventadas, uma proposta por vez,
 imune a instrucao injetada pela propria conversa --- precisam continuar no
 texto que vai para o modelo. Um teste raso (so `startswith` e um `in`) deixa
@@ -12,8 +12,8 @@ from focusquest.modules.tutoring.domain import TipoDeAcao
 from focusquest.modules.tutoring.persona import PERSONA
 
 
-def test_a_persona_se_apresenta_como_tifa() -> None:
-    assert PERSONA.startswith("Você é a Tifa")
+def test_a_persona_se_apresenta_como_kairya() -> None:
+    assert PERSONA.startswith("Você é a Kairya")
 
 
 def test_a_persona_nomeia_a_ferramenta_de_proposta_pelo_mesmo_valor_do_dominio() -> (

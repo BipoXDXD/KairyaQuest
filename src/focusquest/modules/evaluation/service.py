@@ -64,7 +64,7 @@ def avaliar_missao(
     mission_id: int,
     clock: Clock,
 ) -> ResultadoDaAvaliacao:
-    """Pede a Tifa o veredito da entrega e aplica o bonus deterministico.
+    """Pede a Kairya o veredito da entrega e aplica o bonus deterministico.
 
     Devolve a avaliacao `concluida` (a nova, ou a que ja existia, sem chamar o
     modelo: E8). Toda falha do modelo e GRAVADA e commitada antes de subir

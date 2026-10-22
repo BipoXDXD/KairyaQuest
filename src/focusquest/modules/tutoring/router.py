@@ -79,7 +79,7 @@ def enviar(
     proprias, nunca a da requisicao (a dela fecha antes do `finally` do gerador).
     """
     if tutoria is None:
-        raise ProvedorNaoConfiguradoError("a Tifa esta sem provedor configurado")
+        raise ProvedorNaoConfiguradoError("a Kairya esta sem provedor configurado")
     fabrica = sessionmaker(bind=engine, expire_on_commit=False)
     with fabrica() as session:
         preparo = preparar_turno(

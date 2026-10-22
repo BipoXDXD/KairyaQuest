@@ -1,4 +1,4 @@
-"""A escrita da avaliacao da Tifa: dados da missao, gravados por `missions`.
+"""A escrita da avaliacao da Kairya: dados da missao, gravados por `missions`.
 
 A avaliacao e dado da missao (E11): as tabelas moram em `missions`, e e daqui
 que `evaluation` escreve nelas. Como em `service.py`, nada aqui commita.

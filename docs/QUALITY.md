@@ -201,7 +201,7 @@ excluído deliberadamente, nunca por dificuldade de testar.
 | Exclusão | Justificativa |
 |---|---|
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
-| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes quatro arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Tifa busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. |
+| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes quatro arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. |
 | `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
 | `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
@@ -395,7 +395,7 @@ mesmos criaram.
   resposta do POST descartada com `route.fetch()` e `route.abort()`, depois
   de o servidor concluir). **Desde o 1b-2** (Task 7), também na tutoria: o
   estado "escrevendo" (resposta presa no meio pelo falso, região viva em
-  "Tifa está escrevendo…"), o cartão de proposta, o indisponível (campo e
+  "Kairya está escrevendo…"), o cartão de proposta, o indisponível (campo e
   Enviar desabilitados) e a folha aberta no celular. **Desde o Incremento C**
   (Task 6), também em Campanhas, **no viewport padrão (desktop)**: a trilha
   da semana carregada, com o plano já semeado (7 dias, hoje concluído, dias
@@ -405,7 +405,7 @@ mesmos criaram.
   Focus 2 do plano do C: um só `main` visível por vez). **O celular
   (390×844) de Campanhas não é auditado pelo axe**: o `describe('celular')`
   da Task 6 confere só `side-nav` visível, ausência de rolagem horizontal
-  (README §7) e ausência de sobreposição com "Falar com a Tifa" — ao
+  (README §7) e ausência de sobreposição com "Falar com a Kairya" — ao
   contrário do `describe('(e) celular')` da tutoria (1b-2), que já chama
   `semViolacoes` dentro do viewport móvel. **Desde o Incremento D** (Task 9),
   também o painel de progresso no Quartel-General: o cenário que conclui a
@@ -426,7 +426,7 @@ mesmos criaram.
   falha sozinho (`progress-error`; o E2E só exercitou esse estado **junto**
   com outra falha da página — ver `docs/HANDOFF.md`, o diagnóstico da
   Task 8 sobre dois `role="alert"` simultâneos que a integração pegou); o
-  carregando do painel da Tifa (esqueleto), o "Enviando…" antes do
+  carregando do painel da Kairya (esqueleto), o "Enviando…" antes do
   `user_message`, os estados do cartão depois da decisão (executada,
   recusada, falhou) e o aviso de falha do envio (herdados do 1b-2); e, novos
   do C, o celular de Campanhas (acima), o carregando (`trail-loading`), o
@@ -1104,7 +1104,7 @@ das camadas 1 e 2 serve a avaliação como serve a conversa.
   vale o de antes (`tool_use` com ferramenta, `end_turn` sem). Provado por
   `test_o_roteiro_escolhe_o_motivo_de_parada`; **visto reprovando** por mutação
   (o `stop_reason` fixado em `None`). É o que permite testar a parada por
-  `max_tokens`, que deixa uma entrada possivelmente parcial. **Lote g-tifa
+  `max_tokens`, que deixa uma entrada possivelmente parcial. **Lote g-kairya
   (pendência 120):** o tipo virou `MotivoDeParada`, com
   `model_context_window_exceeded` e `refusal` a mais, e o controle HTTP do E2E
   aceita a chave `stop_reason` (só os valores de `MotivoDeParada`; outro valor
@@ -1244,7 +1244,7 @@ serviço:
   falso como processo com `tool_name: reschedule_mission`, confere que o fluxo
   faz **uma** chamada ao modelo com as ferramentas `['create_mission',
   'reschedule_mission']`, confirma pela tela e confere o prazo novo, o histórico
-  "proposto pela Tifa" e que **nenhuma** segunda missão nasceu. **Visto
+  "proposto pela Kairya" e que **nenhuma** segunda missão nasceu. **Visto
   reprovando** por mutação: a confirmação que ignora o `kind` (a API responde
   500) e o cartão que não recarrega o quadro.
 
@@ -1312,7 +1312,7 @@ comparação, a guarda do endereço e o texto não capturado.
 `claude-opus-5`, `max_tokens` 2048, fallback ligado: aprovada.** Nenhuma
 proposta; a sequência de tipos (thinking, texto, `message_delta`,
 `message_stop`) é **igual** à da referência da conversa sem o bloco da
-ferramenta, e a referência não foi regravada. Lido no texto: a Tifa disse que
+ferramenta, e a referência não foi regravada. Lido no texto: a Kairya disse que
 a diária não se adia, lembrou que ainda dá para concluir até a meia-noite de
 hoje em São Paulo (o limite certo, com a conta de horas certa para 01:19 de
 São Paulo) e ofereceu reagendar só a avulsa `#7`, se o aperto fosse nela.
@@ -1344,9 +1344,9 @@ controle é provado do lado Python por `tests/integration/test_falso_do_e2e.py`
 `frontend/tests/e2e/evaluation.spec.ts` roda o circuito inteiro contra o falso
 como processo, com o bloco `{"tool_input": {...}, "tool_name":
 "record_evaluation"}` no roteiro. Um cenário, que: conclui uma missão criada pela
-API **com evidência** pela tela; pede "Pedir avaliação da Tifa"; vê o selo do
+API **com evidência** pela tela; pede "Pedir avaliação da Kairya"; vê o selo do
 veredito ("Critério atendido", com `exact: true`, porque a região viva também diz
-"Avaliação concluída: Critério atendido."), o **rótulo fixo** "Avaliação da Tifa —
+"Avaliação concluída: Critério atendido."), o **rótulo fixo** "Avaliação da Kairya —
 interpretação do modelo, não verificação automática", o `+N XP de bônus` (com `N` =
 metade do XP da missão lida da API) e o total do painel como delta do
 `GET /api/progress` de antes. **As asserções sobre o pedido ao falso são as da

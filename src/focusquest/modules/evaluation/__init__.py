@@ -1,1 +1,1 @@
-"""Avaliacao: o processo de pedir a Tifa o veredito de uma entrega (E11)."""
+"""Avaliacao: o processo de pedir a Kairya o veredito de uma entrega (E11)."""

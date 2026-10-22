@@ -62,7 +62,8 @@ class Codigo(StrEnum):
     VETERAN_10 = "veteran_10"
     VETERAN_50 = "veteran_50"
     VETERAN_100 = "veteran_100"
-    TIFA_PARTNERSHIP = "tifa_partnership"
+    # Valor persistido legado: mantém conquistas já concedidas e clientes existentes.
+    KAIRYA_PARTNERSHIP = "tifa_partnership"
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ class FatosDoUsuario:
 
     missoes_concluidas: int
     maior_sequencia: int
-    concluiu_missao_da_tifa: bool
+    concluiu_missao_da_kairya: bool
 
 
 @dataclass(frozen=True)
@@ -122,10 +123,10 @@ CATALOGO: tuple[Conquista, ...] = (
         lambda f: f.missoes_concluidas >= 100,
     ),
     Conquista(
-        Codigo.TIFA_PARTNERSHIP,
-        "Parceria com a Tifa",
-        "Conclua uma missão proposta pela Tifa.",
-        lambda f: f.concluiu_missao_da_tifa,
+        Codigo.KAIRYA_PARTNERSHIP,
+        "Parceria com a Kairya",
+        "Conclua uma missão proposta pela Kairya.",
+        lambda f: f.concluiu_missao_da_kairya,
     ),
 )
 

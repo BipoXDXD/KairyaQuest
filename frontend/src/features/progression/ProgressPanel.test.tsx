@@ -13,7 +13,7 @@ const CATALOGO = [
   ['veteran_10', 'Veterano I', 'Conclua 10 missões.'],
   ['veteran_50', 'Veterano II', 'Conclua 50 missões.'],
   ['veteran_100', 'Veterano III', 'Conclua 100 missões.'],
-  ['tifa_partnership', 'Parceria com a Tifa', 'Conclua uma missão proposta pela Tifa.'],
+  ['tifa_partnership', 'Parceria com a Kairya', 'Conclua uma missão proposta pela Kairya.'],
 ] as const
 
 function progress(

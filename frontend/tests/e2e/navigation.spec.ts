@@ -136,7 +136,7 @@ async function currentData(page: Page) {
   await expect(page.getByTestId('progress-total')).toHaveText('60 XP no total')
 }
 
-test('retorno na mesma aba depois da virada do servidor atualiza em silêncio sem remontar a Tifa', async ({
+test('retorno na mesma aba depois da virada do servidor atualiza em silêncio sem remontar a Kairya', async ({
   page,
 }) => {
   let release!: () => void
@@ -147,7 +147,7 @@ test('retorno na mesma aba depois da virada do servidor atualiza em silêncio se
     await pending
     return 'success'
   })
-  await page.getByLabel('Sua mensagem para a Tifa').fill('Rascunho antes da meia-noite.')
+  await page.getByLabel('Sua mensagem para a Kairya').fill('Rascunho antes da meia-noite.')
   await sameTabReturn(page, advanceServerDay)
   await expect.poll(() => calls.get('/api/cycle')).toBe(2)
   await expect.poll(() => calls.get('/api/progress')).toBe(2)
@@ -157,7 +157,7 @@ test('retorno na mesma aba depois da virada do servidor atualiza em silêncio se
   await expect(page.getByTestId('progress-loading')).toHaveCount(0)
   release()
   await currentData(page)
-  await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue(
+  await expect(page.getByLabel('Sua mensagem para a Kairya')).toHaveValue(
     'Rascunho antes da meia-noite.',
   )
   expect(calls.get('/api/missions')).toBe(1)

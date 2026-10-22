@@ -26,7 +26,7 @@ describe('describeActionFailure', () => {
       'prazo_expirado',
       422,
       'expired',
-      'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.',
+      'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     ],
   ])('traduz %s', (code, status, recovery, message) => {
     for (const attempted of ['confirm', 'reject'] as const) {
@@ -72,7 +72,7 @@ describe('describeActionFailure', () => {
         ),
       ).toEqual({
         message:
-          'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',
+          'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
         recovery: 'invalidated',
       })
     }
@@ -113,16 +113,16 @@ describe('describeActionFailure', () => {
 
 describe('failedActionText', () => {
   it.each([
-    ['prazo_expirado', 'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.'],
+    ['prazo_expirado', 'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.'],
     [
       'reagendamento_invalido',
-      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.',
+      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
     ],
-    ['proposta_invalida', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    ['proposta_invalida', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
     // Um code que existe no mapa mas nao e gravado na acao cai no generico.
-    ['transicao_ilegal', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
-    ['toString', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
-    [null, 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    ['transicao_ilegal', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
+    ['toString', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
+    [null, 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
   ])('a acao gravada falhou com %s', (code, text) => {
     expect(failedActionText(code)).toBe(text)
   })

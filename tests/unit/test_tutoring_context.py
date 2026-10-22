@@ -399,7 +399,7 @@ def test_a_diaria_de_ontem_iniciada_a_tempo_entra_como_tardia() -> None:
 
 def test_a_diaria_de_ontem_ja_concluida_com_atraso_nao_entra() -> None:
     """`ler_ciclo` a mantem ate o limite para o Quartel-General (o cartao da
-    recompensa); para a Tifa ela nao e mais nada a lembrar."""
+    recompensa); para a Kairya ela nao e mais nada a lembrar."""
     ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.CONCLUIDA)
     assert tardias_do_ciclo(_ciclo(ontem=ontem), MEIO_DIA_SP) == ()
 
@@ -432,7 +432,7 @@ def test_a_especial_concluida_depois_da_janela_nao_entra() -> None:
 def test_a_tardia_entra_no_contexto_com_o_limite_e_sem_reagendamento() -> None:
     """O limite e a meia-noite SEGUINTE ao prazo (F25), em UTC como o "Agora"
     e tambem na hora de Sao Paulo: e uma meia-noite de la, e "ontem" e o dia
-    civil de la -- so em UTC, a Tifa diria "ate as 3h".
+    civil de la -- so em UTC, a Kairya diria "ate as 3h".
     Sem `#id`: o `#` e o que a `reschedule_mission` recebe, e a diaria nao e
     reagendavel -- a linha diz isso com todas as letras."""
     ontem = _do_ciclo(MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL)

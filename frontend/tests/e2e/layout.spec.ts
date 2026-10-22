@@ -133,7 +133,7 @@ for (const width of [1440, 1024]) {
     await toggle.focus()
     await page.keyboard.press('Enter')
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    await expect(toggle).toHaveAccessibleName('Abrir o painel da Tifa')
+    await expect(toggle).toHaveAccessibleName('Abrir o painel da Kairya')
     await expect(toggle).toBeFocused()
     const panel = await page.getByTestId('tutor-panel').boundingBox()
     const control = await toggle.boundingBox()
@@ -144,12 +144,12 @@ for (const width of [1440, 1024]) {
     expect(control!.width).toBeGreaterThanOrEqual(24)
     expect(control!.height).toBeGreaterThanOrEqual(24)
     await noHorizontalOverflow(page)
-    await expect(toggle).toHaveAttribute('title', 'Abrir o painel da Tifa')
+    await expect(toggle).toHaveAttribute('title', 'Abrir o painel da Kairya')
     await accessible(page)
     await page.screenshot({ path: testInfo.outputPath('collapsed.png'), fullPage: true })
     await page.keyboard.press('Space')
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    await expect(toggle).toHaveAccessibleName('Recolher o painel da Tifa')
+    await expect(toggle).toHaveAccessibleName('Recolher o painel da Kairya')
     await expect(page.getByTestId('tutor-greeting')).toBeVisible()
     await expect(toggle).toBeFocused()
   })
@@ -184,7 +184,7 @@ for (const viewport of [
             ['veteran_10', 'Veterano I'],
             ['veteran_50', 'Veterano II'],
             ['veteran_100', 'Veterano III'],
-            ['tifa_partnership', 'Parceria com a Tifa'],
+            ['tifa_partnership', 'Parceria com a Kairya'],
           ].map(([code, title]) => ({
             code,
             title,
@@ -224,7 +224,7 @@ for (const viewport of [
         expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height)
       }
     }
-    const input = page.getByLabel('Sua mensagem para a Tifa')
+    const input = page.getByLabel('Sua mensagem para a Kairya')
     const draft = 'Meu rascunho continua na jornada.'
     await input.fill(draft)
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
@@ -327,7 +327,7 @@ for (const width of [320, 375]) {
       const card = page.getByTestId('tutor-proposal')
       await readableText(card.getByTestId('proposal-instructions'), LONG_TEXT)
       await readableText(card.locator('p').filter({ hasText: 'Critério de conclusão:' }), LONG_TEXT)
-      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      const region = page.getByRole('region', { name: 'Conversa com a Kairya' })
       expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
       await noHorizontalOverflow(page)
       await accessible(page)
@@ -386,7 +386,7 @@ for (const width of [320, 375]) {
       await page.goto('/')
       await page.getByTestId('tutor-sheet-open').click()
       await readableText(page.getByTestId('reschedule-instructions'), LONG_TEXT)
-      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      const region = page.getByRole('region', { name: 'Conversa com a Kairya' })
       expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
       await noHorizontalOverflow(page)
       await accessible(page)
@@ -397,18 +397,18 @@ for (const width of [320, 375]) {
       await page.goto('/')
       await page.getByTestId('tutor-sheet-open').click()
       await readableText(page.getByTestId('tutor-message').locator('p').nth(1), LONG_TEXT)
-      const region = page.getByRole('region', { name: 'Conversa com a Tifa' })
+      const region = page.getByRole('region', { name: 'Conversa com a Kairya' })
       expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
       await noHorizontalOverflow(page)
       await accessible(page)
       await page
-        .getByLabel('Sua mensagem para a Tifa')
+        .getByLabel('Sua mensagem para a Kairya')
         .fill('Rascunho com acentos: ação e conclusão.')
       await page.screenshot({ path: testInfo.outputPath('conversation-long.png') })
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('tutor-sheet-open')).toBeFocused()
       await page.keyboard.press('Enter')
-      await expect(page.getByLabel('Sua mensagem para a Tifa')).toHaveValue(
+      await expect(page.getByLabel('Sua mensagem para a Kairya')).toHaveValue(
         'Rascunho com acentos: ação e conclusão.',
       )
     })

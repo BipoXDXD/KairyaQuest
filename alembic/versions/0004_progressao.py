@@ -68,7 +68,7 @@ def _maior_sequencia(historico: dict[date, _Dia]) -> int:
     return max((_sequencia_ate(historico, dia) for dia in historico), default=0)
 
 
-def _satisfeitas(concluidas: int, maior: int, tifa: bool) -> set[str]:
+def _satisfeitas(concluidas: int, maior: int, kairya: bool) -> set[str]:
     regras = {
         "first_steps": concluidas >= 1,
         "streak_7": maior >= 7,
@@ -76,7 +76,7 @@ def _satisfeitas(concluidas: int, maior: int, tifa: bool) -> set[str]:
         "veteran_10": concluidas >= 10,
         "veteran_50": concluidas >= 50,
         "veteran_100": concluidas >= 100,
-        "tifa_partnership": tifa,
+        "tifa_partnership": kairya,
     }
     return {codigo for codigo, vale in regras.items() if vale}
 
@@ -85,7 +85,7 @@ def _satisfeitas(concluidas: int, maior: int, tifa: bool) -> set[str]:
 class _Estado:
     historico: dict[date, _Dia]
     concluidas: int = 0
-    tifa: bool = False
+    kairya: bool = False
 
 
 def upgrade() -> None:
@@ -142,7 +142,7 @@ def upgrade() -> None:
 def _backfill(conexao: sa.Connection) -> None:
     """D7: lanca o XP de toda missao ja concluida e destrava as conquistas
     na data em que a condicao valeu pela primeira vez."""
-    da_tifa = set(
+    da_kairya = set(
         conexao.execute(
             sa.text(
                 "SELECT mission_id FROM tutor_actions "
@@ -193,11 +193,11 @@ def _backfill(conexao: sa.Connection) -> None:
         if mission_id in dia_da_diaria:
             estado.historico[dia_da_diaria[mission_id]].concluida = True
         estado.concluidas += 1
-        estado.tifa = estado.tifa or mission_id in da_tifa
+        estado.kairya = estado.kairya or mission_id in da_kairya
         ja = destravadas.setdefault(user_id, set())
         novas = (
             _satisfeitas(
-                estado.concluidas, _maior_sequencia(estado.historico), estado.tifa
+                estado.concluidas, _maior_sequencia(estado.historico), estado.kairya
             )
             - ja
         )

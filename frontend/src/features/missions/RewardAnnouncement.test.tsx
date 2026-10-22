@@ -49,8 +49,8 @@ describe('RewardAnnouncement', () => {
             { code: 'veteran_10', title: 'Veterano I', description: '10 missões concluídas.' },
             {
               code: 'tifa_partnership',
-              title: 'Parceria com a Tifa',
-              description: 'Primeira conversa com a Tifa.',
+              title: 'Parceria com a Kairya',
+              description: 'Primeira conversa com a Kairya.',
             },
           ],
         })}
@@ -60,7 +60,7 @@ describe('RewardAnnouncement', () => {
     const itens = screen.getAllByTestId('reward-achievement')
     expect(itens).toHaveLength(2)
     expect(itens[0]).toHaveTextContent('Conquista: Veterano I')
-    expect(itens[1]).toHaveTextContent('Conquista: Parceria com a Tifa')
+    expect(itens[1]).toHaveTextContent('Conquista: Parceria com a Kairya')
   })
 
   it('sem conquistas, nenhum item aparece', () => {

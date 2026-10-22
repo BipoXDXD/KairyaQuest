@@ -42,8 +42,8 @@ const withCode =
     Response.json({ detail: 'x', code }, { status })
 
 const INVALIDATED_TEXT =
-  'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Tifa uma nova proposta.'
-const EXPIRED_TEXT = 'O prazo desta proposta já passou. Peça à Tifa uma nova proposta.'
+  'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.'
+const EXPIRED_TEXT = 'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.'
 
 /** O cartao como o painel o usa: a acao mora ACIMA e muda pelo `onChanged`. */
 function Harness({
@@ -216,7 +216,7 @@ describe('RescheduleProposalCard', () => {
   it.each([
     ['prazo_expirado', EXPIRED_TEXT],
     ['reagendamento_invalido', INVALIDATED_TEXT],
-    ['outro', 'Esta proposta não pôde ser executada. Peça à Tifa uma nova proposta.'],
+    ['outro', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
   ])('R7 falhou com %s: o texto certo, sem botoes', (code, text) => {
     render(<Harness initial={{ ...proposta, state: 'falhou', error_code: code }} />)
 
