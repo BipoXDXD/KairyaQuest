@@ -65,7 +65,7 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
 # dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
 # mypy de fora era a unica assimetria.
-	uv run mypy src tests alembic
+	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
@@ -134,3 +134,10 @@ image-release: ## Exporta API e frontend em OCI com AMD64 e ARM64, sem carregar 
 	mkdir -p .docker-artifacts
 	./scripts/docker-build.sh oci .docker-artifacts/kairyaquest-api.tar -f docker/api.Dockerfile -t kairyaquest-api:$(IMAGE_TAG) .
 	./scripts/docker-build.sh oci .docker-artifacts/kairyaquest-web.tar -f docker/web.Dockerfile -t kairyaquest-web:$(IMAGE_TAG) .
+
+.PHONY: check-image-platforms promote-images
+check-image-platforms: ## Confere IMAGE_REFERENCE no GHCR; tags exigem IMAGE_DIGEST aprovado
+	python3 scripts/verify_image_platforms.py
+
+promote-images: ## Promove API_REFERENCE e WEB_REFERENCE aprovados se GITHUB_SHA ainda for a main
+	python3 scripts/promote_images.py

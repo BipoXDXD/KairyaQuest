@@ -1,3 +1,44 @@
+# Publicação automática GHCR (2026-10-22)
+
+Objetivo autorizado: publicar API e web com Linux AMD64 e ARM64 após o CI e
+integrar por PR com todos os checks verdes. Base: `49c79af` (PR #33 integrado).
+O checkout original com alterações locais foi preservado; implementação em branch isolada.
+
+O `quality.yml` mantém os quatro checks e o agregador. Após sucesso em push da
+`main`, os jobs `publish-api` e `publish-web` publicam as
+tags pelo commit. A promoção de `main`/`latest` depende das duas referências por
+digest aprovadas. O alvo `check-image-platforms` valida o índice e os configs
+reais, inclusive depois da promoção. Tags móveis não são uma referência imutável;
+para fixar uma release, use o digest registrado no resumo do job.
+`scripts/promote_images.py` consulta a ponta da `main` antes e depois do preflight;
+rerun de execução antiga não volta os aliases a uma release anterior. O builder
+da promoção usa o mesmo digest de BuildKit fixado nos dois jobs de imagem.
+
+Infraestrutura justificada: GHCR e as actions oficiais do Docker atendem a
+publicação automática solicitada. QEMU permite o build ARM64 no runner AMD64;
+Buildx/BuildKit geram o índice portátil. Actions e imagens auxiliares fixadas por
+SHA/digest; cache separado por imagem. Só os jobs de publicação recebem
+`packages: write` no token temporário do Actions. Nenhuma biblioteca de aplicação,
+PAT, segredo de produção, contrato de API ou operação de deploy acrescentados.
+
+Validação inicial: `make check` aprovado na base, 1507 testes Python, 1002 frontend,
+66 E2E, cobertura de aplicação 100%, lint, tipos e segredos aprovados. Regressões
+novas: oito falhas observadas sem o verificador, depois oito testes aprovados,
+incluindo plataformas ausentes/duplicadas, configs divergentes, atestados,
+digest trocado, transporte e JSON inválidos. A primeira implementação passou
+também no `make check` completo (1515 Python, 1002 frontend e 66 E2E). A guarda
+de promoção acrescentou três cenários: são 11 testes novos aprovados. O helper
+real foi exercitado em registry descartável: os dois índices e aliases corretos
+passaram; rerun antigo e avanço da main no preflight preservaram os aliases atuais.
+`actionlint`, `zizmor`, Ruff e mypy aprovados; revisão independente aprovada após
+as duas correções. Os hooks validam o conteúdo final do commit e da ref enviada
+com o gate inteiro. CI e primeira publicação GHCR serão conferidos nos runs do
+Actions após a integração, sem usar resultados de outra revisão como aprovação.
+
+Limite operacional: a promoção de múltiplos aliases não é uma transação do
+registry. Uma falha de rede no meio reprova o job; reexecutar os jobs reprovados
+após diagnóstico repete a promoção por digests aprovados, sem pular o gate.
+
 # Builds Docker nativos e releases portáveis (2026-10-22)
 
 As imagens temporárias AMD64 de publicação estavam aparecendo no Docker do Mac ARM64.

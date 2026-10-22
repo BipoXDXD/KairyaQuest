@@ -50,7 +50,7 @@ KairyaQuest/
 ├── scripts/                   # gate, worktrees e diagnósticos operacionais
 ├── docs/                      # arquitetura, qualidade, estado e arte
 │   └── superpowers/specs/     # contratos e decisões dos incrementos
-├── .github/workflows/         # CI: um job por alvo de verificação
+├── .github/workflows/         # CI: um job por alvo; publicação GHCR após o gate
 └── .run/                      # configurações compartilhadas do PyCharm
 ```
 
@@ -68,8 +68,12 @@ principal, com banco e portas próprios; criação e isolamento em
 
 Registrado explicitamente, para que ninguém leia ausência como descuido:
 
-- **Não existe `Dockerfile`.** A aplicação roda direto da árvore (`uv run`,
-  `npm run`); só o PostgreSQL roda em container, pelo `compose.yaml`.
+- **Imagens de aplicação:** `docker/api.Dockerfile` e `docker/web.Dockerfile`
+  constroem API e frontend. O wrapper local escolhe a arquitetura do daemon;
+  os jobs de publicação em `quality.yml` enviam as duas plataformas ao GHCR.
+  `scripts/verify_image_platforms.py` confere o índice e os configs reais;
+  `quality.yml` chama `scripts/promote_images.py` para promover as tags móveis
+  somente após as duas imagens aprovadas e com o commit ainda na ponta da `main`.
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
