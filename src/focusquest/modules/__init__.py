@@ -1,1 +1,1 @@
-"""Modulos de dominio do FocusQuest, agrupados por funcionalidade."""
+"""Modulos de dominio do KairyaQuest, agrupados por funcionalidade."""

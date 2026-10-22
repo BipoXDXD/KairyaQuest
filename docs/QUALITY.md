@@ -1,6 +1,6 @@
 # QUALITY
 
-Este documento descreve o gate de qualidade do FocusQuest: os comandos que o
+Este documento descreve o gate de qualidade do KairyaQuest: os comandos que o
 compõem, a regra que governa quem chama quem, o que a cobertura mede (e o que
 deliberadamente não mede), o que os alvos `check-api` e `check-e2e` fazem, a
 integração contínua, as limitações conhecidas sem eufemismo, e o

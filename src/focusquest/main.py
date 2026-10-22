@@ -1,4 +1,4 @@
-"""Aplicacao FastAPI do FocusQuest: montagem do app e traducao de erros.
+"""Aplicacao FastAPI do KairyaQuest: montagem do app e traducao de erros.
 
 A traducao de erro de dominio para status HTTP mora aqui, em um lugar so.
 Espalha-la pelas rotas faria cada endpoint novo ter a chance de esquecer um
@@ -89,7 +89,7 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
         app_logger.setLevel(nivel_de_antes)
 
 
-app = FastAPI(title="FocusQuest", lifespan=_ciclo_de_vida)
+app = FastAPI(title="KairyaQuest", lifespan=_ciclo_de_vida)
 app.include_router(missions_router)
 app.include_router(cycle_router)
 app.include_router(progression_router)

@@ -1,6 +1,6 @@
 # HANDOFF
 
-Estado para retomar o FocusQuest. Leia antes `README.md` e
+Estado para retomar o KairyaQuest. Leia antes `README.md` e
 `docs/ARCHITECTURE.md`; depois deste documento, leia `docs/QUALITY.md`.
 README é a autoridade de produto. AGENTS contém as regras comuns dos agentes.
 
@@ -25,8 +25,8 @@ Resultados registrados da entrega, anteriores a esta redução documental:
   cobertura 100%, lint, tipos, formatação e segredos aprovados.
 - As 378 fontes, HEAD, índice e `.env` ficaram estáveis durante o gate.
 - Hooks de commit/push e CI push/PR aprovados no SHA publicado, cinco jobs cada.
-- [CI da main 37283106424](https://github.com/BipoXDXD/FocusQuest/actions/runs/37283106424):
-  cinco jobs verdes no merge `ca3b03c`; [PR #30](https://github.com/BipoXDXD/FocusQuest/pull/30).
+- [CI da main 37283106424](https://github.com/BipoXDXD/KairyaQuest/actions/runs/37283106424):
+  cinco jobs verdes no merge `ca3b03c`; [PR #30](https://github.com/BipoXDXD/KairyaQuest/pull/30).
 
 Revisão visual técnica: 14 cenários, depois duas capturas prioritárias e dois
 probes de altura curta, com fontes/build estáveis. Capturas usam fixtures GET,
@@ -53,6 +53,38 @@ Artefatos locais, ignorados e ausentes num clone novo:
 
 Arquivos exclusivos ignorados não são recuperáveis pelo Git. Preservar esses
 arquivos de recuperação; consultar manifests antes de restaurar dados/refs.
+
+## Identidade KairyaQuest — 2026-10-22
+
+O responsável autorizou dois PRs separados para a atualização do Python e a
+renomeação deste projeto para KairyaQuest. O repositório passou a
+`BipoXDXD/KairyaQuest`, preservando o mesmo ID, histórico e proteção da main.
+A pasta local também foi renomeada. Interface, título da página, metadados
+públicos da API, textos da tutora e documentação corrente usam KairyaQuest.
+O pacote `focusquest`, variáveis `FOCUSQUEST_*`, chaves de preferências e nomes
+de banco continuam compatíveis com a instalação existente.
+
+O CI instala o Python de `.python-version` com `actions/setup-python` antes
+do uv: o catálogo de downloads embutido no uv ainda não inclui o patch.
+
+O `make check` da revisão com o novo nome passou: 1500 testes Python, 1002
+frontend e 66 E2E, cobertura de 100% e scanner sem segredos. O gate também
+roda nos hooks de commit e de push; os resultados da CI ficam no PR. As alterações locais de volumes não fazem
+parte deste PR.
+
+## Atualização do runtime — 2026-10-22
+
+Solicitação: atualizar o patch do Python, com base em
+`fc6b5d8093016e13c7034d10c0b6c2190a0d303f`. O interpretador de desenvolvimento e
+CI é selecionado por `.python-version`; o CI já usa esse arquivo por meio do
+`uv sync --locked`. A compatibilidade do pacote e os alvos do Ruff/mypy
+continuam na série 3.14; não houve mudança de dependências ou de contratos.
+
+A instalação local e a sincronização pelo lock foram executadas com sucesso.
+Validação desta alteração: `make check` EXIT 0 com Python 3.14.9: 1500 testes
+Python, 1002 frontend e 66 E2E, cobertura de 100% e scanner sem segredos.
+A publicação foi autorizada em PR separado; este incremento não autoriza merge
+nem deploy.
 
 ## Continuação e autorização
 
@@ -339,7 +371,7 @@ git show ca3b03c93d57c24a0054747564f475677734de24:docs/REVISAO-2026-10-04.md
 | 49/51/60 | GET versus updateAction reconciliado; check-e2e já faz reset próprio; QG refresca ao voltar da navegação. Não repetir as descrições antigas de falha como atuais. |
 
 Link permanente do arquivo antigo:
-[HANDOFF em ca3b03c](https://github.com/BipoXDXD/FocusQuest/blob/ca3b03c93d57c24a0054747564f475677734de24/docs/HANDOFF.md).
+[HANDOFF em ca3b03c](https://github.com/BipoXDXD/KairyaQuest/blob/ca3b03c93d57c24a0054747564f475677734de24/docs/HANDOFF.md).
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
