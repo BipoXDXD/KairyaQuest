@@ -29,6 +29,11 @@ case "$(uname -s)-$(uname -m)" in
     SHA256="b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
     BIN_SHA256="ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f"
     ;;
+  Linux-aarch64|Linux-arm64)
+    ASSET="gitleaks_${VERSION}_linux_arm64.tar.gz"
+    SHA256="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+    BIN_SHA256="00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b"
+    ;;
   Linux-x86_64)
     ASSET="gitleaks_${VERSION}_linux_x64.tar.gz"
     SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
