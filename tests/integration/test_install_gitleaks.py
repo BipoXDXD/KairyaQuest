@@ -177,3 +177,22 @@ def test_curl_repete_tambem_erro_de_conexao(tmp_path: Path) -> None:
     assert "--retry-all-errors" in argumentos
     assert "--retry" in argumentos
     assert "--fail" in argumentos
+
+
+def test_linux_arm64_baixa_o_artefato_arm64_e_preserva_a_falha_do_download(
+    tmp_path: Path,
+) -> None:
+    bin_falso = tmp_path / "bin"
+    bin_falso.mkdir()
+    uname_falso = bin_falso / "uname"
+    uname_falso.write_text(
+        '#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo aarch64;; *) exit 1;; esac\n'
+    )
+    uname_falso.chmod(0o755)
+
+    resultado = _rodar(tmp_path, tmp_path / "tools")
+
+    assert resultado.returncode == SAIDA_DO_CURL
+    argumentos = (tmp_path / "curl-args").read_text().splitlines()
+    assert any(arg.endswith("_linux_arm64.tar.gz") for arg in argumentos)
+    assert not (tmp_path / "tools" / "gitleaks").exists()

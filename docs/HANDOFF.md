@@ -1,3 +1,19 @@
+# Gitleaks em Linux ARM64 — 2026-10-22
+
+O instalador rejeitava `Linux-aarch64` antes de tentar obter o Gitleaks,
+impedindo o gate nessa plataforma. Agora aceita `Linux-aarch64` e
+`Linux-arm64`, usando o artefato oficial ARM64 do Gitleaks 8.30.1. Os hashes
+SHA-256 do arquivo e do binário foram conferidos contra a release oficial;
+a versão e as guardas de integridade existentes foram mantidas.
+
+O novo teste reproduziu a falha antes da correção e verifica a seleção do
+artefato ARM64 e a propagação da falha de download. Os cinco testes do
+instalador passaram após a correção. O binário oficial também executou como
+usuário sem privilégios num contêiner Linux ARM64 nativo, sem rede e com
+sistema de arquivos somente leitura; a guarda de cache passou e a versão
+retornada foi 8.30.1. Os hooks obrigatórios verificam o gate completo antes
+de gravar o commit e de enviar a branch.
+
 # Groq Free para conversa e avaliação (2026-10-22)
 
 Objetivo autorizado: concluir o PR da renomeação com Groq Free para Kairya,
