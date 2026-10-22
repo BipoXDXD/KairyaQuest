@@ -21,6 +21,23 @@ preservados no [HANDOFF](HANDOFF.md). Relatos completos de implementação e
 resultados antigos estão no Git em `ca3b03c:docs/HANDOFF.md`; não são
 instruções para repetir fases concluídas.
 
+## Tutoria de produção: Groq Free (2026-10-22)
+
+`dependencies.get_tutoria` monta exclusivamente `ProvedorGroq` com a chave
+`FOCUSQUEST_GROQ_API_KEY`; não importa nem instancia o adaptador Anthropic.
+`groq_provider.py` usa HTTPX2 já instalado, endpoint/modelo fixos, SSE e
+ferramentas locais com esquema gerado em `tool_definitions.py`. Sem chave,
+retorna `None`. Não há retry, redirect, proxy do ambiente ou fallback.
+As regras de autorização, confirmação, avaliação e XP continuam nos serviços.
+Erros HTTP e respostas interrompidas falham sem executar ferramentas.
+A gratuidade depende de manter a conta no plano Free: [GROQ.md](GROQ.md).
+
+O adaptador Anthropic e os roteiros de caracterização históricos permanecem
+para testes, sem caminho de seleção na dependência de produção. O navegador
+de testes usa `tests/integration/e2e_app.py`, chave fictícia e host loopback;
+essa entrada não é incluída no pacote da aplicação. As descrições antigas de
+fallback abaixo documentam somente esse comportamento legado.
+
 ## 1. O que existe hoje
 
 Mapa dos diretórios implementados, atualizado após o redesign desktop
@@ -202,7 +219,7 @@ real, e em qual módulo.
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
-| `provider.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
+| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
 **A dependência é `tutoring → missions`, nunca o contrário.**
@@ -565,8 +582,8 @@ tela, e volta ao contexto quando é reenviada. Um stream sem `done` nem
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
 
-**O fallback da recusa** (pendência 174, beta da Anthropic, ligado por
-padrão e desligável por `FOCUSQUEST_TUTOR_FALLBACK=false`): o adaptador chama
+**Fallback histórico, desativado em produção** (pendência 174, beta da
+Anthropic, preservado somente nos testes explícitos do adaptador legado): o adaptador chama
 `client.beta.messages.stream` com `fallbacks="default"` e o beta
 `server-side-fallback-2026-07-01` (`BETA_DO_FALLBACK`), e a API refaz a
 requisição recusada no modelo que a Anthropic recomenda para a categoria da

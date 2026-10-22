@@ -109,7 +109,11 @@ describe('playwright.config.ts deriva TODAS as portas de servers.ts', () => {
       'http://127.0.0.1:5280',
     ])
     expect(config.use?.baseURL).toBe('http://127.0.0.1:5280')
-    expect(servidores[1]?.env).toEqual({ FOCUSQUEST_ANTHROPIC_BASE_URL: 'http://127.0.0.1:8157' })
+    expect(servidores[1]?.env).toEqual({
+      FOCUSQUEST_ANTHROPIC_BASE_URL: 'http://127.0.0.1:8157',
+      PYTHONPATH: 'tests',
+    })
+    expect(servidores[1]?.command).toContain('uvicorn integration.e2e_app:app')
     expect(servidores[2]?.env).toEqual({ API_PROXY_TARGET: 'http://127.0.0.1:8107' })
   })
 })

@@ -1,3 +1,42 @@
+# Groq Free para conversa e avaliação (2026-10-22)
+
+Objetivo autorizado: concluir o PR da renomeação com Groq Free para Kairya,
+sem consumir Anthropic nem usar fallback pago. Base: `72fc969`.
+
+A dependência de produção agora instancia somente `ProvedorGroq`, com a
+chave `FOCUSQUEST_GROQ_API_KEY`. Usa HTTPX2 já existente: nenhuma dependência,
+serviço adicional, migração ou contrato HTTP introduzido. Endpoint e modelo
+fixos (`api.groq.com`, `openai/gpt-oss-20b`); sem retries, redirects, proxy do
+ambiente, ferramentas pagas do servidor ou troca de modelo/provedor.
+Os esquemas das propostas foram extraídos para módulo sem SDK e permanecem
+os mesmos. Avaliação usa a rubrica existente e a confirmação das propostas
+continua obrigatória; XP e idempotência permanecem no domínio.
+
+Configuração antiga da Anthropic/modelo/fallback é aceita para não quebrar
+.env existentes, mas não pode ativar chamadas na dependência de produção.
+Os testes históricos preservam o adaptador antigo; o E2E o monta em entrada
+exclusiva de testes com chave fictícia e endereço loopback. O gate bloqueia
+tráfego real a Groq mesmo se existir uma chave no ambiente local.
+
+Limite operacional: a API de completions não informa o plano da conta.
+A conta Groq deve permanecer Free; não automatizar upgrade, cadastro de
+pagamento ou compra de cota. 429 falha fechado e não tenta outro serviço.
+Configuração detalhada e fontes primárias em [GROQ.md](GROQ.md).
+
+Provas iniciais: testes do adaptador falharam antes de existir implementação;
+o teste da dependência reproduziu seleção indevida da Anthropic antes da
+correção. Testes HTTP cobrem deltas, propostas, avaliação, cortes, recusa,
+JSON inválido, múltiplas ferramentas, 401/429/5xx, redirecionamento, timeout,
+cancelamento e ausência de reenvio. Integração com banco cobre proposta sem
+criação automática e avaliação com recompensa idempotente.
+Gate inicial aprovado: 1559 testes Python e 32 subtestes, 1002 frontend,
+66 E2E e cobertura de 100%. Revisão do contrato oficial do Groq acrescentou
+quatro casos de campos nulos, recusa explícita e erro em metadados: falharam
+antes da correção, depois os 37 testes do adaptador passaram. Os hooks
+obrigatórios validam novamente o conteúdo final antes de commit e push.
+CI e revisão exata publicada são verificadas no PR.
+Ativação e aceitação reais aguardam chave Groq Free fornecida localmente.
+
 # Identidade da personagem Kairya — 2026-10-22
 
 O responsável definiu Kairya como nome próprio da tutora e usará artes de sua
@@ -17,9 +56,9 @@ não exige migração de banco nem altera XP, histórico ou credenciais.
 O usuário não autoriza consumir créditos da Anthropic neste projeto. Nenhuma
 chave foi instalada nem chamada paga foi efetuada. Alternativas sem consumir
 esse saldo foram pesquisadas em documentação primária: Ollama com modelo
-local e planos gratuitos de Groq/Gemini. A seleção e a integração de um novo
-provedor são uma etapa separada da renomeação. O provedor ainda permanece
-indisponível na instalação atual.
+local e planos gratuitos de Groq/Gemini. O usuário selecionou Groq Free em seguida; a integração abaixo substitui
+a configuração de produção anterior. A instalação atual ainda depende da
+chave Free e de publicação para ativar a tutoria real.
 
 Validação desta revisão: `make check` EXIT 0 com 1.519 testes Python, 32
 subtestes, 1.002 testes do frontend e 66 E2E; cobertura de 100%, lint, tipos,
