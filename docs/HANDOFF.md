@@ -1,3 +1,20 @@
+# Base Nginx com brotli-libs corrigido — 2026-11-06
+
+CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
+foi republicada sem mudar de nome: o digest antigo `c59d1f8b…` traz
+`brotli-libs 1.2.0-r1` em AMD64 e ARM64, e o índice atual `583b7f2f…` traz
+`1.2.1-r0` nas duas plataformas, lido em `lib/apk/db/installed` das camadas.
+O `FROM` fixa o índice multiplataforma, não um manifesto de arquitetura, porque
+a publicação gera AMD64 e ARM64.
+
+O índice `e9b2d762…` foi o anterior da mesma tag. Difere do atual só em
+ppc64le; os manifestos AMD64 (`bb8f722b…`) e ARM64 (`564a0993…`) são idênticos.
+
+Nenhum teste nem documento fixava o digest antigo. O `pull_request` do CI não
+constrói a imagem web: o primeiro build do CI é o `publish-web`, no push à `main`,
+e ele confere plataformas, não pacotes. Nada muda em contrato, segredo ou
+configuração de publicação. Merge e publicação seguem fora desta etapa.
+
 # Gitleaks em Linux ARM64 — 2026-10-22
 
 O instalador rejeitava `Linux-aarch64` antes de tentar obter o Gitleaks,
