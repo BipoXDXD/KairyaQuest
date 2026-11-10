@@ -133,7 +133,10 @@ export interface StatusRead {
  * (pendencia 32 do HANDOFF). O 422 do Pydantic nao tem `code`.
  */
 export type PreStreamErrorCode =
-  'provedor_nao_configurado' | 'mensagem_em_andamento' | 'operacao_reutilizada'
+  | 'provedor_nao_configurado'
+  | 'mensagem_em_andamento'
+  | 'operacao_reutilizada'
+  | 'limite_diario_da_tutoria'
 
 /**
  * Os `code` do evento `error` DENTRO do stream. Espelham o `CodigoDoStream` de
