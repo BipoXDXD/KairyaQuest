@@ -1,4 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
+import { translate } from '../../shared/i18n/catalog'
+import { en } from '../../shared/i18n/messages/en'
 import { renderWithI18n } from '../../test/i18n'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -287,5 +289,100 @@ describe('ProposalCard', () => {
     expect(card()).toHaveAttribute('data-state', 'falhou')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Os mesmos textos em ingles, lidos do catalogo `en`: os casos PT acima fixam
+ * o literal; estes provam que o cartao troca de catalogo.
+ */
+describe('ProposalCard em ingles', () => {
+  const target = translate('en', 'tutoring.proposal.target', { instructions: INSTRUCTIONS })
+
+  it('E1 rotulos, valores e os nomes dos botoes', () => {
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    expect(
+      within(card()).getByRole('heading', { name: en['tutoring.proposal.title'] }),
+    ).toBeInTheDocument()
+    expect(card()).toHaveTextContent(`${en['tutoring.proposal.criterion']} Resumo de uma pagina`)
+    expect(card()).toHaveTextContent(en['tutoring.proposal.difficulty'])
+    expect(card()).toHaveTextContent(en['tutoring.proposal.estimate'])
+    expect(card()).toHaveTextContent(en['tutoring.proposal.deadline'])
+    expect(screen.getByTestId('proposal-difficulty')).toHaveTextContent(
+      translate('en', 'tutoring.proposal.difficultyValue', { value: 2, max: 5 }),
+    )
+    expect(screen.getByTestId('proposal-estimated-minutes')).toHaveTextContent(
+      translate('en', 'tutoring.proposal.minutes', { minutes: 40 }),
+    )
+    expect(confirmButton()).toHaveAccessibleName(`${en['tutoring.decision.confirm']} ${target}`)
+    expect(rejectButton()).toHaveAccessibleName(`${en['tutoring.decision.reject']} ${target}`)
+  })
+
+  it('E2 confirmando', () => {
+    routeFetch({ [CONFIRM]: PENDING })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+    expect(confirmButton()).toHaveTextContent(en['tutoring.decision.confirming'])
+  })
+
+  it('E2 recusando', () => {
+    routeFetch({ [REJECT]: PENDING })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(rejectButton())
+    expect(rejectButton()).toHaveTextContent(en['tutoring.decision.rejecting'])
+  })
+
+  it('E3 executada: Missao criada e o link do quadro', () => {
+    renderWithI18n(<Harness initial={executada} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-created')).toHaveTextContent(
+      en['tutoring.proposal.created'],
+    )
+    expect(
+      screen.getByRole('link', { name: en['tutoring.proposal.boardLink'] }),
+    ).toBeInTheDocument()
+  })
+
+  it('E4 recusada', () => {
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'recusada' }} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-rejected')).toHaveTextContent(
+      en['tutoring.proposal.rejected'],
+    )
+  })
+
+  it('E5 falha que se repete: o botao tentado vira Tentar de novo', async () => {
+    routeFetch({ [CONFIRM]: networkFailure })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+
+    await screen.findByRole('alert')
+    expect(confirmButton()).toHaveAccessibleName(`${en['tutoring.retry']} ${target}`)
+  })
+
+  it('E6 falha que nao se repete: Atualizar a conversa', async () => {
+    routeFetch({
+      [CONFIRM]: () => Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+
+    expect(await screen.findByTestId('proposal-refresh')).toHaveTextContent(
+      en['tutoring.decision.refresh'],
+    )
+  })
+
+  it('E7 um kind desconhecido', () => {
+    const future = { ...proposta, kind: 'split_mission' } as unknown as ActionRead
+    renderWithI18n(<Harness initial={future} />, { locale: 'en' })
+
+    expect(screen.getByTestId('tutor-proposal-unknown')).toHaveTextContent(
+      en['tutoring.proposal.unknown'],
+    )
   })
 })

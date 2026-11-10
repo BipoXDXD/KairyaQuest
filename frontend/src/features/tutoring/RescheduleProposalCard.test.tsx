@@ -2,6 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithI18n } from '../../test/i18n'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { translate } from '../../shared/i18n/catalog'
+import { en } from '../../shared/i18n/messages/en'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { RescheduleProposalCard } from './RescheduleProposalCard'
@@ -344,5 +346,51 @@ describe('RescheduleProposalCard', () => {
     expect(rejectButton()).toBeEnabled()
     expect(confirmButton()).toHaveAccessibleName(`Confirmar o reagendamento: ${INSTRUCTIONS}`)
     expect(confirmButton()).toBeEnabled()
+  })
+})
+
+/**
+ * Os mesmos textos em ingles, lidos do catalogo `en`: os casos PT acima fixam
+ * o literal; estes provam que o cartao troca de catalogo.
+ */
+describe('RescheduleProposalCard em ingles', () => {
+  const target = translate('en', 'tutoring.reschedule.target', { instructions: INSTRUCTIONS })
+
+  it('E1 rotulos, motivo e os nomes dos botoes', () => {
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    expect(
+      within(card()).getByRole('heading', { name: en['tutoring.reschedule.title'] }),
+    ).toBeInTheDocument()
+    expect(card()).toHaveTextContent(
+      `${en['tutoring.reschedule.previousDeadline']}${formatDeadline(PREVIOUS)}`,
+    )
+    expect(card()).toHaveTextContent(
+      `${en['tutoring.reschedule.newDeadline']}${formatDeadline(PROPOSED)}`,
+    )
+    expect(screen.getByTestId('reschedule-reason')).toHaveTextContent(
+      `${en['tutoring.reschedule.reason']} ${en['missions.rescheduleReason.lackOfTime']}`,
+    )
+    expect(confirmButton()).toHaveAccessibleName(`${en['tutoring.decision.confirm']} ${target}`)
+    expect(rejectButton()).toHaveAccessibleName(`${en['tutoring.decision.reject']} ${target}`)
+  })
+
+  it('E2 executada: Prazo reagendado e o link do quadro', () => {
+    renderWithI18n(<Harness initial={executada} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-rescheduled')).toHaveTextContent(
+      en['tutoring.reschedule.done'],
+    )
+    expect(
+      within(card()).getByRole('link', { name: en['tutoring.proposal.boardLink'] }),
+    ).toBeInTheDocument()
+  })
+
+  it('E3 recusada', () => {
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'recusada' }} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-rejected')).toHaveTextContent(
+      en['tutoring.proposal.rejected'],
+    )
   })
 })

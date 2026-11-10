@@ -7,6 +7,8 @@ import { useActionKeys } from './useActionKeys'
 import { useIsDesktop } from './useIsDesktop'
 import { useTutorConversation, type SendState } from './useTutorConversation'
 import { useTutorStatus } from './useTutorStatus'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * O que a regiao viva anuncia: o INICIO e o FIM da resposta, e nao cada
@@ -15,11 +17,11 @@ import { useTutorStatus } from './useTutorStatus'
  * A falha e anunciada pelo `role="alert"` da propria conversa; o fim de uma
  * resposta cortada, com texto proprio (`announceAnswer`, pendencia 121).
  */
-function liveText(send: SendState): string {
+function liveText(send: SendState): MessageKey | null {
   if (send.status === 'sending' || send.status === 'writing') {
-    return 'Kairya está escrevendo…'
+    return 'tutoring.writing'
   }
-  return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : ''
+  return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : null
 }
 
 /** Arte original decorativa; dimensões reservadas antes do download. */
@@ -74,6 +76,7 @@ export function TutorPanel({
   /** A página conserva a conversa montada ao navegar para outra área. */
   hidden?: boolean
 }) {
+  const t = useT()
   const isDesktop = useIsDesktop()
   const { state: status, reload: reloadStatus } = useTutorStatus()
   const conversation = useTutorConversation()
@@ -193,6 +196,9 @@ export function TutorPanel({
     }
   }
 
+  const live = liveText(conversation.send)
+  const toggleLabel = t(desktopOpen ? 'tutoring.panel.collapse' : 'tutoring.panel.expand')
+
   const body = (
     <TutorConversation
       conversation={conversation}
@@ -218,12 +224,12 @@ export function TutorPanel({
   return (
     <aside
       ref={panel}
-      aria-label="Kairya"
+      aria-label={t('tutoring.name')}
       data-testid="tutor-panel"
       className="rpg-tutor lg:border-l lg:border-slate-800"
     >
       <p role="status" data-testid="tutor-live" className="sr-only">
-        {liveText(conversation.send)}
+        {live === null ? '' : t(live)}
       </p>
 
       {isDesktop ? (
@@ -238,22 +244,24 @@ export function TutorPanel({
           >
             {desktopOpen && (
               <div className="flex-1">
-                <h2 className="tutor-name text-lg font-semibold text-slate-50">Kairya</h2>
-                <p className="text-xs text-slate-400">sua tutora</p>
+                <h2 className="tutor-name text-lg font-semibold text-slate-50">
+                  {t('tutoring.name')}
+                </h2>
+                <p className="text-xs text-slate-400">{t('tutoring.panel.subtitle')}</p>
               </div>
             )}
             <button
               type="button"
               ref={desktopToggle}
               data-testid="tutor-panel-toggle"
-              aria-label={desktopOpen ? 'Recolher o painel da Kairya' : 'Abrir o painel da Kairya'}
-              title={desktopOpen ? 'Recolher o painel da Kairya' : 'Abrir o painel da Kairya'}
+              aria-label={toggleLabel}
+              title={toggleLabel}
               aria-expanded={desktopOpen}
               aria-controls="tutor-panel-body"
               onClick={toggleDesktop}
               className={`rounded border border-slate-600 text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ${desktopOpen ? 'px-2 py-1 text-xs' : 'flex h-11 w-11 items-center justify-center text-xl'}`}
             >
-              {desktopOpen ? 'Recolher o painel da Kairya' : <span aria-hidden="true">›</span>}
+              {desktopOpen ? toggleLabel : <span aria-hidden="true">›</span>}
             </button>
           </header>
           {desktopOpen && (
@@ -275,7 +283,7 @@ export function TutorPanel({
               className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
               <Portrait scene={false} />
-              Falar com a Kairya
+              {t('tutoring.panel.openSheet')}
             </button>
           )}
           {sheetOpen && (
@@ -297,7 +305,7 @@ export function TutorPanel({
                 <header className="flex items-center gap-3">
                   <Portrait scene={false} />
                   <h2 id="tutor-sheet-title" className="flex-1 text-lg font-semibold text-slate-50">
-                    Kairya
+                    {t('tutoring.name')}
                   </h2>
                   <button
                     ref={sheetClose}
@@ -306,7 +314,7 @@ export function TutorPanel({
                     onClick={closeSheet}
                     className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
                   >
-                    Fechar a conversa
+                    {t('tutoring.panel.closeSheet')}
                   </button>
                 </header>
                 {body}

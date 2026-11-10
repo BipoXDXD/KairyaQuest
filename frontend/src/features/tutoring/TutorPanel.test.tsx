@@ -1,5 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { Locale } from '../../shared/i18n/locale'
+import { translate } from '../../shared/i18n/catalog'
+import { en } from '../../shared/i18n/messages/en'
 import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
@@ -130,6 +132,24 @@ async function typeAndSend(text: string) {
   await ready()
   type(text)
   fireEvent.click(sendButton())
+}
+
+/** Os helpers acima, para o painel montado em `en`: o campo e achado pelo rotulo EN. */
+function inputEn(): HTMLTextAreaElement {
+  return screen.getByLabelText(en['tutoring.input.label'])
+}
+
+async function readyEn() {
+  await waitFor(() => {
+    expect(inputEn()).toBeEnabled()
+  })
+  await waitFor(() => {
+    expect(screen.queryByTestId('tutor-history-loading')).not.toBeInTheDocument()
+  })
+}
+
+function typeEn(text: string) {
+  fireEvent.change(inputEn(), { target: { value: text } })
 }
 
 /** O corpo do n-esimo envio (1, 2, ...). */
@@ -299,7 +319,9 @@ describe('TutorPanel: estados da conversa', () => {
   it('P7d o teto diario em ingles diz a hora de Brasilia', async () => {
     mountPanel({ [SEND]: DAILY_LIMIT }, 'desktop', vi.fn(), 'en')
 
-    await typeAndSend('One more')
+    await readyEn()
+    typeEn('One more')
+    fireEvent.click(sendButton())
 
     expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
       "Kairya can't answer now. You've reached today's conversation limit. Kairya is back at midnight (Brasília time).",
@@ -752,6 +774,21 @@ describe('TutorPanel: o envio', () => {
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
     expect(requestsTo(fetchMock, SEND)).toHaveLength(0)
     expect(input().value).toHaveLength(4001)
+  })
+
+  it.each([
+    [3600, 'Restam 400 caracteres.'],
+    [3999, 'Resta 1 caractere.'],
+    // O CLDR `pt` poe o 0 em `one`: sem a forma `zero`, sairia "Resta 0 caractere."
+    [4000, 'Restam 0 caracteres.'],
+    [4001, 'Passou 1 caractere do limite de 4000.'],
+    [4012, 'Passou 12 caracteres do limite de 4000.'],
+  ])('P18b contador com %i caracteres: %s', async (size, text) => {
+    mountPanel({})
+    await ready()
+
+    type('a'.repeat(size))
+    expect(screen.getByTestId('tutor-counter')).toHaveTextContent(text)
   })
 
   it('P30 indisponivel: nenhum Tentar de novo, nem o do historico', async () => {
@@ -1416,4 +1453,190 @@ it('QG oculto libera o fundo, conserva conversa e só contém foco quando volta 
   expect(external).toHaveAttribute('inert', '')
   fireEvent.keyDown(input(), { key: 'Escape' })
   expect(external).not.toHaveAttribute('inert')
+})
+
+/**
+ * Os mesmos textos em ingles. O esperado sai do catalogo `en` (pelo
+ * `translate`, quando a chave interpola), e nao e reescrito a mao: os casos
+ * PT acima fixam o literal de cada chave; estes provam que a tela troca de
+ * catalogo.
+ */
+describe('TutorPanel: em ingles', () => {
+  it.each([
+    [3998, translate('en', 'tutoring.counter.remaining.other', { count: 2 })],
+    [4000, translate('en', 'tutoring.counter.remaining.zero', { count: 0 })],
+    [4001, translate('en', 'tutoring.counter.over.one', { count: 1, max: 4000 })],
+  ])('E1 contador com %i caracteres', async (size, text) => {
+    mountPanel({}, 'desktop', vi.fn(), 'en')
+    await readyEn()
+
+    typeEn('a'.repeat(size))
+    expect(screen.getByTestId('tutor-counter')).toHaveTextContent(text)
+  })
+
+  it('E2 painel vazio: saudacao, nomes, campo e Enviar', async () => {
+    mountPanel({}, 'desktop', vi.fn(), 'en')
+
+    expect(await screen.findByTestId('tutor-greeting')).toHaveTextContent(
+      en['tutoring.conversation.greeting'],
+    )
+    await readyEn()
+    expect(screen.getByRole('complementary', { name: en['tutoring.name'] })).toBeInTheDocument()
+    expect(screen.getByText(en['tutoring.panel.subtitle'])).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: en['tutoring.conversation.region'] }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('tutor-send')).toHaveTextContent(en['tutoring.send.idle'])
+
+    const toggle = screen.getByTestId('tutor-panel-toggle')
+    expect(toggle).toHaveAccessibleName(en['tutoring.panel.collapse'])
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAccessibleName(en['tutoring.panel.expand'])
+  })
+
+  it('E3 carregando: o anuncio em ingles', async () => {
+    mountPanel({ [HISTORY]: PENDING }, 'desktop', vi.fn(), 'en')
+
+    expect(screen.getByText(en['tutoring.history.loading'])).toBeInTheDocument()
+    await waitFor(() => {
+      expect(inputEn()).toBeEnabled()
+    })
+  })
+
+  it('E4 historico e status que falham', async () => {
+    mountPanel(
+      {
+        [STATUS]: () => Response.json({}, { status: 500 }),
+        [HISTORY]: () => Response.json({}, { status: 500 }),
+      },
+      'desktop',
+      vi.fn(),
+      'en',
+    )
+
+    expect(await screen.findByTestId('tutor-history-error')).toHaveTextContent(
+      "Couldn't load your conversation with Kairya. The request failed. Use the button to try again.",
+    )
+    expect(screen.getByTestId('tutor-history-retry')).toHaveTextContent(en['tutoring.retryLoad'])
+    expect(await screen.findByTestId('tutor-status-error')).toHaveTextContent(
+      "Couldn't check whether Kairya is available. The request failed. Use the button to try again.",
+    )
+    expect(screen.getByTestId('tutor-status-retry')).toHaveTextContent(en['tutoring.retryLoad'])
+  })
+
+  it('E5 autores e marcas do historico', async () => {
+    mountPanel(
+      {
+        [HISTORY]: () =>
+          Response.json([
+            question(1, 'p1', 'c1'),
+            answer(2, 1, 'meio', 'interrompida'),
+            question(3, 'p3', 'c3'),
+            answer(4, 3, 'x', 'falhou'),
+            question(5, 'p5', 'c5'),
+            answer(6, 5, 'y', 'gerando'),
+          ]),
+      },
+      'desktop',
+      vi.fn(),
+      'en',
+    )
+
+    await screen.findByTestId('tutor-messages')
+    expect(within(messageWith('p1')).getByText(en['tutoring.message.author.user'])).toBeVisible()
+    expect(within(messageWith('meio')).getByText(en['tutoring.name'])).toBeVisible()
+    expect(within(messageWith('meio')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      en['tutoring.message.mark.interrupted'],
+    )
+    expect(within(messageWith('x')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      en['tutoring.message.mark.failed'],
+    )
+    expect(within(messageWith('y')).getByTestId('tutor-message-mark')).toHaveTextContent(
+      en['tutoring.message.mark.generating'],
+    )
+  })
+
+  it('E6 indisponivel pelo status', async () => {
+    mountPanel({ [STATUS]: () => Response.json({ available: false }) }, 'desktop', vi.fn(), 'en')
+
+    expect(await screen.findByTestId('tutor-unavailable')).toHaveTextContent(
+      en['tutoring.messageFailure.providerNotConfigured.message'],
+    )
+  })
+
+  it('E7 escrevendo e terminando: regiao viva, parcial e Enviando', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response }, 'desktop', vi.fn(), 'en')
+    await readyEn()
+
+    typeEn('Give me a mission')
+    fireEvent.click(screen.getByTestId('tutor-send'))
+    stream.push(sseFrame('user_message', question(1, 'Give me a mission', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Sure' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent(en['tutoring.writing'])
+    })
+    expect(screen.getByTestId('tutor-live')).toHaveTextContent(en['tutoring.writing'])
+    expect(screen.getByTestId('tutor-send')).toHaveTextContent(en['tutoring.send.busy'])
+
+    stream.push(sseFrame('done', answer(2, 1, 'Sure')))
+    stream.close()
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live').textContent).toBe(
+        en['tutoring.answer.announce.complete'],
+      )
+    })
+  })
+
+  it('E8 a pergunta sem resposta completa: nota e Tentar de novo', async () => {
+    mountPanel(
+      {
+        [HISTORY]: () =>
+          Response.json([question(10, 'Old', 'c10'), answer(11, 10, 'meio', 'interrompida')]),
+      },
+      'desktop',
+      vi.fn(),
+      'en',
+    )
+    await readyEn()
+
+    expect(await screen.findByTestId('tutor-history-retry-note')).toHaveTextContent(
+      en['tutoring.answer.note.general'],
+    )
+    expect(screen.getByTestId('tutor-retry')).toHaveTextContent(en['tutoring.retry'])
+  })
+
+  it('E9 a nota do modelo substituto', async () => {
+    mountPanel(
+      {
+        [HISTORY]: () =>
+          Response.json([
+            question(10, 'Question', 'c10'),
+            { ...answer(11, 10, 'Answer'), fallback_model: 'claude-opus-4-8' },
+          ]),
+      },
+      'desktop',
+      vi.fn(),
+      'en',
+    )
+    await readyEn()
+
+    expect(screen.getByTestId('tutor-message-fallback')).toHaveTextContent(
+      translate('en', 'tutoring.message.fallback', { model: 'claude-opus-4-8' }),
+    )
+  })
+
+  it('E10 celular: abrir e fechar a folha', async () => {
+    mountPanel({}, 'mobile', vi.fn(), 'en')
+
+    const open = screen.getByTestId('tutor-sheet-open')
+    expect(open).toHaveAccessibleName(en['tutoring.panel.openSheet'])
+    fireEvent.click(open)
+    expect(screen.getByRole('dialog', { name: en['tutoring.name'] })).toBeInTheDocument()
+    expect(screen.getByTestId('tutor-sheet-close')).toHaveTextContent(
+      en['tutoring.panel.closeSheet'],
+    )
+    await readyEn()
+  })
 })

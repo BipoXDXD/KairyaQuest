@@ -1,3 +1,5 @@
+import type { Counter } from '../../shared/types/counter'
+
 /**
  * O tamanho maximo da pergunta, em pontos de codigo.
  *
@@ -18,8 +20,8 @@ export interface QuestionLength {
   remaining: number
   /** Nao vazio e dentro do limite. */
   sendable: boolean
-  /** O texto do contador, ou `null` longe do limite. */
-  counter: string | null
+  /** O contador, ou `null` longe do limite. O texto sai do catalogo. */
+  counter: Counter | null
 }
 
 /**
@@ -36,14 +38,10 @@ export function describeQuestionLength(text: string): QuestionLength {
     length,
     remaining,
     sendable: length > 0 && remaining >= 0,
-    counter: length < COUNTER_VISIBLE_FROM ? null : counterText(remaining),
+    counter: length < COUNTER_VISIBLE_FROM ? null : counterFor(remaining),
   }
 }
 
-function counterText(remaining: number): string {
-  if (remaining < 0) {
-    const over = -remaining
-    return `Passou ${String(over)} ${over === 1 ? 'caractere' : 'caracteres'} do limite de ${String(MAX_QUESTION_LENGTH)}.`
-  }
-  return remaining === 1 ? 'Resta 1 caractere.' : `Restam ${String(remaining)} caracteres.`
+function counterFor(remaining: number): Counter {
+  return remaining < 0 ? { kind: 'over', n: -remaining } : { kind: 'remaining', n: remaining }
 }

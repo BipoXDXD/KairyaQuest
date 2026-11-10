@@ -99,6 +99,74 @@ export const ptBR = {
   'missions.evaluationFailure.generic.recovery':
     'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
 
+  'tutoring.name': 'Kairya',
+  'tutoring.panel.subtitle': 'sua tutora',
+  'tutoring.panel.collapse': 'Recolher o painel da Kairya',
+  'tutoring.panel.expand': 'Abrir o painel da Kairya',
+  'tutoring.panel.openSheet': 'Falar com a Kairya',
+  'tutoring.panel.closeSheet': 'Fechar a conversa',
+
+  'tutoring.conversation.region': 'Conversa com a Kairya',
+  'tutoring.conversation.greeting':
+    'Aqui você conversa com a Kairya, sua tutora. Peça uma missão de estudo ou tire uma dúvida.',
+  'tutoring.history.loading': 'Carregando a conversa…',
+  'tutoring.history.loadFailed': 'Não foi possível carregar a conversa.',
+  'tutoring.status.loadFailed': 'Não foi possível verificar se a Kairya está disponível.',
+  'tutoring.retryLoad': 'Tentar novamente',
+  'tutoring.retry': 'Tentar de novo',
+  'tutoring.writing': 'Kairya está escrevendo…',
+  'tutoring.message.author.user': 'Você',
+  'tutoring.message.mark.generating': 'Resposta em andamento',
+  'tutoring.message.mark.interrupted': 'Resposta interrompida',
+  'tutoring.message.mark.failed': 'Resposta com falha',
+  'tutoring.message.fallback':
+    'Respondida por um modelo substituto ({model}), porque o modelo principal não pôde responder a esta pergunta.',
+  'tutoring.input.label': 'Sua mensagem para a Kairya',
+  'tutoring.send.idle': 'Enviar',
+  'tutoring.send.busy': 'Enviando…',
+  'tutoring.counter.remaining.zero': 'Restam 0 caracteres.',
+  'tutoring.counter.remaining.one': 'Resta 1 caractere.',
+  'tutoring.counter.remaining.other': 'Restam {count} caracteres.',
+  'tutoring.counter.over.one': 'Passou 1 caractere do limite de {max}.',
+  'tutoring.counter.over.other': 'Passou {count} caracteres do limite de {max}.',
+
+  'tutoring.answer.announce.complete': 'Kairya terminou de responder.',
+  'tutoring.answer.announce.cut':
+    'A resposta da Kairya ficou longa demais e foi cortada. Tente pedir por partes.',
+  'tutoring.answer.announce.incomplete': 'A resposta da Kairya chegou incompleta.',
+  'tutoring.answer.note.long':
+    'A última resposta ficou longa demais e foi cortada. Tente pedir por partes, um tópico de cada vez. Tentar de novo refaz a mesma pergunta e pode cortar outra vez.',
+  'tutoring.answer.note.refused':
+    'A Kairya não pôde responder à última pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+  'tutoring.answer.note.general':
+    'A última pergunta ficou sem resposta completa. Tentar de novo é seguro: a pergunta não será duplicada.',
+
+  'tutoring.decision.confirm': 'Confirmar',
+  'tutoring.decision.confirming': 'Confirmando…',
+  'tutoring.decision.reject': 'Recusar',
+  'tutoring.decision.rejecting': 'Recusando…',
+  'tutoring.decision.refresh': 'Atualizar a conversa',
+
+  'tutoring.proposal.title': 'Proposta de missão',
+  'tutoring.proposal.target': 'a proposta: {instructions}',
+  'tutoring.proposal.criterion': 'Critério de conclusão:',
+  'tutoring.proposal.difficulty': 'Dificuldade',
+  'tutoring.proposal.difficultyValue': '{value} de {max}',
+  'tutoring.proposal.estimate': 'Estimativa',
+  'tutoring.proposal.minutes': '{minutes} min',
+  'tutoring.proposal.deadline': 'Prazo',
+  'tutoring.proposal.created': 'Missão criada',
+  'tutoring.proposal.rejected': 'Proposta recusada',
+  'tutoring.proposal.boardLink': 'Ver no Quartel-General',
+  'tutoring.proposal.unknown': 'Proposta que esta versão não sabe mostrar.',
+
+  'tutoring.reschedule.title': 'Proposta de reagendamento',
+  'tutoring.reschedule.target': 'o reagendamento: {instructions}',
+  'tutoring.reschedule.previousDeadline': 'Prazo atual',
+  'tutoring.reschedule.newDeadline': 'Prazo proposto',
+  'tutoring.reschedule.reason': 'Motivo:',
+  'tutoring.reschedule.done': 'Prazo reagendado',
+
   'tutoring.messageFailure.safeRetry': 'Tentar de novo é seguro: a pergunta não será duplicada.',
   'tutoring.messageFailure.tryAgain': 'Tente de novo.',
   'tutoring.messageFailure.unknownResult.message':
