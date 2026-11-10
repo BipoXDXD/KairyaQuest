@@ -1136,9 +1136,12 @@ dentro do `reagendar_missao`, a missão; nenhum caminho trava na ordem inversa.
 Dois reagendamentos simultâneos, com chaves diferentes, viram **dois elos
 encadeados** (o `previous_deadline` do segundo é o `new_deadline` do primeiro),
 nunca uma atualização perdida. Provado por conexões reais em
-`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`; a
-ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
-tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
+`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`. A
+ordem "ação antes da missão", declarada no docstring de `confirmar_acao`, é
+observada em `test_ordem_global_das_travas.py` (pendência 104): com a missão
+retida pela escrita da avaliação, a confirmação espera nela já segurando a
+ação, e uma sonda `NOWAIT` confirma a ação travada; o mesmo módulo prova
+missão e avaliação antes do usuário. Os
 testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
 A confirmação da Kairya × conclusão (pendência 167) ganhou uma prova das duas
 ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
