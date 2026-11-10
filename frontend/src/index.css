@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import './styles/tokens.css';
+@import './styles/fonts.css';
+@import './styles/base.css';
 
 /* A entrada do anuncio da recompensa (D16), usada so sob `motion-safe:` em
    RewardAnnouncement.tsx -- README §7, movimento reduzido. */
@@ -54,7 +56,7 @@
 }
 
 .rpg-wordmark {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
   font-size: 21px;
   letter-spacing: 0.01em;
   color: #f3e7d3;
@@ -70,9 +72,7 @@
   display: none;
   color: #b9a78c;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .rpg-nav-item {
@@ -126,7 +126,7 @@
 
 .rpg-hero h1 {
   max-width: 680px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
   font-size: clamp(25px, 2.2vw, 35px);
   font-weight: 500;
   line-height: 1.18;
@@ -144,9 +144,7 @@
 .rpg-eyebrow {
   color: #ecd1a4;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .rpg-progress,
@@ -173,7 +171,7 @@
 
 .rpg-main section > h2 {
   color: var(--color-text-primary);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
   font-size: 21px;
   font-weight: 500;
   line-height: 1.35;
@@ -186,7 +184,7 @@
 }
 
 .rpg-progress-content > .progress-level-value {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
   font-size: 30px;
   font-weight: 500;
   color: #f1dcbb;
@@ -303,7 +301,7 @@
 }
 
 .tutor-name {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
   font-size: 26px;
   font-weight: 500;
   color: #f0dfc4;

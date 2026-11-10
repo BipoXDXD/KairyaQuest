@@ -7,7 +7,7 @@
 // `new URL('../../', import.meta.url)`: o Vite reescreve essa forma literal
 // como URL de asset (`http://localhost:3000/@fs/...`) e o `fileURLToPath`
 // recusa o esquema http. Medido no Vitest 5.0.1 com jsdom.
-import { globSync, readFileSync } from 'node:fs'
+import { existsSync, globSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +21,11 @@ export function readSource(pathFromFrontend: string): string {
     throw new Error(`arquivo vazio: ${pathFromFrontend}`)
   }
   return text
+}
+
+/** Diz se um arquivo relativo a `frontend/` existe; serve a binários (woff2). */
+export function sourceExists(pathFromFrontend: string): boolean {
+  return existsSync(resolve(FRONTEND_ROOT, pathFromFrontend))
 }
 
 /** Caminhos relativos a `frontend/` que casam com o glob, em ordem estável. */
