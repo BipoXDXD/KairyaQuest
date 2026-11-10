@@ -1210,4 +1210,12 @@ transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
 a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
 ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
 
+**Teste instável corrigido.** O gate do pre-push reprovou uma vez no D1 de
+`useDecideAction.test.tsx` (`confirming` no lugar de `idle`), num teste que
+este PR não tinha tocado. A causa é uma race no teste: o `then` do hook faz
+`setState` e chama os callbacks fora de `act`, e o `waitFor` esperava o
+callback, de modo que o render com `idle` podia ainda não ter chegado. D1, D6
+e o caso da chave que falha ao ser gerada passam a esperar o estado dentro do
+`waitFor`; as expectativas não mudam.
+
 **Comandos e resultado.** `make check` completo; resultado no corpo do PR.
