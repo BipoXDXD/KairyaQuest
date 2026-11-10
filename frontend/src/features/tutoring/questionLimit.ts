@@ -2,9 +2,10 @@
  * O tamanho maximo da pergunta, em pontos de codigo.
  *
  * Espelha `TAMANHO_MAXIMO_DA_PERGUNTA`, em
- * src/focusquest/modules/tutoring/schemas.py, e nada amarra os dois (pendencia
- * 32). O numero e PROVISORIO: e teto tecnico de custo, e a decisao de produto
- * e do dono (pendencia 41). Quem mudar la muda aqui.
+ * src/focusquest/modules/tutoring/schemas.py. O numero foi decidido pelo dono
+ * (pendencia 41) e tests/unit/test_limite_da_pergunta.py reprova se os dois
+ * divergirem; o teste le esta declaracao como texto, entao mantenha a forma
+ * `export const MAX_QUESTION_LENGTH = <inteiro>`.
  */
 export const MAX_QUESTION_LENGTH = 4000
 
