@@ -1,3 +1,15 @@
+# Bíblia e voz da Kairya — 2026-11-10
+
+`docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
+visual, paleta, expressões, máquina de estados e limites) e
+`docs/kairya/voz.md` (princípios, exemplos PT/EN, padrão de erro, forma do
+chat, gatilhos das 36 falas por idioma e descrições das vozes) passam a ser a
+fonte da persona da tutora, dos prompts de arte e do roteiro das falas. A
+Kairya é original e descrita só por traços próprios: nenhum desses textos
+compara a personagem com obra ou franquia existente. O texto final de cada
+fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
+código, dependência, endpoint ou custo.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
