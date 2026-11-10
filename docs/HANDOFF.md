@@ -1,3 +1,73 @@
+# Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
+
+**Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
+ser a API da Anthropic. `get_tutoria` monta `ProvedorAnthropic` com
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, `None` e tela de indisponível. O
+Groq saiu do código, dos testes e da documentação viva (`groq_provider.py`,
+os testes dele, `docs/GROQ.md` e o plano de 22/10); a seção "Groq Free"
+abaixo fica só como histórico. `tests/unit/test_sem_groq.py` impede a volta
+do nome em `src`, `tests`, `frontend/src`, `frontend/tests`, `docs` (exceto
+este arquivo), `scripts`, `.github`, `alembic`, `.env.example`,
+`README.md`, `AGENTS.md`, `Makefile`, `pyproject.toml`,
+`.pre-commit-config.yaml`, `compose*.yaml` e a configuração da raiz de
+`frontend/` (`package.json`, `vite.config.ts`, `playwright.config.ts`,
+`tsconfig*` e afins), pulando `node_modules`, binários, `.env` privados e os
+lockfiles (`uv.lock`, `package-lock.json`: espelham os manifestos, e os
+hashes de integridade dariam falso positivo). Nenhuma dependência nova.
+`FOCUSQUEST_GROQ_API_KEY` deixou de existir; com `extra="forbid"`, um `.env`
+que ainda a tenha impede a partida: retire a linha do `.env` local e da
+configuração do deploy.
+
+- Padrões: `tutor_model=claude-sonnet-5-5`, `tutor_fallback=true`,
+  `tutor_effort=low` (conversa), `evaluation_effort=medium` (avaliação). O
+  esforço vai em `output_config.effort`; nenhum pedido envia `temperature`,
+  `top_p`, `top_k` nem `budget_tokens`.
+- Cache do prefixo estático: `cache_control` ephemeral na última ferramenta e
+  no bloco da persona. O `Turno` separa `sistema` (persona) de `contexto`
+  (missões, progresso, hora); o contexto vai num bloco DEPOIS do ponto de
+  cache, e o histórico nas mensagens, ambos fora do prefixo. A avaliação não
+  usa cache.
+- Teto diário: `tutor_daily_turn_limit=60` turnos por dia de
+  America/Sao_Paulo. **Turno é chamada ao modelo** (uma resposta da Kairya),
+  não pergunta: o teto é guarda de orçamento, e o reenvio de uma pergunta
+  interrompida ou falhada também é pago. `turnos_de_hoje` conta as respostas
+  da tutora com `created_at` no dia de São Paulo, e a checagem roda antes de
+  criar QUALQUER resposta `gerando`, inclusive no reenvio. Só o reenvio de
+  pergunta já respondida (`JaRespondida`) sai sem chamar o modelo e sem
+  contar. Acima do teto: 429 `limite_diario_da_tutoria` com `Retry-After`
+  até a meia-noite; nada é gravado e o provedor não é chamado. A tela
+  desabilita o campo com "Você chegou ao limite de conversas de hoje. A
+  Kairya volta à meia-noite." (EN na Fase 3).
+- Contrato do 429: é o status de cota excedida (RFC 6585), que é o que o
+  teto é. `Retry-After` vai em segundos (a forma delta-seconds, sem depender
+  do relógio do cliente), calculados em UTC até a meia-noite de São Paulo,
+  arredondados para cima, e corretos também nos dias de 23 e 25 horas do
+  antigo horário de verão. O `code` é próprio porque a tela precisa
+  distinguir este 429 de uma falha: desabilita o campo e não oferece "Tentar
+  de novo", que só gastaria outra requisição. O membro novo do `CodigoDeErro`
+  tem handler (`_limite_diario` em `main.py`) e entra na lista "Erros antes
+  do stream" do `docs/ARCHITECTURE.md`.
+- O teto é guarda de orçamento, não invariante. Duas requisições simultâneas
+  poderiam passar 1 turno do teto; na implementação atual a trava `FOR
+  UPDATE` na linha do usuário serializa as duas, então isso não acontece
+  hoje. A frase vale como contrato: o teto não é invariante e pode deixar de
+  ser exato se a trava mudar.
+- Pendência 100 encerrada. Itens G e H da fila antiga cancelados (eram do
+  Groq).
+- Pendência nova 206: a tela de limite diário não destrava sozinha à
+  meia-noite; hoje basta recarregar. Fica para a Fase 3, que refaz essa tela.
+
+**Passos de deploy.** Antes do deploy, o responsável remove
+`FOCUSQUEST_GROQ_API_KEY` e ajusta `FOCUSQUEST_TUTOR_MODEL` no `.env` de
+produção e no Coolify. Com a variável antiga, a aplicação não sobe
+(`extra_forbidden`).
+Antes do deploy, o responsável também confere que
+`FOCUSQUEST_ANTHROPIC_API_KEY` existe no Coolify (sem expor o valor): sem
+ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
+`None`). As variáveis novas `FOCUSQUEST_TUTOR_EFFORT`,
+`FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
+`FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
@@ -450,7 +520,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | **Encerrada em 2026-11-10** com a volta à Anthropic (ver topo). |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
@@ -460,6 +530,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
 

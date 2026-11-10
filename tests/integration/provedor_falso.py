@@ -204,6 +204,20 @@ class Recebida:
     corpo: dict[str, Any]
     cabecalhos: dict[str, str]
 
+    @property
+    def contexto_do_turno(self) -> str:
+        """O texto dos blocos de `system` que ficam fora do prefixo cacheado.
+
+        A conversa manda a persona num bloco com `cache_control` e o contexto
+        do turno, que muda a cada pergunta, em bloco proprio depois dele. Ler
+        so os blocos sem `cache_control` prova as duas coisas: o contexto
+        chegou e nao entrou no cache.
+        """
+        blocos: list[dict[str, Any]] = self.corpo["system"]
+        return "\n\n".join(
+            bloco["text"] for bloco in blocos if "cache_control" not in bloco
+        )
+
 
 def _uso_da_troca(
     substituicao: Substituicao | None,

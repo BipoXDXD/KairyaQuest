@@ -453,7 +453,7 @@ def test_pedir_xp_no_chat_nao_altera_o_saldo(
             ).select_from(XpEntry)
         ).one()
     assert depois == antes
-    assert "Progresso do estudante" in falso.recebidas[-1].corpo["system"]
+    assert "Progresso do estudante" in falso.recebidas[-1].contexto_do_turno
 
 
 def test_o_turno_leva_so_mensagens_completas(
@@ -991,7 +991,7 @@ def _sistema_do_turno(
         tutoria=tutoria,
         clock=relogio or (lambda: agora),
     )
-    return _para_gerar(preparo).turno.sistema
+    return _para_gerar(preparo).turno.contexto
 
 
 def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(

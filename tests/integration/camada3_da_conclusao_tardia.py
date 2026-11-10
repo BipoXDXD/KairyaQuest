@@ -108,7 +108,11 @@ def turno(agora: datetime) -> Turno:
         historico=[],
         tardias=(_diaria_de_ontem(agora),),
     )
-    return Turno(sistema=base.sistema, mensagens=(MensagemDoTurno("user", _PEDIDO),))
+    return Turno(
+        sistema=base.sistema,
+        contexto=base.contexto,
+        mensagens=(MensagemDoTurno("user", _PEDIDO),),
+    )
 
 
 def capturar(
@@ -168,6 +172,8 @@ def main() -> None:
         max_tokens=settings.tutor_max_tokens,
         timeout_segundos=settings.tutor_timeout_seconds,
         fallback=settings.tutor_fallback,
+        esforco=settings.tutor_effort,
+        esforco_da_avaliacao=settings.evaluation_effort,
     )
     agora = datetime.now(UTC)
     try:

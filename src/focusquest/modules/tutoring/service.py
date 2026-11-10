@@ -13,18 +13,20 @@ seguro:
 Nenhuma funcao daqui conhece HTTP, e nenhuma conhece o SDK.
 """
 
+import math
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
+    LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
@@ -34,6 +36,7 @@ from focusquest.core.errors import (
     PrazoInalteradoError,
 )
 from focusquest.core.validation import rejeitar_nul
+from focusquest.modules.missions.cycle_domain import dia_de, fim_do_dia, inicio_do_dia
 from focusquest.modules.missions.cycle_service import ler_ciclo
 from focusquest.modules.missions.domain import (
     MissionState,
@@ -100,6 +103,8 @@ class Tutoria:
     historico: int
     limite: timedelta
     modelo: str
+    # Perguntas por dia de Sao Paulo (`Settings.tutor_daily_turn_limit`).
+    turnos_por_dia: int
 
 
 @dataclass(frozen=True)
@@ -211,6 +216,12 @@ def preparar_turno(
     if em_andamento is not None:
         raise MensagemEmAndamentoError("ja existe uma resposta da Kairya sendo gerada")
 
+    # O teto vale para TODA resposta nova, inclusive o reenvio de pergunta
+    # interrompida ou falhada: cada `gerando` e uma chamada paga ao modelo.
+    # So a `JaRespondida`, acima, sai sem chamar o modelo e sem contar.
+    if turnos_de_hoje(session, agora, user_id=user_id) >= tutoria.turnos_por_dia:
+        raise LimiteDiarioDaTutoriaError(segundos_ate_meia_noite(agora))
+
     if pergunta is None:
         pergunta = TutorMessage(
             user_id=user_id,
@@ -251,6 +262,37 @@ def preparar_turno(
         ),
     )
     return ParaGerar(pergunta=pergunta, resposta_id=resposta.id, turno=turno)
+
+
+def turnos_de_hoje(session: Session, agora: datetime, *, user_id: int) -> int:
+    """Quantas chamadas ao modelo o estudante fez no dia de `agora`, em Sao
+    Paulo: as respostas da Kairya, uma por chamada, em qualquer status.
+
+    "Turno" e chamada paga, e nao pergunta: o reenvio de uma pergunta
+    interrompida abre outra resposta e outra chamada, e tambem custa. A janela
+    e semiaberta, `[00:00, 24:00)`.
+    """
+    dia = dia_de(agora)
+    total = session.scalar(
+        select(func.count())
+        .select_from(TutorMessage)
+        .where(
+            TutorMessage.user_id == user_id,
+            TutorMessage.role == Papel.TUTORA,
+            TutorMessage.created_at >= inicio_do_dia(dia),
+            TutorMessage.created_at < fim_do_dia(dia),
+        )
+    )
+    return total or 0
+
+
+def segundos_ate_meia_noite(agora: datetime) -> int:
+    """Os segundos ate a proxima meia-noite de Sao Paulo, arredondados para
+    cima: o `Retry-After` nunca manda repetir antes de o dia virar."""
+    # Em UTC: dois `datetime` com o MESMO `tzinfo` se subtraem pelo horario
+    # de parede, e o dia de 25 h (fim do horario de verao) daria 1 h a menos.
+    fim = fim_do_dia(dia_de(agora)).astimezone(UTC)
+    return math.ceil((fim - agora.astimezone(UTC)).total_seconds())
 
 
 def transmitir(
