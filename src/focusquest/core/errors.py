@@ -130,3 +130,12 @@ class ReagendamentoInvalidoError(DomainError):
     """A proposta de reagendamento nao vale mais: a missao sumiu, foi concluida
     ou ja tem aquele prazo (F17). A acao foi GRAVADA como `falhou` antes deste
     erro subir -- a rota commita e so entao levanta."""
+
+
+class CampoDesconhecidoError(DomainError):
+    """O corpo trouxe um campo que o contrato nao tem.
+
+    Separado do 422 de valor invalido porque a correcao do cliente e outra:
+    tirar o campo, e nao mudar o valor. Hoje so `/api/me` o levanta, pela
+    `RotaQueRecusaCampoExtra` de `users/router.py`.
+    """
