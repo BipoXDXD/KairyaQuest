@@ -51,6 +51,7 @@ from focusquest.modules.missions.service import (
 )
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
+    PRAZO_FORA_DO_LIMITE,
     REAGENDAMENTO_INVALIDO,
     CodigoDoStream,
     EstadoDaAcao,
@@ -61,11 +62,13 @@ from focusquest.modules.tutoring.domain import (
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.service import (
     Executada,
+    ForaDoLimite,
     ParaGerar,
     PrazoExpirado,
     ReagendamentoInvalido,
     RespostaConcluida,
     RespostaFalhou,
+    ResultadoDaConfirmacao,
     Tutoria,
     confirmar_acao,
     preparar_turno,
@@ -559,7 +562,7 @@ def _proposta(
 
 def _confirmar(
     session: Session, acao_id: int, op: str, agora: datetime = AGORA
-) -> Executada | PrazoExpirado | ReagendamentoInvalido:
+) -> ResultadoDaConfirmacao:
     return confirmar_acao(session, ESTUDANTE, acao_id, op, clock=relogio(agora))
 
 
@@ -638,6 +641,33 @@ def test_prazo_proposto_ja_passado_grava_falhou(session: Session) -> None:
     assert isinstance(_confirmar(session, acao.id, "op-t7-4"), PrazoExpirado)
     with pytest.raises(TransicaoIlegalError):
         _confirmar(session, acao.id, "op-t7-5")
+
+
+def test_prazo_proposto_alem_de_365_dias_grava_falhou(session: Session) -> None:
+    """Pendencia 26: o horizonte da tela vale na confirmacao da Kairya. A falha
+    e gravada na acao, e a missao fica com o prazo de antes."""
+    missao = _avulsa(session)
+    acao = _proposta(session, missao.id, novo=AGORA + timedelta(days=365, seconds=1))
+    resultado = _confirmar(session, acao.id, "op-t15-1")
+    assert resultado == ForaDoLimite(acao, PRAZO_FORA_DO_LIMITE)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PRAZO_FORA_DO_LIMITE)
+    assert (acao.operation_id, acao.decided_at) == ("op-t15-1", AGORA)
+    assert acao.mission_id is None
+    assert missao.deadline == PRAZO_ATUAL
+    assert _linhas(session, missao.id) == []
+    assert _confirmar(session, acao.id, "op-t15-1") == ForaDoLimite(
+        acao, PRAZO_FORA_DO_LIMITE
+    )
+
+
+def test_prazo_proposto_no_horizonte_ainda_executa(session: Session) -> None:
+    missao = _avulsa(session)
+    teto = AGORA + timedelta(days=365)
+    acao = _proposta(session, missao.id, novo=teto)
+    resultado = _confirmar(session, acao.id, "op-t15-2")
+    assert isinstance(resultado, Executada)
+    assert resultado.missao.deadline == teto
+    assert len(_linhas(session, missao.id)) == 1
 
 
 def _concluir_direto(session: Session, missao: Mission) -> None:
@@ -914,6 +944,29 @@ def test_api_prazo_expirado_e_422_com_a_falha_ja_gravada(
     assert resposta.json()["code"] == "prazo_expirado"
     acao = _acao_na_conversa(api, acao_id)
     assert (acao["state"], acao["error_code"]) == ("falhou", "prazo_expirado")
+    assert _historico_de(banco_migrado, mission_id) == []
+
+
+def test_api_prazo_fora_do_limite_e_422_com_a_falha_ja_gravada(
+    api: TestClient, banco_migrado: Engine, registro: Registro
+) -> None:
+    mission_id, acao_id = _proposta_commitada(
+        banco_migrado,
+        registro,
+        "api-limite",
+        novo=AGORA + timedelta(days=365, seconds=1),
+    )
+    url = f"/api/tutoring/actions/{acao_id}/confirm"
+    resposta = api.post(url, json={"operation_id": "op-api-limite"})
+    assert resposta.status_code == 422
+    assert resposta.json()["code"] == "prazo_fora_do_limite"
+    acao = _acao_na_conversa(api, acao_id)
+    assert (acao["state"], acao["error_code"]) == ("falhou", "prazo_fora_do_limite")
+    de_novo = api.post(url, json={"operation_id": "op-api-limite"})
+    assert (de_novo.status_code, de_novo.json()["code"]) == (
+        422,
+        "prazo_fora_do_limite",
+    )
     assert _historico_de(banco_migrado, mission_id) == []
 
 

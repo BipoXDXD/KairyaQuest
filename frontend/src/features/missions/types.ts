@@ -97,6 +97,7 @@ export type RescheduleErrorCode =
   | 'prazo_expirado'
   | 'prazo_inalterado'
   | 'prazo_derivado'
+  | 'prazo_fora_do_limite'
 
 /**
  * O rascunho do reagendamento, como o formulario o entrega ao hook: a hora

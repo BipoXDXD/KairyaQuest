@@ -16,9 +16,12 @@ import type { ActionErrorCode, ActionRead } from './types'
  *   foi concluida, o prazo ja e o proposto); o backend GRAVOU a acao como
  *   `falhou`/`reagendamento_invalido` antes do 409 (F17), e o cartao passa a
  *   esse estado, como no `expired`.
+ * - `out-of-bounds`: a proposta saiu dos limites da avulsa (estimativa fora de
+ *   1 a 1440 minutos, prazo alem de 365 dias; pendencia 26); o backend GRAVOU
+ *   a acao como `falhou` com esse code antes do 422, como no `expired`.
  */
 export type ActionRecovery =
-  'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated'
+  'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated' | 'out-of-bounds'
 
 export interface ActionFailure {
   message: string
@@ -47,6 +50,29 @@ const BY_CODE: Record<ActionErrorCode, ActionFailure> = {
       'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
     recovery: 'invalidated',
   },
+  estimativa_fora_do_limite: {
+    message:
+      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
+    recovery: 'out-of-bounds',
+  },
+  prazo_fora_do_limite: {
+    message:
+      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
+    recovery: 'out-of-bounds',
+  },
+}
+
+/**
+ * Se o backend GRAVOU a acao como `falhou` antes de responder, por saida.
+ * Exaustivo: uma saida nova reprova o `tsc` ate dizer se grava.
+ */
+const RECORDS: Record<ActionRecovery, boolean> = {
+  retry: false,
+  'retry-with-new-operation': false,
+  refresh: false,
+  expired: true,
+  invalidated: true,
+  'out-of-bounds': true,
 }
 
 /**
@@ -77,6 +103,18 @@ function isActionErrorCode(code: string): code is ActionErrorCode {
 }
 
 /**
+ * O `error_code` que o backend GRAVOU na acao antes de responder com este
+ * erro, ou `null` se a acao nao mudou. A tela espelha a acao gravada sem outra
+ * ida a rede.
+ */
+export function recordedErrorCode(error: unknown): ActionErrorCode | null {
+  if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
+    return RECORDS[BY_CODE[error.code].recovery] ? error.code : null
+  }
+  return null
+}
+
+/**
  * A mensagem e a acao do cartao, decididas pelo `code` e so por ele. O `kind`
  * so escolhe o texto do "confirmar sem resposta", e e OBRIGATORIO: um padrao
  * esconderia do `tsc` o chamador que esquecesse o `kind` de um reagendamento,
@@ -97,8 +135,8 @@ const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma
 
 /**
  * O texto de uma acao que o backend gravou como `falhou`, pelo `error_code`
- * gravado. So os codes que o backend GRAVA na acao (`expired`, `invalidated`)
- * tem texto proprio -- o mesmo do aviso da confirmacao, para a tela dizer a
+ * gravado. So os codes que o backend GRAVA na acao (`expired`, `invalidated`,
+ * `out-of-bounds`) tem texto proprio -- o mesmo do aviso da confirmacao, para a tela dizer a
  * mesma coisa antes e depois de uma recarga. Qualquer outro cai no generico, e
  * o code cru nunca vai para a tela.
  */
@@ -107,7 +145,5 @@ export function failedActionText(errorCode: string | null): string {
     return FAILED_TEXT
   }
   const failure = BY_CODE[errorCode]
-  return failure.recovery === 'expired' || failure.recovery === 'invalidated'
-    ? failure.message
-    : FAILED_TEXT
+  return RECORDS[failure.recovery] ? failure.message : FAILED_TEXT
 }
