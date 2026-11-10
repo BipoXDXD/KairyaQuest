@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './styles/tokens.css';
 
 /* A entrada do anuncio da recompensa (D16), usada so sob `motion-safe:` em
    RewardAnnouncement.tsx -- README §7, movimento reduzido. */
@@ -13,28 +14,20 @@
   }
 }
 
-:root {
-  --fq-bg: #0b1421;
-  --fq-surface: #152331;
-  --fq-text: #e5eaf0;
-  --fq-muted: #b2beca;
-  --fq-metal: #b69767;
-  --fq-mako: #82d8b2;
-  --fq-border: #52606d;
-  --fq-font-display: Georgia, 'Times New Roman', serif;
-  --fq-radius: 12px;
-  --fq-space: 24px;
-}
-
 /* Apresentação do desktop: arte decorativa, superfícies legíveis e fontes
    locais. As classes não alteram estados, foco, hidden ou contratos. */
 .app-shell {
-  background: radial-gradient(ellipse at 70% 0%, #192c3c 0, var(--fq-bg) 45%, #080f1a 100%);
+  background: radial-gradient(
+    ellipse at 70% 0%,
+    #192c3c 0,
+    var(--color-bg-canvas) 45%,
+    #080f1a 100%
+  );
 }
 
 .rpg-nav {
   background: linear-gradient(180deg, #111c29, #0b1420 60%);
-  border-color: var(--fq-border);
+  border-color: var(--color-border-strong);
 }
 
 .rpg-brand {
@@ -50,7 +43,7 @@
   height: 48px;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid var(--fq-metal);
+  border: 1px solid var(--lantern-600);
   border-radius: 4px 4px 16px 16px;
   color: #e6c798;
   font-size: 27px;
@@ -61,14 +54,14 @@
 }
 
 .rpg-wordmark {
-  font-family: var(--fq-font-display);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 21px;
   letter-spacing: 0.01em;
   color: #f3e7d3;
 }
 
 .rpg-brand-note {
-  color: var(--fq-muted);
+  color: var(--color-text-muted);
   font-size: 10px;
   line-height: 1.5;
 }
@@ -89,7 +82,7 @@
 
 .rpg-nav-item[aria-current='page'] {
   background: linear-gradient(90deg, #214537, #17302b);
-  border-left-color: var(--fq-mako);
+  border-left-color: var(--color-feedback-success);
   box-shadow:
     inset 0 0 0 1px #46735e80,
     0 5px 18px #0002;
@@ -109,8 +102,8 @@
   overflow: hidden;
   border: 1px solid #64707a;
   border-radius: 14px;
-  padding: var(--fq-space);
-  background-color: var(--fq-surface);
+  padding: calc(var(--spacing) * 6);
+  background-color: var(--color-bg-surface);
   background-size: cover;
   background-position: center;
   box-shadow:
@@ -133,7 +126,7 @@
 
 .rpg-hero h1 {
   max-width: 680px;
-  font-family: var(--fq-font-display);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: clamp(25px, 2.2vw, 35px);
   font-weight: 500;
   line-height: 1.18;
@@ -161,7 +154,7 @@
 .rpg-mission-card,
 .rpg-trail-card {
   border: 1px solid #54616f;
-  border-radius: var(--fq-radius);
+  border-radius: var(--radius-ui);
   background: linear-gradient(150deg, #172433, #111d2b);
   box-shadow:
     inset 0 1px 0 #ffffff0a,
@@ -171,16 +164,16 @@
 .rpg-progress,
 .rpg-cycle {
   padding: 20px;
-  margin-bottom: var(--fq-space);
+  margin-bottom: calc(var(--spacing) * 6);
 }
 
 .rpg-progress {
-  border-top: 2px solid var(--fq-metal);
+  border-top: 2px solid var(--lantern-600);
 }
 
 .rpg-main section > h2 {
-  color: var(--fq-text);
-  font-family: var(--fq-font-display);
+  color: var(--color-text-primary);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 21px;
   font-weight: 500;
   line-height: 1.35;
@@ -193,7 +186,7 @@
 }
 
 .rpg-progress-content > .progress-level-value {
-  font-family: var(--fq-font-display);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 30px;
   font-weight: 500;
   color: #f1dcbb;
@@ -229,11 +222,11 @@
   width: fit-content;
   min-height: 24px;
   cursor: pointer;
-  color: var(--fq-metal);
+  color: var(--lantern-600);
 }
 
 .progress-achievements summary:focus-visible {
-  outline: 2px solid var(--fq-mako);
+  outline: 2px solid var(--color-feedback-success);
   outline-offset: 4px;
   border-radius: 3px;
 }
@@ -260,7 +253,7 @@
 
 .rpg-tutor {
   background: linear-gradient(160deg, #142231, #0d1825);
-  border-color: var(--fq-border);
+  border-color: var(--color-border-strong);
 }
 
 .tutor-desktop {
@@ -273,9 +266,9 @@
   height: 40px;
   flex-shrink: 0;
   overflow: hidden;
-  border: 1px solid var(--fq-metal);
+  border: 1px solid var(--lantern-600);
   border-radius: 50%;
-  background: var(--fq-surface);
+  background: var(--color-bg-surface);
 }
 
 .tutor-portrait img {
@@ -290,7 +283,7 @@
   position: relative;
   width: 100%;
   height: clamp(150px, 22vh, 220px);
-  border-radius: var(--fq-radius);
+  border-radius: var(--radius-ui);
   box-shadow:
     inset 0 0 0 1px #cab38440,
     0 8px 25px #0003;
@@ -310,7 +303,7 @@
 }
 
 .tutor-name {
-  font-family: var(--fq-font-display);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 26px;
   font-weight: 500;
   color: #f0dfc4;

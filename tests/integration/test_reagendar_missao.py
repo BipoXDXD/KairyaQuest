@@ -20,6 +20,7 @@ from focusquest.core.errors import (
     OperacaoReutilizadaError,
     PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoForaDoLimite,
     PrazoInalteradoError,
 )
 from focusquest.main import app
@@ -248,6 +249,8 @@ def test_antecipar_e_permitido(session: Session) -> None:
         ("nada", AGORA - timedelta(days=1), PrazoExpiradoError),
         ("nada", "atual", PrazoInalteradoError),
         ("nada", "atual_sp", PrazoInalteradoError),
+        # Pendencia 26: o teto do prazo vale tambem no reagendamento.
+        ("nada", AGORA + timedelta(days=365, seconds=1), PrazoForaDoLimite),
     ],
 )
 def test_cada_recusa_vem_antes_de_qualquer_escrita(
@@ -269,6 +272,23 @@ def test_cada_recusa_vem_antes_de_qualquer_escrita(
     assert missao.deadline == atual
     assert _historico(session, missao.id) == []
     assert _operacoes(session, missao.id, "reschedule") == 0
+
+
+@pytest.mark.parametrize(
+    "prazo",
+    [AGORA + timedelta(seconds=1), AGORA + timedelta(days=365)],
+    ids=["agora+1s", "agora+365d"],
+)
+def test_prazo_na_borda_da_janela_e_reagendado(
+    session: Session, prazo: datetime
+) -> None:
+    """Pendencia 26, borda ACEITA: um segundo depois de agora e exatamente um
+    ano depois. O passado (`agora`) segue com `PrazoExpiradoError` e o teto+1s
+    com `PrazoForaDoLimite`, no teste de recusas acima."""
+    missao = _avulsa(session)
+    _reagendar(session, missao, "op-r-borda", prazo=prazo)
+    assert missao.deadline == prazo
+    assert len(_historico(session, missao.id)) == 1
 
 
 @pytest.mark.parametrize(
@@ -415,6 +435,11 @@ def test_api_reenvio_em_outro_fuso_e_o_mesmo_corpo(
             "prazo_inalterado",
         ),
         ({"new_deadline": AGORA.isoformat()}, 422, "prazo_expirado"),
+        (
+            {"new_deadline": (AGORA + timedelta(days=365, seconds=1)).isoformat()},
+            422,
+            "prazo_fora_do_limite",
+        ),
     ],
 )
 def test_api_prazo_recusado_com_code(
@@ -429,6 +454,12 @@ def test_api_prazo_recusado_com_code(
         f"/api/missions/{criada['id']}/reschedule", json=_corpo("op-a3", **corpo)
     )
     assert (resposta.status_code, resposta.json()["code"]) == (status, code)
+    # Toda recusa deixa o banco como estava: mesmo prazo, nenhum elo.
+    (relida,) = [
+        m for m in client.get("/api/missions").json() if m["id"] == criada["id"]
+    ]
+    assert relida["deadline"] == criada["deadline"]
+    assert relida["reschedules"] == []
 
 
 def test_api_concluida_e_transicao_ilegal(
