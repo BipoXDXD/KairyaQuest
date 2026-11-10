@@ -17,6 +17,12 @@ describe('describePreStreamFailure', () => {
       'A Kairya ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
     ],
     [
+      'limite_diario_da_tutoria',
+      429,
+      'daily-limit',
+      'Você chegou ao limite de conversas de hoje. A Kairya volta à meia-noite.',
+    ],
+    [
       'operacao_reutilizada',
       409,
       'retry-with-new-id',
