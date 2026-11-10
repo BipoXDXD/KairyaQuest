@@ -425,7 +425,9 @@ def test_api_diaria_perdida_e_missao_expirada(
 @pytest.mark.parametrize(
     "corpo", [{}, {"operation_id": ""}, {"operation_id": "x" * 201}]
 )
-def test_api_chave_invalida_e_422(client: TestClient, corpo: dict[str, Any]) -> None:
+def test_api_chave_invalida_e_422(
+    client: TestClient, instante: list[datetime], corpo: dict[str, Any]
+) -> None:
     criada = _criar(client)
     assert (
         client.post(f"/api/missions/{criada['id']}/start", json=corpo).status_code
