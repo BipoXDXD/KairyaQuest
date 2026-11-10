@@ -112,7 +112,7 @@ describe('useDecideAction', () => {
       status: 'failed',
       failure: {
         message:
-          'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
+          'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
         recovery: 'retry',
       },
       attempted: 'confirm',
@@ -265,7 +265,8 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível conectar. Tentar de novo é seguro.',
+        message:
+          'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
         recovery: 'retry',
       },
       attempted: 'reject',

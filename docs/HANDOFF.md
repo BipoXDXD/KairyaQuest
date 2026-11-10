@@ -1180,3 +1180,34 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 211: textos de falha de transporte — 2026-11-10
+
+A linha 211 da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** A falha de transporte (rede fora ou prazo esgotado) trocava a
+abertura do texto pela causa ("Não foi possível conectar." / "A resposta
+demorou mais que o esperado.") e deixava de nomear a ação que falhou.
+
+**Decisão.** A abertura nomeia a ação, com objeto, e a causa numa frase só:
+"Não foi possível <ação>: <causa>.". As causas são "sem conexão com o
+servidor" (rede) e "o servidor demorou demais para responder" (prazo). O fim
+"Tentar de novo é seguro: …" fica como estava; o E2E do QG continua conferindo
+esse trecho. `leadFor` passa a receber `{ action, fallback }` (`FailureLead`):
+a frase do transporte é montada num lugar só, e o `fallback` continua sendo a
+abertura própria de cada tradutor para 5xx e `code` desconhecido, que não muda.
+
+**Alterações.** `frontend/src/shared/api/transportFailure.ts` (assinatura e
+causas), os tradutores `completion`, `start`, `reschedule` e
+`evaluationFailure.ts` em `features/missions`, `features/tutoring/actionFailure.ts`
+e os testes unitários que conferem esses textos. Ações usadas: concluir a
+missão, iniciar a missão, reagendar a missão, pedir a avaliação, confirmar a
+missão, confirmar o reagendamento e recusar a proposta.
+
+**Limitação nova.** Só o texto de recusar ficou na faixa de 12–18 palavras da
+revisão de ux-writing (16 por rede, 17 por prazo). As outras seis mensagens de
+transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
+a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
+ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
+
+**Comandos e resultado.** `make check` completo; resultado no corpo do PR.

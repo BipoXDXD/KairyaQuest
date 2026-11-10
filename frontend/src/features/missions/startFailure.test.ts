@@ -66,7 +66,7 @@ describe('describeStartFailure', () => {
   it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(describeStartFailure(new ApiError('x', null, null))).toEqual({
       message:
-        'Não foi possível conectar. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível iniciar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
       recovery: 'retry',
     })
   })
@@ -74,7 +74,7 @@ describe('describeStartFailure', () => {
   it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
     expect(describeStartFailure(new ApiTimeoutError())).toEqual({
       message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível iniciar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
       recovery: 'retry',
     })
   })
