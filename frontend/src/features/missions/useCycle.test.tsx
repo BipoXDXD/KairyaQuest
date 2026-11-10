@@ -443,15 +443,20 @@ describe('useCycle', () => {
       return result
     }
 
-    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
-      const { route, responder } = emVoo([Response.json(semPlano)])
-      const result = await carregarComRotas(route)
-
+    /** Dispara tres `refresh` no mesmo `act`, como a rajada da aba que volta. */
+    function pedirTresRefresh(result: { current: { refresh: () => void } }) {
       act(() => {
         result.current.refresh()
         result.current.refresh()
         result.current.refresh()
       })
+    }
+
+    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
+      const { route, responder } = emVoo([Response.json(semPlano)])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
       await responder(2, Response.json(ciclo(3)))
       expect(result.current.state).toEqual(carregado(ciclo(3), false))
       await responder(1, Response.json(ciclo(2)))
@@ -464,11 +469,7 @@ describe('useCycle', () => {
       const { route, responder } = emVoo([Response.json(semPlano)])
       const result = await carregarComRotas(route)
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(0, Response.json(ciclo(1)))
       await responder(1, Response.json(ciclo(2)))
       expect(result.current.state).toEqual(carregado(semPlano, false))
@@ -481,11 +482,7 @@ describe('useCycle', () => {
       const { route, responder } = emVoo([Response.json(semPlano)])
       const result = await carregarComRotas(route)
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(2, Response.json(ciclo(3)))
       await responder(0, new Response(null, { status: 500 }))
       await responder(1, new Response(null, { status: 500 }))
@@ -529,11 +526,7 @@ describe('useCycle', () => {
       const { result } = renderHook(() => useCycle())
       expect(result.current.state).toEqual({ status: 'loading' })
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(2, Response.json(ciclo(2)))
       expect(result.current.state).toEqual({ status: 'loading' })
       await responder(3, new Response(null, { status: 503 }))

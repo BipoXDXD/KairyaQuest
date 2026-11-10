@@ -33,12 +33,15 @@ do `vitest` (os dois arquivos se comportaram igual):
 - (b) `catch` do refresh sem checagem de `id`: F3 reprova (com os dois
   testes antigos que já cobriam isso).
 - (c) refresh descarta **só** o penúltimo (`requestId.current - id === 1`):
-  os três testes antigos de dois refresh puros **continuam verdes**; F1–F5
-  (e F6) reprovam. É a prova de que o caso de dois não bastava.
+  F1–F5 (e F6) reprovam. Antes deste PR, (c) passava pelos três testes
+  antigos de dois refresh puros (que continuam verdes) e só era pega pelos
+  dois testes antigos de `reload` ("um reload que comeca com um refresh em
+  voo..." e "o refresh que falha durante um reload..."); F1–F5/F6 a provam
+  no caso direto.
 - (d) `then` do efeito sem checagem de `id`: F4 e F5 reprovam (a carga do
   `reload` e a carga inicial velhas sobrescreveriam).
 
-Decisão do dono (F5): a regra atual fica. Durante a carga inicial, se um
+Decisão da coordenação (F5, autonomia delegada): a regra atual fica. Durante a carga inicial, se um
 refresh velho responde com dado bom e o mais recente falha, a tela vai para
 erro e o dado bom é descartado: "o pedido mais recente é a última palavra".
 Registrado em "Decisões aceitas" (65).
@@ -47,8 +50,11 @@ Limitação registrada como pendência 213: o `refresh` não tem prazo. Vale já
 para um pedido só, por isso não é da pendência 65.
 
 Validação: os dois arquivos de teste passando (`45 passed`), `tsc -b`,
-`eslint` e `prettier --check` sem erro; `make check` no fim desta entrega
-(resultado no PR).
+`eslint` e `prettier --check` sem erro. `make check` no worktree, com a
+revisão do texto e o helper `pedirTresRefresh` já aplicados: `EXIT=0`;
+Vitest `Tests 1057 passed (1057)`; cobertura 100% (Statements 1337/1337,
+Branches 996/996, Functions 371/371, Lines 1298/1298); pytest `1669 passed,
+32 subtests passed`; Playwright `66 passed`; gitleaks `no leaks found`.
 
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
@@ -897,7 +903,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
 | 47 | Revalidar payload histórico com schema endurecido pode produzir ValidationError/500 na confirmação de create/reschedule; falta versionamento/compatibilidade dessas propostas. |
-| ~~65~~ | ~~Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural.~~ Resolvida em 2026-11-10 (seção "Pendência 65: três ou mais refresh concorrentes"): três e quatro pedidos em voo, em ordens adversas, nos dois hooks, com sabotagem que só o caso de três detecta. |
+| ~~65~~ | ~~Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural.~~ Resolvida em 2026-11-10 (seção "Pendência 65: três ou mais refresh concorrentes"): três e quatro pedidos em voo, em ordens adversas, nos dois hooks, com sabotagem (descartar só o penúltimo) que os testes de dois refresh puros deixavam passar e só os de `reload` pegavam; F1–F5/F6 a provam no caso direto. |
 | 80 | Sequência O(D) por conclusão; backfill 0004 O(N·D). Rever quando histórico justificar, sem otimização especulativa. |
 | 81 | CASCADE de xp_entry pode remover conquista em exclusão futura; hoje não há rota de exclusão. Conquista deve sobreviver se esse fluxo nascer. |
 | 88 | Pares missions↔progression e progression↔tutoring continuam no nível de pacote; constante de usuário/router foi corrigida. Evaluation não cria terceiro par. |
@@ -961,7 +967,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
 | 54/56 | Janela E2E perto da meia-noite SP aceita; segunda leitura de clock pós-commit é risco teórico, não bug reproduzido. |
-| 65 | Durante a carga inicial, com vários refresh em voo, o pedido mais recente decide: se ele falha, a tela vai para erro mesmo que um refresh mais velho tenha trazido dado válido (teste F5). Decidido pelo dono; mudar é alteração de comportamento. |
+| 65 | Durante a carga inicial, com vários refresh em voo, o pedido mais recente decide: se ele falha, a tela vai para erro mesmo que um refresh mais velho tenha trazido dado válido (teste F5). Decisão da coordenação (F5, autonomia delegada); mudar é alteração de comportamento. |
 | 67/68/69/70 | Subtítulo/fixture aceitos; reload invalida imediatamente e efeito cria outra geração; refresh após unmount é no-op sem efeito observável, aceito. |
 | 73/74/75/76 | Compose só no principal; bancos sobrevivem à remoção de worktree; limpeza DB manual, sem DROP automático. Push simultâneo mesma árvore colide; script não atualiza main pela rede. |
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |

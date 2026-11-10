@@ -464,15 +464,20 @@ describe('useCurrentPlan', () => {
       return result
     }
 
-    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
-      const { route, responder } = emVoo([Response.json({ plan: plano })])
-      const result = await carregarComRotas(route)
-
+    /** Dispara tres `refresh` no mesmo `act`, como a rajada da aba que volta. */
+    function pedirTresRefresh(result: { current: { refresh: () => void } }) {
       act(() => {
         result.current.refresh()
         result.current.refresh()
         result.current.refresh()
       })
+    }
+
+    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
       await responder(2, Response.json({ plan: comProgresso(30) }))
       expect(result.current.state).toEqual(carregado(comProgresso(30), false))
       await responder(1, Response.json({ plan: comProgresso(20) }))
@@ -485,11 +490,7 @@ describe('useCurrentPlan', () => {
       const { route, responder } = emVoo([Response.json({ plan: plano })])
       const result = await carregarComRotas(route)
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(0, Response.json({ plan: comProgresso(10) }))
       await responder(1, Response.json({ plan: comProgresso(20) }))
       expect(result.current.state).toEqual(carregado(plano, false))
@@ -502,11 +503,7 @@ describe('useCurrentPlan', () => {
       const { route, responder } = emVoo([Response.json({ plan: plano })])
       const result = await carregarComRotas(route)
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(2, Response.json({ plan: comProgresso(30) }))
       await responder(0, new Response(null, { status: 500 }))
       await responder(1, new Response(null, { status: 500 }))
@@ -548,11 +545,7 @@ describe('useCurrentPlan', () => {
       const { result } = renderHook(() => useCurrentPlan())
       expect(result.current.state).toEqual({ status: 'loading' })
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(2, Response.json({ plan: comProgresso(20) }))
       expect(result.current.state).toEqual({ status: 'loading' })
       await responder(3, new Response(null, { status: 503 }))
@@ -573,11 +566,7 @@ describe('useCurrentPlan', () => {
       const { route, responder } = emVoo([Response.json({ plan: plano })])
       const result = await carregarComRotas(route)
 
-      act(() => {
-        result.current.refresh()
-        result.current.refresh()
-        result.current.refresh()
-      })
+      pedirTresRefresh(result)
       await responder(2, Response.json({ plan: null }))
       expect(result.current.state).toEqual({ status: 'no-plan' })
       await responder(0, Response.json({ plan: comProgresso(5) }))
