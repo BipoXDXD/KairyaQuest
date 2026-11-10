@@ -307,12 +307,17 @@ describe('useRequestEvaluation', () => {
     // Valor literal de proposito: espelho manual do backend (60 s + 30 s de
     // folga = proxy_read_timeout do nginx). Mudar um lado exige mudar o outro.
     expect(EVALUATION_TIMEOUT_MS).toBe(105_000)
+    expect(EVALUATION_TIMEOUT_MS).toBeGreaterThan(90_000)
   })
 
   it('E8 um 504 tempo_esgotado antes do prazo mantem o texto proprio e desarma o timer', async () => {
     vi.useFakeTimers()
+    let release: (r: Response) => void = () => undefined
     routeFetch({
-      [KEY]: () => Response.json({ code: 'tempo_esgotado', detail: 'x' }, { status: 504 }),
+      [KEY]: () =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
     })
     const { result } = renderHook(() => useRequestEvaluation(7))
 
@@ -320,6 +325,12 @@ describe('useRequestEvaluation', () => {
       result.current.request()
     })
     await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+    expect(vi.getTimerCount()).toBe(1)
+
+    await act(async () => {
+      release(Response.json({ code: 'tempo_esgotado', detail: 'x' }, { status: 504 }))
       await vi.advanceTimersByTimeAsync(0)
     })
 

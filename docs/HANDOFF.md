@@ -19,7 +19,7 @@ Decisões:
 
   | Fonte | Valor | Efeito |
   |---|---|---|
-  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só quando um evento chega; uma resposta legítima pode sair depois de 60 s |
+  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só depois que o provedor responde; uma resposta legítima pode sair depois de 60 s |
   | `FOLGA_DO_ORFAO` (`tutoring/service.py`) | 30 s | o corte do órfão da avaliação é 60 + 30 = 90 s; antes disso o reenvio recebe 409 `avaliacao_em_andamento` |
   | `proxy_read_timeout` (`docker/nginx.conf`) | 90 s | em produção o nginx já responde 504 a um backend mudo aos 90 s |
 
