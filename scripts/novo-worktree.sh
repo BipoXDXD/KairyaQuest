@@ -8,9 +8,14 @@
 # O que faz, nesta ordem, e so depois de validar TUDO:
 #  1. cria .claude/worktrees/<nome> dentro do principal numa branch nova,
 #     wt/<nome>, a partir da main atual;
-#  2. escreve o .env dele a partir do .env do principal, trocando o banco de
-#     teste para focusquest_<nome>_test (o resto da URL fica) e fixando
+#  2. escreve o .env dele a partir do .env.example da main (a mesma revisao do
+#     worktree), com o banco de teste do principal trocado para
+#     focusquest_<nome>_test (servidor, credencial e opcoes da URL ficam) e
 #     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o menor livre de 1 a 24;
+#     do .env do principal so a URL do banco de teste e lida. Nenhum outro
+#     valor dele e copiado: as chaves de segredo (FOCUSQUEST_GROQ_API_KEY e
+#     afins) nascem em branco, como no exemplo, e quem precisar delas no
+#     worktree as preenche a mao;
 #  3. roda "make bootstrap" nele;
 #  4. imprime os proximos passos.
 #
@@ -31,8 +36,8 @@
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
 # branch que ja existam; deslocamento fora de 0 a 24 ou ja em uso por outro
 # worktree; .env do principal ausente ou com um banco de teste que nao termine
-# em _test; outra execucao em andamento (a trava). E NUNCA escreve por cima de
-# um .env que ja exista no destino.
+# em _test; main sem .env.example; outra execucao em andamento (a trava). E
+# NUNCA escreve por cima de um .env que ja exista no destino.
 #
 # Por que "push" e o UNICO nome reservado (HANDOFF, decisao F12): o banco de
 # um worktree e focusquest_<nome>_test, e o gate do push de quem tem o banco
@@ -98,6 +103,9 @@ if git -C "$principal" show-ref --verify --quiet "refs/heads/${branch}"; then
   recusa "a branch ${branch} ja existe; escolha outro nome"
 fi
 [ -f "${principal}/.env" ] || recusa "o principal nao tem .env (${principal}/.env): crie-o com cp .env.example .env"
+# O modelo do .env novo: o .env.example da main, de onde o worktree nasce.
+exemplo="$(git -C "$principal" show main:.env.example 2>/dev/null)" ||
+  recusa "a main nao tem .env.example: o .env do worktree e gerado a partir dele"
 
 # O valor de uma chave num .env, sem executar o arquivo (mesma regra do
 # push-env.sh): ultima ocorrencia, aspas envolventes removidas.
@@ -190,18 +198,28 @@ while IFS=' ' read -r ocupado dono; do
   fi
 done <<<"$bancos_ocupados"
 
-# O .env novo, montado ANTES de criar qualquer coisa: as linhas do principal,
-# com o banco de teste trocado e sem deslocamento herdado; o deslocamento do
-# worktree novo vai no fim.
+# O .env novo, montado ANTES de criar qualquer coisa: as linhas do
+# .env.example, com o banco de teste trocado e sem deslocamento; o
+# deslocamento do worktree novo vai no fim. Partir do exemplo, e nao do .env
+# do principal, e o que garante que nenhum segredo dele passe para o worktree.
 env_novo=""
+banco_escrito=nao
 while IFS= read -r linha || [ -n "$linha" ]; do
   case "$linha" in
-    FOCUSQUEST_TEST_DATABASE_URL=*) linha="FOCUSQUEST_TEST_DATABASE_URL=${url_nova}" ;;
+    FOCUSQUEST_TEST_DATABASE_URL=*)
+      linha="FOCUSQUEST_TEST_DATABASE_URL=${url_nova}"
+      banco_escrito=sim
+      ;;
     FOCUSQUEST_E2E_PORT_OFFSET=*) continue ;;
   esac
   env_novo="${env_novo}${linha}
 "
-done <"${principal}/.env"
+done <<<"$exemplo"
+# Sem a linha no exemplo, o worktree cairia no banco padrao, o do principal.
+if [ "$banco_escrito" = nao ]; then
+  env_novo="${env_novo}FOCUSQUEST_TEST_DATABASE_URL=${url_nova}
+"
+fi
 env_novo="${env_novo}
 # Worktree ${nome} (scripts/novo-worktree.sh): banco de teste e portas do E2E
 # proprios, para rodar o gate ao mesmo tempo que os outros worktrees.
