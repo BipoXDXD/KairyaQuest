@@ -1,3 +1,59 @@
+# Paridade geral modelo/migração e Alembic offline — 2026-11-10
+
+Pendência 9/10. Revisão-base: `e57fa2b`. Nenhuma migração, modelo,
+dependência ou contrato mudou.
+
+`tests/integration/test_paridade_geral_do_esquema.py` roda `compare_metadata`
+do Alembic (`compare_type` e `compare_server_default` ligados, sem filtro)
+contra o banco migrado até `head`: diff vazio. Cobre tabelas, colunas, tipos,
+nulabilidade, server defaults, FKs com `ON DELETE`, UNIQUE e índices. Um
+segundo teste compara os nomes dos CHECKs por tabela, porque o autogenerate
+não compara CHECK. O autogenerate **não** compara, e por isso fica fora:
+
+- o texto dos CHECKs (só o nome é comparado; o texto segue provado pelos
+  testes de comportamento, INSERT recusado);
+- o predicado de índice parcial (`postgresql_where` de
+  `uq_missions_especial_por_plano` e dos índices parciais de
+  `tutor_messages`): só unicidade e colunas entram.
+
+Sabotagens temporárias no modelo, revertidas (`git diff --exit-code -- src`
+vazio), cada uma reprovando o teste esperado:
+
+- `ondelete` da FK `xp_entries.mission_id` de `CASCADE` para `SET NULL`:
+  `remove_fk` + `add_fk` em `xp_entries`;
+- sem `server_default=func.now()` em `users.created_at`: `modify_default`
+  em `users.created_at`;
+- `missions.instructions` de `Text` para `String(50)`: `modify_type`
+  `TEXT()` → `String(length=50)`;
+- `ck_xp_entries_amount` renomeado: "so no banco:
+  [('xp_entries', 'ck_xp_entries_amount')]; so no modelo:
+  [('xp_entries', 'ck_xp_entries_valor')]".
+
+`tests/integration/test_migracoes_offline.py` gera SQL com `sql=True`, sem
+conexão, nas faixas: upgrade `base→0003` e `0004→head` (0005, 0006, 0007);
+downgrade `0007→0006`, `0004→0003` e `0002→base`. Exclusões, porque
+`op.get_bind()` offline não devolve resultado e a migração lê dados:
+
+- upgrade da 0004 (backfill): `alembic -x test=true upgrade 0003:0004 --sql`
+  termina em `AttributeError: 'NoneType' object has no attribute 'scalars'`;
+- downgrade de 0003, 0005 e 0006 (guardas que contam linhas): cada um
+  termina em `AttributeError: 'NoneType' object has no attribute
+  'scalar_one'`.
+
+Sabotagens temporárias, revertidas (`git diff --exit-code -- alembic` vazio):
+faixa `0003:head` no lugar de `0004:head` e uma leitura de dados no upgrade da
+0007 reprovam só o caso `0004-ate-head` (1 failed, 4 passed).
+
+Resultados lidos: os dois arquivos com `pytest` 7 passed; Ruff check, Ruff
+format `--check` e mypy estrito sem erros nos dois arquivos.
+
+Validação: `make check` completo roda no hook `pre-commit` deste commit (o
+commit só existe se ele passar); o resultado do CI fica no PR. Um gate anterior,
+rodado ao mesmo tempo que o de outro worktree, mostrou 2 `F` no pytest e foi
+cortado por timeout antes do resumo, sem nome dos testes; a suíte pytest
+inteira, rodada sozinha logo depois, passou sem falha. Possível intermitência
+sob carga, não reproduzida nem investigada.
+
 # Bíblia e voz da Kairya — 2026-11-10
 
 `docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
@@ -436,7 +492,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | ID | O que continua aberto |
 |---|---|
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
-| 9/10 | Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado. |
+| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção do topo). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 11 | Porta 55432 repetida em Settings/compose/exemplo/workflow, sem prova geral de divergência. |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
 | 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
