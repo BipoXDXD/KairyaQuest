@@ -27,6 +27,7 @@ from focusquest.core.errors import (
     AvaliacaoEmAndamentoError,
     CampoDesconhecidoError,
     EstimativaForaDoLimite,
+    LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -135,6 +136,7 @@ class CodigoDeErro(StrEnum):
     OPERACAO_REUTILIZADA = "operacao_reutilizada"
     PROVEDOR_NAO_CONFIGURADO = "provedor_nao_configurado"
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
+    LIMITE_DIARIO_DA_TUTORIA = "limite_diario_da_tutoria"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
     PRAZO_DERIVADO = "prazo_derivado"
@@ -289,6 +291,19 @@ def _sem_provedor(request: Request, exc: ProvedorNaoConfiguradoError) -> JSONRes
 def _em_andamento(request: Request, exc: MensagemEmAndamentoError) -> JSONResponse:
     """409: a conversa ja esta gerando uma resposta. O cliente espera."""
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.MENSAGEM_EM_ANDAMENTO)
+
+
+@app.exception_handler(LimiteDiarioDaTutoriaError)
+def _limite_diario(request: Request, exc: LimiteDiarioDaTutoriaError) -> JSONResponse:
+    """429 com `Retry-After`: o teto do dia acabou e volta a meia-noite de
+    Sao Paulo. A pergunta nao foi gravada; o cliente pode repeti-la depois."""
+    resposta = _erro(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        str(exc),
+        CodigoDeErro.LIMITE_DIARIO_DA_TUTORIA,
+    )
+    resposta.headers["Retry-After"] = str(exc.segundos_ate_liberar)
+    return resposta
 
 
 @app.exception_handler(AcaoNaoEncontradaError)

@@ -51,6 +51,8 @@ def _provedor(
         max_tokens=256,
         timeout_segundos=TIMEOUT,
         fallback=fallback,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
 
 
@@ -131,7 +133,9 @@ def test_a_requisicao_leva_o_que_a_spec_manda(falso: ServidorAnthropicFalso) -> 
     corpo = falso.recebidas[0].corpo
     assert corpo["model"] == "claude-opus-5"
     assert corpo["max_tokens"] == 256
-    assert corpo["system"] == "SISTEMA"
+    assert corpo["system"] == [
+        {"type": "text", "text": "SISTEMA", "cache_control": {"type": "ephemeral"}}
+    ]
     assert corpo["messages"] == [{"role": "user", "content": "oi"}]
     assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
     criar, reagendar = corpo["tools"]
@@ -222,6 +226,8 @@ def test_provedor_fora_do_ar_vira_indisponivel() -> None:
         max_tokens=8,
         timeout_segundos=TIMEOUT,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(TURNO))
