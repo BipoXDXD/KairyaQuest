@@ -1,3 +1,37 @@
+# Áudio: roteiro de gravação, nomes dos efeitos e pós-processo — 2026-11-10
+
+Tarefa 1 da Fase 8 (PR `audio-roteiro`). Nenhuma geração paga: só código,
+o roteiro e o script de pós-processo. Zero dependências novas.
+
+- `shared/audio/audioSrc.ts`: `AudioSrc` (brand) e `audioSrc(path)`, que só
+  aceita `` `/audio/${string}.mp3` ``; nenhum texto solto chega ao player.
+- `shared/audio/sfx.ts`: os 12 `SFX_NAMES` da spec §9 e `sfxSrc`.
+- `features/kairya/lineAudio.ts`: `lineSrc(locale, id)` → `/audio/<locale>/<id>.mp3`.
+- `features/kairya/recordingScript.ts`: `SFX_GUIDE` (prompt em inglês e
+  duração de cada efeito) e `buildRecordingScript()`, que lê o texto das 72
+  falas de `CATALOGS[locale][lineKey(id)]`. Só o teste importa o módulo, então
+  os prompts não entram no bundle.
+- `assets-src/audio/roteiro.json`: o roteiro gerado (72 falas, 12 efeitos).
+  O teste-golden `recordingScript.test.ts` compara o arquivo com a função e
+  reprova quando o texto de uma fala muda no catálogo. Para regerar, da raiz:
+  `mkdir -p assets-src/audio && cd frontend && KAIRYAQUEST_WRITE_ROTEIRO=1 npx vitest run src/features/kairya/recordingScript.test.ts`.
+  Sem a variável (CI), o teste só confere.
+- `frontend/src/test/readSource.ts` ganha `sourcePath`, `readSourceBytes` e
+  `isSourceFile` (com `readSource.test.ts`), para que nenhum teste leia o disco
+  por `node:fs`. A única escrita direta é a regeração do roteiro.
+- `scripts/encode-audio.sh <entrada> <saída> voice|sfx [trim]`: mp3 mono,
+  44,1 kHz, CBR 64 kbps, `loudnorm` (−18 LUFS voz, −20 LUFS efeito, −1,5 dBTP),
+  sem metadados; `trim` corta o silêncio só das pontas. Depende do `ffmpeg`
+  local do dono, não de pacote do repositório.
+- `.gitignore`: `assets-src/audio/raw/` (brutos ficam com o dono).
+
+Desvio do plano: o literal do teste de tom (`/alarm/`) reprovava o prompt
+de `soft_error`, que diz "not alarming". O teste agora remove a negação
+explícita (`not <palavra>`) e casa o radical com qualquer sufixo
+(`\b(?:scream|alarm|buzzer|siren|explo)\w*`), com dois casos que provam que o
+regex não é vácuo. O prompt ficou como no plano; a negação dele vai para o
+dono revisar antes do lote pago de efeitos (Tarefa 8.3).
+
 # Kairya: catálogo das 36 falas — 2026-11-10
 
 Tarefa 1 da Fase 6 (presença da Kairya). Cria `frontend/src/features/kairya/`
@@ -54,6 +88,108 @@ Pendências deste PR: a conferência visual do seletor na coluna de 224px do
 desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
 `shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
 aparecer na tela.
+
+# Fase 4, Tarefa 4.1: tokens em 3 níveis e teste de contraste — 2026-11-10
+
+Objetivo: criar os tokens do design system "dojo-biblioteca ao anoitecer"
+(primitivos, semânticos e de componente) e um teste que mede o contraste WCAG
+de cada par de cor usado, sobre o CSS real. Base: `e57fa2b`.
+
+Decisões:
+
+- **O CSS é a fonte única dos tokens.** O TypeScript não repete nenhum hex:
+  `contrast.ts` lê as declarações `--nome: valor;` do CSS e resolve `var()`
+  sob demanda; `contrastPairs.ts` só nomeia os pares e o mínimo de cada um.
+- **Tokens em `frontend/src/styles/tokens.css`, não em `index.css`.** Desvio
+  da spec 4.1, que põe os tokens no `index.css`: o `index.css` passa a só
+  importar (`tailwindcss`, `tokens.css`) e a carregar as regras `.rpg-*`
+  legadas até a Tarefa 4.9, e os tokens ganham um arquivo que o teste lê
+  sozinho.
+- **Primitivos em `:root`, fora do `@theme`**, para não gerar utilities como
+  `bg-ink-800` que pulem o nível semântico. Semânticos e de componente
+  (`--radius-ui` 10px, `--radius-pill` 999px, `--shadow-glow-lantern`) no
+  `@theme`, onde viram utilities (`bg-bg-canvas`, `rounded-ui`,
+  `shadow-glow-lantern` etc.). `--glow-lantern-color`, o alias
+  `--glow-lantern` e `--glow-lantern-filter` (forma do glow para SVG,
+  `drop-shadow` sem spread) ficam em `:root`, sem utility.
+- **Primitivo novo `ink-400` `#697b91` e `color-border-strong` = ink-400.**
+  Origem: ruling 08:05 do controlador da Fase 4. A spec manda
+  `border-strong` = ink-500 (`#5b6e84`), que mede 2,74:1 sobre `bg-raised` e
+  reprova o 3:1 que a própria spec exige para componente de UI; o requisito
+  de contraste vence o hex. O ink-400 mede 4,23 / 3,79 / 3,31 sobre
+  canvas / surface / raised (margem ≥ 0,2 sobre 3:1) e 2,10:1 contra
+  `text-muted`, distinto dele. Com isso o `Field` funciona sobre qualquer
+  elevação, sem restrição de contexto.
+- Um semântico de estado a mais, `color-action-primary-hover` = lantern-200
+  (13,75:1 com `text-on-action`). Nenhum hover usa `color-mix`.
+- `color-border-subtle` (ink-700) é decorativa e fica fora dos pares de 3:1
+  (mede 1,61:1 no canvas); nunca é o único limite de um controle.
+- Ciclo de `var()` é reportado como "ciclo em var()" no
+  `findContrastFailures`, separado de "token ausente", para a mensagem
+  apontar a causa certa.
+- A razão na mensagem de falha é **truncada** em 2 casas, não arredondada:
+  2,996 arredondado viraria "3.00 < 3", contradizendo a reprovação.
+- `readSource` resolve a raiz por `fileURLToPath(import.meta.url)` +
+  `node:path`, e não por `new URL('../../', import.meta.url)` como dizia o
+  plano: o Vite reescreve essa forma literal como URL `http://localhost:3000/@fs/...`
+  e o `fileURLToPath` a recusa (medido no Vitest 5.0.1 com jsdom).
+
+Alterações:
+
+- Novos: `frontend/src/styles/tokens.css`,
+  `frontend/src/shared/ui/tokens/{contrast.ts,contrastPairs.ts,contrast.test.ts}`,
+  `frontend/src/shared/ui/tokens.test.ts`, `frontend/src/test/readSource.ts`.
+- `frontend/src/index.css`: importa `tokens.css`, remove o bloco
+  `:root { --fq-* }` e troca cada `var(--fq-*)` pelo equivalente (`--fq-bg` →
+  `--color-bg-canvas`, `--fq-surface` → `--color-bg-surface`, `--fq-text` →
+  `--color-text-primary`, `--fq-muted` → `--color-text-muted`, `--fq-metal` →
+  `--lantern-600`, `--fq-mako` → `--color-feedback-success`, `--fq-border` →
+  `--color-border-strong`, `--fq-radius` → `--radius-ui`, `--fq-space` →
+  `calc(var(--spacing) * 6)`, `--fq-font-display` → Georgia provisório até a
+  4.2). Nenhum `--fq-*` tinha consumidor fora do `index.css`, então não ficou
+  alias. Os hex soltos das regras `.rpg-*` ficam até a 4.9.
+- `docs/QUALITY.md` §3: linha do `readSource.ts`.
+- `docs/ARCHITECTURE.md`: `styles/` e `shared/ui/` passam a existir,
+  `readSource.ts` entra na lista de `src/test/` e a linha "Token visual" da
+  tabela passa a "existe".
+
+Comandos e resultados:
+
+- `npx vitest run src/shared/ui/tokens/contrast.test.ts` antes do
+  `contrast.ts`: falhou (módulo inexistente); depois: passou (23 testes,
+  contando o de truncamento, que falhou antes do ajuste com "3.00 < 3").
+- `npx vitest run src/shared/ui/tokens.test.ts` antes do `tokens.css`:
+  falhou (`ENOENT` em `src/styles/tokens.css`); depois: passou.
+- Sabotagem manual: `color-border-strong` → ink-500 reprova 3 testes, com
+  `color-border-strong/color-bg-raised = 2.74 < 3 (borda de controle)`;
+  revertido.
+- `vite build` numa pasta temporária: o CSS gerado tem `--ink-400:#697b91`,
+  `--color-bg-canvas:var(--ink-950)`, `--radius-ui:10px`, o glow e o filtro,
+  e nenhum `fq-`.
+- `make check-web` (exit 0): lint, Prettier e `tsc` limpos; 53 arquivos,
+  1035 testes passaram; cobertura 100% em statements (1325/1325), branches
+  (989/989), functions (369/369) e lines (1286/1286).
+
+Pendências:
+
+- O gate completo (`make check`, com E2E de layout e axe) fica com o
+  controlador. As cores das regras `.rpg-*` mudaram levemente com a troca
+  (por exemplo, borda `#52606d` → `#697b91`, texto secundário `#b2beca` →
+  `#a9b6c6`, fundo `#0b1421` → `#0d1520`); o contraste novo foi medido nos
+  pares do teste, mas o axe sobre as telas reais ainda não rodou.
+- `listSources` ainda não tem consumidor; a 4.3 (lint de design) é a
+  primeira. Foi conferido à mão nesta tarefa.
+# Bíblia e voz da Kairya — 2026-11-10
+
+`docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
+visual, paleta, expressões, máquina de estados e limites) e
+`docs/kairya/voz.md` (princípios, exemplos PT/EN, padrão de erro, forma do
+chat, gatilhos das 36 falas por idioma e descrições das vozes) passam a ser a
+fonte da persona da tutora, dos prompts de arte e do roteiro das falas. A
+Kairya é original e descrita só por traços próprios: nenhum desses textos
+compara a personagem com obra ou franquia existente. O texto final de cada
+fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
+código, dependência, endpoint ou custo.
 
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
@@ -354,6 +490,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, depois da persona e de uma linha em branco. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -463,7 +600,6 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 4/5 | Autenticação/autorização por recurso; conferir dono antes de prender linha em missions/tutor_actions quando houver contas. Hoje é contenção teórica no recorte único, sem 404 diferente. |
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
 | 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
-| 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
 | 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
@@ -513,10 +649,11 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 | Instruções com quebras entram cruas no contexto e podem forjar cabeçalhos; efeito no modelo real não medido. Normalização/recusa ainda não decidida. |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e `make check` ainda **não executados** (sem banco nesta janela). |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
 
 ### Interface, acessibilidade e manutenção
 
@@ -544,6 +681,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 22/23 | Lock npm pode divergir local/CI; tabela Vitest vazia não prova cobertura, limiar/resumo sim. Limites em QUALITY. |
 | 29/30 | Raiz é convenção com receita externa; barra final produz307. Não mudar Settings/redirect por estética. |
 | 39 | Preparação Playwright usa rede/apt; falha reprova fechado. Sem cache parcial introduzido. |
+| 41 | Pergunta à tutora limitada a 4000 caracteres, decidido pelo dono. O espelho `MAX_QUESTION_LENGTH` (frontend) ↔ `TAMANHO_MAXIMO_DA_PERGUNTA` (backend) é provado por `tests/unit/test_limite_da_pergunta.py`, que reprova com `arquivo:linha` dos dois lados se divergirem, e com o caminho do arquivo se a constante do frontend sumir. Mudar o número é decisão de produto. |
 | 44/71 | Medições antigas de mutações são histórico de prova, não taxas universais atuais nem tarefas por repetir. |
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
