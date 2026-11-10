@@ -50,14 +50,14 @@ const FAILURE_BY_CODE: Record<StartErrorCode, StartFailure> = {
   },
 }
 
+const UNCONFIRMED_LEAD = 'Não foi possível confirmar o início.'
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será iniciada duas vezes.'
+
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
  * novo. A abertura diz a causa quando ela e de transporte (`leadFor`); o fim
  * diz a unica coisa certa -- que repetir nao duplica.
  */
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar o início.'
-const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será iniciada duas vezes.'
-
 function unconfirmed(error: unknown): StartFailure {
   return { message: `${leadFor(error, UNCONFIRMED_LEAD)} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }

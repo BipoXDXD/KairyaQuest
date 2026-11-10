@@ -57,13 +57,13 @@ const FAILURE_BY_CODE: Record<RescheduleErrorCode, RescheduleFailure> = {
   },
 }
 
+const UNCONFIRMED_LEAD = 'Não foi possível confirmar o reagendamento.'
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: o prazo não mudará duas vezes.'
+
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
  * novo. A abertura diz a causa quando ela e de transporte (`leadFor`).
  */
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar o reagendamento.'
-const RETRY_IS_SAFE = 'Tentar de novo é seguro: o prazo não mudará duas vezes.'
-
 function unconfirmed(error: unknown): RescheduleFailure {
   return { message: `${leadFor(error, UNCONFIRMED_LEAD)} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }

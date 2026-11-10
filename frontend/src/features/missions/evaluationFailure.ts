@@ -57,13 +57,13 @@ const FAILURE_BY_CODE: Record<EvaluationErrorCode, EvaluationFailure> = {
   },
 }
 
+const GENERIC_LEAD = 'Não foi possível pedir a avaliação.'
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.'
+
 /**
  * Rede fora, prazo, 5xx, `code` de um backend mais novo: repetir e seguro. A
  * abertura recebida diz a causa quando ela e conhecida.
  */
-const GENERIC_LEAD = 'Não foi possível pedir a avaliação.'
-const RETRY_IS_SAFE = 'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.'
-
 function generic(lead: string): EvaluationFailure {
   return { message: `${lead} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }

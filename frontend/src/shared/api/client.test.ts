@@ -148,7 +148,7 @@ describe('client', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('aborta o pedido pendurado ao fim do prazo e falha como rede fora, com a causa', async () => {
+    it('aborta o pedido pendurado ao fim do prazo e falha como prazo (ApiTimeoutError), com a causa', async () => {
       const fetchMock = fetchUntilAborted()
       vi.stubGlobal('fetch', fetchMock)
       const { ApiError, ApiTimeoutError, postJson } = await loadClient()

@@ -944,7 +944,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
 | 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
-| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: a tela cai no texto genérico, com reenvio seguro. A distinção demora/rede e o status apagado pelo timer foram resolvidos em 2026-11-10 (seção "Prazo que preserva o status e texto que separa demora de rede"). |
+| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: os erros só distinguíveis pelo code (409, e o 504 `tempo_esgotado` da avaliação) caem no texto genérico, com reenvio seguro. |
 | 211 | Textos de falha de transporte (`leadFor`) trocam a abertura "Não foi possível <ação>." pela causa, então não nomeiam a ação que falhou, e o de recusar por rede ("Não foi possível conectar. Tentar de novo é seguro.") tem 9 palavras, abaixo da faixa 12–18 da revisão de ux-writing. Rever junto do fim "Tentar de novo é seguro: …", que o E2E do QG verifica. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
