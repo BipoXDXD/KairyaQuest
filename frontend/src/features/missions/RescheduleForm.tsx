@@ -8,6 +8,8 @@ import {
 import { sameDraft } from './rescheduleDraft'
 import type { RescheduleFailure } from './rescheduleFailure'
 import type { RescheduleDraft } from './types'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import { useT } from '../../shared/i18n/useT'
 
 const TOGGLE_CLASS =
   'rounded text-sm font-medium text-emerald-200 underline-offset-2 hover:underline ' +
@@ -95,6 +97,7 @@ export function RescheduleForm({
   onSubmit: (draft: RescheduleDraft) => void
   describedBy?: string
 }) {
+  const t = useT()
   // O prazo da missao quando o disclosure foi aberto; `null` = fechado.
   const [openedFor, setOpenedFor] = useState<string | null>(null)
   const [draft, setDraft] = useState<RescheduleDraft>({ civil: '', reason: null })
@@ -116,8 +119,8 @@ export function RescheduleForm({
   }, [closedBySuccess])
 
   const blocked = blockedReason(draft)
-  const retrySame = failure?.recovery === 'retry' && sent !== null && sameDraft(sent, draft)
-  const retryLabel = retrySame || failure?.recovery === 'retry-with-new-operation'
+  const retrySame = failure?.action === 'retry' && sent !== null && sameDraft(sent, draft)
+  const retryLabel = retrySame || failure?.action === 'retry-with-new-operation'
 
   return (
     <div className="mt-3">
@@ -177,7 +180,7 @@ export function RescheduleForm({
                     }}
                     className="focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
                   />
-                  {RESCHEDULE_REASON_LABELS[reason]}
+                  {t(RESCHEDULE_REASON_LABELS[reason])}
                 </label>
               ))}
             </fieldset>
@@ -213,7 +216,7 @@ export function RescheduleForm({
             )}
             {failure !== null && (
               <p role="alert" data-testid="reschedule-error" className="text-sm text-red-300">
-                {failure.message}
+                <FailureMessage failure={failure} />
               </p>
             )}
           </>

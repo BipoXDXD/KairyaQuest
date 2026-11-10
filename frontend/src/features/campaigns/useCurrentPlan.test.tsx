@@ -5,6 +5,12 @@ import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { Plan } from './types'
 import { useCurrentPlan } from './useCurrentPlan'
 
+/** O 503 vira o texto do catalogo pelo `kind`; a `message` de depuracao nao sai do hook. */
+const HTTP_FAILURE = {
+  kind: 'api',
+  text: { message: 'shared.apiError.http.message', recovery: 'shared.apiError.http.recovery' },
+} as const
+
 const plano: Plan = {
   week_start: '2026-09-21',
   days: [],
@@ -38,7 +44,7 @@ describe('useCurrentPlan', () => {
     })
   })
 
-  it('mostra o erro com a mensagem do cliente HTTP, e o reload tenta de novo', async () => {
+  it('mostra o erro com o texto do catalogo pelo kind, e o reload tenta de novo', async () => {
     routeFetch({
       'GET /api/plans/current': (_init, call) =>
         call === 1 ? new Response(null, { status: 503 }) : Response.json({ plan: plano }),
@@ -47,7 +53,7 @@ describe('useCurrentPlan', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     act(() => {
@@ -65,7 +71,7 @@ describe('useCurrentPlan', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'Falha inesperada ao carregar a trilha.',
+        failure: { kind: 'unexpected', message: 'Falha inesperada ao carregar a trilha.' },
       })
     })
   })
@@ -455,7 +461,7 @@ describe('useCurrentPlan', () => {
       await waitFor(() => {
         expect(result.current.state).toEqual({
           status: 'error',
-          message: 'O servidor respondeu 503.',
+          failure: HTTP_FAILURE,
         })
       })
 
@@ -468,7 +474,7 @@ describe('useCurrentPlan', () => {
       })
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     },
   )
@@ -485,14 +491,14 @@ describe('useCurrentPlan', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     await act(async () => {
       result.current.refresh()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(result.current.state).toEqual({ status: 'error', message: 'O servidor respondeu 503.' })
+    expect(result.current.state).toEqual({ status: 'error', failure: HTTP_FAILURE })
   })
 
   it('a aba que volta a ficar visivel atualiza a trilha em silencio', async () => {

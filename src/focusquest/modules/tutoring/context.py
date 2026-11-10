@@ -66,7 +66,7 @@ def montar_turno(
     entram na lista de pendentes, que e a lista do reagendamento.
     """
     contexto = _contexto(agora, pendentes, tardias, progresso)
-    return Turno(sistema=f"{persona}\n\n{contexto}", mensagens=_mensagens(historico))
+    return Turno(sistema=persona, contexto=contexto, mensagens=_mensagens(historico))
 
 
 def tardias_do_ciclo(ciclo: CicloLido, agora: datetime) -> tuple[MissaoLida, ...]:

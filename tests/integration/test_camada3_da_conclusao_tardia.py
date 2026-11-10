@@ -40,6 +40,8 @@ def _capturar(
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     return camada3_da_conclusao_tardia.capturar(provedor, espiao, agora=AGORA)
 
@@ -52,7 +54,7 @@ def test_o_contexto_traz_a_diaria_de_ontem_tardia_e_a_avulsa_pelo_id(
     falso.roteiro = Roteiro(blocos=(Texto(("Certo.",)),))
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
-    sistema = corpo["system"]
+    sistema = falso.recebidas[-1].contexto_do_turno
     assert "Missões do ciclo em conclusão tardia" in sistema
     assert (
         "- diária de ontem: Resolver 5 exercícios de laço (em andamento desde "

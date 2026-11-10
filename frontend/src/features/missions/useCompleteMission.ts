@@ -55,7 +55,7 @@ export interface UseCompleteMissionResult {
  *
  * Quando a chave sai do registro, este hook decide pelo resultado:
  *
- * - **falha que se repete com a mesma chave** (`recovery: 'retry'` -- rede,
+ * - **falha que se repete com a mesma chave** (`action: 'retry'` -- rede,
  *   5xx, `code` desconhecido): a chave FICA, e o registro marca o retry
  *   pendente (a tela trava a edicao da evidencia). Nao se sabe se o servidor
  *   concluiu, e so a mesma chave torna o reenvio seguro;
@@ -127,7 +127,7 @@ export function useCompleteMission(
         })
         .catch((error: unknown) => {
           const failure = describeCompletionFailure(error)
-          if (failure.recovery === 'retry') {
+          if (failure.action === 'retry') {
             registry.markRetryPending(missionId)
           } else {
             registry.release(missionId)

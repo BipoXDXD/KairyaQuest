@@ -4,6 +4,7 @@ import { RESCHEDULE_REASON_LABELS } from '../../shared/types/mission'
 import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls'
 import type { ProposalCardProps, RescheduleMissionAction } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * O fim do cartao, um ramo por estado da acao.
@@ -84,6 +85,7 @@ export function RescheduleProposalCard({
   boardHref,
   onGoToBoard,
 }: ProposalCardProps<RescheduleMissionAction>) {
+  const t = useT()
   const {
     state: decision,
     confirm,
@@ -122,7 +124,7 @@ export function RescheduleProposalCard({
       </dl>
       <p data-testid="reschedule-reason" className="mt-1 text-sm text-slate-300">
         <span className="text-slate-400">Motivo: </span>
-        {RESCHEDULE_REASON_LABELS[payload.reason]}
+        {t(RESCHEDULE_REASON_LABELS[payload.reason])}
       </p>
       <Outcome
         action={action}

@@ -49,7 +49,7 @@ export interface UseRescheduleMissionResult {
  * (`actionKeyFor(missionId, 'reschedule')`), pelo mesmo motivo do Iniciar. Quando
  * ela sai, este hook decide pelo resultado:
  *
- * - **falha que se repete com a mesma chave** (`recovery: 'retry'`): a chave
+ * - **falha que se repete com a mesma chave** (`action: 'retry'`): a chave
  *   FICA; nao se sabe se o prazo mudou;
  * - **sucesso e qualquer outra falha** (`edit`, `refresh`,
  *   `retry-with-new-operation`): a chave SAI. Em `edit` o servidor leu e recusou
@@ -101,7 +101,7 @@ export function useRescheduleMission(
         })
         .catch((error: unknown) => {
           const failure = describeRescheduleFailure(error)
-          if (failure.recovery !== 'retry') {
+          if (failure.action !== 'retry') {
             registry.releaseActionKey(missionId, 'reschedule')
           }
           setState({ status: 'failed', failure })

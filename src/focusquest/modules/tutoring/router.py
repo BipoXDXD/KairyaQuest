@@ -74,7 +74,7 @@ def enviar(
 ) -> StreamingResponse:
     """Prepara e COMMITA antes de abrir o stream; so entao transmite.
 
-    Os erros da preparacao (sem chave, 409) saem como JSON comum, antes de
+    Os erros da preparacao (sem chave, 409, 429) saem como JSON comum, antes de
     qualquer byte do stream, e nada foi gravado. A transmissao usa sessoes
     proprias, nunca a da requisicao (a dela fecha antes do `finally` do gerador).
     """

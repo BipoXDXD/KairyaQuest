@@ -38,7 +38,7 @@ export interface UseStartMissionResult {
  *
  * Quando a chave sai do registro, este hook decide pelo resultado:
  *
- * - **falha que se repete com a mesma chave** (`recovery: 'retry'` -- rede, 5xx,
+ * - **falha que se repete com a mesma chave** (`action: 'retry'` -- rede, 5xx,
  *   `code` desconhecido): a chave FICA. Nao se sabe se o servidor iniciou, e so
  *   a mesma chave torna o reenvio seguro;
  * - **sucesso e qualquer outra falha** (`refresh`, `retry-with-new-operation`):
@@ -96,7 +96,7 @@ export function useStartMission(
       })
       .catch((error: unknown) => {
         const failure = describeStartFailure(error)
-        if (failure.recovery !== 'retry') {
+        if (failure.action !== 'retry') {
           registry.releaseActionKey(missionId, 'start')
         }
         setState({ status: 'failed', failure })

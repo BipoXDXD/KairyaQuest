@@ -51,6 +51,11 @@ export default defineConfig({
     // maquina -- que, na do dono, E Sao Paulo --, a asseveracao do texto do
     // prazo passaria mesmo se a aplicacao usasse o fuso de quem le.
     timezoneId: 'Asia/Tokyo',
+    // O idioma inicial vem de `navigator.language` (Fase 3); sem isto o
+    // Chromium abre em `en-US` e as specs, que afirmam a interface em PT,
+    // passariam a ler o catalogo EN. Cenario em EN (Tarefa 3.4) fixa o idioma
+    // no proprio teste.
+    locale: 'pt-BR',
   },
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
