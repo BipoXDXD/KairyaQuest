@@ -1180,3 +1180,58 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
