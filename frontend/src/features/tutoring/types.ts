@@ -153,3 +153,5 @@ export type ActionErrorCode =
   | 'prazo_expirado'
   | 'acao_nao_encontrada'
   | 'reagendamento_invalido'
+  | 'estimativa_fora_do_limite'
+  | 'prazo_fora_do_limite'

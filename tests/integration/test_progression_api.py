@@ -60,6 +60,15 @@ def relogio_movel() -> Iterator[list[datetime]]:
     app.dependency_overrides.pop(get_clock, None)
 
 
+def _agora_da_api() -> datetime:
+    """O instante do relogio que a API vai ler (o sobreposto, ou o real). A
+    criacao confere o prazo contra ele (pendencia 26): relativo ao relogio
+    REAL, o prazo viraria bomba-relogio com `relogio_fixo`."""
+    relogio = app.dependency_overrides.get(get_clock, get_clock)()
+    instante: datetime = relogio()
+    return instante
+
+
 def _corpo(**ajustes: Any) -> dict[str, Any]:
     """O corpo de criacao valido de uma missao avulsa, dificuldade 5."""
     corpo: dict[str, Any] = {
@@ -67,7 +76,7 @@ def _corpo(**ajustes: Any) -> dict[str, Any]:
         "completion_criterion": "Resumo de uma pagina entregue",
         "difficulty": 5,
         "estimated_minutes": 30,
-        "deadline": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        "deadline": (_agora_da_api() + timedelta(days=1)).isoformat(),
     }
     return corpo | ajustes
 
