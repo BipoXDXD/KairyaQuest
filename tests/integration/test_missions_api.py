@@ -107,7 +107,7 @@ def relogio_fixo() -> Iterator[datetime]:
 
 
 def _prazo(dias: int) -> str:
-    return (datetime.now(UTC) + timedelta(days=dias)).isoformat()
+    return (_agora_da_api() + timedelta(days=dias)).isoformat()
 
 
 def _operacoes(session: Session, mission_id: int) -> int:
@@ -139,6 +139,16 @@ def _logado(caplog: pytest.LogCaptureFixture) -> str:
     )
 
 
+def _agora_da_api() -> datetime:
+    """O instante que a API vai ler: o do relogio sobreposto, se houver, ou o
+    real. A criacao confere o prazo contra ele (pendencia 26); um prazo fixo
+    relativo ao relogio REAL viraria bomba-relogio nos testes com `relogio_fixo`
+    quando a distancia passasse de 365 dias."""
+    relogio = app.dependency_overrides.get(get_clock, get_clock)()
+    instante: datetime = relogio()
+    return instante
+
+
 def _corpo(**ajustes: Any) -> dict[str, Any]:
     """O corpo de criacao valido, com os ajustes que cada teste precisa variar."""
     corpo: dict[str, Any] = {
@@ -146,7 +156,7 @@ def _corpo(**ajustes: Any) -> dict[str, Any]:
         "completion_criterion": "Resumo de uma pagina entregue",
         "difficulty": 2,
         "estimated_minutes": 30,
-        "deadline": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        "deadline": (_agora_da_api() + timedelta(days=1)).isoformat(),
     }
     return corpo | ajustes
 
@@ -322,8 +332,13 @@ def test_prazo_sem_fuso_devolve_422(client: TestClient) -> None:
     assert "timezone_aware" in [erro["type"] for erro in erros]
 
 
-def test_o_prazo_do_201_e_o_mesmo_instante_do_get(client: TestClient) -> None:
+def test_o_prazo_do_201_e_o_mesmo_instante_do_get(
+    client: TestClient, relogio_fixo: datetime
+) -> None:
     """O MESMO campo, nas duas respostas, e o mesmo instante.
+
+    `relogio_fixo` porque o prazo e um literal: desde a pendencia 26 a criacao
+    o confere contra o relogio, e contra o relogio real ele ja estaria vencido.
 
     Nenhum teste comparava o `deadline` do 201 com o do GET, e foi essa
     ausencia que deixou a divergencia de serializacao passar: os dois olhavam
@@ -370,13 +385,74 @@ def test_estimativa_acima_do_int4_devolve_422(client: TestClient, minutos: int) 
     assert ["body", "estimated_minutes"] in locais
 
 
-def test_estimativa_no_teto_do_int4_e_aceita(client: TestClient) -> None:
-    """A borda ACEITA do teto: prova que ele e `le` e nao `lt`, e que o maior
-    valor que a guarda deixa passar cabe mesmo na coluna -- um teto maior que a
-    coluna trocaria o 422 de volta por um 500."""
-    corpo = _criar(client, estimated_minutes=MAIOR_INTEIRO_DA_COLUNA)
+def test_estimativa_no_teto_do_int4_passa_a_borda_e_cai_no_limite_de_negocio(
+    client: TestClient,
+) -> None:
+    """O teto TECNICO continua `le` (o maior int4 passa pelo schema), mas desde a
+    pendencia 26 o limite de negocio da avulsa o recusa com `code` proprio --
+    nunca 500 e nunca o 422 nativo do schema."""
+    resposta = client.post(
+        "/api/missions", json=_corpo(estimated_minutes=MAIOR_INTEIRO_DA_COLUNA)
+    )
 
-    assert corpo["estimated_minutes"] == MAIOR_INTEIRO_DA_COLUNA
+    assert resposta.status_code == 422
+    assert resposta.json()["code"] == "estimativa_fora_do_limite"
+
+
+def _missoes(session: Session) -> int:
+    return session.execute(select(func.count()).select_from(Mission)).scalar_one()
+
+
+@pytest.mark.parametrize("minutos", [1, 1440], ids=["piso", "teto"])
+def test_estimativa_na_borda_do_negocio_e_aceita(
+    client: TestClient, relogio_fixo: datetime, minutos: int
+) -> None:
+    """Pendencia 26: a avulsa aceita de 1 a 1440 minutos, as duas bordas."""
+    corpo = _criar(client, estimated_minutes=minutos)
+
+    assert corpo["estimated_minutes"] == minutos
+
+
+def test_estimativa_acima_do_teto_do_negocio_devolve_422_sem_gravar(
+    client: TestClient, session: Session, relogio_fixo: datetime
+) -> None:
+    antes = _missoes(session)
+
+    resposta = client.post("/api/missions", json=_corpo(estimated_minutes=1441))
+
+    assert resposta.status_code == 422
+    assert resposta.json()["code"] == "estimativa_fora_do_limite"
+    assert _missoes(session) == antes
+
+
+@pytest.mark.parametrize(
+    "prazo",
+    [AGORA + timedelta(seconds=1), AGORA + timedelta(days=365)],
+    ids=["agora+1s", "agora+365d"],
+)
+def test_prazo_na_borda_da_janela_e_aceito(
+    client: TestClient, relogio_fixo: datetime, prazo: datetime
+) -> None:
+    corpo = _criar(client, deadline=prazo.isoformat())
+
+    assert datetime.fromisoformat(corpo["deadline"]) == prazo
+
+
+@pytest.mark.parametrize(
+    "prazo",
+    [AGORA, AGORA + timedelta(days=365, seconds=1)],
+    ids=["agora", "agora+365d+1s"],
+)
+def test_prazo_fora_da_janela_devolve_422_sem_gravar(
+    client: TestClient, session: Session, relogio_fixo: datetime, prazo: datetime
+) -> None:
+    antes = _missoes(session)
+
+    resposta = client.post("/api/missions", json=_corpo(deadline=prazo.isoformat()))
+
+    assert resposta.status_code == 422
+    assert resposta.json()["code"] == "prazo_fora_do_limite"
+    assert _missoes(session) == antes
 
 
 @pytest.mark.parametrize(
@@ -458,24 +534,23 @@ def test_prazo_extremo_recusado_nao_quebra_a_listagem(client: TestClient) -> Non
     assert tentativa.status_code == 422
 
 
-def test_prazo_no_ultimo_instante_representavel_e_aceito_e_lido(
+def test_prazo_no_ultimo_instante_representavel_cai_no_limite_de_negocio(
     client: TestClient,
 ) -> None:
-    """A borda ACEITA do prazo, lida de volta: prova que a guarda nao recusa
-    mais do que precisa, e que o que ela aceita a listagem consegue ler.
-
-    Este teste NAO vigia o fuso da sessao. Sem o `SET TIME ZONE` de
-    `core/database.py`, ele so reprovaria com o ambiente a leste de UTC -- a
-    oeste esta borda e lida sem problema, e quem quebra e a outra. Quem vigia e
-    `test_sessao_em_utc.py`, que pede um fuso a leste e um a oeste por `PGTZ` e
-    le cada borda no lado em que ela estourava.
-    """
-    criada = _criar(client, deadline="9999-12-31T23:59:59Z")
+    """O ultimo instante representavel passa pela guarda TECNICA do schema, mas
+    desde a pendencia 26 a janela de 365 dias o recusa com `code` proprio, e a
+    listagem segue legivel. A leitura de um prazo nessa borda (linha antiga,
+    gravada antes da regra) continua vigiada por `test_sessao_em_utc.py`."""
+    tentativa = client.post(
+        "/api/missions", json=_corpo(deadline="9999-12-31T23:59:59Z")
+    )
 
     listagem = client.get("/api/missions")
 
     assert listagem.status_code == 200
-    assert [missao["id"] for missao in listagem.json()] == [criada["id"]]
+    assert listagem.json() == []
+    assert tentativa.status_code == 422
+    assert tentativa.json()["code"] == "prazo_fora_do_limite"
 
 
 # ---------------------------------------------------------------------------
