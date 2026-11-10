@@ -261,6 +261,21 @@ describe('TutorPanel: estados da conversa', () => {
     expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
   })
 
+  it('P7b o teto diario desabilita o campo ate a meia-noite, sem tentar de novo', async () => {
+    mountPanel({ [SEND]: preStreamError(429, { code: 'limite_diario_da_tutoria' }) })
+
+    await typeAndSend('Mais uma')
+
+    expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
+      'Você chegou ao limite de conversas de hoje. A Kairya volta à meia-noite.',
+    )
+    expect(input()).toHaveValue('Mais uma')
+    expect(input()).toBeDisabled()
+    expect(sendButton()).toBeDisabled()
+    expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-unavailable')).not.toBeInTheDocument()
+  })
+
   it('P8 o status que falha oferece tentar de novo', async () => {
     const { fetchMock } = mountPanel({
       [STATUS]: (_init, call) =>

@@ -445,6 +445,8 @@ def test_adaptador_classifica_max_tokens_depois_da_proposta_como_corte(
         max_tokens=256,
         timeout_segundos=1.0,
         fallback=False,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     turno = Turno(sistema="Teste", mensagens=(MensagemDoTurno("user", "Uma missão?"),))
     eventos: list[EventoDoProvedor] = []
