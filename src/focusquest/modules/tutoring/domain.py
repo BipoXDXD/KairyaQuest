@@ -87,6 +87,13 @@ PRAZO_EXPIRADO = "prazo_expirado"
 # (`CodigoDeErro.REAGENDAMENTO_INVALIDO`); um teste de API confere.
 REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
 
+# Os `error_code` de uma acao cuja proposta saiu dos limites de negocio da
+# avulsa (pendencia 26): estimativa fora de 1..1440 minutos ou prazo alem de
+# 365 dias. Sao a FONTE dos valores do `code` do 422: o `CodigoDeErro` os
+# reaproveita, e a acao gravada diz o mesmo que a resposta HTTP.
+ESTIMATIVA_FORA_DO_LIMITE = "estimativa_fora_do_limite"
+PRAZO_FORA_DO_LIMITE = "prazo_fora_do_limite"
+
 
 _TRANSICOES_DA_ACAO: dict[EstadoDaAcao, frozenset[EstadoDaAcao]] = {
     EstadoDaAcao.PROPOSTA: frozenset(

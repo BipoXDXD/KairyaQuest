@@ -1,3 +1,417 @@
+# Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
+
+Objetivo: provar, em conexões reais, a ordem global **ação → missão →
+avaliação → usuário** e os conflitos cruzados da escrita da avaliação, só
+com teste novo, sem mudar produção. Revisão-base: `2c09706`.
+
+Decisões:
+
+- **Recorte: a escrita da avaliação (transação 2 de `avaliar_missao`) contra
+  os dois fluxos de produção que disputam as mesmas linhas, nas duas ordens.**
+  É a única transação que passa por missão, avaliação e usuário; a
+  confirmação da Kairya cobre "ação → missão" e a conclusão cobre "missão →
+  usuário".
+- **Como a ordem é observada.** O PostgreSQL diz quem bloqueia quem
+  (`pg_blocking_pids`) e em qual tabela está a espera (`pg_locks`,
+  `locktype = 'tuple'`). Só então uma sonda `NOWAIT` (KEY SHARE para missão e
+  ação, SHARE para avaliação e usuário) confere o que quem espera **já**
+  segura e o que ainda não tocou. Sem `sleep` cego: o provedor falso segura a
+  resposta e a sessão da transação 2 pode segurar o próprio `commit`, por
+  eventos.
+- **A ordem "ação antes da missão" é observada em `confirmar_acao`.** O
+  cenário 3 abaixo mostra a confirmação esperando a missão já segurando a
+  ação. Isso contradiz a frase da F14 em `docs/ARCHITECTURE.md`, que a dá
+  como não observável por teste; o ARCHITECTURE.md não foi editado (está em
+  PRs abertos), e a correção ficou como pendência 209.
+- Helpers de espera e sonda são locais ao módulo: os equivalentes existentes
+  são privados de `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`, que outros PRs abertos tocam.
+  Reaproveitadas as fixtures `banco_migrado` e `fabrica` do `conftest.py`.
+
+Matriz provada (`tests/integration/test_ordem_global_das_travas.py`):
+
+| Teste | Quem segura | Quem espera, e onde | O que a sonda prova |
+|---|---|---|---|
+| `test_avaliacao_espera_o_usuario_ja_segurando_missao_e_avaliacao` | conclusão de outra missão do mesmo usuário (outra missão + usuário) | escrita da avaliação, em `users` | missão e avaliação já travadas |
+| `test_avaliacao_espera_a_missao_sem_tocar_avaliacao_nem_usuario` | confirmação da Kairya, reagendar a missão avaliada (ação + missão) | escrita da avaliação, em `missions` | avaliação e usuário livres |
+| `test_confirmacao_espera_a_missao_ja_segurando_a_acao` | escrita da avaliação retida no `commit` (missão, avaliação, usuário) | confirmação da Kairya, em `missions` | ação já travada |
+| `test_conclusao_espera_o_usuario_ja_segurando_a_propria_missao` | escrita da avaliação retida no `commit` | conclusão de outra missão, em `users` | a própria missão já travada |
+
+Depois de liberar o dono, o que cada teste afirma:
+
+- **Todos os quatro:** as duas transações terminam (o resultado de cada uma é
+  lido, sem `DeadlockDetected` nem outra exceção) e a avaliação fica
+  `concluida`, tentativa 1, veredito `atende`, com o modelo e o feedback do
+  provedor e bônus de 20.
+- **Testes 2 e 3:** a ação fica `falhou`/`reagendamento_invalido`, sem
+  `mission_id`, e o prazo da missão avaliada não muda. O teste 3 confere
+  também que a confirmação devolveu `ReagendamentoInvalido`.
+- **Testes 1, 2 e 4:** a ordem dos créditos das duas missões no livro-razão
+  (`xp_entries.id`) é a da serialização observada: teste 1, conclusão da
+  avaliada, conclusão da outra, bônus; teste 2, conclusão e bônus da
+  avaliada; teste 4, conclusão da avaliada, bônus, conclusão da outra. O
+  teste 3 não confere créditos.
+
+**Correção depois da revisão independente (corrida nos testes 3 e 4).** A
+primeira versão ligava `devolver_resposta` logo depois de submeter a
+avaliação, e a sessão observada marcava como transação 2 a primeira sessão
+aberta depois disso; se a transação 1 abrisse mais tarde, ela era tomada pela
+2. Duas mudanças: os testes 3 e 4 esperam `entrou_modelo` antes de liberar a
+resposta, como os testes 1 e 2; e a transação 2 passou a ser a primeira
+sessão aberta depois de o provedor **devolver** a resposta
+(`modelo_respondeu`, marcado na própria thread da avaliação), o que não
+depende de escalonamento. As outras passagens foram revistas: as sondas e a
+liberação do dono só acontecem depois de uma condição observada no banco ou
+num evento da thread.
+
+O que ficou de fora (não inventei teste para fechar):
+
+- Transação 1 (`abrir_tentativa`) e `registrar_falha` contra outros fluxos;
+  já há provas de 409, retomada e relógio em `test_evaluation_concorrencia.py`.
+- `iniciar_missao` e `reagendar_missao` pela tela × escrita da avaliação:
+  travam só a missão, como a confirmação, sem a ação na frente.
+- Confirmação de **criação** da Kairya (ação → `INSERT` de missão, que toma
+  KEY SHARE no usuário) × bônus.
+- `preparar_turno` da tutoria (FOR UPDATE no usuário, sem missão) × bônus e
+  × conclusão.
+- Duas escritas de avaliação de missões diferentes do mesmo usuário (as duas
+  missão → usuário; disputa só o usuário).
+- HTTP: a matriz roda nos serviços, não pelas rotas.
+
+Sabotagens (temporárias, revertidas com `git checkout -- src`; depois de cada
+uma, `git diff --exit-code -- src` saiu com 0):
+
+| Sabotagem | Reprovou |
+|---|---|
+| S1: transação 2 da avaliação trava o usuário antes da missão (`evaluation/service.py`) | testes 1 (`DID NOT RAISE` na sonda da missão) e 2 (`LockNotAvailable` em `users` na sonda que devia aceitar) |
+| S2: `_buscar_acao` sem `with_for_update` (`tutoring/service.py`) | teste 3 (`DID NOT RAISE` na sonda da ação) |
+| S3: `concluir_missao` trava o usuário antes da missão (`missions/service.py`) | teste 4 (`DID NOT RAISE` na sonda da própria missão) |
+| S4: `_corrente` sem `with_for_update` na missão (`evaluation_records.py`) | testes 1 (`DID NOT RAISE`, linha 458, sonda da missão), 2 e 3 (`DID NOT RAISE`, linha 541, sonda da missão) |
+
+S1, S2 e S3 foram refeitas depois da correção da corrida, com as mesmas
+reprovações da tabela.
+
+S4 refeita depois da correção, com a saída lida no teste 2: ele **não** para
+em `_esperar_bloqueio`. A transação 2 passa pela espera em `missions`
+(linha 497, aprovada) e reprova na linha 502, `_aceita` da avaliação, com
+`LockNotAvailable: could not obtain lock on row in relation
+"mission_evaluations"` na consulta `... FOR SHARE NOWAIT`. Leitura: sem o
+FOR UPDATE da missão, a transação 2 grava a avaliação e trava o usuário sem
+esperar ninguém, e só para no `INSERT` do bônus em `xp_entries`, cuja FK para
+`missions` toma FOR KEY SHARE na missão, que a confirmação segura com FOR
+UPDATE. Por isso ela ainda espera em `missions`, mas já segurando a
+avaliação, e o teste reprova pela ordem errada, não por "thread terminou
+antes". Depois da reversão, `git diff --exit-code -- src` saiu com 0.
+
+Comandos e resultados lidos (com `UV_PYTHON=3.14.10`):
+
+- Os plugins de estresse do revisor (`troca_rapida.py`, que faz
+  `sys.setswitchinterval(1e-6)`, e `atraso_tx1.py`, que atrasa 50 ms a
+  entrada de `avaliar_missao`) ficam fora do repositório e foram carregados
+  com `PYTHONPATH=<scratchpad> uv run pytest ... -p <plugin>`.
+- Na versão **anterior** à correção: `-p atraso_tx1`, testes 3 e 4
+  reprovados; `-p troca_rapida`, 3 execuções, testes 3 e 4 reprovados nas 3.
+- Na versão corrigida, 10 execuções de cada: `-p atraso_tx1` 10/10 verdes;
+  `-p troca_rapida` 10/10; `-p troca_rapida -p atraso_tx1` 10/10. Sem
+  plugin, 5/5 verdes. São as execuções feitas; não afirmam estabilidade
+  além delas.
+- Com os vizinhos `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`: 14 aprovados. Rodado de novo depois da
+  correção: 14 aprovados.
+- `ruff check`, `ruff format --check` e `mypy` no arquivo novo: sem erros.
+- `make check` e a suíte inteira **não executados** neste incremento.
+
+Defeitos de produção encontrados: nenhum.
+
+Alterações: novo `tests/integration/test_ordem_global_das_travas.py`; este
+HANDOFF (seção, linha 104 e pendência nova 209).
+
+# Engine única sob chamadas simultâneas — 2026-11-10
+
+Pendência 14, parte da corrida. Revisão-base: `2c09706`. `get_engine()` em
+`src/focusquest/core/database.py` ganhou um `threading.Lock` de módulo com
+dupla checagem: lê `_engine` sem trava (caminho comum, engine já criada) e,
+se for `None`, trava, confere de novo e só então cria. O FastAPI roda
+dependências síncronas no threadpool; sem a trava, duas requisições na
+partida podiam criar duas engines, com dois pools, e a perdedora ficava
+órfã. A engine continua preguiçosa e global; `/health`, `/ready` e
+`get_engine_se_configurada` não mudaram. Nenhuma dependência, contrato ou
+configuração mudou.
+
+Testes novos em `tests/unit/test_engine_unica.py`, sem banco (a criação é
+substituída por uma falsa) e sem `sleep`:
+
+- 4 threads chamam `get_engine()`; a primeira criação espera num
+  `threading.Event` (`wait(timeout=1.0)`) a segunda começar. Sem a trava, a
+  segunda entra e a acorda: mais de uma criação (de 2 a 4, conforme o
+  tempo das threads). Com a trava, a segunda fica no
+  lock, a espera expira e há uma criação só; todas as threads recebem o
+  mesmo objeto, e uma chamada posterior devolve o mesmo sem criar outra. O
+  custo do caminho verde é a espera de 1 s. As threads são `daemon` e o
+  `join` tem teto de 10 s: um deadlock vira falha sem segurar o processo.
+  Limite conhecido: o ramo interno `if _engine is None` falso só é coberto
+  se ao menos uma das threads 2–4 passar pela checagem externa durante a
+  espera de 1 s; numa máquina muito carregada isso pode não ocorrer e o
+  `fail_under = 100` acusaria o ramo.
+- Configuração ausente levanta `ValidationError`, `_engine` continua `None`
+  e a segunda chamada (numa thread com teto) levanta de novo, sem deadlock.
+
+Vermelho antes da correção (observado nesta execução): `assert 2 == 1` em `len(criadas)`
+(`test_chamadas_simultaneas_criam_uma_unica_engine`); o teste de
+configuração ausente já passava (guarda de regressão). Depois: `2 passed`,
+repetido 3 vezes. Sabotagem temporária, revertida: com a trava removida
+(volta à checagem única), o mesmo `assert 2 == 1`, `FAILED
+test_chamadas_simultaneas_criam_uma_unica_engine`. Cobertura de ramos de
+`get_engine` pelos testes novos: os quatro ramos cobertos (fora de cobertura
+no arquivo só as linhas de outras funções, exercitadas pelo resto da
+suíte).
+
+Validação: `ruff check`, `ruff format --check` e `mypy --strict` nos dois
+arquivos sem erros; `tests/unit/test_clock.py` e `tests/unit/test_config.py`
+passando. `make check` não executado nesta entrega.
+
+Fora do escopo, resíduo da pendência 14: `dispose()` da engine no shutdown.
+Exige um lifespan em `src/focusquest/main.py`, que está em quatro PRs abertos
+de outras frentes, e mover a criação para o lifespan mudaria o `/health` sem
+configuração.
+
+# Fase 4, Tarefa 4.1: tokens em 3 níveis e teste de contraste — 2026-11-10
+
+Objetivo: criar os tokens do design system "dojo-biblioteca ao anoitecer"
+(primitivos, semânticos e de componente) e um teste que mede o contraste WCAG
+de cada par de cor usado, sobre o CSS real. Base: `e57fa2b`.
+
+Decisões:
+
+- **O CSS é a fonte única dos tokens.** O TypeScript não repete nenhum hex:
+  `contrast.ts` lê as declarações `--nome: valor;` do CSS e resolve `var()`
+  sob demanda; `contrastPairs.ts` só nomeia os pares e o mínimo de cada um.
+- **Tokens em `frontend/src/styles/tokens.css`, não em `index.css`.** Desvio
+  da spec 4.1, que põe os tokens no `index.css`: o `index.css` passa a só
+  importar (`tailwindcss`, `tokens.css`) e a carregar as regras `.rpg-*`
+  legadas até a Tarefa 4.9, e os tokens ganham um arquivo que o teste lê
+  sozinho.
+- **Primitivos em `:root`, fora do `@theme`**, para não gerar utilities como
+  `bg-ink-800` que pulem o nível semântico. Semânticos e de componente
+  (`--radius-ui` 10px, `--radius-pill` 999px, `--shadow-glow-lantern`) no
+  `@theme`, onde viram utilities (`bg-bg-canvas`, `rounded-ui`,
+  `shadow-glow-lantern` etc.). `--glow-lantern-color`, o alias
+  `--glow-lantern` e `--glow-lantern-filter` (forma do glow para SVG,
+  `drop-shadow` sem spread) ficam em `:root`, sem utility.
+- **Primitivo novo `ink-400` `#697b91` e `color-border-strong` = ink-400.**
+  Origem: ruling 08:05 do controlador da Fase 4. A spec manda
+  `border-strong` = ink-500 (`#5b6e84`), que mede 2,74:1 sobre `bg-raised` e
+  reprova o 3:1 que a própria spec exige para componente de UI; o requisito
+  de contraste vence o hex. O ink-400 mede 4,23 / 3,79 / 3,31 sobre
+  canvas / surface / raised (margem ≥ 0,2 sobre 3:1) e 2,10:1 contra
+  `text-muted`, distinto dele. Com isso o `Field` funciona sobre qualquer
+  elevação, sem restrição de contexto.
+- Um semântico de estado a mais, `color-action-primary-hover` = lantern-200
+  (13,75:1 com `text-on-action`). Nenhum hover usa `color-mix`.
+- `color-border-subtle` (ink-700) é decorativa e fica fora dos pares de 3:1
+  (mede 1,61:1 no canvas); nunca é o único limite de um controle.
+- Ciclo de `var()` é reportado como "ciclo em var()" no
+  `findContrastFailures`, separado de "token ausente", para a mensagem
+  apontar a causa certa.
+- A razão na mensagem de falha é **truncada** em 2 casas, não arredondada:
+  2,996 arredondado viraria "3.00 < 3", contradizendo a reprovação.
+- `readSource` resolve a raiz por `fileURLToPath(import.meta.url)` +
+  `node:path`, e não por `new URL('../../', import.meta.url)` como dizia o
+  plano: o Vite reescreve essa forma literal como URL `http://localhost:3000/@fs/...`
+  e o `fileURLToPath` a recusa (medido no Vitest 5.0.1 com jsdom).
+
+Alterações:
+
+- Novos: `frontend/src/styles/tokens.css`,
+  `frontend/src/shared/ui/tokens/{contrast.ts,contrastPairs.ts,contrast.test.ts}`,
+  `frontend/src/shared/ui/tokens.test.ts`, `frontend/src/test/readSource.ts`.
+- `frontend/src/index.css`: importa `tokens.css`, remove o bloco
+  `:root { --fq-* }` e troca cada `var(--fq-*)` pelo equivalente (`--fq-bg` →
+  `--color-bg-canvas`, `--fq-surface` → `--color-bg-surface`, `--fq-text` →
+  `--color-text-primary`, `--fq-muted` → `--color-text-muted`, `--fq-metal` →
+  `--lantern-600`, `--fq-mako` → `--color-feedback-success`, `--fq-border` →
+  `--color-border-strong`, `--fq-radius` → `--radius-ui`, `--fq-space` →
+  `calc(var(--spacing) * 6)`, `--fq-font-display` → Georgia provisório até a
+  4.2). Nenhum `--fq-*` tinha consumidor fora do `index.css`, então não ficou
+  alias. Os hex soltos das regras `.rpg-*` ficam até a 4.9.
+- `docs/QUALITY.md` §3: linha do `readSource.ts`.
+- `docs/ARCHITECTURE.md`: `styles/` e `shared/ui/` passam a existir,
+  `readSource.ts` entra na lista de `src/test/` e a linha "Token visual" da
+  tabela passa a "existe".
+
+Comandos e resultados:
+
+- `npx vitest run src/shared/ui/tokens/contrast.test.ts` antes do
+  `contrast.ts`: falhou (módulo inexistente); depois: passou (23 testes,
+  contando o de truncamento, que falhou antes do ajuste com "3.00 < 3").
+- `npx vitest run src/shared/ui/tokens.test.ts` antes do `tokens.css`:
+  falhou (`ENOENT` em `src/styles/tokens.css`); depois: passou.
+- Sabotagem manual: `color-border-strong` → ink-500 reprova 3 testes, com
+  `color-border-strong/color-bg-raised = 2.74 < 3 (borda de controle)`;
+  revertido.
+- `vite build` numa pasta temporária: o CSS gerado tem `--ink-400:#697b91`,
+  `--color-bg-canvas:var(--ink-950)`, `--radius-ui:10px`, o glow e o filtro,
+  e nenhum `fq-`.
+- `make check-web` (exit 0): lint, Prettier e `tsc` limpos; 53 arquivos,
+  1035 testes passaram; cobertura 100% em statements (1325/1325), branches
+  (989/989), functions (369/369) e lines (1286/1286).
+
+Pendências:
+
+- O gate completo (`make check`, com E2E de layout e axe) fica com o
+  controlador. As cores das regras `.rpg-*` mudaram levemente com a troca
+  (por exemplo, borda `#52606d` → `#697b91`, texto secundário `#b2beca` →
+  `#a9b6c6`, fundo `#0b1421` → `#0d1520`); o contraste novo foi medido nos
+  pares do teste, mas o axe sobre as telas reais ainda não rodou.
+- `listSources` ainda não tem consumidor; a 4.3 (lint de design) é a
+  primeira. Foi conferido à mão nesta tarefa.
+
+# `.env` de worktree sem segredo — 2026-11-10
+
+**Objetivo.** O `scripts/novo-worktree.sh` montava o `.env` do worktree novo
+copiando linha a linha o `.env` do principal, inclusive chaves de segredo
+reais (`FOCUSQUEST_GROQ_API_KEY`). Cada worktree multiplicava as cópias da
+chave em disco.
+
+**Decisão.** O `.env` do worktree passa a ser gerado a partir do
+`.env.example` da `main` (lido com `git show main:.env.example`, a mesma
+revisão de onde o worktree nasce, antes de criar qualquer coisa). Do `.env`
+do principal só se lê `FOCUSQUEST_TEST_DATABASE_URL`, como antes: o nome do
+banco vira `focusquest_<nome>_test`, e servidor, credencial local e opções da
+URL ficam. O deslocamento do E2E continua sendo escrito no fim. Alternativa
+descartada: continuar copiando o principal e apagar chaves por padrão de nome
+(`*_API_KEY`, `*_TOKEN`...). É uma denylist: a próxima chave com outro nome
+vazaria em silêncio. O exemplo funciona como allowlist, porque só tem o que é
+seguro versionar. O custo é que ajustes não secretos do `.env` do principal
+(nível de log, modelo, URL do banco de desenvolvimento) não passam para o
+worktree, que fica com os valores do exemplo. Quem precisa de uma chave no
+worktree a preenche à mão.
+
+**Alterações.** `scripts/novo-worktree.sh`: gera a partir do exemplo, recusa
+se a `main` não tiver `.env.example` e acrescenta a linha do banco de teste
+se o exemplo não a tiver (sem ela, o worktree cairia no banco do principal).
+Trava, validações, `noclobber` e as demais recusas não mudaram.
+`tests/integration/test_novo_worktree.py`: o repositório sintético versiona
+uma cópia do `.env.example` real. Teste novo com canários (`CANARY-<uuid>`)
+em toda chave que o exemplo deixa em branco, mais uma que ele não conhece.
+Dois testes novos cobrem as bordas acima. Dois testes antigos afirmavam a
+cópia de valores do principal (`FOCUSQUEST_TUTOR_MODEL`); passaram a afirmar
+o contrário, ou, no da chamada por outro worktree, que o servidor do banco de
+teste vem do principal e não do worktree que chamou. `docs/QUALITY.md`
+descreve a geração.
+
+**Resultados.** O teste dos canários falhou antes da implementação, com dois
+canários no `.env` gerado. Depois dela, o arquivo
+`tests/integration/test_novo_worktree.py` inteiro passou: 56 testes. Ruff,
+`ruff format --check` e mypy passaram nesse arquivo, e `shellcheck -x` no
+script. `make check` completo roda no hook `pre-commit` deste commit (o commit só
+existe se ele passar).
+
+**Pendência.** Worktrees criados antes desta mudança ainda guardam a cópia
+da chave no próprio `.env`; apagá-la é manual.
+
+# Porta do PostgreSQL com prova de concordância — 2026-11-10
+
+Pendência 11 resolvida. Revisão-base: `e57fa2b`. `tests/unit/test_porta_do_banco.py`
+toma `Settings.db_port` como referência e confere, com contagem esperada por
+extrator, `compose.yaml` (1), `.env.example` (variável 1, URLs 2) e
+`.github/workflows/quality.yml` (`ports` 2, URLs 4, `psql -p` 2). Varre
+menções `55xxx` em `config.py`, `.env.example`, `compose.yaml`, workflow,
+`docs/QUALITY.md` e `frontend/tests/e2e/servers.ts`, e usa `git grep` para
+recusar arquivo rastreado que repita a porta fora dessa lista (exceto
+`tests/`, este HANDOFF e os lockfiles). URL sem porta explícita é recusada com
+`arquivo:linha`. Teste unitário, sem banco; nenhum contrato, dependência ou
+configuração mudou. Fonte única (workflow montando URLs de uma `env` comum,
+compose sem padrão) foi avaliada e descartada: mudaria contratos do CI e
+quebraria `docker compose up` sem `.env`.
+
+Vermelho antes da implementação: `3 failed` (`NameError` nos extratores).
+Depois: `12 passed`. Sabotagens temporárias, cada uma revertida antes da
+seguinte, com a falha lida na saída:
+
+| Sabotagem | Resultado |
+|---|---|
+| `.env.example:4` → `FOCUSQUEST_DB_PORT=55433` | `2 failed`: extrator da variável e varredura, ambos `.env.example:4: 55433` |
+| `compose.yaml:16` → `:-55433}` | `2 failed`: extrator do compose e varredura, ambos `compose.yaml:16: 55433` |
+| `quality.yml:88` → `- "55432:5432"` | `1 failed`: extrator de `ports`, "esperadas 2 … achadas 1" |
+| `docs/QUALITY.md:24` → `55433` | `1 failed`: só a varredura, `docs/QUALITY.md:24: 55433` |
+| `scripts/porta.txt` com `55432` (`git add -N`) | `1 failed`: `git grep`, `['scripts/porta.txt']` |
+
+Limitação: uma porta DIFERENTE num arquivo novo fora da lista não é
+detectada; a lista é o que se declarou como fonte.
+
+Validação: `ruff check`, `ruff format --check` e `mypy` no arquivo novo sem
+erros. `make check`: completo
+no hook `pre-commit` deste commit (o commit só existe se ele passar).
+
+# Paridade geral modelo/migração e Alembic offline — 2026-11-10
+
+Pendência 9/10. Revisão-base: `e57fa2b`. Nenhuma migração, modelo,
+dependência ou contrato mudou.
+
+`tests/integration/test_paridade_geral_do_esquema.py` roda `compare_metadata`
+do Alembic (`compare_type` e `compare_server_default` ligados, sem filtro)
+contra o banco migrado até `head`: diff vazio. Cobre tabelas, colunas, tipos,
+nulabilidade, server defaults, FKs com `ON DELETE`, UNIQUE e índices. Um
+segundo teste compara os nomes dos CHECKs por tabela, porque o autogenerate
+não compara CHECK. O autogenerate **não** compara, e por isso fica fora:
+
+- o texto dos CHECKs (só o nome é comparado; o texto segue provado pelos
+  testes de comportamento, INSERT recusado);
+- o predicado de índice parcial (`postgresql_where` de
+  `uq_missions_especial_por_plano` e dos índices parciais de
+  `tutor_messages`): só unicidade e colunas entram.
+
+Sabotagens temporárias no modelo, revertidas (`git diff --exit-code -- src`
+vazio), cada uma reprovando o teste esperado:
+
+- `ondelete` da FK `xp_entries.mission_id` de `CASCADE` para `SET NULL`:
+  `remove_fk` + `add_fk` em `xp_entries`;
+- sem `server_default=func.now()` em `users.created_at`: `modify_default`
+  em `users.created_at`;
+- `missions.instructions` de `Text` para `String(50)`: `modify_type`
+  `TEXT()` → `String(length=50)`;
+- `ck_xp_entries_amount` renomeado: "so no banco:
+  [('xp_entries', 'ck_xp_entries_amount')]; so no modelo:
+  [('xp_entries', 'ck_xp_entries_valor')]".
+
+`tests/integration/test_migracoes_offline.py` gera SQL com `sql=True`, sem
+conexão, nas faixas: upgrade `base→0003` e `0004→head` (0005, 0006, 0007);
+downgrade `0007→0006`, `0004→0003` e `0002→base`. Exclusões, porque
+`op.get_bind()` offline não devolve resultado e a migração lê dados:
+
+- upgrade da 0004 (backfill): `alembic -x test=true upgrade 0003:0004 --sql`
+  termina em `AttributeError: 'NoneType' object has no attribute 'scalars'`;
+- downgrade de 0003, 0005 e 0006 (guardas que contam linhas): cada um
+  termina em `AttributeError: 'NoneType' object has no attribute
+  'scalar_one'`.
+
+Sabotagens temporárias, revertidas (`git diff --exit-code -- alembic` vazio):
+faixa `0003:head` no lugar de `0004:head` e uma leitura de dados no upgrade da
+0007 reprovam só o caso `0004-ate-head` (1 failed, 4 passed).
+
+Resultados lidos: os dois arquivos com `pytest` 7 passed; Ruff check, Ruff
+format `--check` e mypy estrito sem erros nos dois arquivos.
+
+Validação: `make check` completo roda no hook `pre-commit` deste commit (o
+commit só existe se ele passar); o resultado do CI fica no PR. Um gate anterior,
+rodado ao mesmo tempo que o de outro worktree, mostrou 2 `F` no pytest e foi
+cortado por timeout antes do resumo, sem nome dos testes; a suíte pytest
+inteira, rodada sozinha logo depois, passou sem falha. Possível intermitência
+sob carga, não reproduzida nem investigada.
+
+# Bíblia e voz da Kairya — 2026-11-10
+
+`docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
+visual, paleta, expressões, máquina de estados e limites) e
+`docs/kairya/voz.md` (princípios, exemplos PT/EN, padrão de erro, forma do
+chat, gatilhos das 36 falas por idioma e descrições das vozes) passam a ser a
+fonte da persona da tutora, dos prompts de arte e do roteiro das falas. A
+Kairya é original e descrita só por traços próprios: nenhum desses textos
+compara a personagem com obra ou franquia existente. O texto final de cada
+fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
+código, dependência, endpoint ou custo.
+
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
 **Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
@@ -494,8 +908,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 4/5 | Autenticação/autorização por recurso; conferir dono antes de prender linha em missions/tutor_actions quando houver contas. Hoje é contenção teórica no recorte único, sem 404 diferente. |
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
-| 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
-| 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
+| ~~26~~ | ~~Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos.~~ Resolvida na Fase 1 (Tarefa 1.5): `POST /api/missions` recusa estimativa fora de 1–1440 min (422 `estimativa_fora_do_limite`) e prazo fora de `(agora, agora+365 dias]` (422 `prazo_fora_do_limite`), contra o relógio injetado e antes de qualquer escrita; o reagendamento recusa acima de 365 dias com o mesmo code (o passado segue `prazo_expirado`). Schema intacto: 0/negativo continuam no 422 nativo, e a ferramenta da Kairya não muda. A confirmação pela Kairya aplica os mesmos limites: criação e reagendamento fora deles gravam a ação `falhou` com o `error_code` igual ao `code` do 422, e o cartão mostra o texto próprio. Resíduo: não há formulário de criação no frontend, então `estimativa_fora_do_limite` só aparece no cartão da Kairya; o formulário de reagendar ganhou `min`/`max` e o bloqueio do teto. Os prazos literais do E2E do QG ficam na pendência 207. |
 | 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
@@ -513,10 +926,9 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | ID | O que continua aberto |
 |---|---|
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
-| 9/10 | Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado. |
-| 11 | Porta 55432 repetida em Settings/compose/exemplo/workflow, sem prova geral de divergência. |
+| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção "Paridade geral modelo/migração e Alembic offline"). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
-| 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
+| 14 | Engine global/lazy, sem dispose no shutdown ~~e corrida teórica~~; mover ao lifespan muda liveness sem configuração. Corrida resolvida em 2026-11-10 (trava com dupla checagem em `get_engine`, `tests/unit/test_engine_unica.py`). Resta o dispose no shutdown, via lifespan em `main.py`. |
 | 32/161 | Códigos HTTP/SSE, dificuldade, dias por marco e rótulos Python/frontend espelhados à mão; respostas externas não têm validação runtime geral. |
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
@@ -528,10 +940,11 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 97(a/c/g/i) | TypeDecorators semelhantes/cascade sem passive_deletes; último tool_use da mesma ferramenta vence e falso tem dois membros tool_input; rascunho retido após refresh; downgrade0005 pode falhar pela guarda0006 antes do bônus. |
 | 97/S-M6 | Só o rótulo foi recuperado; falta requisito verificável. Não inventar teste para fechar o item. |
 | 97/T-M1 | Provas de ausência de escrita antes do rollback são parciais; faltam todas as falhas, _mesma_evidencia, disputa UNIQUE e HTTP. Casos sequenciais não provam todos os entrelaçamentos. |
-| 104 | Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário. |
+| ~~104~~ | ~~Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário.~~ Resolvida em 2026-11-10 (seção "Pendência 104: matriz de conflitos cruzados e ordem global das travas"): escrita da avaliação × confirmação da Kairya e × conclusão de outra missão, nas duas ordens, com sonda NOWAIT do que já está travado. Resíduo declarado: transação 1 e `registrar_falha`, início/reagendamento pela tela, confirmação de criação × bônus, `preparar_turno` × bônus/conclusão, duas avaliações do mesmo usuário e HTTP. |
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
+| 209 | A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos). |
 
 ### Provedor, custo e diagnósticos
 
@@ -567,6 +980,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
 | 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
+| 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
 
 ## Decisões aceitas e limitações operacionais
 
@@ -578,6 +992,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 22/23 | Lock npm pode divergir local/CI; tabela Vitest vazia não prova cobertura, limiar/resumo sim. Limites em QUALITY. |
 | 29/30 | Raiz é convenção com receita externa; barra final produz307. Não mudar Settings/redirect por estética. |
 | 39 | Preparação Playwright usa rede/apt; falha reprova fechado. Sem cache parcial introduzido. |
+| 41 | Pergunta à tutora limitada a 4000 caracteres, decidido pelo dono. O espelho `MAX_QUESTION_LENGTH` (frontend) ↔ `TAMANHO_MAXIMO_DA_PERGUNTA` (backend) é provado por `tests/unit/test_limite_da_pergunta.py`, que reprova com `arquivo:linha` dos dois lados se divergirem, e com o caminho do arquivo se a constante do frontend sumir. Mudar o número é decisão de produto. |
 | 44/71 | Medições antigas de mutações são histórico de prova, não taxas universais atuais nem tarefas por repetir. |
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
@@ -587,7 +1002,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |
 | 98 | PRs antigos #4–#18 podem pertencer ao remoto anterior, recriado; usar hash/época para identificar. Não confundir com PRs atuais de mesmo número. |
 | 108 | Banco E2E limpo por execução, mas compartilhado entre specs; falso reiniciar não limpa banco. Assertar IDs/deltas, não contagens/XP absolutos; axe de uma spec pode incluir cartões anteriores. |
-| 110 | Reagendar sem teto é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. |
+| 110 | Reagendar sem teto de quantidade é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. O novo prazo, pela tela ou pela Kairya, tem desde a Tarefa 1.5 o horizonte de 365 dias (`prazo_fora_do_limite`, pendência 26); a contagem de reagendamentos continua sem teto. |
 | 164(b) | Reenvio de ação executada devolve missão atual, não sua fotografia antiga; a ação/idempotência permanece igual. |
 | 170/171/172 | error_code também marca corte; stop_sequence/pause_turn hoje normais pois ferramentas de servidor inexistem; parcial pode aparecer antes da recusa final e depois sumir. Fallback atenua, não elimina a última limitação. |
 | 182/185 | _completar usa sessão própria sem cache anterior; risco se contrato mudar. Chat depende de ciclo legível, confiando em CHECK/FKs, sem proteção para dado impossível por eles. |

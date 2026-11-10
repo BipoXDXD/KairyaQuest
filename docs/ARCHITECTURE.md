@@ -99,7 +99,10 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) e
   ganhou o lado do frontend (`frontend/src/features/tutoring/`) **no
   1b-2** — a feature existe hoje, não é mais contrato.
-- **No frontend, não existem `styles/` nem `shared/ui/`.** `shared/lib/`
+- **No frontend, `styles/` e `shared/ui/` nasceram na Fase 4, Tarefa 4.1.**
+  `styles/tokens.css` é a fonte única dos tokens visuais; `shared/ui/` tem,
+  por ora, só `tokens/` (contraste WCAG e pares) e o `tokens.test.ts`.
+  `shared/lib/`
   **nasceu no 1b-2**, com `deadline.ts` (§5 regra 3), e ganhou `civilDate.ts`
   **no C**. `app/` (a navegação lateral), `shared/hooks/`
   (`useRefreshOnReturn.ts`) e `shared/types/` (`mission.ts`) **nasceram no
@@ -1402,17 +1405,24 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   `MISSION_STATE_LABELS`, `DAYS_PER_MILESTONE` e `MAX_DIFFICULTY`, movidos
   de `features/missions/types.ts` **sem reexport** — "um lugar só para o
   contrato". `features/missions/types.ts` ficou só com `Cycle` (que importa
-  `Mission` de `shared/`) e `MissionErrorCode`. `shared/ui/` continua
-  contrato.
-- **`src/styles/`** *(contrato)* — tokens e estilos globais. Hoje os estilos
-  globais estão em `src/index.css`.
+  `Mission` de `shared/`) e `MissionErrorCode`.
+- **`src/shared/ui/`** *(existe, desde a F4 4.1)* — o design system. Por ora
+  só `tokens/` (`contrast.ts`, `contrastPairs.ts`) e o `tokens.test.ts`, que
+  mede o contraste WCAG de cada par de cor sobre o CSS real; os componentes
+  chegam nas tarefas seguintes da Fase 4.
+- **`src/styles/`** *(existe, desde a F4 4.1)* — `tokens.css` é a fonte
+  única dos tokens (primitivos em `:root`, semânticos e de componente no
+  `@theme` do Tailwind). O `src/index.css` importa o Tailwind e o
+  `tokens.css` e mantém as regras `.rpg-*` legadas até a Tarefa 4.9.
 - **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
   oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
   hoje: os arquivos do scaffold foram removidos por órfãos (§1).
 - **`src/test/`** *(existe)* — infraestrutura de teste: `setup.ts` (o modo
   de teste do React), `sse.ts` (quadros SSE falsos), `fetchRoutes.ts`
   (`routeFetch`, um `fetch` falso roteado) e `viewport.ts` (`stubViewport`,
-  `matchMedia` falso, desde o 1b-2). Está **fora** do denominador da
+  `matchMedia` falso, desde o 1b-2) e `readSource.ts` (`readSource` e
+  `listSources`, leitura real de arquivos-fonte com `node:fs`, desde a F4
+  4.1). Está **fora** do denominador da
   cobertura de propósito; ver `docs/QUALITY.md` §3.
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
   fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
@@ -1477,8 +1487,8 @@ legitimamente pertence a ele — nunca antes.
 | Hook que só faz sentido dentro de uma feature | `frontend/src/features/<feature>/` | existe (`missions/useMissions.ts`, `tutoring/useTutorConversation.ts`, `campaigns/useCurrentPlan.ts`) |
 | Função pura usada por mais de uma feature | `frontend/src/shared/lib/` | existe (`deadline.ts` desde o 1b-2; `civilDate.ts` desde o C) |
 | Página nova da navegação lateral (uma área) | `frontend/src/pages/`, com o `id` do `h1` em `frontend/src/pages/headings.ts` e a entrada em `frontend/src/app/areas.ts` | existe (`Headquarters`, `Campaigns`, desde o C) |
-| Token visual (cor, espaçamento, tipografia, foco, movimento) | `frontend/src/styles/` | contrato |
-| Estilo global | hoje `frontend/src/index.css`; migra para `frontend/src/styles/` quando a pasta nascer | existe |
+| Token visual (cor, espaçamento, tipografia, foco, movimento) | `frontend/src/styles/tokens.css` | existe (desde a F4 4.1) |
+| Estilo global | `frontend/src/index.css` (importa `styles/tokens.css`; regras `.rpg-*` legadas até a F4 4.9) | existe |
 | Teste de componente | **ao lado do arquivo testado**, com o mesmo nome e sufixo `.test.tsx` (`App.tsx` → `App.test.tsx`) | existe |
 | Página (composição de features) | `frontend/src/pages/` | existe |
 | Teste ponta a ponta | `frontend/tests/e2e/` | existe |
@@ -1671,7 +1681,9 @@ Arquivos adicionais da estabilização, além da árvore histórica da seção 1
 src/focusquest/core/validation.py
 tests/unit/test_textos_persistiveis.py
 tests/integration/test_cycle_consistency.py
+tests/integration/test_migracoes_offline.py
 tests/integration/test_mission_operations_schema_parity.py
+tests/integration/test_paridade_geral_do_esquema.py
 tests/integration/test_progression_consistency.py
 tests/integration/test_progression_schema_parity.py
 tests/integration/test_request_validation.py
@@ -1687,8 +1699,10 @@ frontend/tests/e2e/tutor-focus.spec.ts
 
 Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
 atual, incluindo unicidade por `(mission_id, source)` do E; os de
-`mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
-sem afirmar paridade geral de todo o esquema. O caso explícito
+`mission_operations` comparam FKs e UNIQUE nomeadas. A paridade geral fica em
+`test_paridade_geral_do_esquema.py` (autogenerate + nomes dos CHECKs); os
+testes delimitados continuam fixando nomes de UNIQUE e a ausência de predicado
+em `ix_xp_entries_user_id_id`. O caso explícito
 `test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao` exige
 legado/XP/conquistas não vazios, preserva o legado em 0003↔head e compara a
 progressão reconstruída, excluindo missões pendentes (83 já resolvida na base).
