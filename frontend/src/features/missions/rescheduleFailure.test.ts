@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { describeRescheduleFailure } from './rescheduleFailure'
 
 // Escrita por extenso, e nao importada do modulo (mesmo motivo de
@@ -23,6 +23,14 @@ const NOT_ACCEPTED = {
 describe('describeRescheduleFailure', () => {
   it.each([
     ['prazo_expirado', 422, { message: 'O novo prazo precisa estar no futuro.', recovery: 'edit' }],
+    [
+      'prazo_fora_do_limite',
+      422,
+      {
+        message: 'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+        recovery: 'edit',
+      },
+    ],
     [
       'prazo_inalterado',
       409,
@@ -92,8 +100,22 @@ describe('describeRescheduleFailure', () => {
     },
   )
 
-  it('cai na mensagem generica quando nao ha code (rede, 5xx)', () => {
-    expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual(UNCONFIRMED)
+  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
+    expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual({
+      message: 'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      recovery: 'retry',
+    })
+  })
+
+  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
+    expect(describeRescheduleFailure(new ApiTimeoutError())).toEqual({
+      message:
+        'A resposta demorou mais que o esperado. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      recovery: 'retry',
+    })
+  })
+
+  it('um 5xx sem code continua no texto generico', () => {
     expect(describeRescheduleFailure(new ApiError('x', 500, null))).toEqual(UNCONFIRMED)
   })
 

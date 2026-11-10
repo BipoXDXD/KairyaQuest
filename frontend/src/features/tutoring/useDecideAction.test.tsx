@@ -112,7 +112,7 @@ describe('useDecideAction', () => {
       status: 'failed',
       failure: {
         message:
-          'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
+          'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
         recovery: 'retry',
       },
       attempted: 'confirm',
@@ -182,6 +182,34 @@ describe('useDecideAction', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['estimativa_fora_do_limite', 'prazo_fora_do_limite'])(
+    'D4 %s marca a acao como falhou com esse code, como o servidor gravou, e solta a chave',
+    async (code) => {
+      const fetchMock = routeFetch({ [CONFIRM]: withCode(422, code) })
+      const { changed, missionCreated, result } = mount()
+
+      act(() => {
+        result.current.decision.confirm()
+      })
+      await waitFor(() => {
+        expect(result.current.decision.state.status).toBe('failed')
+      })
+
+      expect(changed).toHaveBeenCalledExactlyOnceWith({
+        ...proposta(5),
+        state: 'falhou',
+        error_code: code,
+      })
+      expect(missionCreated).not.toHaveBeenCalled()
+      expect(result.current.decision.state).toMatchObject({
+        failure: { recovery: 'out-of-bounds' },
+        attempted: 'confirm',
+      })
+      expect(result.current.keys.operationIdFor(5)).toBe(K2)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it.each(['transicao_ilegal', 'acao_nao_encontrada'])(
     'D5 %s pede atualizar a conversa, e solta a chave',
     async (code) => {
@@ -237,7 +265,7 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
+        message: 'Não foi possível conectar. Tentar de novo é seguro.',
         recovery: 'retry',
       },
       attempted: 'reject',
