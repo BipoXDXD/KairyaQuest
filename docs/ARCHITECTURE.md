@@ -1106,7 +1106,7 @@ pendente, o estado, o início e "reagendada N vez(es); último motivo", e as aç
 antigas entram como texto por tipo (F19).
 
 **A confirmação de um reagendamento** executa pelo **mesmo** `reagendar_missao`,
-com `origin = 'tifa'` e o `operation_id` da confirmação, e revalida tudo (F17):
+com `origin = 'kairya'` e o `operation_id` da confirmação, e revalida tudo (F17):
 prazo passado → ação `falhou`/`prazo_expirado` e `422`; missão que mudou (não
 existe mais, concluída, prazo já igual, tipo derivado) → ação
 `falhou`/`reagendamento_invalido` e `409`; chave reutilizada →
