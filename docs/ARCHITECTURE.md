@@ -222,7 +222,7 @@ real, e em qual módulo.
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
-| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
+| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno (o contexto vai como um cabeçalho fixo e uma linha JSON no system, depois da persona, e as ações antigas como "Ação registrada pelo sistema" + JSON: todo texto livre fica dentro de strings, como na avaliação), o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
 **A dependência é `tutoring → missions`, nunca o contrário.**
@@ -1677,7 +1677,9 @@ Arquivos adicionais da estabilização, além da árvore histórica da seção 1
 src/focusquest/core/validation.py
 tests/unit/test_textos_persistiveis.py
 tests/integration/test_cycle_consistency.py
+tests/integration/test_migracoes_offline.py
 tests/integration/test_mission_operations_schema_parity.py
+tests/integration/test_paridade_geral_do_esquema.py
 tests/integration/test_progression_consistency.py
 tests/integration/test_progression_schema_parity.py
 tests/integration/test_request_validation.py
@@ -1693,8 +1695,10 @@ frontend/tests/e2e/tutor-focus.spec.ts
 
 Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
 atual, incluindo unicidade por `(mission_id, source)` do E; os de
-`mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
-sem afirmar paridade geral de todo o esquema. O caso explícito
+`mission_operations` comparam FKs e UNIQUE nomeadas. A paridade geral fica em
+`test_paridade_geral_do_esquema.py` (autogenerate + nomes dos CHECKs); os
+testes delimitados continuam fixando nomes de UNIQUE e a ausência de predicado
+em `ix_xp_entries_user_id_id`. O caso explícito
 `test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao` exige
 legado/XP/conquistas não vazios, preserva o legado em 0003↔head e compara a
 progressão reconstruída, excluindo missões pendentes (83 já resolvida na base).
