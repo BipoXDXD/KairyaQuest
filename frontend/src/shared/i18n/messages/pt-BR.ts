@@ -15,4 +15,5 @@ export const ptBR = {
   'shell.locale.saveFailed':
     'Não foi possível salvar o idioma {language}. A conexão falhou. Tente de novo.',
   'ui.dialog.cancel': 'Cancelar',
+  'ui.loading': 'Carregando…',
 } as const

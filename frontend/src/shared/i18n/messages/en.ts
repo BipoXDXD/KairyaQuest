@@ -12,4 +12,5 @@ export const en = {
   'shell.locale.saveFailed':
     "Couldn't save {language} as your language. The connection failed. Try again.",
   'ui.dialog.cancel': 'Cancel',
+  'ui.loading': 'Loading…',
 } as const satisfies Messages

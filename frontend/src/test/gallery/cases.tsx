@@ -1,5 +1,16 @@
 import type { JSX } from 'react'
-import { ButtonCase, ConfirmDialogCase, IconButtonCase } from './caseComponents'
+import {
+  BadgeCase,
+  ButtonCase,
+  ConfirmDialogCase,
+  EmptyStateCase,
+  IconButtonCase,
+  PanelCase,
+  ProgressBarCase,
+  SkeletonCase,
+  SpeechBubbleCase,
+  StatusLineCase,
+} from './caseComponents'
 import type { GalleryCaseId } from './caseIds'
 
 // `Record`: o compilador exige um caso para cada id, e nenhum a mais.
@@ -22,4 +33,25 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
   'icon-button-loading': () => <IconButtonCase state="loading" />,
   'confirm-dialog-open': () => <ConfirmDialogCase pending={false} />,
   'confirm-dialog-confirming': () => <ConfirmDialogCase pending />,
+  'panel-sunken': () => <PanelCase elevation="sunken" />,
+  'panel-surface': () => <PanelCase elevation="surface" />,
+  'panel-raised': () => <PanelCase elevation="raised" />,
+  'panel-glow': () => <PanelCase elevation="raised" glow />,
+  'badge-neutral': () => <BadgeCase tone="neutral" />,
+  'badge-success': () => <BadgeCase tone="success" />,
+  'badge-danger': () => <BadgeCase tone="danger" />,
+  'badge-action': () => <BadgeCase tone="action" />,
+  'progress-bar-empty': () => <ProgressBarCase value={0} />,
+  'progress-bar-partial': () => <ProgressBarCase value={40} />,
+  'progress-bar-full': () => <ProgressBarCase value={200} />,
+  'status-line-neutral': () => <StatusLineCase tone="neutral" />,
+  'status-line-success': () => <StatusLineCase tone="success" />,
+  'status-line-danger': () => <StatusLineCase tone="danger" />,
+  'skeleton-default': () => <SkeletonCase />,
+  'speech-bubble-neutral': () => <SpeechBubbleCase tone="neutral" />,
+  'speech-bubble-celebrating': () => <SpeechBubbleCase tone="celebrating" />,
+  'speech-bubble-concerned': () => <SpeechBubbleCase tone="concerned" />,
+  'empty-state-missions': () => <EmptyStateCase art="missions" />,
+  'empty-state-plan': () => <EmptyStateCase art="plan" />,
+  'empty-state-campaign-new': () => <EmptyStateCase art="campaign-new" />,
 }
