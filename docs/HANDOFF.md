@@ -1,3 +1,66 @@
+# Pendência 192/37: prazo no Concluir e na avaliação — 2026-11-10
+
+Objetivo: um Concluir ou uma avaliação pendurados deixam de prender o cartão
+e a espera do "Atualizar o quadro". Revisão-base: `d65a97d`. Só frontend;
+nenhuma dependência, endpoint ou configuração entrou.
+
+Decisões:
+
+- **Concluir: `MUTATION_TIMEOUT_MS` (20 s), o prazo que os outros POSTs de
+  banco já usam.** `concluir_missao` não tem modelo no caminho. Ao fim do
+  prazo a falha sai como a de rede (`status` e `code` nulos), o tradutor
+  devolve `recovery: 'retry'`, a chave e o rascunho ficam no registro, o
+  retry pendente é marcado e o `registry.settled()` solta a recarga em
+  espera.
+- **Avaliação: `EVALUATION_TIMEOUT_MS = 105_000` (decisão do responsável),
+  nova constante em `frontend/src/shared/api/client.ts`.** O número espelha
+  à mão três valores, conferidos na `main` nesta entrega e sem mudança desde
+  o plano:
+
+  | Fonte | Valor | Efeito |
+  |---|---|---|
+  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só depois que o provedor responde; uma resposta legítima pode sair depois de 60 s |
+  | `FOLGA_DO_ORFAO` (`tutoring/service.py`) | 30 s | o corte do órfão da avaliação é 60 + 30 = 90 s; antes disso o reenvio recebe 409 `avaliacao_em_andamento` |
+  | `proxy_read_timeout` (`docker/nginx.conf`) | 90 s | em produção o nginx já responde 504 a um backend mudo aos 90 s |
+
+  90 s + 15 s de margem para a gravação final e a volta pela rede. Abaixo de
+  90 s o frontend cortaria respostas legítimas e o próprio `tempo_esgotado`;
+  acima, não compete com o 504 do nginx e só age quando nenhuma camada
+  responde. **O timeout do proxy da Coolify (Traefik) não foi verificado.**
+  Se `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS`, a folga ou o nginx mudarem, a
+  constante muda junto (o teste E7 fixa o literal para isso aparecer).
+
+Alterações:
+
+- `useCompleteMission.ts` e `useRequestEvaluation.ts` passam `{ timeoutMs }`
+  ao `postJson`; a doc dos dois hooks e a de `MUTATION_TIMEOUT_MS` foram
+  atualizadas.
+- Testes novos: `useCompleteMission.test.tsx` — E1 (falha `retry` só ao fim
+  dos 20 s), E2 (a recarga pedida durante o voo acontece quando o prazo
+  vence), E3 (o reenvio usa a MESMA `operation_id` e o timer é desarmado),
+  E4 (rascunho, chave e retry pendente ficam no registro);
+  `useRequestEvaluation.test.tsx` — E5 (falha `retry` só ao fim dos 105 s),
+  E6 (reenvio que encontra 409 `avaliacao_em_andamento` pede para esperar),
+  E7 (o literal 105 000), E8 (504 `tempo_esgotado` antes do prazo mantém o
+  texto próprio e não deixa timer). Os testes afirmam `recovery` e estado,
+  não o texto da falha de prazo, para não depender do PR-D.
+
+Comandos e resultados lidos:
+
+- Vermelho antes da implementação: `npx vitest run
+  src/features/missions/useCompleteMission.test.tsx` → 4 failed (E1–E4,
+  estado preso em `submitting`); `npx vitest run
+  src/features/missions/useRequestEvaluation.test.tsx` → 3 failed (E5–E7;
+  E8 já passava, é guarda de regressão).
+- Depois: `npx vitest run src/features/missions` → 20 arquivos, 528 testes
+  passando, sem aviso de `act` nem de atualização após unmount (os testes
+  antigos com POST que nunca responde só deixam um timer pendente).
+- `eslint`, `prettier --check` e `tsc -b --noEmit` nos arquivos tocados sem
+  erros.
+- `make check` completo: `EXIT 0`. Frontend 53 arquivos, 1054 testes,
+  cobertura 100% em instruções, ramos, funções e linhas; pytest 1669
+  passando; Playwright 66 passando; gitleaks sem vazamento.
+
 # Log local das falhas do Groq (pendência 100, parte "log") — 2026-11-10
 
 Objetivo: dar ao responsável um diagnóstico local das falhas do Groq (chave
@@ -943,7 +1006,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 94/150 | Logs frontend só console; backend simples sem correlação/JSON. Reload/workers/log-config uvicorn não exercitados; Alembic usa log próprio; nova interpolação de segredo exige revisão. |
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
-| 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
+| 192/37 | Prazo da avaliação (105 s) espelha à mão tutor_timeout_seconds + FOLGA_DO_ORFAO (= proxy_read_timeout 90 s) + 15 s; sem medida real de latência (177/203) e sem verificar o timeout do proxy da Coolify (Traefik). Reenvio após o prazo passa do corte do órfão e pode repetir a chamada ao provedor (106). |
 | 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
