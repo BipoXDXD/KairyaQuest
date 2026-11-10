@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-api check-e2e check-secrets format db-up db-down migrate migrate-test reset-test-db
+.PHONY: help bootstrap check check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -33,7 +33,7 @@ bootstrap: ## Instala as dependencias dos dois ecossistemas
 	uv sync --locked
 	./scripts/install-gitleaks.sh
 
-check: check-web check-api check-e2e check-secrets ## Gate completo. E o que os hooks e o CI executam.
+check: check-web check-api check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
 
 check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run lint
@@ -65,7 +65,7 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
 # dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
 # mypy de fora era a unica assimetria.
-	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py
+	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
@@ -103,6 +103,12 @@ reset-test-db: ## DESTRUTIVO: cria se faltar, recria o banco de TESTE do zero e 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh
 	$(TOOLS)/gitleaks dir . --no-banner --redact --exit-code 1 --config .gitleaks.toml
+
+# Os prompts da persona e da rubrica sao `.md` lidos por importlib.resources;
+# a imagem instala o wheel, e um `.md` fora dele so quebraria em producao. O
+# motivo completo esta no proprio script e no docs/HANDOFF.md.
+check-wheel: ## Constroi o wheel e confere que os prompts .md estao nele
+	./scripts/check-wheel.sh
 
 format: ## MODIFICA arquivos: aplica o Prettier. Nunca chamado por check.
 	cd $(WEB) && npm run format

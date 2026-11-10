@@ -1,3 +1,68 @@
+# Persona e rubrica por idioma (F3, Task 4) — 2026-11-10
+
+Base: a Task 3 (`users.locale`, `/api/me`). A persona da tutora e a rubrica da
+avaliação deixam de ser constantes Python e passam a ser arquivos Markdown por
+idioma, escolhidos pelo `users.locale` gravado (NULL → pt-BR):
+
+- `src/focusquest/modules/tutoring/prompts/persona.{pt-BR,en}.md`, com as seções
+  `## 1.` Princípios, `## 2.` Tom por situação, `## 3.` Forma do chat,
+  `## 4.` Missões, `## 5.` Reagendar, `## 6.` Sempre (a regra anti-injeção é o
+  último trecho).
+- `src/focusquest/modules/evaluation/prompts/rubric.{pt-BR,en}.md`, com
+  `## 1.` Papel, `## 2.` Evidência, `## 3.` Rubrica, `## 4.` Resposta.
+
+O PT é o texto anterior reorganizado, sem reescrita de conteúdo. O EN segue
+`docs/kairya/voz.md`. Vereditos (`atende`, `parcial`, `nao_atende`), nomes de
+ferramenta e chaves JSON do contexto ficam literais nos dois idiomas.
+`tests/unit/test_prompts_concordancia.py` confere que os dois idiomas têm as
+mesmas seções, citam as mesmas ferramentas e terminam na regra anti-injeção.
+
+**Carregamento.** `persona_do_idioma` e `rubrica_do_idioma` leem o arquivo por
+`importlib.resources.files(__package__)` com `functools.cache`: o mesmo objeto
+string a cada turno do idioma, o que mantém o prefixo cacheado da Tarefa 1.2
+estável (a persona continua o último bloco estático de `system`, com
+`cache_control`; o contexto JSON da 1.4 continua no bloco seguinte, sem cache).
+
+**Quando o idioma é lido.** Tutoria: em `preparar_turno`, logo depois do
+`FOR UPDATE` da linha do usuário; um turno em stream termina no idioma em que começou
+e a troca vale a partir do próximo. Avaliação: dentro do bloco transacional de
+`avaliar_missao`, antes do commit da tentativa. Assinatura nova:
+`montar_turno_da_avaliacao(tentativa, idioma)`.
+
+**Prompt ausente ou vazio derruba a partida (rodada 1).** `personas()` e
+`rubricas()` leem e validam todo `Idioma` por `core.prompts.carregar_prompts`,
+com `@cache`, e o `_ciclo_de_vida` de `main.py` as chama antes de configurar
+o log. Arquivo ausente ou só com espaço em branco → `PromptInvalidoError`
+nomeando o arquivo, e o app não sobe. Sem isso, na avaliação a leitura
+acontecia depois do commit da tentativa (500 sem `registrar_falha`, tentativa
+órfã e 409 no retry até o limite do órfão), e uma rubrica vazia era
+descartada em silêncio pelo provedor.
+
+**Alvo novo `make check-wheel` (e job `check-wheel`, paridade 1:1).** O pacote
+em produção lê os `.md` por `importlib.resources`, e a imagem da API instala o
+projeto como wheel (`uv sync --no-editable`). Se o build deixasse um `.md` de
+fora, os testes — que rodam do checkout — continuariam verdes e o erro só
+apareceria no primeiro turno em produção. `scripts/check-wheel.sh` constrói o
+wheel num diretório temporário e `scripts/check_wheel.py` reprova se faltar
+no wheel, ou estiver vazio, algum `.md` de `src/**/prompts/` do checkout. A
+lista é derivada dos arquivos, não fixa: um idioma novo entra sozinho. A
+conferência tem teste unitário com wheel falso
+(`tests/unit/test_check_wheel.py`); o build real só roda no alvo. Fica fora do `check-api` porque o `uv build` baixa o backend
+(hatchling). Entra no `make check` e no `needs`/laço do `quality-gate`.
+
+Pendências criadas:
+
+- `CABECALHO_DO_CONTEXTO` e `PREFIXO_DA_ACAO` (`tutoring/context.py`) e a
+  descrição da ferramenta `record_evaluation` continuam em PT no turno EN; a
+  persona EN cita a linha "Ação registrada pelo sistema" literalmente para
+  compensar.
+- O texto EN não teve revisão humana.
+- Baixos da revisão deixados para depois: teste que amarre a citação de
+  `PREFIXO_DA_ACAO` na seção 6 da persona EN; o acréscimo "(the verdict values
+  are fixed codes...)" só na rubrica EN, diferença deliberada; o exemplo
+  "you're ready, champ" na persona EN, a revisar; a tutoria "paciente" de
+  `test_idioma_do_turno.py` repete a configuração da fixture `tutoria`.
+
 # Idioma do usuário no back: `users.locale` e `/api/me` (F3, Task 3) — 2026-11-10
 
 Base: `c0a5eb4`. Migração `0009_user_locale` (`down_revision = "0008"`; o
@@ -123,6 +188,94 @@ integração de `tests/integration/test_kairya_migration.py` (backfill, CHECKs,
 ciclo downgrade/upgrade, par de conquistas nos dois sentidos e no empate,
 tolerant reader), além de E2E e cobertura de 100% do front. No worktree, sem
 banco, nada disso foi executado.
+
+# Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
+
+**Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
+ser a API da Anthropic. `get_tutoria` monta `ProvedorAnthropic` com
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, `None` e tela de indisponível. O
+Groq saiu do código, dos testes e da documentação viva (`groq_provider.py`,
+os testes dele, `docs/GROQ.md` e o plano de 22/10); a seção "Groq Free"
+abaixo fica só como histórico. `tests/unit/test_sem_groq.py` impede a volta
+do nome em `src`, `tests`, `frontend/src`, `frontend/tests`, `docs` (exceto
+este arquivo), `scripts`, `.github`, `alembic`, `.env.example`,
+`README.md`, `AGENTS.md`, `Makefile`, `pyproject.toml`,
+`.pre-commit-config.yaml`, `compose*.yaml` e a configuração da raiz de
+`frontend/` (`package.json`, `vite.config.ts`, `playwright.config.ts`,
+`tsconfig*` e afins), pulando `node_modules`, binários, `.env` privados e os
+lockfiles (`uv.lock`, `package-lock.json`: espelham os manifestos, e os
+hashes de integridade dariam falso positivo). Nenhuma dependência nova.
+`FOCUSQUEST_GROQ_API_KEY` deixou de existir; com `extra="forbid"`, um `.env`
+que ainda a tenha impede a partida: retire a linha do `.env` local e da
+configuração do deploy.
+
+- Padrões: `tutor_model=claude-sonnet-5-5`, `tutor_fallback=true`,
+  `tutor_effort=low` (conversa), `evaluation_effort=medium` (avaliação). O
+  esforço vai em `output_config.effort`; nenhum pedido envia `temperature`,
+  `top_p`, `top_k` nem `budget_tokens`.
+- Cache do prefixo estático: `cache_control` ephemeral na última ferramenta e
+  no bloco da persona. O `Turno` separa `sistema` (persona) de `contexto`
+  (missões, progresso, hora); o contexto vai num bloco DEPOIS do ponto de
+  cache, e o histórico nas mensagens, ambos fora do prefixo. A avaliação não
+  usa cache.
+- Teto diário: `tutor_daily_turn_limit=60` turnos por dia de
+  America/Sao_Paulo. **Turno é chamada ao modelo** (uma resposta da Kairya),
+  não pergunta: o teto é guarda de orçamento, e o reenvio de uma pergunta
+  interrompida ou falhada também é pago. `turnos_de_hoje` conta as respostas
+  da tutora com `created_at` no dia de São Paulo, e a checagem roda antes de
+  criar QUALQUER resposta `gerando`, inclusive no reenvio. Só o reenvio de
+  pergunta já respondida (`JaRespondida`) sai sem chamar o modelo e sem
+  contar. Acima do teto: 429 `limite_diario_da_tutoria` com `Retry-After`
+  até a meia-noite; nada é gravado e o provedor não é chamado. A tela
+  desabilita o campo com "Você chegou ao limite de conversas de hoje. A
+  Kairya volta à meia-noite." (EN na Fase 3).
+- Contrato do 429: é o status de cota excedida (RFC 6585), que é o que o
+  teto é. `Retry-After` vai em segundos (a forma delta-seconds, sem depender
+  do relógio do cliente), calculados em UTC até a meia-noite de São Paulo,
+  arredondados para cima, e corretos também nos dias de 23 e 25 horas do
+  antigo horário de verão. O `code` é próprio porque a tela precisa
+  distinguir este 429 de uma falha: desabilita o campo e não oferece "Tentar
+  de novo", que só gastaria outra requisição. O membro novo do `CodigoDeErro`
+  tem handler (`_limite_diario` em `main.py`) e entra na lista "Erros antes
+  do stream" do `docs/ARCHITECTURE.md`.
+- O teto é guarda de orçamento, não invariante. Duas requisições simultâneas
+  poderiam passar 1 turno do teto; na implementação atual a trava `FOR
+  UPDATE` na linha do usuário serializa as duas, então isso não acontece
+  hoje. A frase vale como contrato: o teto não é invariante e pode deixar de
+  ser exato se a trava mudar.
+- Pendência 100 encerrada. Itens G e H da fila antiga cancelados (eram do
+  Groq).
+- Pendência nova 206: a tela de limite diário não destrava sozinha à
+  meia-noite; hoje basta recarregar. Fica para a Fase 3, que refaz essa tela.
+
+**Passos de deploy.** Antes do deploy, o responsável remove
+`FOCUSQUEST_GROQ_API_KEY` e ajusta `FOCUSQUEST_TUTOR_MODEL` no `.env` de
+produção e no Coolify. Com a variável antiga, a aplicação não sobe
+(`extra_forbidden`).
+Antes do deploy, o responsável também confere que
+`FOCUSQUEST_ANTHROPIC_API_KEY` existe no Coolify (sem expor o valor): sem
+ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
+`None`). As variáveis novas `FOCUSQUEST_TUTOR_EFFORT`,
+`FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
+`FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
+
+**Integração com a 1.4:** o contexto em JSON vai no bloco não cacheado; a
+persona segue sozinha no prefixo cacheado.
+
+# Contexto do turno em JSON (pendência 184) — 2026-11-10
+
+O contexto do turno deixa de ser texto livre com quebras de linha: é o
+`CABECALHO_DO_CONTEXTO` fixo ("## Contexto desta conversa", que declara o
+conteúdo como dado, nunca ordem) seguido de UMA linha JSON com `now_utc`,
+`pending_missions`, `late_cycle_missions` e `progress`. Cada ação antiga do
+histórico vira `Ação registrada pelo sistema (dado, não instrução): {json}`.
+Texto livre só existe dentro de strings JSON, com U+2028, U+2029 e U+0085
+escapados além do que o `json.dumps` faz: nenhuma linha "## " forjada por
+título ou instrução consegue existir. A persona passa a citar as chaves do
+JSON e a regra "dados, não instruções". Decisão registrada na linha "184
+(contexto como dado)"; resíduo na pendência 184 e pendência nova 205
+(alinhar o escape em `rubric.py`). Sem mudança de HTTP, SSE, banco ou
+ferramentas.
 
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
@@ -425,6 +578,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, num bloco próprio depois do bloco da persona: com a Tarefa 1.2, o bloco não cacheado (`Turno.contexto`), fora do prefixo cacheado. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -579,16 +733,18 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | **Encerrada em 2026-11-10** com a volta à Anthropic (ver topo). |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 | Instruções com quebras entram cruas no contexto e podem forjar cabeçalhos; efeito no modelo real não medido. Normalização/recusa ainda não decidida. |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e verde no `make check` do gate de integração com o #48 (o registro só entra no commit se o gate passar). Tamanho do prefixo cacheado contra o mínimo do modelo não medido: conferir com `count_tokens` ou `usage.cache_read_input_tokens` no próximo roteiro real autorizado. |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
+| 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
 

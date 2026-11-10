@@ -21,22 +21,22 @@ preservados no [HANDOFF](HANDOFF.md). Relatos completos de implementação e
 resultados antigos estão no Git em `ca3b03c:docs/HANDOFF.md`; não são
 instruções para repetir fases concluídas.
 
-## Tutoria de produção: Groq Free (2026-10-22)
+## Tutoria de produção: Anthropic (2026-11-10)
 
-`dependencies.get_tutoria` monta exclusivamente `ProvedorGroq` com a chave
-`FOCUSQUEST_GROQ_API_KEY`; não importa nem instancia o adaptador Anthropic.
-`groq_provider.py` usa HTTPX2 já instalado, endpoint/modelo fixos, SSE e
-ferramentas locais com esquema gerado em `tool_definitions.py`. Sem chave,
-retorna `None`. Não há retry, redirect, proxy do ambiente ou fallback.
-As regras de autorização, confirmação, avaliação e XP continuam nos serviços.
-Erros HTTP e respostas interrompidas falham sem executar ferramentas.
-A gratuidade depende de manter a conta no plano Free: [GROQ.md](GROQ.md).
-
-O adaptador Anthropic e os roteiros de caracterização históricos permanecem
-para testes, sem caminho de seleção na dependência de produção. O navegador
-de testes usa `tests/integration/e2e_app.py`, chave fictícia e host loopback;
-essa entrada não é incluída no pacote da aplicação. As descrições antigas de
-fallback abaixo documentam somente esse comportamento legado.
+`dependencies.get_tutoria` monta `ProvedorAnthropic` com a chave
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, retorna `None` e a tela mostra
+indisponibilidade. O adaptador manda o esforço em `output_config.effort`
+(`tutor_effort` na conversa, `evaluation_effort` na avaliação) e nunca envia
+`temperature`, `top_p`, `top_k` nem `budget_tokens`, que os modelos 5.x
+recusam. O prefixo estático vai em cache: `cache_control` na última
+ferramenta e no bloco da persona; o contexto do turno e o histórico ficam
+depois do ponto de cache. O contexto do turno (o `CABECALHO_DO_CONTEXTO`
+seguido de uma linha JSON com `now_utc`, `pending_missions`,
+`late_cycle_missions` e `progress`, pendência 184) é um bloco próprio de
+`system`, sem `cache_control`, logo depois do bloco da persona. As regras
+de autorização, confirmação, avaliação e XP continuam nos serviços. O navegador de testes usa
+`tests/integration/e2e_app.py`, chave fictícia e host loopback; essa entrada
+não é incluída no pacote da aplicação.
 
 ## 1. O que existe hoje
 
@@ -222,7 +222,7 @@ real, e em qual módulo.
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
-| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno, o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
+| `provider.py` / `tool_definitions.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno (a persona sozinha é o `Turno.sistema`, o prefixo cacheado; o contexto vai em `Turno.contexto` como um cabeçalho fixo e uma linha JSON, que o adaptador manda no bloco de `system` NÃO cacheado, depois do bloco da persona; as ações antigas vão como "Ação registrada pelo sistema" + JSON: todo texto livre fica dentro de strings, como na avaliação), o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
 **A dependência é `tutoring → missions`, nunca o contrário.**
@@ -271,6 +271,8 @@ módulos**, nunca pelos modelos deles diretamente. As arestas, conferidas nos
 - `evaluation → tutoring`: `tutoring.provider` (o `Protocol`, `Ferramenta`,
   `Turno` e os erros do provedor), `tutoring.service` (`Tutoria`,
   `FOLGA_DO_ORFAO`) e `tutoring.dependencies` (`get_tutoria`);
+- `evaluation → users`: `users.service` (`ler_idioma`, só leitura), para
+  escolher a rubrica pelo idioma gravado (F3);
 - **ninguém importa `evaluation` além de `main.py`**, que registra o router e
   o handler de `AvaliacaoFalhouError`. Conferido: `grep -rn
   "modules.evaluation" src` fora do próprio módulo acha só `main.py:34` e
@@ -285,7 +287,11 @@ o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
 **O módulo `users` (F3).** Lê e grava o idioma do usuário (`GET`/`PATCH
 /api/me`). Arestas: `users → missions.models` (`User`, que continua lá; ver
 `docs/HANDOFF.md`) e `users → core` (`Idioma`, `CampoDesconhecidoError`,
-sessão e usuário único). Ninguém importa `users` além de `main.py`. O router
+sessão e usuário único). `users` é importado por `main.py` (o router) e,
+só pela função de leitura `ler_idioma`, por `tutoring.service` e
+`evaluation.service`, que escolhem a persona e a rubrica pelo idioma gravado
+(F3). Não forma par nos dois sentidos: `users` não importa `tutoring` nem
+`evaluation`. O router
 tem uma exceção à regra "não trata erro": a `RotaQueRecusaCampoExtra` troca o
 `RequestValidationError` com `extra_forbidden` por `CampoDesconhecidoError`,
 sem montar resposta; o 400 continua sendo traduzido em `main.py`.
@@ -612,7 +618,11 @@ o fallback: continua no endpoint estável.
 **Erros antes do stream** (a pergunta não é gravada): `503
 provedor_nao_configurado` (sem chave); `409 mensagem_em_andamento` (já há
 uma resposta `gerando`); `409 operacao_reutilizada` (`client_message_id`
-com outro `content`); `422` do Pydantic (corpo inválido).
+com outro `content`); `429 limite_diario_da_tutoria` (o teto diário de
+turnos acabou; header `Retry-After` com os segundos até a meia-noite de
+America/Sao_Paulo; nada é gravado e o modelo não é chamado; vale também para
+o reenvio de pergunta interrompida ou falhada); `422` do Pydantic (corpo
+inválido).
 
 **Erros dentro do stream** (`event: error`, coluna `error_code`), do enum
 `CodigoDoStream` de `tutoring/domain.py` — fora do `CodigoDeErro` de

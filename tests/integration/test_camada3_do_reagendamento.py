@@ -45,6 +45,8 @@ def _capturar(falso: ServidorAnthropicFalso) -> tuple[list[str], list[Proposta]]
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     return camada3_do_reagendamento.capturar(provedor, espiao, agora=AGORA)
 
@@ -57,7 +59,8 @@ def test_o_contexto_mostra_a_missao_avulsa_pendente_pelo_id(
     falso.roteiro = Roteiro(blocos=(Texto(("Certo.",)),))
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
-    assert f"- #{camada3_do_reagendamento.ID_DA_MISSAO}: " in corpo["system"]
+    pendentes = falso.recebidas[-1].dados_do_contexto["pending_missions"]
+    assert [m["id"] for m in pendentes] == [camada3_do_reagendamento.ID_DA_MISSAO]
     assert (
         f"#{camada3_do_reagendamento.ID_DA_MISSAO}" in (corpo["messages"][0]["content"])
     )

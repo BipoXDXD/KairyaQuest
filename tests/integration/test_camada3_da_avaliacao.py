@@ -12,9 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from focusquest.core.idioma import Idioma
 from focusquest.modules.evaluation.rubric import (
     FERRAMENTA_DA_AVALIACAO,
     NOME_DA_FERRAMENTA,
+    rubrica_do_idioma,
 )
 from integration import camada3, camada3_da_avaliacao
 from integration.conftest import TIMEOUT_DE_TESTE
@@ -53,6 +55,8 @@ def test_o_falso_emite_a_sequencia_da_avaliacao_real(
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     tipos, entrada = camada3_da_avaliacao.capturar(provedor, espiao)
     referencia = json.loads(camada3_da_avaliacao.REFERENCIA.read_text())["eventos"]
@@ -77,6 +81,8 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
         max_tokens=256,
         timeout_segundos=TIMEOUT_DE_TESTE,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     camada3_da_avaliacao.capturar(provedor, espiao)
     corpo = falso.recebidas[-1].corpo
@@ -84,6 +90,8 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
     assert corpo["tools"][0]["strict"] is True
     assert corpo["tools"][0]["input_schema"] == FERRAMENTA_DA_AVALIACAO.esquema
     assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
+    # A captura mede o prompt de producao em pt-BR, o idioma padrao.
+    assert corpo["system"] == rubrica_do_idioma(Idioma.PT_BR)
     dados = json.loads(corpo["messages"][0]["content"])
     assert dados["mission"]["completion_criterion"] == (
         camada3_da_avaliacao.TENTATIVA.completion_criterion

@@ -249,7 +249,8 @@ export function TutorConversation({
   const unavailable =
     status.status === 'unavailable' ||
     (send.status === 'failed' && send.failure.recovery === 'unavailable')
-  const inputDisabled = unavailable || status.status !== 'available'
+  const dailyLimitReached = send.status === 'failed' && send.failure.recovery === 'daily-limit'
+  const inputDisabled = unavailable || dailyLimitReached || status.status !== 'available'
   const busy = send.status === 'sending' || send.status === 'writing'
 
   return (

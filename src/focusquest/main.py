@@ -26,6 +26,7 @@ from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
     CampoDesconhecidoError,
+    LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -44,10 +45,12 @@ from focusquest.core.errors import (
 from focusquest.core.log import configurar_logging
 from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
 from focusquest.modules.evaluation.router import router as evaluation_router
+from focusquest.modules.evaluation.rubric import rubricas
 from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
+from focusquest.modules.tutoring.persona import personas
 from focusquest.modules.tutoring.router import router as tutoring_router
 from focusquest.modules.users.router import router as users_router
 
@@ -73,7 +76,14 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
 
     A linha registrada diz o nivel, e so ele: nenhum outro campo da
     configuracao entra no log.
+
+    Antes de tudo, le e valida a persona e a rubrica de todo idioma: um
+    prompt ausente ou vazio e defeito de build e derruba a partida com
+    `PromptInvalidoError` nomeando o arquivo, em vez de falhar no turno do
+    estudante. Vem antes do log para nao deixar handler para tras.
     """
+    personas()
+    rubricas()
     raiz = logging.getLogger()
     app_logger = logging.getLogger("focusquest")
     handlers_de_antes = raiz.handlers[:]
@@ -132,6 +142,7 @@ class CodigoDeErro(StrEnum):
     OPERACAO_REUTILIZADA = "operacao_reutilizada"
     PROVEDOR_NAO_CONFIGURADO = "provedor_nao_configurado"
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
+    LIMITE_DIARIO_DA_TUTORIA = "limite_diario_da_tutoria"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
     PRAZO_DERIVADO = "prazo_derivado"
@@ -282,6 +293,19 @@ def _sem_provedor(request: Request, exc: ProvedorNaoConfiguradoError) -> JSONRes
 def _em_andamento(request: Request, exc: MensagemEmAndamentoError) -> JSONResponse:
     """409: a conversa ja esta gerando uma resposta. O cliente espera."""
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.MENSAGEM_EM_ANDAMENTO)
+
+
+@app.exception_handler(LimiteDiarioDaTutoriaError)
+def _limite_diario(request: Request, exc: LimiteDiarioDaTutoriaError) -> JSONResponse:
+    """429 com `Retry-After`: o teto do dia acabou e volta a meia-noite de
+    Sao Paulo. A pergunta nao foi gravada; o cliente pode repeti-la depois."""
+    resposta = _erro(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        str(exc),
+        CodigoDeErro.LIMITE_DIARIO_DA_TUTORIA,
+    )
+    resposta.headers["Retry-After"] = str(exc.segundos_ate_liberar)
+    return resposta
 
 
 @app.exception_handler(AcaoNaoEncontradaError)
