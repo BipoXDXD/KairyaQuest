@@ -79,9 +79,12 @@ make check
 ```
 
 O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
-`main`), escreve o `.env` a partir do do principal com um banco de teste
-próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
-roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
+`main`), gera o `.env` a partir do `.env.example` da `main` com um banco de
+teste próprio (`focusquest_<nome>_test`, no servidor e com a credencial e as
+opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre,
+e roda `make bootstrap`. Do `.env` do principal só a URL do banco de teste é
+lida: as chaves de segredo (`FOCUSQUEST_GROQ_API_KEY` e afins) nascem em
+branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
 PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
 container (seção 6). O nome `push` é **reservado** (o banco dele seria o
@@ -201,7 +204,7 @@ excluído deliberadamente, nunca por dificuldade de testar.
 | Exclusão | Justificativa |
 |---|---|
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
-| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes quatro arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. |
+| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes cinco arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. `readSource.ts` (`readSource`, `listSources`) lê arquivos-fonte de verdade com `node:fs`, relativos a `frontend/`, e trata arquivo vazio como erro; existe porque o `?raw` de CSS não serve no Vitest 5.0.1: ele passa pelo plugin `vitest:css-empty-post` e devolve `""`, o que deixaria vácuo todo teste que inspeciona CSS (o `vite.config.ts` não define `test.css`, e mudá-lo mexeria na fonte de verdade da config). A raiz sai de `fileURLToPath(import.meta.url)` + `node:path`, porque o Vite reescreve a forma literal `new URL('../../', import.meta.url)` como URL `http://localhost:3000/@fs/...` e o `fileURLToPath` a recusa. Todo teste que lê CSS tem a sentinela `o CSS lido não está vazio`. |
 | `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
 | `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
@@ -250,9 +253,10 @@ contagens) e o código de saída.
 - **Fora:** `tests/` (os próprios testes) e `alembic/` (as migrações e o
   `env.py`). `alembic/` não fica sem verificação: o Ruff e o mypy estrito o
   cobrem, e os testes de integração aplicam a migração, fazem o downgrade e
-  a aplicam de novo. O que fica sem exercício é o caminho
-  `run_migrations_offline()` do `alembic/env.py`, que o projeto não usa
-  (registrado em `docs/HANDOFF.md`).
+  a aplicam de novo. O caminho `run_migrations_offline()` é exercitado por
+  `tests/integration/test_migracoes_offline.py`, nas faixas sem leitura de
+  dados; a 0004 e as guardas de downgrade 0003/0005/0006 ficam fora
+  (`docs/HANDOFF.md`, 9/10).
 
 Esta lista segue o README §9: "Declare o denominador: testes, dependências,
 arquivos gerados, CSS e configuração de ferramentas não são código de

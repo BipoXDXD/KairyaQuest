@@ -1,0 +1,60 @@
+/* Tokens do design system "dojo-biblioteca ao anoitecer", em 3 níveis.
+   Este arquivo é a fonte única dos tokens; o teste de contraste
+   (src/shared/ui/tokens.test.ts) lê este CSS e mede cada par usado.
+
+   Nível 1, primitivos: ficam em :root, fora do @theme, para não gerar
+   utilities (bg-ink-800 etc.) que pulem o nível semântico. ink-400 não está
+   na spec: border-strong precisa de 3:1 sobre as três superfícies, e o
+   ink-500 da spec mede 2,74:1 sobre raised. */
+:root {
+  --ink-950: #0d1520;
+  --ink-900: #142030;
+  --ink-800: #1c2b3d;
+  --ink-700: #2a3b50;
+  --ink-500: #5b6e84;
+  --ink-400: #697b91;
+  --ink-300: #a9b6c6;
+  --ink-100: #e6ebf1;
+  --lantern-200: #f9dc9c;
+  --lantern-400: #f2b950;
+  --lantern-600: #c98b22;
+  --jade-400: #6fd3a8;
+  --jade-700: #2d7a5c;
+  --ember-400: #f08a76;
+  --ember-700: #a8442f;
+  --dusk-400: #9fb2f5;
+}
+
+/* Nível 2, semânticos, e nível 3, componente: viram utilities do Tailwind.
+   Elevação em 3 níveis por superfície mais clara (canvas, surface, raised),
+   sem sombra. border-subtle é decorativa: nunca é o único limite de um
+   controle, por isso fica fora dos pares de 3:1. */
+@theme {
+  --color-bg-canvas: var(--ink-950);
+  --color-bg-surface: var(--ink-900);
+  --color-bg-raised: var(--ink-800);
+  --color-border-subtle: var(--ink-700);
+  --color-border-strong: var(--ink-400);
+  --color-text-primary: var(--ink-100);
+  --color-text-muted: var(--ink-300);
+  --color-action-primary: var(--lantern-400);
+  --color-action-primary-hover: var(--lantern-200);
+  --color-text-on-action: var(--ink-950);
+  --color-feedback-success: var(--jade-400);
+  --color-feedback-danger: var(--ember-400);
+  --color-focus-ring: var(--dusk-400);
+
+  --radius-ui: 10px;
+  --radius-pill: 999px;
+  --shadow-glow-lantern: 0 0 24px 4px var(--glow-lantern-color);
+}
+
+/* O glow da lanterna é o único efeito decorativo. A cor, o alias para CSS
+   puro e a forma para SVG ficam fora do @theme para não gerar utility. Em
+   SVG vale o filtro: box-shadow num svg pinta o retângulo da caixa, e
+   drop-shadow não aceita o spread do glow de caixa. */
+:root {
+  --glow-lantern-color: color-mix(in oklab, var(--lantern-400) 35%, transparent);
+  --glow-lantern: var(--shadow-glow-lantern);
+  --glow-lantern-filter: drop-shadow(0 0 12px var(--glow-lantern-color));
+}
