@@ -52,4 +52,10 @@ export const ptBR = {
   'kairya.lines.tutor_offline_2': 'Não consegui responder agora. Tenta de novo em instantes.',
   'kairya.lines.farewell_1': 'Bom treino hoje. Descansar também é parte dele.',
   'kairya.lines.farewell_2': 'Por hoje está bom. Amanhã a gente continua.',
+  'ui.dialog.cancel': 'Cancelar',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
+  'ui.loading': 'Carregando…',
+  'ui.sound.voice': 'Voz da Kairya',
+  'ui.sound.sfx': 'Efeitos sonoros',
 } as const

@@ -1,6 +1,7 @@
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 import '@testing-library/jest-dom/vitest'
+import './dialog'
 
 // O React so entra em "modo de teste" quando este sinalizador global esta
 // definido. Sem ele, todo act() -- inclusive o de src/main.test.tsx --

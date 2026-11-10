@@ -4,7 +4,7 @@ import { renderWithI18n } from '../../test/i18n'
 import type { MessageKey } from './catalog'
 import { I18nProvider } from './I18nProvider'
 import { LOCALE_STORAGE_KEY } from './locale'
-import { LocaleSwitcher } from './LocaleSwitcher'
+import { LanguageSwitcher } from '../ui/LanguageSwitcher'
 import { en } from './messages/en'
 import { useLocale } from './useLocale'
 import { useT } from './useT'
@@ -48,7 +48,7 @@ describe('I18nProvider', () => {
     const { result } = renderHook(() => useLocale(), {
       wrapper: ({ children }) => (
         <I18nProvider initialLocale="pt-BR">
-          <LocaleSwitcher />
+          <LanguageSwitcher />
           {children}
         </I18nProvider>
       ),

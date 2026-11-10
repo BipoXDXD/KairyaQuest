@@ -49,4 +49,10 @@ export const en = {
   'kairya.lines.tutor_offline_2': "I couldn't answer just now. Try again in a moment.",
   'kairya.lines.farewell_1': 'Good training today. Rest is part of it too.',
   'kairya.lines.farewell_2': "That's enough for today. We'll pick it up tomorrow.",
+  'ui.dialog.cancel': 'Cancel',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
+  'ui.loading': 'Loading…',
+  'ui.sound.voice': "Kairya's voice",
+  'ui.sound.sfx': 'Sound effects',
 } as const satisfies Messages

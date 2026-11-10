@@ -1423,7 +1423,8 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
   fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
   do servidor falso (8150), e `falso.ts` é o cliente do controle HTTP dele.
-  **Desde a Frente 0**, `servers.ts` é a fonte única das três portas (o
+  **Desde a Frente 0**, `servers.ts` é a fonte única das portas (três até a
+  F4; desde a 4.3, quatro, com a da galeria de estados da UI; o
   `playwright.config.ts` deriva todas dele) e as desloca por
   `FOCUSQUEST_E2E_PORT_OFFSET`; a validação da variável tem teste Vitest em
   `tests/unit/servers.test.ts`, fora de `tests/e2e/` para o Playwright não o
