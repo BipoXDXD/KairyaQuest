@@ -1136,14 +1136,16 @@ dentro do `reagendar_missao`, a missão; nenhum caminho trava na ordem inversa.
 Dois reagendamentos simultâneos, com chaves diferentes, viram **dois elos
 encadeados** (o `previous_deadline` do segundo é o `new_deadline` do primeiro),
 nunca uma atualização perdida. Provado por conexões reais em
-`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`; a
-ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
-tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
-testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
-A confirmação da Kairya × conclusão (pendência 167) ganhou uma prova das duas
-ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
-`wt/kairya-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
-a `main` em `5ba81c3` ainda não contém o módulo.
+`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`. A
+ordem "ação antes da missão", declarada no docstring de `confirmar_acao`, é
+observada em `test_ordem_global_das_travas.py` (pendência 104): com a missão
+retida pela escrita da avaliação, a confirmação espera nela já segurando a
+ação, e uma sonda `NOWAIT` confirma a ação travada; o mesmo módulo prova
+missão e avaliação antes do usuário, sem depender do escalonador. Os testes de
+detecção de corrida de `test_acompanhamento_concorrencia.py` e
+`test_tutoring_reagendamento.py` dependem dele (pendência 160). A confirmação
+da Kairya × conclusão (pendência 167) tem prova das duas ordens em
+`test_tutoring_conclusao_concorrencia.py`.
 
 **Início diário na virada civil (160 parcial).**
 `test_inicio_virada_dia_concorrencia.py` retém a pré-carga, observa os PIDs exatos
