@@ -5,6 +5,8 @@ informa o plano de cobranca; este adaptador nunca altera plano nem compra cota.
 """
 
 import json
+import logging
+import re
 from collections.abc import Generator
 from typing import Any, Literal
 
@@ -32,6 +34,22 @@ from focusquest.modules.tutoring.tool_definitions import (
 
 MODELO_GROQ = "openai/gpt-oss-20b"
 _ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+
+_LOGGER = logging.getLogger(__name__)
+# Cabecalhos de limite descritos na documentacao "Rate Limits" do Groq; qualquer
+# outro (location, set-cookie, x-request-id...) fica fora do log.
+_CABECALHOS_DE_LIMITE = (
+    "retry-after",
+    "x-ratelimit-limit-requests",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-tokens",
+)
+_TAMANHO_MAXIMO_DO_VALOR = 64
+# Espaco, "=", quebra de linha e controle forjariam campos ou linhas no log.
+_FORA_DO_SEGURO = re.compile(r"[^A-Za-z0-9._:,+-]")
 
 
 class _Funcao(BaseModel):
@@ -66,6 +84,29 @@ class _Fragmento(BaseModel):
     model: Literal["openai/gpt-oss-20b"]
     choices: list[_Escolha] = Field(max_length=1)
     x_groq: _Metadados | None = None
+
+
+def _valor_seguro(valor: str) -> str:
+    return _FORA_DO_SEGURO.sub("?", valor[:_TAMANHO_MAXIMO_DO_VALOR])
+
+
+def _descrever_limites(cabecalhos: httpx2.Headers) -> str:
+    return "".join(
+        f" {nome}={_valor_seguro(cabecalhos[nome])}"
+        for nome in _CABECALHOS_DE_LIMITE
+        if nome in cabecalhos
+    )
+
+
+def _registrar_falha(erro: Exception) -> None:
+    if isinstance(erro, httpx2.HTTPStatusError):
+        _LOGGER.warning(
+            "Falha HTTP do provedor Groq: status=%d%s",
+            erro.response.status_code,
+            _descrever_limites(erro.response.headers),
+        )
+    else:
+        _LOGGER.warning("Falha do provedor Groq: tipo=%s", type(erro).__name__)
 
 
 class ProvedorGroq:
@@ -205,9 +246,14 @@ class ProvedorGroq:
                     motivo = escolha.finish_reason
                 raise ValueError("stream sem DONE")
         except httpx2.TimeoutException as erro:
+            _LOGGER.warning(
+                "Tempo esgotado no provedor Groq: tipo=%s", type(erro).__name__
+            )
             raise TempoEsgotadoError("o provedor demorou alem do limite") from erro
         except (httpx2.HTTPError, ValidationError, ValueError) as erro:
-            # Nenhum corpo HTTP, entrada de validacao ou credencial vai ao log.
+            # Só status e limites saneados vão ao log; corpo, chave e mensagem da
+            # exceção, nunca.
+            _registrar_falha(erro)
             raise ProvedorIndisponivelError(
                 "o provedor nao concluiu uma resposta valida"
             ) from erro

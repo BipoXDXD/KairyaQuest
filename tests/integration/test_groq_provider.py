@@ -5,6 +5,8 @@ incompleta poderia enviar dados ao lugar errado ou executar uma proposta indevid
 """
 
 import json
+import logging
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -360,3 +362,248 @@ def test_erro_no_metadado_final_nao_conclui_resposta_ou_avaliacao() -> None:
     with pytest.raises(ProvedorIndisponivelError) as erro:
         com_resposta(dados).avaliar(TURNO, FERRAMENTA)
     assert "confidencial" not in str(erro.value)
+
+
+LOGGER = "focusquest.modules.tutoring.groq_provider"
+FALHA_GENERICA = "o provedor nao concluiu uma resposta valida"
+TEMPO_ESGOTADO = "o provedor demorou alem do limite"
+
+LIMITES_DO_GROQ = {
+    "retry-after": "7",
+    "x-ratelimit-limit-requests": "1000",
+    "x-ratelimit-remaining-requests": "0",
+    "x-ratelimit-reset-requests": "2m59.56s",
+    "x-ratelimit-limit-tokens": "8000",
+    "x-ratelimit-remaining-tokens": "0",
+    "x-ratelimit-reset-tokens": "7.66s",
+}
+
+
+def registros_do_groq(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.name == LOGGER]
+
+
+def falhar_com(
+    status: int, cabecalhos: dict[str, str] | list[tuple[str, str]]
+) -> tuple[ProvedorIndisponivelError, int]:
+    recebidas: list[httpx2.Request] = []
+
+    def tratar(r: httpx2.Request) -> httpx2.Response:
+        recebidas.append(r)
+        return httpx2.Response(status, headers=cabecalhos, text="corpo")
+
+    with pytest.raises(ProvedorIndisponivelError) as erro:
+        list(provedor(tratar).responder(TURNO))
+    return erro.value, len(recebidas)
+
+
+def test_429_registra_status_e_todos_os_limites_na_ordem(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    erro, pedidos = falhar_com(
+        429,
+        LIMITES_DO_GROQ
+        | {"location": "https://outro.invalido", "x-groq-region": "us-east-1"},
+    )
+
+    (registro,) = registros_do_groq(caplog)
+    assert registro.levelno == logging.WARNING
+    assert registro.getMessage() == (
+        "Falha HTTP do provedor Groq: status=429 retry-after=7"
+        " x-ratelimit-limit-requests=1000 x-ratelimit-remaining-requests=0"
+        " x-ratelimit-reset-requests=2m59.56s x-ratelimit-limit-tokens=8000"
+        " x-ratelimit-remaining-tokens=0 x-ratelimit-reset-tokens=7.66s"
+    )
+    assert registro.exc_info is None
+    assert registro.stack_info is None
+    assert type(erro) is ProvedorIndisponivelError
+    assert str(erro) == FALHA_GENERICA
+    assert pedidos == 1
+
+
+@pytest.mark.parametrize("status", [301, 307, 400, 401, 403, 404, 413, 500, 503])
+def test_falha_http_sem_limites_registra_so_o_status(
+    status: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    erro, pedidos = falhar_com(status, {"location": "https://outro.invalido"})
+
+    (registro,) = registros_do_groq(caplog)
+    assert registro.getMessage() == f"Falha HTTP do provedor Groq: status={status}"
+    assert "outro.invalido" not in caplog.text
+    assert str(erro) == FALHA_GENERICA
+    assert pedidos == 1
+
+
+@pytest.mark.parametrize(
+    ("bruto", "saneado"),
+    [
+        ("1 status=200", "1?status?200"),
+        ("1\tx", "1?x"),
+        ("1\x1b[2J", "1??2J"),
+        ("1\r\nCRITICAL forjado", "1??CRITICAL?forjado"),
+    ],
+)
+def test_valor_de_cabecalho_hostil_sai_saneado_numa_linha(
+    bruto: str, saneado: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    falhar_com(429, [("retry-after", bruto)])
+
+    (registro,) = registros_do_groq(caplog)
+    mensagem = registro.getMessage()
+    assert mensagem == f"Falha HTTP do provedor Groq: status=429 retry-after={saneado}"
+    assert "\n" not in mensagem
+    assert "\r" not in mensagem
+
+
+def test_valor_longo_e_cortado_em_64(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    falhar_com(429, {"x-ratelimit-reset-tokens": "9" * 200})
+
+    (registro,) = registros_do_groq(caplog)
+    assert registro.getMessage() == (
+        "Falha HTTP do provedor Groq: status=429 x-ratelimit-reset-tokens=" + "9" * 64
+    )
+
+
+@pytest.mark.parametrize(
+    ("tipo", "esperado", "mensagem", "publica"),
+    [
+        (
+            httpx2.ReadTimeout,
+            TempoEsgotadoError,
+            "Tempo esgotado no provedor Groq: tipo=ReadTimeout",
+            TEMPO_ESGOTADO,
+        ),
+        (
+            httpx2.ConnectTimeout,
+            TempoEsgotadoError,
+            "Tempo esgotado no provedor Groq: tipo=ConnectTimeout",
+            TEMPO_ESGOTADO,
+        ),
+        (
+            httpx2.ConnectError,
+            ProvedorIndisponivelError,
+            "Falha do provedor Groq: tipo=ConnectError",
+            FALHA_GENERICA,
+        ),
+        (
+            httpx2.RemoteProtocolError,
+            ProvedorIndisponivelError,
+            "Falha do provedor Groq: tipo=RemoteProtocolError",
+            FALHA_GENERICA,
+        ),
+    ],
+)
+def test_erro_de_transporte_registra_so_o_tipo(
+    tipo: type[Exception],
+    esperado: type[Exception],
+    mensagem: str,
+    publica: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+
+    def tratar(r: httpx2.Request) -> httpx2.Response:
+        raise tipo("detalhe-do-transporte")
+
+    with pytest.raises(esperado) as erro:
+        list(provedor(tratar).responder(TURNO))
+
+    (registro,) = registros_do_groq(caplog)
+    assert registro.levelno == logging.WARNING
+    assert registro.getMessage() == mensagem
+    assert registro.exc_info is None
+    assert "detalhe-do-transporte" not in caplog.text
+    assert type(erro.value) is esperado
+    assert str(erro.value) == publica
+
+
+@pytest.mark.parametrize(
+    ("dados", "tipo"),
+    [
+        (sse("[DONE]"), "ValueError"),
+        (sse("{nao-json", "[DONE]"), "ValidationError"),
+        (sse({"model": "outro-modelo", "choices": []}), "ValidationError"),
+    ],
+)
+def test_stream_invalido_registra_so_o_tipo(
+    dados: bytes, tipo: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    with pytest.raises(ProvedorIndisponivelError) as erro:
+        list(com_resposta(dados).responder(TURNO))
+
+    (registro,) = registros_do_groq(caplog)
+    assert registro.getMessage() == f"Falha do provedor Groq: tipo={tipo}"
+    assert "outro-modelo" not in caplog.text
+    assert str(erro.value) == FALHA_GENERICA
+
+
+def test_sucesso_nao_registra_nada(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger="focusquest")
+    dados = sse(fragmento({"content": "oi"}), fragmento(motivo="stop"), "[DONE]")
+    assert list(com_resposta(dados).responder(TURNO)) == [Delta("oi"), Fim()]
+    assert registros_do_groq(caplog) == []
+
+
+def _canario_por_http(canario: str) -> Callable[[httpx2.Request], httpx2.Response]:
+    def tratar(r: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            429,
+            headers=LIMITES_DO_GROQ
+            | {"x-groq-debug": canario, "set-cookie": f"s={canario}"},
+            text=f'{{"error":{{"message":"{canario}"}}}}',
+        )
+
+    return tratar
+
+
+def _canario_por_transporte(
+    canario: str,
+) -> Callable[[httpx2.Request], httpx2.Response]:
+    def tratar(r: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError(canario)
+
+    return tratar
+
+
+def _canario_por_stream(canario: str) -> Callable[[httpx2.Request], httpx2.Response]:
+    def tratar(r: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=sse({"model": canario, "choices": []}))
+
+    return tratar
+
+
+@pytest.mark.parametrize(
+    "cenario", [_canario_por_http, _canario_por_transporte, _canario_por_stream]
+)
+def test_canario_nunca_aparece_no_log(
+    cenario: Callable[[str], Callable[[httpx2.Request], httpx2.Response]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Chave, sistema, mensagem do usuario, corpo, cabecalho fora da allowlist e
+    mensagem da excecao levam o mesmo canario; com `focusquest` em DEBUG, nenhum
+    deles chega ao log."""
+    canario = f"CANARY-{uuid.uuid4()}"
+    from focusquest.modules.tutoring.groq_provider import ProvedorGroq
+
+    p = ProvedorGroq(
+        chave=canario,
+        max_tokens=1024,
+        timeout_segundos=2,
+        transporte=httpx2.MockTransport(cenario(canario)),
+    )
+    turno = Turno(f"sistema {canario}", (MensagemDoTurno("user", canario),))
+    caplog.set_level(logging.DEBUG, logger="focusquest")
+
+    with pytest.raises(ProvedorIndisponivelError) as erro:
+        list(p.responder(turno))
+
+    assert len(registros_do_groq(caplog)) == 1
+    assert canario not in caplog.text
+    assert "Bearer" not in caplog.text
+    assert all(r.exc_info is None for r in caplog.records)
+    assert canario not in str(erro.value)
