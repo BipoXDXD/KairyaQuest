@@ -118,17 +118,20 @@
     0 16px 45px #0003;
 }
 
+/* Os cenarios tem realces quase brancos em toda a largura, e o texto do hero
+   chega a borda direita no celular. Por isso nenhum stop fica abaixo de alfa
+   0,70 (b3): com um pixel branco por baixo, o pior caso do eyebrow e 4,93:1
+   (conta no docs/HANDOFF.md, presa em heroContrast.test.ts). */
 .rpg-hero-library {
   background-image:
-    linear-gradient(90deg, #07101be6 0%, #07101b99 55%, #07101b33 100%),
-    url('/art/medieval-library.webp');
+    linear-gradient(90deg, #07101be6 0%, #07101bb3 55%, #07101bb3 100%), url('/art/scenes/hq.webp');
   background-position: center 45%;
 }
 
 .rpg-hero-citadel {
   background-image:
-    linear-gradient(90deg, #07101be6 0%, #07101b80 55%, #07101b1a 100%),
-    url('/art/medieval-citadel.webp');
+    linear-gradient(90deg, #07101be6 0%, #07101bb3 55%, #07101bb3 100%),
+    url('/art/scenes/campaigns.webp');
 }
 
 .rpg-hero h1 {
