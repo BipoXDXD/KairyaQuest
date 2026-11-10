@@ -12,7 +12,7 @@ describe('SideNav', () => {
     // Os botoes da lista de areas; os do seletor de idioma tem teste proprio.
     const buttons = within(within(nav).getByRole('list')).getAllByRole('button')
     expect(buttons).toHaveLength(2)
-    // O nome acessivel nao inclui o marcador ▸ (aria-hidden).
+    // O nome acessivel nao inclui o marcador (aria-hidden).
     expect(buttons[0]).toHaveAccessibleName('Quartel-General')
     expect(buttons[1]).toHaveAccessibleName('Campanhas')
   })
@@ -27,16 +27,40 @@ describe('SideNav', () => {
     expect(screen.getByRole('button', { name: other })).not.toHaveAttribute('aria-current')
   })
 
-  it('o marcador visivel ▸ fica so na area ativa, e o leitor de tela nao o le', () => {
+  it('o marcador visivel fica so na area ativa, e o leitor de tela nao o le', () => {
     // Aviso alem da cor (README §7): quem nao distingue a cor da barra ainda
-    // ve o marcador. O leitor de tela ja ouve o `aria-current`.
+    // ve o marcador, um triangulo em SVG desde o NavTabs (4.5). O leitor de
+    // tela ja ouve o `aria-current`.
     renderWithI18n(<SideNav active="campaigns" onNavigate={vi.fn()} />)
 
-    const markers = screen.getAllByTestId('nav-current-marker')
-    expect(markers).toHaveLength(1)
-    expect(markers[0]).toHaveTextContent('▸')
-    expect(markers[0]).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByTestId('nav-campaigns')).toContainElement(markers[0]!)
+    // `getByTestId` reprova se houver mais de um marcador.
+    const marker = screen.getByTestId('nav-current-marker')
+    expect(marker.querySelector('svg')).not.toBeNull()
+    expect(marker).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByTestId('nav-campaigns')).toContainElement(marker)
+  })
+
+  it('o nav Áreas é o único landmark de navegação', () => {
+    renderWithI18n(<SideNav active="headquarters" onNavigate={vi.fn()} />)
+
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
+  })
+
+  it('a marca e a nota aparecem no bloco da marca, dentro do nav', () => {
+    renderWithI18n(<SideNav active="headquarters" onNavigate={vi.fn()} />)
+
+    const nav = screen.getByRole('navigation', { name: 'Áreas' })
+    expect(within(nav).getByText('KairyaQuest')).toBeInTheDocument()
+    expect(within(nav).getByText('Sua jornada de estudos')).toBeInTheDocument()
+  })
+
+  it('em inglês, o landmark, as áreas e a nota vêm do catálogo', () => {
+    renderWithI18n(<SideNav active="headquarters" onNavigate={vi.fn()} />, { locale: 'en' })
+
+    const nav = screen.getByRole('navigation', { name: 'Areas' })
+    const buttons = within(within(nav).getByRole('list')).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Headquarters', 'Campaigns'])
+    expect(within(nav).getByText('Your study journey')).toBeInTheDocument()
   })
 
   it('clicar numa area chama onNavigate com o id dela', () => {

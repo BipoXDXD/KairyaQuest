@@ -8,13 +8,16 @@ import type { Locale } from '../shared/i18n/locale'
  * testes existentes). O idioma vem da opcao, e nao do `navigator.language` nem
  * do cache, para o teste nao depender do ambiente.
  *
+ * `strict` monta sob `StrictMode` (opcao `reactStrictMode` do Testing
+ * Library), para os testes que medem efeitos em dobro.
+ *
  * Arquivo `.ts` com `createElement`, e nao `.tsx`: o
  * `react-refresh/only-export-components` reprova `.tsx` que exporta funcao
  * que nao e componente.
  */
-export function renderWithI18n(ui: ReactElement, opts: { locale?: Locale } = {}) {
+export function renderWithI18n(ui: ReactElement, opts: { locale?: Locale; strict?: boolean } = {}) {
   const locale = opts.locale ?? 'pt-BR'
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(I18nProvider, { initialLocale: locale, children })
-  return render(ui, { wrapper })
+  return render(ui, { wrapper, reactStrictMode: opts.strict === true })
 }
