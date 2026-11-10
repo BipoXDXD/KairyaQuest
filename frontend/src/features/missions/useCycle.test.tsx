@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { routeFetch } from '../../test/fetchRoutes'
+import { routeFetch, type Route } from '../../test/fetchRoutes'
 import type { Cycle } from './types'
 import { useCycle } from './useCycle'
 
@@ -387,6 +387,160 @@ describe('useCycle', () => {
       status: 'loaded',
       cycle: comSequencia,
       refreshFailed: false,
+    })
+  })
+
+  // Pendencia 65: os testes acima provam a guarda de sequencia com DOIS
+  // pedidos em voo. A regra ("o pedido mais recente e a ultima palavra") nao
+  // guarda estado por pedido, entao nao deveria depender de quantos estao em
+  // voo -- estes testes trocam esse argumento por prova, com tres ou quatro
+  // pedidos respondendo em ordens adversas.
+  describe('tres ou mais refresh concorrentes', () => {
+    /**
+     * Cada chamada a `/api/cycle` depois das `prontas` primeiras fica em voo
+     * ate o teste responder pelo indice (0 = primeira em voo). Generaliza o
+     * `resolverPrimeiro`/`resolverSegundo` dos testes de dois pedidos.
+     *
+     * `responder` cede um macrotask inteiro dentro do `act`: a resposta
+     * percorre todo o `requestJson` (corpo, JSON, `then`/`catch`) antes da
+     * assercao seguinte. So microtasks poderiam afirmar "ignorado" antes de a
+     * resposta chegar, e o teste passaria vacuamente.
+     */
+    function emVoo(prontas: Response[]) {
+      const pendentes: ((resposta: Response) => void)[] = []
+      const route: Route = (_init, call) => {
+        const pronta = prontas[call - 1]
+        if (pronta !== undefined) return pronta
+        return new Promise<Response>((resolve) => {
+          pendentes.push(resolve)
+        })
+      }
+      async function responder(indice: number, resposta: Response) {
+        const resolve = pendentes[indice]
+        if (resolve === undefined) throw new Error(`o pedido ${String(indice)} nao saiu`)
+        await act(async () => {
+          resolve(resposta)
+          await new Promise((pronto) => setTimeout(pronto, 0))
+        })
+      }
+      return { route, responder }
+    }
+
+    const ciclo = (streak: number): Cycle => ({ ...semPlano, streak })
+    const carregado = (cycle: Cycle, refreshFailed: boolean) => ({
+      status: 'loaded',
+      cycle,
+      refreshFailed,
+    })
+
+    /** Monta o hook com a carga inicial pronta (`semPlano`) e ja assentada. */
+    async function carregarComRotas(route: Route) {
+      routeFetch({ 'GET /api/cycle': route })
+      const { result } = renderHook(() => useCycle())
+      await waitFor(() => {
+        expect(result.current.state).toEqual(carregado(semPlano, false))
+      })
+      return result
+    }
+
+    /** Dispara tres `refresh` no mesmo `act`, como a rajada da aba que volta. */
+    function pedirTresRefresh(result: { current: { refresh: () => void } }) {
+      act(() => {
+        result.current.refresh()
+        result.current.refresh()
+        result.current.refresh()
+      })
+    }
+
+    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
+      const { route, responder } = emVoo([Response.json(semPlano)])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json(ciclo(3)))
+      expect(result.current.state).toEqual(carregado(ciclo(3), false))
+      await responder(1, Response.json(ciclo(2)))
+      await responder(0, Response.json(ciclo(1)))
+
+      expect(result.current.state).toEqual(carregado(ciclo(3), false))
+    })
+
+    it('F2 dois sucessos velhos e a falha do mais recente: mantem a carga e liga o aviso', async () => {
+      const { route, responder } = emVoo([Response.json(semPlano)])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(0, Response.json(ciclo(1)))
+      await responder(1, Response.json(ciclo(2)))
+      expect(result.current.state).toEqual(carregado(semPlano, false))
+      await responder(2, new Response(null, { status: 500 }))
+
+      expect(result.current.state).toEqual(carregado(semPlano, true))
+    })
+
+    it('F3 o mais recente tem sucesso e os dois velhos falham depois: sem aviso', async () => {
+      const { route, responder } = emVoo([Response.json(semPlano)])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json(ciclo(3)))
+      await responder(0, new Response(null, { status: 500 }))
+      await responder(1, new Response(null, { status: 500 }))
+
+      expect(result.current.state).toEqual(carregado(ciclo(3), false))
+    })
+
+    it('F4 um reload no meio da rajada: so o refresh pedido depois dele conta', async () => {
+      // Em voo, na ordem das chamadas: 0 = r1, 1 = r2, 2 = carga do reload
+      // (o efeito roda dentro do `act` do reload), 3 = r3.
+      const { route, responder } = emVoo([Response.json(semPlano)])
+      const result = await carregarComRotas(route)
+
+      act(() => {
+        result.current.refresh()
+        result.current.refresh()
+      })
+      act(() => {
+        result.current.reload()
+      })
+      expect(result.current.state).toEqual({ status: 'loading' })
+      act(() => {
+        result.current.refresh()
+      })
+
+      await responder(3, Response.json(ciclo(4)))
+      expect(result.current.state).toEqual(carregado(ciclo(4), false))
+      await responder(2, Response.json(ciclo(9)))
+      await responder(1, Response.json(ciclo(8)))
+      await responder(0, Response.json(ciclo(7)))
+
+      expect(result.current.state).toEqual(carregado(ciclo(4), false))
+    })
+
+    it('F5 rajada durante a carga inicial: o sucesso velho nao tira do carregando, e a falha do mais recente vira erro', async () => {
+      // Em voo: 0 = carga inicial, 1 a 3 = os tres refresh. O sucesso de um
+      // refresh velho e descartado mesmo com a tela em "carregando": a regra
+      // e "o mais recente e a ultima palavra", e o mais recente falhou.
+      const { route, responder } = emVoo([])
+      routeFetch({ 'GET /api/cycle': route })
+      const { result } = renderHook(() => useCycle())
+      expect(result.current.state).toEqual({ status: 'loading' })
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json(ciclo(2)))
+      expect(result.current.state).toEqual({ status: 'loading' })
+      await responder(3, new Response(null, { status: 503 }))
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor respondeu 503.',
+      })
+      await responder(0, Response.json(ciclo(1)))
+      await responder(1, Response.json(ciclo(1)))
+
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor respondeu 503.',
+      })
     })
   })
 
