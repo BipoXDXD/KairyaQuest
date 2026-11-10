@@ -64,7 +64,6 @@ const PENDING_MIGRATION: ReadonlySet<string> = new Set([
   'src/features/tutoring/TutorPanel.tsx',
   'src/pages/Campaigns.tsx',
   'src/pages/Headquarters.tsx',
-  'src/shared/i18n/LocaleSwitcher.tsx',
 ])
 
 test('a varredura enxerga o CSS de verdade', () => {

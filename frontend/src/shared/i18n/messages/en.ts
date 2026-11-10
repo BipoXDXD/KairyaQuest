@@ -12,5 +12,9 @@ export const en = {
   'shell.locale.saveFailed':
     "Couldn't save {language} as your language. The connection failed. Try again.",
   'ui.dialog.cancel': 'Cancel',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
   'ui.loading': 'Loading…',
+  'ui.sound.voice': "Kairya's voice",
+  'ui.sound.sfx': 'Sound effects',
 } as const satisfies Messages

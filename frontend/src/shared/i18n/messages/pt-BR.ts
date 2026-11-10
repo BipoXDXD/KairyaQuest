@@ -15,5 +15,9 @@ export const ptBR = {
   'shell.locale.saveFailed':
     'Não foi possível salvar o idioma {language}. A conexão falhou. Tente de novo.',
   'ui.dialog.cancel': 'Cancelar',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
   'ui.loading': 'Carregando…',
+  'ui.sound.voice': 'Voz da Kairya',
+  'ui.sound.sfx': 'Efeitos sonoros',
 } as const
