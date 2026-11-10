@@ -911,7 +911,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
-| 209 | A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos). |
+| ~~209~~ | ~~A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos).~~ Resolvida em 2026-11-10: a F14 passou a citar a prova de `test_ordem_global_das_travas.py` para ação→missão e para missão/avaliação→usuário. |
 
 ### Provedor, custo e diagnósticos
 
