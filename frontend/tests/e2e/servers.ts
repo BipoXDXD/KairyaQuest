@@ -23,6 +23,21 @@
  * zero e as portas sao as de sempre.
  */
 
+import { fileURLToPath } from 'node:url'
+
+/**
+ * A raiz do repositorio, resolvida a partir deste arquivo (tres niveis acima:
+ * `frontend/tests/e2e/`).
+ *
+ * O `cwd` do webServer da API, e o do helper do teto (`teto.ts`), precisa ser
+ * a raiz: o `uv` procura o `pyproject.toml` e o `Settings` le o `.env` do
+ * diretorio corrente. Um caminho relativo simples funcionaria por acidente --
+ * ele se resolveria contra o diretorio de onde o `npx playwright test` foi
+ * chamado, nao contra o diretorio deste arquivo. Mora aqui, e nao no config,
+ * para o config e o helper lerem a mesma fonte.
+ */
+export const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
+
 const PORTA_DA_API = 8100
 const PORTA_DO_WEB = 5273
 const PORTA_DO_FALSO = 8150
