@@ -9,6 +9,8 @@ export const en = {
   'shell.locale.label': 'Language',
   'shell.locale.ptBR': 'PT, Português (Brasil)',
   'shell.locale.en': 'EN, English',
+  'shell.locale.ptBR.endonym': 'Português (Brasil)',
+  'shell.locale.en.endonym': 'English',
   'shell.locale.saveFailed':
-    "Couldn't save {language} as your language. The connection failed. Try again.",
+    "Couldn't save {language} as your language. The server didn't confirm the change. Please try again.",
 } as const satisfies Messages

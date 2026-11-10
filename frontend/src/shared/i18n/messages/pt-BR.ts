@@ -12,6 +12,8 @@ export const ptBR = {
   'shell.locale.label': 'Idioma',
   'shell.locale.ptBR': 'PT, Português (Brasil)',
   'shell.locale.en': 'EN, English',
+  'shell.locale.ptBR.endonym': 'Português (Brasil)',
+  'shell.locale.en.endonym': 'English',
   'shell.locale.saveFailed':
-    'Não foi possível salvar o idioma {language}. A conexão falhou. Tente de novo.',
+    'Não foi possível salvar o idioma {language}. O servidor não confirmou a troca. Tente de novo.',
 } as const

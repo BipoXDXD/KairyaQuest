@@ -25,6 +25,7 @@ from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
+    CampoDesconhecidoError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -48,6 +49,7 @@ from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegal
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
 from focusquest.modules.tutoring.router import router as tutoring_router
+from focusquest.modules.users.router import router as users_router
 
 _log = logging.getLogger(__name__)
 
@@ -95,6 +97,7 @@ app.include_router(cycle_router)
 app.include_router(progression_router)
 app.include_router(tutoring_router)
 app.include_router(evaluation_router)
+app.include_router(users_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
 # proposito: ver `_nao_pertence`.
@@ -146,6 +149,7 @@ class CodigoDeErro(StrEnum):
     PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
     TEMPO_ESGOTADO = "tempo_esgotado"
     AVALIACAO_INVALIDA = "avaliacao_invalida"
+    CAMPO_DESCONHECIDO = "campo_desconhecido"
 
 
 @app.exception_handler(RequestValidationError)
@@ -363,6 +367,23 @@ def _avaliacao_em_andamento(
     """409: outra tentativa esta avaliando esta missao. O cliente espera."""
     return _erro(
         status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.AVALIACAO_EM_ANDAMENTO
+    )
+
+
+@app.exception_handler(CampoDesconhecidoError)
+def _campo_desconhecido(request: Request, exc: CampoDesconhecidoError) -> JSONResponse:
+    """400, e nao o 422 nativo: o corpo trouxe um campo que o contrato nao tem
+    (`id`, `role`, `display_name` no `PATCH /api/me`). A correcao do cliente e
+    tirar o campo, nao trocar o valor.
+
+    O corpo e fixo e nao nomeia o campo: o nome vem do cliente, e ecoa-lo
+    aqui traria de volta o risco de texto nao representavel em UTF-8 que o
+    handler do 422 trata com escapes.
+    """
+    return _erro(
+        status.HTTP_400_BAD_REQUEST,
+        "campo desconhecido no corpo",
+        CodigoDeErro.CAMPO_DESCONHECIDO,
     )
 
 

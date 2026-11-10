@@ -17,7 +17,7 @@ const segundo: Reschedule = {
   previous_deadline: '2026-10-05T21:00:00Z',
   new_deadline: '2026-10-07T13:30:00Z',
   reason: 'mudanca_de_prioridade',
-  origin: 'tifa',
+  origin: 'kairya',
   rescheduled_at: '2026-10-04T10:00:00Z',
 }
 

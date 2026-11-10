@@ -44,6 +44,8 @@ async function setup(page: Page) {
   const posts: unknown[] = []
   const unexpected: string[] = []
   const bodies: Record<string, unknown> = {
+    // O boot do idioma (`ServerLocaleSync`): o mesmo idioma da tela, sem escrita.
+    '/api/me': { display_name: 'Aventureira', locale: 'pt-BR' },
     '/api/missions': [
       original,
       ...Array.from({ length: 7 }, (_, index) => ({

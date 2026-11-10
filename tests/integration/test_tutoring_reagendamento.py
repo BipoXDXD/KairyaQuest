@@ -868,7 +868,7 @@ def test_api_confirma_e_devolve_a_missao_reagendada(
             "previous_deadline": "2026-09-21T12:00:00Z",
             "new_deadline": "2026-09-24T12:00:00Z",
             "reason": "falta_de_tempo",
-            "origin": "tifa",
+            "origin": "kairya",
             "rescheduled_at": "2026-09-19T12:00:00Z",
         }
     ]
