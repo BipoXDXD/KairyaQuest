@@ -1,8 +1,8 @@
 """Entrada EXCLUSIVA do navegador de testes, ausente do pacote de producao.
 
-Preserva os roteiros deterministas historicos, inclusive a exibicao de
-fallback antigo. Nao e uma opcao da dependencia de producao: nao recebe
-chave real nem aceita host externo. O script e2e-env valida tambem o banco.
+Liga a tutoria ao servidor falso da Anthropic em loopback, com os roteiros
+deterministas. Nao e uma opcao da dependencia de producao: nao recebe chave
+real nem aceita host externo. O script e2e-env valida tambem o banco.
 """
 
 from datetime import timedelta
@@ -33,8 +33,11 @@ def tutoria_falsa() -> Tutoria:
             max_tokens=settings.tutor_max_tokens,
             timeout_segundos=settings.tutor_timeout_seconds,
             fallback=True,
+            esforco="low",
+            esforco_da_avaliacao="medium",
         ),
         historico=settings.tutor_history_messages,
+        turnos_por_dia=settings.tutor_daily_turn_limit,
         limite=timedelta(seconds=settings.tutor_timeout_seconds),
         modelo="claude-opus-5",
     )

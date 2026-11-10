@@ -13,8 +13,11 @@ import type { PreStreamErrorCode, StreamErrorCode } from './types'
  *   campo para a pessoa mudar.
  * - `unavailable`: a Kairya esta fora do ar (sem chave). O painel mostra o estado
  *   indisponivel e desabilita o campo, com o texto preservado.
+ * - `daily-limit`: o teto diario de conversas (chamadas a Kairya) acabou
+ *   (429). O campo fica desabilitado, com o texto preservado, ate a
+ *   meia-noite; repetir antes disso daria o mesmo 429.
  */
-export type MessageRecovery = 'retry' | 'retry-with-new-id' | 'edit' | 'unavailable'
+export type MessageRecovery = 'retry' | 'retry-with-new-id' | 'edit' | 'unavailable' | 'daily-limit'
 
 export interface MessageFailure {
   /** Texto para a pessoa, em pt-BR. Nunca e o `detail` do backend. */
@@ -53,6 +56,10 @@ const PRE_STREAM: Record<PreStreamErrorCode, MessageFailure> = {
   operacao_reutilizada: {
     message: 'Não foi possível registrar esta pergunta. Tente de novo.',
     recovery: 'retry-with-new-id',
+  },
+  limite_diario_da_tutoria: {
+    message: 'Você chegou ao limite de conversas de hoje. A Kairya volta à meia-noite.',
+    recovery: 'daily-limit',
   },
 }
 
