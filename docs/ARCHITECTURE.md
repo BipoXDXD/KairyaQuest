@@ -30,6 +30,9 @@ ferramentas locais com esquema gerado em `tool_definitions.py`. Sem chave,
 retorna `None`. Não há retry, redirect, proxy do ambiente ou fallback.
 As regras de autorização, confirmação, avaliação e XP continuam nos serviços.
 Erros HTTP e respostas interrompidas falham sem executar ferramentas.
+Cada falha deixa uma linha `WARNING` no log local: status HTTP com
+`retry-after` e `x-ratelimit-*` saneados, ou o tipo da exceção; nunca corpo,
+chave nem texto do usuário (pendência 100).
 A gratuidade depende de manter a conta no plano Free: [GROQ.md](GROQ.md).
 
 O adaptador Anthropic e os roteiros de caracterização históricos permanecem

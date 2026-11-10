@@ -43,6 +43,9 @@ Chave inválida, cota esgotada (429), falha de rede ou servidor são mostradas
 pelos erros existentes do produto. Não há tentativa automática, redirect,
 proxy herdado do ambiente ou fallback pago. Um reenvio manual continua
 sujeito às regras de idempotência e nunca duplica recompensas.
+Para diagnosticar, o log da API registra o status HTTP e os cabeçalhos de
+limite do Groq (`retry-after`, `x-ratelimit-*`) de cada falha, sem corpo nem
+chave: um 401 indica chave recusada; um 429 com `retry-after`, cota Free.
 
 Os limites Free variam por organização/modelo; consulte sua conta em
 [Rate Limits](https://console.groq.com/docs/rate-limits). Uma conversa longa
