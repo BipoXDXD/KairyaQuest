@@ -1,3 +1,37 @@
+# Porta do PostgreSQL com prova de concordância — 2026-11-10
+
+Pendência 11 resolvida. Revisão-base: `e57fa2b`. `tests/unit/test_porta_do_banco.py`
+toma `Settings.db_port` como referência e confere, com contagem esperada por
+extrator, `compose.yaml` (1), `.env.example` (variável 1, URLs 2) e
+`.github/workflows/quality.yml` (`ports` 2, URLs 4, `psql -p` 2). Varre
+menções `55xxx` em `config.py`, `.env.example`, `compose.yaml`, workflow,
+`docs/QUALITY.md` e `frontend/tests/e2e/servers.ts`, e usa `git grep` para
+recusar arquivo rastreado que repita a porta fora dessa lista (exceto
+`tests/`, este HANDOFF e os lockfiles). URL sem porta explícita é recusada com
+`arquivo:linha`. Teste unitário, sem banco; nenhum contrato, dependência ou
+configuração mudou. Fonte única (workflow montando URLs de uma `env` comum,
+compose sem padrão) foi avaliada e descartada: mudaria contratos do CI e
+quebraria `docker compose up` sem `.env`.
+
+Vermelho antes da implementação: `3 failed` (`NameError` nos extratores).
+Depois: `12 passed`. Sabotagens temporárias, cada uma revertida antes da
+seguinte, com a falha lida na saída:
+
+| Sabotagem | Resultado |
+|---|---|
+| `.env.example:4` → `FOCUSQUEST_DB_PORT=55433` | `2 failed`: extrator da variável e varredura, ambos `.env.example:4: 55433` |
+| `compose.yaml:16` → `:-55433}` | `2 failed`: extrator do compose e varredura, ambos `compose.yaml:16: 55433` |
+| `quality.yml:88` → `- "55432:5432"` | `1 failed`: extrator de `ports`, "esperadas 2 … achadas 1" |
+| `docs/QUALITY.md:24` → `55433` | `1 failed`: só a varredura, `docs/QUALITY.md:24: 55433` |
+| `scripts/porta.txt` com `55432` (`git add -N`) | `1 failed`: `git grep`, `['scripts/porta.txt']` |
+
+Limitação: uma porta DIFERENTE num arquivo novo fora da lista não é
+detectada; a lista é o que se declarou como fonte.
+
+Validação: `ruff check`, `ruff format --check` e `mypy` no arquivo novo sem
+erros. `make check`: completo
+no hook `pre-commit` deste commit (o commit só existe se ele passar).
+
 # Paridade geral modelo/migração e Alembic offline — 2026-11-10
 
 Pendência 9/10. Revisão-base: `e57fa2b`. Nenhuma migração, modelo,
@@ -492,8 +526,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | ID | O que continua aberto |
 |---|---|
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
-| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção do topo). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
-| 11 | Porta 55432 repetida em Settings/compose/exemplo/workflow, sem prova geral de divergência. |
+| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção "Paridade geral modelo/migração e Alembic offline"). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
 | 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
 | 32/161 | Códigos HTTP/SSE, dificuldade, dias por marco e rótulos Python/frontend espelhados à mão; respostas externas não têm validação runtime geral. |
