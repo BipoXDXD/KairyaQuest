@@ -407,7 +407,6 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 4/5 | Autenticação/autorização por recurso; conferir dono antes de prender linha em missions/tutor_actions quando houver contas. Hoje é contenção teórica no recorte único, sem 404 diferente. |
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
 | 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
-| 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
 | 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
@@ -489,6 +488,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 22/23 | Lock npm pode divergir local/CI; tabela Vitest vazia não prova cobertura, limiar/resumo sim. Limites em QUALITY. |
 | 29/30 | Raiz é convenção com receita externa; barra final produz307. Não mudar Settings/redirect por estética. |
 | 39 | Preparação Playwright usa rede/apt; falha reprova fechado. Sem cache parcial introduzido. |
+| 41 | Pergunta à tutora limitada a 4000 caracteres, decidido pelo dono. O espelho `MAX_QUESTION_LENGTH` (frontend) ↔ `TAMANHO_MAXIMO_DA_PERGUNTA` (backend) é provado por `tests/unit/test_limite_da_pergunta.py`, que reprova com `arquivo:linha` dos dois lados se divergirem, e com o caminho do arquivo se a constante do frontend sumir. Mudar o número é decisão de produto. |
 | 44/71 | Medições antigas de mutações são histórico de prova, não taxas universais atuais nem tarefas por repetir. |
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
