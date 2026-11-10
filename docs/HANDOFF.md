@@ -1,3 +1,94 @@
+# Fase 4, Tarefa 4.1: tokens em 3 níveis e teste de contraste — 2026-11-10
+
+Objetivo: criar os tokens do design system "dojo-biblioteca ao anoitecer"
+(primitivos, semânticos e de componente) e um teste que mede o contraste WCAG
+de cada par de cor usado, sobre o CSS real. Base: `e57fa2b`.
+
+Decisões:
+
+- **O CSS é a fonte única dos tokens.** O TypeScript não repete nenhum hex:
+  `contrast.ts` lê as declarações `--nome: valor;` do CSS e resolve `var()`
+  sob demanda; `contrastPairs.ts` só nomeia os pares e o mínimo de cada um.
+- **Tokens em `frontend/src/styles/tokens.css`, não em `index.css`.** Desvio
+  da spec 4.1, que põe os tokens no `index.css`: o `index.css` passa a só
+  importar (`tailwindcss`, `tokens.css`) e a carregar as regras `.rpg-*`
+  legadas até a Tarefa 4.9, e os tokens ganham um arquivo que o teste lê
+  sozinho.
+- **Primitivos em `:root`, fora do `@theme`**, para não gerar utilities como
+  `bg-ink-800` que pulem o nível semântico. Semânticos e de componente
+  (`--radius-ui` 10px, `--radius-pill` 999px, `--shadow-glow-lantern`) no
+  `@theme`, onde viram utilities (`bg-bg-canvas`, `rounded-ui`,
+  `shadow-glow-lantern` etc.). `--glow-lantern-color`, o alias
+  `--glow-lantern` e `--glow-lantern-filter` (forma do glow para SVG,
+  `drop-shadow` sem spread) ficam em `:root`, sem utility.
+- **Primitivo novo `ink-400` `#697b91` e `color-border-strong` = ink-400.**
+  Origem: ruling 08:05 do controlador da Fase 4. A spec manda
+  `border-strong` = ink-500 (`#5b6e84`), que mede 2,74:1 sobre `bg-raised` e
+  reprova o 3:1 que a própria spec exige para componente de UI; o requisito
+  de contraste vence o hex. O ink-400 mede 4,23 / 3,79 / 3,31 sobre
+  canvas / surface / raised (margem ≥ 0,2 sobre 3:1) e 2,10:1 contra
+  `text-muted`, distinto dele. Com isso o `Field` funciona sobre qualquer
+  elevação, sem restrição de contexto.
+- Um semântico de estado a mais, `color-action-primary-hover` = lantern-200
+  (13,75:1 com `text-on-action`). Nenhum hover usa `color-mix`.
+- `color-border-subtle` (ink-700) é decorativa e fica fora dos pares de 3:1
+  (mede 1,61:1 no canvas); nunca é o único limite de um controle.
+- Ciclo de `var()` é reportado como "ciclo em var()" no
+  `findContrastFailures`, separado de "token ausente", para a mensagem
+  apontar a causa certa.
+- A razão na mensagem de falha é **truncada** em 2 casas, não arredondada:
+  2,996 arredondado viraria "3.00 < 3", contradizendo a reprovação.
+- `readSource` resolve a raiz por `fileURLToPath(import.meta.url)` +
+  `node:path`, e não por `new URL('../../', import.meta.url)` como dizia o
+  plano: o Vite reescreve essa forma literal como URL `http://localhost:3000/@fs/...`
+  e o `fileURLToPath` a recusa (medido no Vitest 5.0.1 com jsdom).
+
+Alterações:
+
+- Novos: `frontend/src/styles/tokens.css`,
+  `frontend/src/shared/ui/tokens/{contrast.ts,contrastPairs.ts,contrast.test.ts}`,
+  `frontend/src/shared/ui/tokens.test.ts`, `frontend/src/test/readSource.ts`.
+- `frontend/src/index.css`: importa `tokens.css`, remove o bloco
+  `:root { --fq-* }` e troca cada `var(--fq-*)` pelo equivalente (`--fq-bg` →
+  `--color-bg-canvas`, `--fq-surface` → `--color-bg-surface`, `--fq-text` →
+  `--color-text-primary`, `--fq-muted` → `--color-text-muted`, `--fq-metal` →
+  `--lantern-600`, `--fq-mako` → `--color-feedback-success`, `--fq-border` →
+  `--color-border-strong`, `--fq-radius` → `--radius-ui`, `--fq-space` →
+  `calc(var(--spacing) * 6)`, `--fq-font-display` → Georgia provisório até a
+  4.2). Nenhum `--fq-*` tinha consumidor fora do `index.css`, então não ficou
+  alias. Os hex soltos das regras `.rpg-*` ficam até a 4.9.
+- `docs/QUALITY.md` §3: linha do `readSource.ts`.
+- `docs/ARCHITECTURE.md`: `styles/` e `shared/ui/` passam a existir,
+  `readSource.ts` entra na lista de `src/test/` e a linha "Token visual" da
+  tabela passa a "existe".
+
+Comandos e resultados:
+
+- `npx vitest run src/shared/ui/tokens/contrast.test.ts` antes do
+  `contrast.ts`: falhou (módulo inexistente); depois: passou (23 testes,
+  contando o de truncamento, que falhou antes do ajuste com "3.00 < 3").
+- `npx vitest run src/shared/ui/tokens.test.ts` antes do `tokens.css`:
+  falhou (`ENOENT` em `src/styles/tokens.css`); depois: passou.
+- Sabotagem manual: `color-border-strong` → ink-500 reprova 3 testes, com
+  `color-border-strong/color-bg-raised = 2.74 < 3 (borda de controle)`;
+  revertido.
+- `vite build` numa pasta temporária: o CSS gerado tem `--ink-400:#697b91`,
+  `--color-bg-canvas:var(--ink-950)`, `--radius-ui:10px`, o glow e o filtro,
+  e nenhum `fq-`.
+- `make check-web` (exit 0): lint, Prettier e `tsc` limpos; 53 arquivos,
+  1035 testes passaram; cobertura 100% em statements (1325/1325), branches
+  (989/989), functions (369/369) e lines (1286/1286).
+
+Pendências:
+
+- O gate completo (`make check`, com E2E de layout e axe) fica com o
+  controlador. As cores das regras `.rpg-*` mudaram levemente com a troca
+  (por exemplo, borda `#52606d` → `#697b91`, texto secundário `#b2beca` →
+  `#a9b6c6`, fundo `#0b1421` → `#0d1520`); o contraste novo foi medido nos
+  pares do teste, mas o axe sobre as telas reais ainda não rodou.
+- `listSources` ainda não tem consumidor; a 4.3 (lint de design) é a
+  primeira. Foi conferido à mão nesta tarefa.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
