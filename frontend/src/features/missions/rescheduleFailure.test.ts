@@ -24,6 +24,14 @@ describe('describeRescheduleFailure', () => {
   it.each([
     ['prazo_expirado', 422, { message: 'O novo prazo precisa estar no futuro.', recovery: 'edit' }],
     [
+      'prazo_fora_do_limite',
+      422,
+      {
+        message: 'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+        recovery: 'edit',
+      },
+    ],
+    [
       'prazo_inalterado',
       409,
       {

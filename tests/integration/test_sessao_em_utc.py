@@ -18,6 +18,7 @@ numa borda diferente em cada lado, e a suite antiga so reprovava a leste.
 """
 
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -28,6 +29,7 @@ from sqlalchemy.orm import Session
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url, get_engine
 from focusquest.main import app
+from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission
 
 LESTE = "Asia/Tokyo"
@@ -129,27 +131,44 @@ def test_sessao_fica_em_utc_mesmo_com_pgtz_em_outro_fuso(
     ids=["ultimo instante pedindo leste", "primeiro instante pedindo oeste"],
     indirect=["engine_com_pgtz"],
 )
-def test_prazo_na_borda_aceito_e_lido_em_qualquer_fuso_do_ambiente(
-    cliente: TestClient, prazo: str
+def test_prazo_na_borda_gravado_e_lido_em_qualquer_fuso_do_ambiente(
+    cliente: TestClient, banco_migrado: Engine, prazo: str
 ) -> None:
-    """O par que quebrava: prazo aceito com 201 e a listagem em 500 para sempre.
+    """O par que quebrava: prazo gravado e a listagem em 500 para sempre.
 
     Cada borda so estourava de um lado de UTC -- o ultimo instante a leste, o
     primeiro a oeste --, e por isso cada uma e testada no lado em que quebrava.
+
+    A linha entra pelo ORM, e nao pela API: desde a pendencia 26 a criacao
+    recusa prazo fora de `(agora, agora + 365 dias]`, mas uma linha antiga,
+    gravada antes da regra, ainda pode estar na borda -- e a leitura dela e o
+    que este teste vigia. Commitada, porque a requisicao abre a sessao dela.
 
     O prazo listado e comparado como TEXTO, e isso e deliberado: a leitura sai
     do banco com a sessao em UTC, entao o instante volta com `Z`, na mesma
     grafia do pedido. Com a sessao no fuso do ambiente ele voltaria com o
     offset de la, ou nem voltaria.
     """
-    criacao = cliente.post("/api/missions", json=_corpo(prazo))
-    assert criacao.status_code == 201, criacao.text
+    with Session(bind=banco_migrado) as gravacao:
+        missao = Mission(
+            user_id=1,
+            mission_type=MissionType.AVULSA,
+            instructions="Ler o capitulo 3",
+            completion_criterion="Resumo de uma pagina entregue",
+            difficulty=2,
+            estimated_minutes=30,
+            deadline=datetime.fromisoformat(prazo),
+            state=MissionState.PENDENTE,
+        )
+        gravacao.add(missao)
+        gravacao.commit()
+        mission_id = missao.id
 
     listagem = cliente.get("/api/missions")
 
     assert listagem.status_code == 200, listagem.text
     [listada] = listagem.json()
-    assert listada["id"] == criacao.json()["id"]
+    assert listada["id"] == mission_id
     assert listada["deadline"] == prazo
 
 
@@ -165,7 +184,10 @@ def test_reenvio_da_conclusao_devolve_o_mesmo_corpo_em_qualquer_fuso_do_ambiente
     em Sao Paulo, medido): o mesmo instante, em outra grafia -- e um cliente
     que comparasse as respostas veria duas conclusoes diferentes.
     """
-    criacao = cliente.post("/api/missions", json=_corpo("2027-02-16T00:00:00Z"))
+    # Prazo relativo ao relogio real: a criacao o confere contra a janela de
+    # 365 dias (pendencia 26), e um literal viraria bomba-relogio.
+    prazo = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    criacao = cliente.post("/api/missions", json=_corpo(prazo))
     assert criacao.status_code == 201, criacao.text
     caminho = f"/api/missions/{criacao.json()['id']}/complete"
 
