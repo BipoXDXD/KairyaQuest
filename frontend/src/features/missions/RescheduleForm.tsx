@@ -31,6 +31,23 @@ const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_d
 const RETRY_NOTICE =
   'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.'
 
+/**
+ * O horizonte do prazo da avulsa, o mesmo do servidor (pendencia 26). O
+ * servidor continua sendo quem decide (`prazo_fora_do_limite`); aqui ele so
+ * evita um envio que voltaria recusado.
+ */
+const HORIZONTE_DO_PRAZO_MS = 365 * 24 * 60 * 60 * 1000
+
+/** A janela do novo prazo, em hora civil de Sao Paulo, a partir de `nowMs`. */
+function deadlineWindow(nowMs: number): { min: string; max: string; maxMs: number } {
+  const maxMs = nowMs + HORIZONTE_DO_PRAZO_MS
+  return {
+    min: isoToSaoPauloCivil(new Date(nowMs).toISOString()),
+    max: isoToSaoPauloCivil(new Date(maxMs).toISOString()),
+    maxMs,
+  }
+}
+
 /** Os ids de `aria-describedby` presentes, juntos; `undefined` sem nenhum. */
 function joinIds(...ids: (string | null)[]): string | undefined {
   const present = ids.filter((id) => id !== null)
@@ -38,12 +55,18 @@ function joinIds(...ids: (string | null)[]): string | undefined {
 }
 
 /** Por que o rascunho nao pode sair, ou `null` se pode. */
-function blockedReason(draft: RescheduleDraft): string | null {
+function blockedReason(draft: RescheduleDraft, maxMs: number): string | null {
   if (draft.civil === '') {
     return 'Informe a data e a hora do novo prazo.'
   }
-  if (saoPauloCivilToIso(draft.civil) === null) {
+  const iso = saoPauloCivilToIso(draft.civil)
+  if (iso === null) {
     return 'Esse horário não existe no horário de Brasília. Escolha outro.'
+  }
+  // O passado fica com o servidor (`prazo_expirado`): o minuto civil nao
+  // decide sozinho se "agora" ja passou, e o teto sim.
+  if (Date.parse(iso) > maxMs) {
+    return 'O novo prazo pode ser no máximo 365 dias a partir de agora.'
   }
   if (draft.reason === null) {
     return 'Escolha o motivo para salvar o novo prazo.'
@@ -70,6 +93,9 @@ function blockedReason(draft: RescheduleDraft): string | null {
  *   o prazo: o formulario fica com o que foi digitado.
  * - **Salvar desabilitado com o porque em texto**, ligado por
  *   `aria-describedby`, como o motivo do Concluir bloqueado.
+ * - **Janela do prazo de agora a agora+365 dias** (pendencia 26), contada do
+ *   instante em que o disclosure abriu: `min`/`max` no campo e o teto no
+ *   bloqueio. O passado fica com o servidor (`prazo_expirado`).
  * - **Falha `retry`** (nao se sabe se o prazo mudou): os campos continuam
  *   editaveis; sem mudar nada, o botao diz "Tentar de novo" e reenvia o MESMO
  *   rascunho (a chave retida so vale para o mesmo conteudo, F13). Mudou o
@@ -103,6 +129,9 @@ export function RescheduleForm({
   const [draft, setDraft] = useState<RescheduleDraft>({ civil: '', reason: null })
   // O ultimo rascunho enviado: e com ele que "Tentar de novo" se compara.
   const [sent, setSent] = useState<RescheduleDraft | null>(null)
+  // O instante em que o disclosure abriu: a janela do prazo parte dele. O
+  // relogio e lido no clique, nunca no render (render puro).
+  const [openedAtMs, setOpenedAtMs] = useState(0)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const regionId = `${id}-region`
@@ -118,7 +147,8 @@ export function RescheduleForm({
     }
   }, [closedBySuccess])
 
-  const blocked = blockedReason(draft)
+  const bounds = deadlineWindow(openedAtMs)
+  const blocked = blockedReason(draft, bounds.maxMs)
   const retrySame = failure?.action === 'retry' && sent !== null && sameDraft(sent, draft)
   const retryLabel = retrySame || failure?.action === 'retry-with-new-operation'
 
@@ -137,6 +167,7 @@ export function RescheduleForm({
             return
           }
           setOpenedFor(mission.deadline)
+          setOpenedAtMs(Date.now())
           setDraft({
             civil: isoToSaoPauloCivil(mission.deadline),
             reason: null,
@@ -158,6 +189,8 @@ export function RescheduleForm({
               id={fieldId}
               data-testid="reschedule-deadline"
               type="datetime-local"
+              min={bounds.min}
+              max={bounds.max}
               value={draft.civil}
               disabled={disabled}
               onChange={(event) => {

@@ -19,7 +19,9 @@ from focusquest.core.errors import AcaoNaoEncontradaError, OperacaoReutilizadaEr
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
 from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.tutoring.domain import (
+    ESTIMATIVA_FORA_DO_LIMITE,
     PRAZO_EXPIRADO,
+    PRAZO_FORA_DO_LIMITE,
     EstadoDaAcao,
     Papel,
     StatusDaMensagem,
@@ -28,6 +30,7 @@ from focusquest.modules.tutoring.domain import (
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.service import (
     Executada,
+    ForaDoLimite,
     PrazoExpirado,
     ResultadoDaConfirmacao,
     confirmar_acao,
@@ -174,6 +177,51 @@ def test_prazo_vencido_grava_falhou_e_nao_cria_missao(session: Session) -> None:
 def test_prazo_um_segundo_no_futuro_ainda_vale(session: Session) -> None:
     acao = _proposta(session, prazo=AGORA + timedelta(seconds=1))
     assert isinstance(_confirmar(session, acao.id, "op-1"), Executada)
+
+
+# --- Limites da avulsa (pendencia 26) --------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("prazo", "minutos", "codigo"),
+    [
+        (AGORA + timedelta(days=1), 1441, ESTIMATIVA_FORA_DO_LIMITE),
+        (AGORA + timedelta(days=365, seconds=1), 40, PRAZO_FORA_DO_LIMITE),
+    ],
+    ids=["estimativa 1441", "prazo agora+365d+1s"],
+)
+def test_proposta_fora_do_limite_grava_falhou_e_nao_cria_missao(
+    session: Session, prazo: datetime, minutos: int, codigo: str
+) -> None:
+    acao = _proposta(session, payload=_payload(prazo) | {"estimated_minutes": minutos})
+    resultado = _confirmar(session, acao.id, "op-1")
+
+    assert resultado == ForaDoLimite(acao, codigo)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, codigo)
+    assert (acao.operation_id, acao.decided_at) == ("op-1", AGORA)
+    assert acao.mission_id is None
+    assert _missoes(session) == 0
+    # O mesmo clique de novo: o mesmo resultado, gravado, e nao transicao ilegal.
+    assert _confirmar(session, acao.id, "op-1") == ForaDoLimite(acao, codigo)
+    with pytest.raises(TransicaoIlegalError):
+        _confirmar(session, acao.id, "op-2")
+
+
+@pytest.mark.parametrize(
+    ("prazo", "minutos"),
+    [(AGORA + timedelta(days=365), 40), (AGORA + timedelta(days=1), 1440)],
+    ids=["prazo agora+365d", "estimativa 1440"],
+)
+def test_proposta_na_borda_do_limite_ainda_executa(
+    session: Session, prazo: datetime, minutos: int
+) -> None:
+    acao = _proposta(session, payload=_payload(prazo) | {"estimated_minutes": minutos})
+    resultado = _confirmar(session, acao.id, "op-1")
+    assert isinstance(resultado, Executada)
+    assert (resultado.missao.deadline, resultado.missao.estimated_minutes) == (
+        prazo,
+        minutos,
+    )
 
 
 # --- Recusar ---------------------------------------------------------------

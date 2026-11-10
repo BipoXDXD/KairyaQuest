@@ -78,6 +78,9 @@ export const en = {
   'missions.rescheduleFailure.deadlinePassed.message':
     "Couldn't reschedule. The new deadline is in the past.",
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Pick a future date and time.',
+  'missions.rescheduleFailure.tooFar.message':
+    "Couldn't reschedule. The new deadline is more than 365 days away.",
+  'missions.rescheduleFailure.tooFar.recovery': 'Pick an earlier date.',
   'missions.rescheduleFailure.unchanged.message':
     "Couldn't reschedule. The new deadline matches the current one.",
   'missions.rescheduleFailure.unchanged.recovery': 'Pick a different time.',
@@ -156,6 +159,10 @@ export const en = {
     "Couldn't confirm this proposal. Its deadline has already passed.",
   'tutoring.actionFailure.rescheduleInvalid.message':
     "Couldn't reschedule the mission. It changed after the proposal.",
+  'tutoring.actionFailure.estimateOutOfBounds.message':
+    "Couldn't confirm this proposal. Its estimate must be 1 to 1440 minutes.",
+  'tutoring.actionFailure.deadlineOutOfBounds.message':
+    "Couldn't confirm this proposal. Its deadline is over 365 days away.",
   'tutoring.actionFailure.unconfirmedCreate.message':
     "Couldn't confirm the mission. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedCreate.recovery':

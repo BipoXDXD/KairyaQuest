@@ -5,9 +5,11 @@ bufferiza a resposta inteira, e so aqui da para olhar o banco NO
 INSTANTE de cada evento.
 """
 
+import json
 import threading
 from collections.abc import Callable, Generator
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -23,6 +25,7 @@ from focusquest.modules.missions.domain import MissionType
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.missions.service import concluir_missao, iniciar_missao
 from focusquest.modules.progression.models import XpEntry
+from focusquest.modules.tutoring.context import CABECALHO_DO_CONTEXTO
 from focusquest.modules.tutoring.domain import (
     RESPOSTA_LONGA,
     CodigoDoStream,
@@ -107,6 +110,15 @@ def _resposta(fabrica: sessionmaker[Session], resposta_id: int) -> TutorMessage:
 def _para_gerar(preparo: JaRespondida | ParaGerar) -> ParaGerar:
     assert isinstance(preparo, ParaGerar)
     return preparo
+
+
+def _contexto_do_sistema(sistema: str) -> dict[str, Any]:
+    """O JSON do contexto: a ultima linha do bloco de contexto, logo depois
+    do cabecalho fixo (pendencia 184)."""
+    *_, cabecalho, linha = sistema.rpartition(f"{CABECALHO_DO_CONTEXTO}\n")
+    assert cabecalho == f"{CABECALHO_DO_CONTEXTO}\n"
+    dados: dict[str, Any] = json.loads(linha)
+    return dados
 
 
 # --- O caminho feliz -------------------------------------------------------
@@ -453,7 +465,7 @@ def test_pedir_xp_no_chat_nao_altera_o_saldo(
             ).select_from(XpEntry)
         ).one()
     assert depois == antes
-    assert "Progresso do estudante" in falso.recebidas[-1].contexto_do_turno
+    assert "progress" in _contexto_do_sistema(falso.recebidas[-1].contexto_do_turno)
 
 
 def test_o_turno_leva_so_mensagens_completas(
@@ -977,12 +989,12 @@ def _diaria_de_quarta_iniciada_a_tempo(sessao: Session) -> Mission:
     return _diaria_iniciada(sessao, _QUARTA, _QUARTA_23H50)
 
 
-def _sistema_do_turno(
+def _contexto_do_turno(
     sessao: Session,
     tutoria: Tutoria,
     agora: datetime,
     relogio: Callable[[], datetime] | None = None,
-) -> str:
+) -> dict[str, Any]:
     preparo = preparar_turno(
         sessao,
         user_id=ESTUDANTE,
@@ -991,7 +1003,11 @@ def _sistema_do_turno(
         tutoria=tutoria,
         clock=relogio or (lambda: agora),
     )
-    return _para_gerar(preparo).turno.contexto
+    return _contexto_do_sistema(_para_gerar(preparo).turno.contexto)
+
+
+def _tipos_tardios(contexto: dict[str, Any]) -> list[str]:
+    return [m["kind"] for m in contexto["late_cycle_missions"]]
 
 
 def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(
@@ -1002,15 +1018,18 @@ def test_o_turno_lembra_a_diaria_de_ontem_iniciada_a_tempo(
     pendentes (a do reagendamento)."""
     quarta = _diaria_de_quarta_iniciada_a_tempo(session)
 
-    sistema = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+    contexto = _contexto_do_turno(session, tutoria, _QUINTA_00H10)
 
-    assert (
-        f"- diária de ontem: Diaria 2 (em andamento desde "
-        f"{_QUARTA_23H50.isoformat()}; pode ser concluída antes de "
-        f"{_SEXTA_00H00.isoformat()}, que é 2026-09-25T00:00:00-03:00 em "
-        "São Paulo)"
-    ) in sistema.splitlines()
-    assert f"#{quarta.id}" not in sistema
+    assert contexto["late_cycle_missions"] == [
+        {
+            "kind": "diária de ontem",
+            "instructions": "Diaria 2",
+            "started_at": "2026-09-24T02:50:00+00:00",
+            "complete_before_utc": "2026-09-25T03:00:00+00:00",
+            "complete_before_sao_paulo": "2026-09-25T00:00:00-03:00",
+        }
+    ]
+    assert quarta.id not in [m["id"] for m in contexto["pending_missions"]]
 
 
 def test_a_diaria_de_hoje_iniciada_nao_e_tardia(
@@ -1019,11 +1038,11 @@ def test_a_diaria_de_hoje_iniciada_nao_e_tardia(
     """Antes da meia-noite a diaria de quarta e a de HOJE, nao a de ontem."""
     _diaria_de_quarta_iniciada_a_tempo(session)
 
-    sistema = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+    contexto = _contexto_do_turno(
+        session, tutoria, _QUARTA_23H50 + timedelta(minutes=5)
+    )
 
-    # O titulo da secao, e nao so "conclusao tardia": a persona tambem fala
-    # dela.
-    assert "Missões do ciclo em conclusão tardia" not in sistema
+    assert contexto["late_cycle_missions"] == []
 
 
 def test_a_diaria_de_ontem_concluida_com_atraso_nao_entra_no_turno(
@@ -1037,9 +1056,9 @@ def test_a_diaria_de_ontem_concluida_com_atraso_nao_entra_no_turno(
         session, ESTUDANTE, terca.id, "op-tardia-c", clock=lambda: _QUARTA_00H10
     )
 
-    sistema = _sistema_do_turno(session, tutoria, _QUARTA_MEIO_DIA)
+    contexto = _contexto_do_turno(session, tutoria, _QUARTA_MEIO_DIA)
 
-    assert "Missões do ciclo em conclusão tardia" not in sistema
+    assert contexto["late_cycle_missions"] == []
 
 
 def test_a_diaria_de_ontem_fora_do_limite_nao_entra_no_turno(
@@ -1050,11 +1069,12 @@ def test_a_diaria_de_ontem_fora_do_limite_nao_entra_no_turno(
     ela ja nao e de ontem, e o turno nao a lembra."""
     _diaria_iniciada(session, _TERCA, _TERCA_23H50)
 
-    dentro = _sistema_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
-    fora = _sistema_do_turno(session, tutoria, _QUINTA_00H10)
+    dentro = _contexto_do_turno(session, tutoria, _QUARTA_23H50 + timedelta(minutes=5))
+    fora = _contexto_do_turno(session, tutoria, _QUINTA_00H10)
 
-    assert "- diária de ontem: Diaria 1 (" in dentro
-    assert "Missões do ciclo em conclusão tardia" not in fora
+    assert [m["instructions"] for m in dentro["late_cycle_missions"]] == ["Diaria 1"]
+    assert _tipos_tardios(dentro) == ["diária de ontem"]
+    assert fora["late_cycle_missions"] == []
 
 
 def test_o_ciclo_e_lido_no_mesmo_instante_do_turno(
@@ -1069,11 +1089,12 @@ def test_o_ciclo_e_lido_no_mesmo_instante_do_turno(
     instantes = iter([_SEXTA_00H00 - timedelta(microseconds=1)])
     depois = _SEXTA_00H00 + timedelta(minutes=1)
 
-    sistema = _sistema_do_turno(
+    contexto = _contexto_do_turno(
         session,
         tutoria,
         _SEXTA_00H00 - timedelta(microseconds=1),
         relogio=lambda: next(instantes, depois),
     )
 
-    assert "- diária de ontem: Diaria 2 (" in sistema
+    assert [m["instructions"] for m in contexto["late_cycle_missions"]] == ["Diaria 2"]
+    assert _tipos_tardios(contexto) == ["diária de ontem"]

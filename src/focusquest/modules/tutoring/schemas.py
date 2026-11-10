@@ -28,9 +28,10 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
 )
 
-# Teto TECNICO de custo: cada caractere vai ao modelo, e volta nos turnos
-# seguintes como historico. O numero e provisorio e e decisao do dono
-# (pendencia no HANDOFF), como os tetos de negocio da missao.
+# Teto de custo: cada caractere vai ao modelo, e volta nos turnos seguintes
+# como historico. O numero foi decidido pelo dono (pendencia 41); o frontend o
+# espelha em `MAX_QUESTION_LENGTH`, e tests/unit/test_limite_da_pergunta.py
+# reprova se os dois divergirem.
 TAMANHO_MAXIMO_DA_PERGUNTA = 4000
 
 # Os campos do retrato de um reagendamento (F16): quem os escreve e o backend,

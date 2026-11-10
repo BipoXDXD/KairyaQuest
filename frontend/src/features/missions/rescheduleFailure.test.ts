@@ -35,6 +35,15 @@ describe('describeRescheduleFailure', () => {
       },
     ],
     [
+      'prazo_fora_do_limite',
+      422,
+      {
+        message: 'missions.rescheduleFailure.tooFar.message',
+        recovery: 'missions.rescheduleFailure.tooFar.recovery',
+        action: 'edit',
+      },
+    ],
+    [
       'prazo_inalterado',
       409,
       {
