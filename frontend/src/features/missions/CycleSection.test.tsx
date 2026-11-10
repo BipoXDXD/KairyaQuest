@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRef, StrictMode } from 'react'
+import { createRef } from 'react'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { Mission } from '../../shared/types/mission'
 import * as completionRegistryHook from './useCompletionRegistry'
@@ -94,7 +95,7 @@ describe('CycleSection', () => {
 
   it('anuncia o carregamento', () => {
     routeFetch({ 'GET /api/cycle': () => new Promise<Response>(() => undefined) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(screen.getByRole('status')).toHaveTextContent('Consultando o ciclo…')
   })
 
@@ -103,7 +104,7 @@ describe('CycleSection', () => {
       'GET /api/cycle': () =>
         Response.json(ciclo({ mission: null, streak: 0, days_to_milestone: 7 })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(await screen.findByTestId('cycle-no-plan')).toHaveTextContent(/não quebra/)
     expect(screen.getByTestId('cycle-progress')).toHaveTextContent(
       'Missão especial: 0 de 7 — faltam 7 dias.',
@@ -112,7 +113,7 @@ describe('CycleSection', () => {
 
   it('mostra a data civil de hoje sem conversao de fuso', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(await screen.findByTestId('cycle-today')).toHaveTextContent(
       'Hoje é quarta-feira, 23/09.',
     )
@@ -120,7 +121,7 @@ describe('CycleSection', () => {
 
   it('mostra a missao de hoje com a sequencia e o progresso ate a especial', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const cartao = await screen.findByTestId('mission-item')
     expect(within(cartao).getByTestId('mission-instructions')).toHaveTextContent(
       diaria.instructions,
@@ -139,7 +140,7 @@ describe('CycleSection', () => {
     routeFetch({
       'GET /api/cycle': () => Response.json(ciclo({ streak: 1, days_to_milestone: 1 })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(await screen.findByTestId('cycle-streak')).toHaveTextContent('Sequência: 1 dia seguido')
     expect(screen.getByTestId('cycle-progress')).toHaveTextContent(
       'Missão especial: 1 de 7 — falta 1 dia.',
@@ -156,7 +157,7 @@ describe('CycleSection', () => {
         ),
       'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     // P4: a regiao viva e o MESMO elemento de antes do clique -- um `role`
     // novo que nasce ja com texto nao e anunciado por todo leitor de tela.
     const statusAntes = await screen.findByTestId('mission-completion-status')
@@ -199,7 +200,7 @@ describe('CycleSection', () => {
         ),
       'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
-    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+    renderWithI18n(<CycleSection onMissionCompleted={onMissionCompleted} />)
 
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
@@ -235,7 +236,7 @@ describe('CycleSection', () => {
           reward: { ...recompensaPadrao, xp_awarded: 20 },
         }),
     })
-    render(<CycleSection onMissionCompleted={onMissionCompleted} />)
+    renderWithI18n(<CycleSection onMissionCompleted={onMissionCompleted} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
 
@@ -245,13 +246,13 @@ describe('CycleSection', () => {
 
   it('a diaria concluida autodeclarada mostra o selo no cartao', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(await screen.findByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
   })
 
   it('sem diaria de ontem em conclusao tardia, nao mostra a secao dela', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     await screen.findByTestId('mission-item')
     expect(screen.queryByTestId('cycle-late-daily')).toBeNull()
   })
@@ -270,7 +271,7 @@ describe('CycleSection', () => {
           }),
         ),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-late-daily')
     expect(
       within(secao).getByRole('heading', {
@@ -304,7 +305,7 @@ describe('CycleSection', () => {
     routeFetch({
       'GET /api/cycle': () => Response.json(ciclo({ late_daily: concluidaComAtraso })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-late-daily')
     expect(within(secao).getByTestId('cycle-late-daily-reason')).toHaveTextContent(
       'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.',
@@ -323,7 +324,7 @@ describe('CycleSection', () => {
       'GET /api/cycle': () =>
         Response.json(ciclo({ today: '2026-09-29', mission: null, special: especialTardia })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
     expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
       'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.',
@@ -346,7 +347,7 @@ describe('CycleSection', () => {
           ciclo({ today: '2026-09-29', mission: null, special: especialConcluidaTarde }),
         ),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
     expect(within(secao).getByTestId('cycle-special-late-reason')).toHaveTextContent(
       'Concluída depois do fim da janela — você começou a tempo.',
@@ -358,14 +359,14 @@ describe('CycleSection', () => {
       'GET /api/cycle': () =>
         Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     await screen.findByTestId('cycle-special')
     expect(screen.queryByTestId('cycle-special-late-reason')).toBeNull()
   })
 
   it('a missao de hoje ja concluida nao oferece Concluir', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ mission: diariaConcluida })) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     await screen.findByTestId('mission-item')
     expect(screen.queryByTestId('mission-complete')).toBeNull()
   })
@@ -375,7 +376,7 @@ describe('CycleSection', () => {
       'GET /api/cycle': () =>
         Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
     // O titulo da SECAO e h3, e o titulo do CARTAO dentro dela e h4
     // (`titleLevel={4}`, em CycleSection.tsx) -- por isso os dois cabem na
@@ -400,7 +401,7 @@ describe('CycleSection', () => {
         Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
       'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secaoEspecial = await screen.findByTestId('cycle-special')
     const cartaoDiaria = screen
       .getAllByTestId('mission-item')
@@ -429,12 +430,19 @@ describe('CycleSection', () => {
     expect(requestsTo(fetchMock, 'POST /api/missions/38/complete')).toHaveLength(0)
   })
 
+  it('em ingles, o erro de carga sai do catalogo', async () => {
+    routeFetch({ 'GET /api/cycle': () => new Response(null, { status: 503 }) })
+    renderWithI18n(<CycleSection />, { locale: 'en' })
+
+    expect(await screen.findByTestId('cycle-error')).toHaveTextContent(HTTP_FAILURE_TEXT.en)
+  })
+
   it('o erro de carregamento oferece Tentar novamente', async () => {
     routeFetch({
       'GET /api/cycle': (_init, call) =>
         call === 1 ? new Response(null, { status: 503 }) : Response.json(ciclo()),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const erro = await screen.findByTestId('cycle-error')
     expect(erro).toHaveTextContent('Falha ao carregar o ciclo.')
     fireEvent.click(screen.getByTestId('cycle-retry'))
@@ -457,14 +465,14 @@ describe('CycleSection', () => {
         return Response.json(ciclo())
       },
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     expect(screen.getByTestId('cycle-loading')).toBeInTheDocument()
 
     act(() => {
       window.dispatchEvent(new Event('focus'))
     })
     const erro = await screen.findByTestId('cycle-error')
-    expect(erro).toHaveTextContent('O servidor respondeu 503.')
+    expect(erro).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
 
     await act(async () => {
       resolverInicial(Response.json(ciclo()))
@@ -489,7 +497,7 @@ describe('CycleSection', () => {
       },
       'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
@@ -505,7 +513,7 @@ describe('CycleSection', () => {
 
   it('a linha da sequencia e uma regiao viva estavel (role="status") desde o primeiro render carregado', async () => {
     routeFetch({ 'GET /api/cycle': () => Response.json(ciclo()) })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     // O ATRIBUTO, e nao so `getByRole('status')`: o `<p>` nao tem role
     // implicita nenhuma, entao so o atributo prova que a regiao existe.
     expect(await screen.findByTestId('cycle-streak')).toHaveAttribute('role', 'status')
@@ -517,7 +525,7 @@ describe('CycleSection', () => {
       'POST /api/missions/31/complete': () =>
         Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
@@ -538,7 +546,7 @@ describe('CycleSection', () => {
       'POST /api/missions/30/complete': () =>
         Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-late-daily')
     fireEvent.click(within(secao).getByTestId('mission-complete'))
 
@@ -558,7 +566,7 @@ describe('CycleSection', () => {
       'POST /api/missions/38/complete': () =>
         Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     const secao = await screen.findByTestId('cycle-special')
     fireEvent.click(within(secao).getByTestId('mission-complete'))
 
@@ -590,7 +598,7 @@ describe('CycleSection', () => {
         ),
       'POST /api/missions/31/complete': () => Response.json(comRecompensa(diariaConcluida)),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
@@ -619,7 +627,7 @@ describe('CycleSection', () => {
       'GET /api/cycle': () =>
         Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especialConcluida })),
     })
-    render(<CycleSection />)
+    renderWithI18n(<CycleSection />)
 
     const secao = await screen.findByTestId('cycle-special')
     expect(within(secao).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -632,7 +640,7 @@ describe('CycleSection', () => {
         'GET /api/cycle': () =>
           Response.json(ciclo({ streak: 7, days_to_milestone: 7, special: especial })),
       })
-      render(<CycleSection />)
+      renderWithI18n(<CycleSection />)
       await screen.findByTestId('cycle-special')
       const cartoes = screen.getAllByTestId('mission-item')
       expect(cartoes).toHaveLength(2)
@@ -653,7 +661,7 @@ describe('CycleSection', () => {
         'GET /api/cycle': () => Response.json(ciclo()),
         'POST /api/missions/31/start': () => Response.json(iniciada),
       })
-      render(<CycleSection />)
+      renderWithI18n(<CycleSection />)
       const cartao = await screen.findByTestId('mission-item')
 
       fireEvent.click(within(cartao).getByTestId('mission-start'))
@@ -668,7 +676,7 @@ describe('CycleSection', () => {
         'POST /api/missions/31/start': () =>
           Response.json({ detail: 'x', code: 'missao_expirada' }, { status: 409 }),
       })
-      render(<CycleSection />)
+      renderWithI18n(<CycleSection />)
       const cartao = await screen.findByTestId('mission-item')
       fireEvent.click(within(cartao).getByTestId('mission-start'))
 
@@ -694,7 +702,7 @@ describe('CycleSection', () => {
       'GET /api/cycle': (_init, call) => (call === 1 ? Response.json(ciclo()) : pending),
     })
     const ref = createRef<CycleSectionHandle>()
-    const { rerender } = render(<CycleSection ref={ref} />)
+    const { rerender } = renderWithI18n(<CycleSection ref={ref} />)
     await screen.findByTestId('cycle-today')
     const initialHandle = ref.current
     const card = screen.getByTestId('mission-item')
@@ -749,7 +757,7 @@ async function montarFoco({
       <CycleSection ref={ref} />
     </>
   )
-  const view = render(strict ? <StrictMode>{content}</StrictMode> : content)
+  const view = renderWithI18n(content, { strict })
   const button = await screen.findByRole('button', {
     name: `Concluir a missão: ${diaria.instructions}`,
   })
@@ -879,7 +887,7 @@ describe('foco da diária durante refresh silencioso', () => {
   it('carga inicial não toma foco externo', async () => {
     const pending = respostaPendente()
     routeFetch({ 'GET /api/cycle': () => pending.promise })
-    render(
+    renderWithI18n(
       <>
         <button>Controle externo</button>
         <CycleSection />
@@ -988,7 +996,7 @@ describe('ciclo reconcilia chaves pelo GET autoritativo', () => {
       })
       const ref = createRef<CycleSectionHandle>()
       const content = <CycleSection ref={ref} />
-      render(strict ? <StrictMode>{content}</StrictMode> : content)
+      renderWithI18n(content, { strict })
       fireEvent.click(await screen.findByTestId('mission-complete'))
       await screen.findByTestId('mission-completion-error')
       expect(JSON.parse(requestsTo(fetchMock, route)[0].body as string)).toEqual({
@@ -1051,7 +1059,7 @@ describe('ciclo conserva chaves sem prova terminal atual', () => {
         'POST /api/missions/31/complete': () => Promise.reject(new TypeError('resposta perdida')),
       })
       const ref = createRef<CycleSectionHandle>()
-      render(<CycleSection ref={ref} />)
+      renderWithI18n(<CycleSection ref={ref} />)
       fireEvent.click(await screen.findByTestId('mission-complete'))
       await screen.findByTestId('mission-completion-error')
       await act(async () => ref.current!.refresh())
@@ -1083,7 +1091,7 @@ describe('ciclo conserva chaves sem prova terminal atual', () => {
     const ref = createRef<CycleSectionHandle>()
     // A chave posterior nasce so depois do efeito da leitura inicial assentar.
     await act(async () => {
-      render(<CycleSection ref={ref} />)
+      renderWithI18n(<CycleSection ref={ref} />)
     })
     expect(screen.getByTestId('cycle-today')).toBeInTheDocument()
     // Controle da fronteira publica: nao inicia POST para uma missao terminal.
@@ -1107,7 +1115,7 @@ describe('ciclo conserva chaves sem prova terminal atual', () => {
       'POST /api/missions/31/complete': () => Promise.reject(new TypeError('resposta perdida')),
     })
     const ref = createRef<CycleSectionHandle>()
-    render(<CycleSection ref={ref} />)
+    renderWithI18n(<CycleSection ref={ref} />)
     fireEvent.click(await screen.findByTestId('mission-complete'))
     await screen.findByTestId('mission-completion-error')
     act(() => ref.current!.refresh())
@@ -1133,7 +1141,7 @@ describe('ciclo conserva chaves sem prova terminal atual', () => {
       'POST /api/missions/31/complete': () => post,
     })
     const ref = createRef<CycleSectionHandle>()
-    render(<CycleSection ref={ref} />)
+    renderWithI18n(<CycleSection ref={ref} />)
     fireEvent.click(await screen.findByTestId('mission-complete'))
     await act(async () => ref.current!.refresh())
     expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -1162,7 +1170,7 @@ describe('limites da reconciliacao no ciclo', () => {
       'POST /api/missions/38/complete': () => Promise.reject(new TypeError('resposta perdida')),
     })
     const ref = createRef<CycleSectionHandle>()
-    render(<CycleSection ref={ref} />)
+    renderWithI18n(<CycleSection ref={ref} />)
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${especial.instructions}` }),
     )
@@ -1201,7 +1209,7 @@ describe('limites da reconciliacao no ciclo', () => {
       'POST /api/missions/31/complete': () => Promise.reject(new TypeError('resposta perdida')),
     })
     const ref = createRef<CycleSectionHandle>()
-    render(<CycleSection ref={ref} />)
+    renderWithI18n(<CycleSection ref={ref} />)
     fireEvent.click(await screen.findByTestId('mission-complete'))
     await screen.findByTestId('mission-completion-error')
     act(() => ref.current!.refresh())
@@ -1262,7 +1270,7 @@ describe('limites da reconciliacao no ciclo', () => {
       'POST /api/missions/38/complete': () => specialPost,
     })
     const ref = createRef<CycleSectionHandle>()
-    render(<CycleSection ref={ref} />)
+    renderWithI18n(<CycleSection ref={ref} />)
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
@@ -1318,7 +1326,7 @@ it('a leitura terminal da diária tardia libera sua chave, sem inventar recompen
     'POST /api/missions/30/complete': () => Promise.reject(new TypeError('resposta perdida')),
   })
   const ref = createRef<CycleSectionHandle>()
-  render(<CycleSection ref={ref} />)
+  renderWithI18n(<CycleSection ref={ref} />)
   const card = within(await screen.findByTestId('cycle-late-daily'))
   fireEvent.click(card.getByTestId('mission-complete'))
   await card.findByTestId('mission-completion-error')

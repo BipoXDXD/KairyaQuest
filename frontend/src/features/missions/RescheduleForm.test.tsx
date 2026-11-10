@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
+import { renderWithI18n } from '../../test/i18n'
 import type { RescheduleFailure } from './rescheduleFailure'
 import { RescheduleForm } from './RescheduleForm'
 
@@ -27,17 +28,19 @@ const missao: Mission = {
 }
 
 const falhaEdit: RescheduleFailure = {
-  message: 'O novo prazo precisa estar no futuro.',
-  recovery: 'edit',
+  message: 'missions.rescheduleFailure.deadlinePassed.message',
+  recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+  action: 'edit',
 }
 const falhaRetry: RescheduleFailure = {
-  message:
-    'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-  recovery: 'retry',
+  message: 'missions.rescheduleFailure.unconfirmed.message',
+  recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+  action: 'retry',
 }
 const falhaNovaChave: RescheduleFailure = {
-  message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-  recovery: 'retry-with-new-operation',
+  message: 'missions.failure.reusedOperation',
+  recovery: 'missions.failure.tryAgain',
+  action: 'retry-with-new-operation',
 }
 
 type Props = Parameters<typeof RescheduleForm>[0]
@@ -45,7 +48,7 @@ type Props = Parameters<typeof RescheduleForm>[0]
 function renderForm(props: Partial<Props> = {}) {
   const onSubmit = vi.fn()
   const all: Props = { mission: missao, disabled: false, failure: null, onSubmit, ...props }
-  const view = render(<RescheduleForm {...all} />)
+  const view = renderWithI18n(<RescheduleForm {...all} />)
   const rerender = (next: Partial<Props>) => {
     view.rerender(<RescheduleForm {...all} {...next} />)
   }
@@ -203,7 +206,9 @@ describe('RescheduleForm', () => {
 
     rerender({ failure: falhaRetry })
 
-    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(falhaRetry.message)
+    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(
+      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    )
     const aviso = screen.getByTestId('reschedule-retry-notice')
     expect(aviso).toHaveTextContent(
       'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.',

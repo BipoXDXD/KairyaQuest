@@ -440,6 +440,113 @@ Pendências:
   pares do teste, mas o axe sobre as telas reais ainda não rodou.
 - `listSources` ainda não tem consumidor; a 4.3 (lint de design) é a
   primeira. Foi conferido à mão nesta tarefa.
+
+# i18n: tutoria no catálogo pt-BR/en — 2026-11-10
+
+Tarefa 7 do plano de i18n (PR 6). Os textos fixos de `TutorConversation`,
+`TutorPanel`, `ProposalCard`, `RescheduleProposalCard`, `DecisionControls`,
+`answerOutcome` e `questionLimit` viraram chaves `tutoring.*` nos dois
+catálogos. Os textos PT são os de antes, sem reescrita; os EN seguem o padrão
+de erro [o que falhou]. [causa]. [o que fazer]. nas duas falhas de carga e nas
+notas de reenvio (12 a 18 palavras).
+
+Contrato: `QuestionLength.counter` passou de `string | null` para
+`Counter | null`, com `type Counter = { kind: 'remaining'; n } | { kind:
+'over'; n }` em `shared/types/counter.ts` (as missões também o usarão, e uma
+feature não importa da outra). O `TutorConversation` monta o texto com
+`plural(locale, n, …)` e as chaves `tutoring.counter.remaining.{zero,one,other}`
+e `tutoring.counter.over.{one,other}`; o `{max}` vem de `MAX_QUESTION_LENGTH`,
+cuja linha `export const` não mudou. Os asserts de `questionLimit.test.ts`
+passaram a afirmar o objeto (mudança de teste justificada pela troca de
+contrato, AGENTS.md §3, a registrar na descrição do PR); as frases PT do
+contador migraram para `TutorPanel.test.tsx` (P18b), inclusive o "Restam 0
+caracteres." que prova a forma `zero`. `announceAnswer` e `unansweredNote`
+devolvem `MessageKey`. O aviso de indisponível usa a chave
+`tutoring.messageFailure.providerNotConfigured.message`, que já tinha o mesmo
+texto.
+
+A regra `no-restricted-syntax` do ESLint passa a valer em
+`src/features/tutoring/**/*.tsx`, com caso em `tests/unit/no-literal-jsx.test.ts`.
+Cada arquivo de teste de componente da área ganhou casos em `en` que leem o
+esperado do catálogo `en`. O P7d (teto diário em inglês) passou a achar o
+campo pelo rótulo EN, que agora existe.
+
+Pendências:
+- `formatDeadline` (`shared/lib/deadline.ts`) ainda formata em `pt-BR` nos
+  dois idiomas; fica para quem migrar `shared/lib`.
+- Números interpolados (`{count}`, `{max}`, `{value}`, `{minutes}`) saem sem
+  `Intl.NumberFormat`; em `en` o contador mostra 4000, não 4,000.
+
+# i18n: shell, erros de API e módulos de falha no catálogo — 2026-11-10
+
+Tarefa 6 do plano de i18n (PR 5). `ApiError` ganha `kind` (`network`,
+`timeout`, `http`, `format`, `interrupted`), `retryAfterSeconds` e
+`receivedAt` (o instante em que o cliente recebeu o erro, lido antes do
+corpo). `parseRetryAfterSeconds` é a única leitura do `Retry-After` e aceita só
+inteiro decimal não negativo. O `message` do `ApiError` continua em PT, só para
+depuração. `shared/i18n/failureText.ts` traz `FailureText`, `apiErrorText` e
+`dailyLimitText`; `FailureMessage.tsx` renderiza `t(message) + ' ' +
+t(recovery)`.
+
+Os seis módulos `*Failure.ts` passaram a devolver chaves do catálogo: o antigo
+campo `recovery` (o enum que decide o botão) virou `action`, e `recovery` agora
+é a chave do texto "o que fazer". Os mapas são exportados para o teste conferir
+as chaves. O texto PT dos módulos de falha não mudou (cada texto foi cortado na
+fronteira da frase), salvo os recoveries novos, para conferência:
+reagendamento `prazo_expirado` ("Escolha uma data e um horário futuros."),
+`prazo_derivado` (passa a usar "Atualize para ver o estado atual.") e
+`provedor_nao_configurado` na avaliação e na tutoria ("Configure o provedor e
+tente de novo."). O teto diário da tutoria usa o `Retry-After`: com ele,
+"A Kairya volta à meia-noite." (EN: "Kairya is back at midnight (Brasília time).");
+sem ele, "Tente de novo amanhã.". Os rótulos de estado e de motivo em
+`shared/types/mission.ts` viraram `MessageKey`.
+
+Shell (`SideNav`, `areas.ts`) e o cabeçalho do `Headquarters` passam pelo
+`t()`. Fitness function: `no-restricted-syntax` em `eslint.config.js` contra
+literal com letra no JSX e em `aria-label`/`title`/`placeholder`/`alt`, só em
+`src/app/**` e `src/pages/Headquarters.tsx`. A prova está em
+`tests/unit/no-literal-jsx.test.ts`, inclusive o `\p{L}` com acento. Cada PR de
+área acrescenta a sua pasta ao `files`.
+
+`renderWithI18n` ganhou `strict`, que liga o StrictMode pela opção
+`reactStrictMode` do Testing Library. Um `<StrictMode>` dentro da árvore fica
+abaixo do `wrapper` do provider, e ali o React 19 não repete os efeitos da
+montagem. O teste do `Headquarters` que conta dois pedidos sob StrictMode
+reprovou assim, e os testes de StrictMode de `CycleSection`, `MissionList` e
+`TutorPanel` passaram a usar a opção.
+
+As cargas de tela (`useMissions`, `useCycle`, `useProgress`,
+`useCurrentPlan`) deixaram de exibir `ApiError.message`: o estado de erro
+carrega um `LoadFailure` (`loadFailureFor` em `failureText.ts`), que é o texto
+do catálogo pelo `kind` para o `ApiError` e a mensagem fixa da área ("Falha
+inesperada ao carregar …") para o defeito. `LoadFailureMessage.tsx` exibe os
+dois. Na tela, "O servidor respondeu 503." virou "O servidor não conseguiu
+atender o pedido. Tente de novo em instantes.". Nenhuma tela exibe mais o
+`message` do `ApiError`.
+
+Mensagens de erro em inglês: [o que falhou]. [causa]. [o que fazer]. em 12 a
+18 palavras, `message` e `recovery` somados. `errorTextLength.test.ts`
+enumera os textos pelas funções públicas de cada módulo de falha, com cada
+`code` e as falhas sem `code`. Cinco passavam de 18 palavras (os "Trying again
+is safe: …" viraram "Retrying is safe: …", e o da tutoria virou "your question
+won't repeat") e o `shell.locale.saveFailed` tinha 11 (ganhou "to the server").
+
+Pendências:
+- ~~`useMissions`, `useCycle`, `useProgress` e `useCurrentPlan` ainda exibem
+  `ApiError.message`.~~ Resolvida neste PR (`LoadFailure`, acima). O fallback
+  "Falha inesperada ao carregar …" continua literal e vira chave no PR de cada
+  área.
+- Os demais literais dos componentes que exibem falha migram no PR da área.
+- PR da área da tutoria: com `action: 'unavailable'`, o `TutorConversation`
+  mostra a constante literal `UNAVAILABLE_TEXT`, e o recovery
+  `tutoring.messageFailure.providerNotConfigured.recovery` nunca aparece. Trocar
+  por `<FailureMessage failure={PRE_STREAM_FAILURE_BY_CODE.provedor_nao_configurado} />`
+  ou por uma chave própria.
+- Tarefa 9: a fitness function só olha `JSXText` e `JSXAttribute > Literal`, e
+  deixa passar `<p>{'Olá'}</p>`, `aria-label={'Fechar'}` e template literal com
+  letra. Acrescentar seletores de `Literal` e `TemplateLiteral` dentro de
+  `JSXExpressionContainer`, cada um com caso em `no-literal-jsx.test.ts`.
+
 # i18n: catálogo tipado e seletor de idioma — 2026-11-10
 
 Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
@@ -535,6 +642,76 @@ Pendências:
 - O `make bootstrap` de `scripts/novo-worktree.sh` falhou no `uv sync
   --locked` por falta do Python 3.14.9 no PATH do `uv`. Foi contornado com
   `UV_PYTHON=3.14.10 uv sync --locked`.
+
+# Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
+
+**Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
+ser a API da Anthropic. `get_tutoria` monta `ProvedorAnthropic` com
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, `None` e tela de indisponível. O
+Groq saiu do código, dos testes e da documentação viva (`groq_provider.py`,
+os testes dele, `docs/GROQ.md` e o plano de 22/10); a seção "Groq Free"
+abaixo fica só como histórico. `tests/unit/test_sem_groq.py` impede a volta
+do nome em `src`, `tests`, `frontend/src`, `frontend/tests`, `docs` (exceto
+este arquivo), `scripts`, `.github`, `alembic`, `.env.example`,
+`README.md`, `AGENTS.md`, `Makefile`, `pyproject.toml`,
+`.pre-commit-config.yaml`, `compose*.yaml` e a configuração da raiz de
+`frontend/` (`package.json`, `vite.config.ts`, `playwright.config.ts`,
+`tsconfig*` e afins), pulando `node_modules`, binários, `.env` privados e os
+lockfiles (`uv.lock`, `package-lock.json`: espelham os manifestos, e os
+hashes de integridade dariam falso positivo). Nenhuma dependência nova.
+`FOCUSQUEST_GROQ_API_KEY` deixou de existir; com `extra="forbid"`, um `.env`
+que ainda a tenha impede a partida: retire a linha do `.env` local e da
+configuração do deploy.
+
+- Padrões: `tutor_model=claude-sonnet-5-5`, `tutor_fallback=true`,
+  `tutor_effort=low` (conversa), `evaluation_effort=medium` (avaliação). O
+  esforço vai em `output_config.effort`; nenhum pedido envia `temperature`,
+  `top_p`, `top_k` nem `budget_tokens`.
+- Cache do prefixo estático: `cache_control` ephemeral na última ferramenta e
+  no bloco da persona. O `Turno` separa `sistema` (persona) de `contexto`
+  (missões, progresso, hora); o contexto vai num bloco DEPOIS do ponto de
+  cache, e o histórico nas mensagens, ambos fora do prefixo. A avaliação não
+  usa cache.
+- Teto diário: `tutor_daily_turn_limit=60` turnos por dia de
+  America/Sao_Paulo. **Turno é chamada ao modelo** (uma resposta da Kairya),
+  não pergunta: o teto é guarda de orçamento, e o reenvio de uma pergunta
+  interrompida ou falhada também é pago. `turnos_de_hoje` conta as respostas
+  da tutora com `created_at` no dia de São Paulo, e a checagem roda antes de
+  criar QUALQUER resposta `gerando`, inclusive no reenvio. Só o reenvio de
+  pergunta já respondida (`JaRespondida`) sai sem chamar o modelo e sem
+  contar. Acima do teto: 429 `limite_diario_da_tutoria` com `Retry-After`
+  até a meia-noite; nada é gravado e o provedor não é chamado. A tela
+  desabilita o campo com "Você chegou ao limite de conversas de hoje. A
+  Kairya volta à meia-noite." (EN na Fase 3).
+- Contrato do 429: é o status de cota excedida (RFC 6585), que é o que o
+  teto é. `Retry-After` vai em segundos (a forma delta-seconds, sem depender
+  do relógio do cliente), calculados em UTC até a meia-noite de São Paulo,
+  arredondados para cima, e corretos também nos dias de 23 e 25 horas do
+  antigo horário de verão. O `code` é próprio porque a tela precisa
+  distinguir este 429 de uma falha: desabilita o campo e não oferece "Tentar
+  de novo", que só gastaria outra requisição. O membro novo do `CodigoDeErro`
+  tem handler (`_limite_diario` em `main.py`) e entra na lista "Erros antes
+  do stream" do `docs/ARCHITECTURE.md`.
+- O teto é guarda de orçamento, não invariante. Duas requisições simultâneas
+  poderiam passar 1 turno do teto; na implementação atual a trava `FOR
+  UPDATE` na linha do usuário serializa as duas, então isso não acontece
+  hoje. A frase vale como contrato: o teto não é invariante e pode deixar de
+  ser exato se a trava mudar.
+- Pendência 100 encerrada. Itens G e H da fila antiga cancelados (eram do
+  Groq).
+- Pendência nova 206: a tela de limite diário não destrava sozinha à
+  meia-noite; hoje basta recarregar. Fica para a Fase 3, que refaz essa tela.
+
+**Passos de deploy.** Antes do deploy, o responsável remove
+`FOCUSQUEST_GROQ_API_KEY` e ajusta `FOCUSQUEST_TUTOR_MODEL` no `.env` de
+produção e no Coolify. Com a variável antiga, a aplicação não sobe
+(`extra_forbidden`).
+Antes do deploy, o responsável também confere que
+`FOCUSQUEST_ANTHROPIC_API_KEY` existe no Coolify (sem expor o valor): sem
+ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
+`None`). As variáveis novas `FOCUSQUEST_TUTOR_EFFORT`,
+`FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
+`FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
 
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
@@ -988,7 +1165,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | **Encerrada em 2026-11-10** com a volta à Anthropic (ver topo). |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
@@ -998,6 +1175,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
 

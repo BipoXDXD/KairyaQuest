@@ -432,7 +432,7 @@ describe('useTutorConversation: envio', () => {
     })
     expect(result.current.messages[1]).toMatchObject({ status: 'falhou', content: 'Meio' })
     const failed = result.current.send
-    expect(failed).toMatchObject({ partial: 'Meio', failure: { recovery: 'retry' } })
+    expect(failed).toMatchObject({ partial: 'Meio', failure: { action: 'retry' } })
     expect(result.current.retryTarget).toEqual({
       clientMessageId: ID_1,
       content: 'Me explica recursão',
@@ -558,7 +558,7 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(result.current.send.status).toBe('failed')
     })
-    expect(result.current.send).toMatchObject({ failure: { recovery: 'unavailable' } })
+    expect(result.current.send).toMatchObject({ failure: { action: 'unavailable' } })
     expect(result.current.draft).toBe('Oi, Kairya')
     expect(result.current.retryTarget).toBeNull()
   })
@@ -651,7 +651,7 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(result.current.send.status).toBe('failed')
     })
-    expect(result.current.send).toMatchObject({ failure: { recovery: 'edit' } })
+    expect(result.current.send).toMatchObject({ failure: { action: 'edit' } })
     expect(result.current.retryTarget).toBeNull()
     expect(result.current.draft).toBe('Oi, Kairya')
   })

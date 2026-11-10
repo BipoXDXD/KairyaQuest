@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
-import { describeActionFailure, type ActionFailure, type ActionRecovery } from './actionFailure'
+import { describeActionFailure, type ActionFailure, type DecisionAction } from './actionFailure'
 import type { ActionErrorCode, ActionRead, ConfirmRead, RejectRead } from './types'
 import type { ActionKeys } from './useActionKeys'
 
@@ -15,7 +15,7 @@ export type DecisionState =
  * So `expired` e `invalidated` gravam (F17); nas outras a acao nao mudou.
  * Exaustivo: uma saida nova reprova o `tsc` ate dizer se grava.
  */
-const RECORDED_FAILURE: Record<ActionRecovery, ActionErrorCode | null> = {
+const RECORDED_FAILURE: Record<DecisionAction, ActionErrorCode | null> = {
   retry: null,
   'retry-with-new-operation': null,
   refresh: null,
@@ -76,10 +76,10 @@ export function useDecideAction(
       })
       .catch((error: unknown) => {
         const failure = describeActionFailure(error, 'confirm', action.kind)
-        if (failure.recovery !== 'retry') {
+        if (failure.action !== 'retry') {
           keys.release(action.id)
         }
-        const recorded = RECORDED_FAILURE[failure.recovery]
+        const recorded = RECORDED_FAILURE[failure.action]
         if (recorded !== null) {
           changed({ ...action, state: 'falhou', error_code: recorded })
         }

@@ -111,9 +111,9 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message:
-          'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
-        recovery: 'retry',
+        message: 'tutoring.actionFailure.unconfirmedCreate.message',
+        recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+        action: 'retry',
       },
       attempted: 'confirm',
     })
@@ -144,7 +144,7 @@ describe('useDecideAction', () => {
       expect(result.current.decision.state.status).toBe('failed')
     })
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'retry-with-new-operation' },
+      failure: { action: 'retry-with-new-operation' },
       attempted: 'confirm',
     })
 
@@ -175,7 +175,7 @@ describe('useDecideAction', () => {
     })
     expect(missionCreated).not.toHaveBeenCalled()
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'expired' },
+      failure: { action: 'expired' },
       attempted: 'confirm',
     })
     // Sem outra ida a rede: o 422 ja diz o que o servidor gravou.
@@ -196,7 +196,7 @@ describe('useDecideAction', () => {
       })
 
       expect(result.current.decision.state).toMatchObject({
-        failure: { recovery: 'refresh' },
+        failure: { action: 'refresh' },
         attempted: 'confirm',
       })
       expect(result.current.keys.operationIdFor(5)).toBe(K2)
@@ -237,8 +237,9 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
-        recovery: 'retry',
+        message: 'tutoring.actionFailure.unconfirmedReject.message',
+        recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
+        action: 'retry',
       },
       attempted: 'reject',
     })
@@ -300,7 +301,7 @@ describe('useDecideAction', () => {
     })
     expect(missionCreated).not.toHaveBeenCalled()
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'invalidated' },
+      failure: { action: 'invalidated' },
       attempted: 'confirm',
     })
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
@@ -329,7 +330,7 @@ describe('useDecideAction', () => {
     })
     expect(result.current.decision.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
       attempted: 'confirm',
     })
     expect(missionCreated).not.toHaveBeenCalled()
@@ -365,7 +366,7 @@ describe('useDecideAction', () => {
 
     expect(result.current.decision.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
       attempted: 'reject',
     })
     expect(changed).not.toHaveBeenCalled()
@@ -473,7 +474,7 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
       expect(result.current.decision.state).toMatchObject({
         status: 'failed',
         attempted: 'reject',
-        failure: { recovery: 'retry' },
+        failure: { action: 'retry' },
       })
       expect(changed).not.toHaveBeenCalled()
       act(() => {

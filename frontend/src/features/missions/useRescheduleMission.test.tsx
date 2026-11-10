@@ -14,6 +14,7 @@ import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission } from './useRescheduleMission'
 import { useStartMission } from './useStartMission'
+import type { FailureText } from '../../shared/i18n/failureText'
 
 const ROTA = 'POST /api/missions/7/reschedule'
 
@@ -154,8 +155,9 @@ describe('useRescheduleMission', () => {
         expect(result.current.state).toEqual({
           status: 'failed',
           failure: {
-            message: 'O novo prazo é igual ao atual. Escolha outro horário.',
-            recovery: 'edit',
+            message: 'missions.rescheduleFailure.unchanged.message',
+            recovery: 'missions.rescheduleFailure.unchanged.recovery',
+            action: 'edit',
           },
         })
       })
@@ -208,7 +210,7 @@ describe('useRescheduleMission', () => {
     await waitFor(() => {
       expect(result.current.state).toMatchObject({
         status: 'failed',
-        failure: { recovery: 'retry' },
+        failure: { action: 'retry' },
       })
     })
     act(() => {
@@ -217,7 +219,7 @@ describe('useRescheduleMission', () => {
     await waitFor(() => {
       expect(result.current.state).toMatchObject({
         status: 'failed',
-        failure: { recovery: 'edit' },
+        failure: { action: 'edit' },
       })
     })
     expect(requestsTo(fetchMock, ROTA).map(jsonBody)).toEqual([
@@ -317,28 +319,37 @@ describe('useRescheduleMission', () => {
     expect(sentKeys(fetchMock)).toEqual([K1, K1])
   })
 
-  it.each<[string, RescheduleDraft, Route, string]>([
+  it.each<[string, RescheduleDraft, Route, FailureText]>([
     [
       'prazo_expirado',
       RASCUNHO,
       comCode('prazo_expirado', 422),
-      'O novo prazo precisa estar no futuro.',
+      {
+        message: 'missions.rescheduleFailure.deadlinePassed.message',
+        recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+      },
     ],
     [
       'prazo_inalterado',
       RASCUNHO,
       comCode('prazo_inalterado', 409),
-      'O novo prazo é igual ao atual. Escolha outro horário.',
+      {
+        message: 'missions.rescheduleFailure.unchanged.message',
+        recovery: 'missions.rescheduleFailure.unchanged.recovery',
+      },
     ],
     [
       'um 422 sem code',
       RASCUNHO,
       () => Response.json({ detail: [] }, { status: 422 }),
-      'O novo prazo não foi aceito. Revise a data e o motivo.',
+      {
+        message: 'missions.rescheduleFailure.notAccepted.message',
+        recovery: 'missions.rescheduleFailure.notAccepted.recovery',
+      },
     ],
   ])(
     'depois de %s (edit), a falha chega traduzida e a chave sai',
-    async (_caso, rascunho, rota, mensagem) => {
+    async (_caso, rascunho, rota, texto) => {
       const fetchMock = routeFetch({
         [ROTA]: (init, call) => (call === 1 ? rota(init, call) : semResposta(init, call)),
       })
@@ -350,7 +361,7 @@ describe('useRescheduleMission', () => {
       await waitFor(() => {
         expect(result.current.state).toEqual({
           status: 'failed',
-          failure: { message: mensagem, recovery: 'edit' },
+          failure: { ...texto, action: 'edit' },
         })
       })
       act(() => {
@@ -548,7 +559,7 @@ describe('useRescheduleMission', () => {
 
     expect(result.current.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
     })
   })
 

@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, type ReactElement, type Ref } from 'rea
 import { MissionCard } from './MissionCard'
 import { useCompletionRegistry, type CompletionRegistry } from './useCompletionRegistry'
 import { useMissions, type MissionsState } from './useMissions'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 
 /** O que a regiao viva do quadro anuncia durante essa espera. */
 const RELOAD_WAITING_ANNOUNCEMENT = 'Aguardando o pedido em andamento para atualizar o quadro.'
@@ -53,7 +54,9 @@ function MissionsContent({
           className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
         >
           <p className="font-semibold">Falha ao carregar as missões.</p>
-          <p className="mt-1">{state.message}</p>
+          <p className="mt-1">
+            <LoadFailureMessage failure={state.failure} />
+          </p>
           <button
             type="button"
             data-testid="missions-retry"

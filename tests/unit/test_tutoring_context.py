@@ -69,17 +69,18 @@ def test_o_sistema_traz_persona_agora_e_missoes_pendentes() -> None:
         progresso=SEM_PROGRESSO,
         historico=[],
     )
-    assert turno.sistema.startswith("PERSONA")
-    assert "2026-09-19T12:00:00+00:00" in turno.sistema
-    assert "#7" in turno.sistema
-    assert "Ler o capitulo 3" in turno.sistema
+    # A persona e o prefixo estatico; o contexto do turno fica separado dela.
+    assert turno.sistema == "PERSONA"
+    assert "2026-09-19T12:00:00+00:00" in turno.contexto
+    assert "#7" in turno.contexto
+    assert "Ler o capitulo 3" in turno.contexto
 
 
 def test_sem_missoes_pendentes_o_sistema_diz_nenhuma() -> None:
     turno = montar_turno(
         persona="P", agora=AGORA, pendentes=[], progresso=SEM_PROGRESSO, historico=[]
     )
-    assert "nenhuma" in turno.sistema
+    assert "nenhuma" in turno.contexto
 
 
 def test_papeis_viram_user_e_assistant() -> None:
@@ -210,7 +211,7 @@ def test_o_contexto_traz_a_linha_de_progresso() -> None:
     assert (
         "Progresso do estudante: nível 5, 1.340 XP; "
         "conquistas: Primeiros passos, Veterano I."
-    ) in turno.sistema
+    ) in turno.contexto
 
 
 def test_sem_conquistas_diz_nenhuma_conquista_ainda() -> None:
@@ -219,7 +220,7 @@ def test_sem_conquistas_diz_nenhuma_conquista_ainda() -> None:
     )
     assert (
         "Progresso do estudante: nível 1, 0 XP; nenhuma conquista ainda."
-        in turno.sistema
+        in turno.contexto
     )
 
 
@@ -247,7 +248,7 @@ def _linha_da_missao(missao: Mission) -> str:
         progresso=SEM_PROGRESSO,
         historico=[],
     )
-    (linha,) = [x for x in turno.sistema.splitlines() if x.startswith("- #7")]
+    (linha,) = [x for x in turno.contexto.splitlines() if x.startswith("- #7")]
     return linha
 
 
@@ -389,7 +390,7 @@ def _sistema_com(tardias: Sequence[MissaoLida]) -> str:
         progresso=SEM_PROGRESSO,
         historico=[],
         tardias=tardias,
-    ).sistema
+    ).contexto
 
 
 def test_a_diaria_de_ontem_iniciada_a_tempo_entra_como_tardia() -> None:

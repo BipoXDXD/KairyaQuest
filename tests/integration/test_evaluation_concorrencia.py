@@ -186,6 +186,8 @@ def test_dois_pedidos_juntos_um_avalia_e_o_outro_recebe_409(
             max_tokens=256,
             timeout_segundos=SEGUNDOS_LIMITE,
             fallback=True,
+            esforco="low",
+            esforco_da_avaliacao="medium",
         ),
     )
     barreira = threading.Barrier(2, timeout=SEGUNDOS_LIMITE)
@@ -586,6 +588,7 @@ def test_avaliacao_aguarda_escrita_com_missao_retida_e_usuario_livre(
     paciente = Tutoria(
         provedor=ProvedorDaOrdem(),
         historico=20,
+        turnos_por_dia=60,
         limite=timedelta(seconds=60),
         modelo=modelo,
     )

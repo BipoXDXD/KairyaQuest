@@ -182,8 +182,9 @@ describe('useCompleteMission', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-          recovery: 'retry-with-new-operation',
+          message: 'missions.failure.reusedOperation',
+          recovery: 'missions.failure.tryAgain',
+          action: 'retry-with-new-operation',
         },
       })
     })
@@ -262,8 +263,9 @@ describe('useCompleteMission', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'Esta missão já estava concluída. Atualize o quadro para ver o estado atual.',
-          recovery: 'refresh',
+          message: 'missions.completionFailure.alreadyCompleted.message',
+          recovery: 'missions.completionFailure.alreadyCompleted.recovery',
+          action: 'refresh',
         },
       })
     })
@@ -562,8 +564,9 @@ describe('useCompleteMission', () => {
         expect(result.current.state).toEqual({
           status: 'failed',
           failure: {
-            message: 'A evidência não foi aceita. Revise o texto e o link.',
-            recovery: 'retry-with-new-operation',
+            message: 'missions.completionFailure.evidenceRejected.message',
+            recovery: 'missions.completionFailure.evidenceRejected.recovery',
+            action: 'retry-with-new-operation',
           },
         })
       })
