@@ -1180,3 +1180,49 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
