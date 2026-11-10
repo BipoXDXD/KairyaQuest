@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { RescheduleErrorCode } from './types'
 
 /**
@@ -56,11 +57,15 @@ const FAILURE_BY_CODE: Record<RescheduleErrorCode, RescheduleFailure> = {
   },
 }
 
-/** A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo. */
-const UNCONFIRMED: RescheduleFailure = {
-  message:
-    'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-  recovery: 'retry',
+/**
+ * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
+ * novo. A abertura diz a causa quando ela e de transporte (`leadFor`).
+ */
+const UNCONFIRMED_LEAD = 'Não foi possível confirmar o reagendamento.'
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: o prazo não mudará duas vezes.'
+
+function unconfirmed(error: unknown): RescheduleFailure {
+  return { message: `${leadFor(error, UNCONFIRMED_LEAD)} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }
 
 /**
@@ -95,5 +100,5 @@ export function describeRescheduleFailure(error: unknown): RescheduleFailure {
   if (error instanceof ApiError && error.status === 422) {
     return NOT_ACCEPTED
   }
-  return UNCONFIRMED
+  return unconfirmed(error)
 }

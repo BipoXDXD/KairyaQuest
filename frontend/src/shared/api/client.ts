@@ -77,6 +77,19 @@ export class ApiError extends Error {
 }
 
 /**
+ * O prazo do `postJson` acabou antes da resposta: o resultado e DESCONHECIDO --
+ * o servidor pode ter gravado. O tipo proprio e o que deixa a tela dizer
+ * "demorou" sem ler a `message`; `status` e `code` seguem nulos, como na rede
+ * fora, porque nenhuma resposta foi aproveitada.
+ */
+export class ApiTimeoutError extends ApiError {
+  constructor(options?: ErrorOptions) {
+    super('O servidor demorou demais para responder.', null, null, options)
+    this.name = 'ApiTimeoutError'
+  }
+}
+
+/**
  * Le o `code` do corpo de erro da API, ou `null` quando ele nao existe.
  *
  * Nem todo corpo de erro tem `code`: o 422 do FastAPI manda so a lista de erros
@@ -149,8 +162,9 @@ export const MUTATION_TIMEOUT_MS = 20_000
 /** As opcoes do `postJson`. */
 export interface PostOptions {
   /**
-   * Aborta o pedido depois desse tempo, e a falha sai como a de rede fora --
-   * `ApiError` sem status e sem `code`. Sem a opcao, o pedido nao tem prazo.
+   * Aborta o pedido depois desse tempo, e a falha sai como `ApiTimeoutError`
+   * -- sem status e sem `code`, salvo quando o status ja tinha chegado (ver
+   * `postJson`). Sem a opcao, o pedido nao tem prazo.
    */
   timeoutMs?: number
 }
@@ -165,10 +179,13 @@ export interface PostOptions {
  *
  * O unico aborto que existe e o do PRAZO (`timeoutMs`), e ele segue o mesmo
  * raciocinio: ao fim do prazo o resultado e DESCONHECIDO -- o servidor pode ter
- * gravado --, e por isso a falha sai igual a de rede fora (`status` e `code`
- * nulos), que as telas ja tratam como "repita com a mesma chave". O prazo cobre
- * tambem a leitura do corpo: uma resposta que comecou e nao termina prende o
- * botao do mesmo jeito.
+ * gravado --, e por isso a falha sai como `ApiTimeoutError` (`status` e `code`
+ * nulos), que as telas tratam como "repita com a mesma chave". O prazo cobre
+ * cabecalhos E corpo: uma resposta que comecou e nao termina prende o botao do
+ * mesmo jeito, e um 200 cujo corpo nao chegou tambem e resultado desconhecido.
+ * Um status de ERRO que ja chegou, porem, e fato e nao e apagado: a falha sai
+ * como `ApiError` com esse status, e o `code` sai nulo se o corpo de erro nao
+ * chegou no prazo.
  *
  * `setTimeout` com `AbortController`, e nao `AbortSignal.timeout`: o timer do
  * segundo e interno ao navegador, e os testes com timers falsos nao o alcancam.
@@ -195,13 +212,18 @@ export async function postJson<T>(
   try {
     return await send<T>(path, { ...init, signal: controller.signal })
   } catch (cause) {
-    if (controller.signal.aborted) {
-      throw new ApiError('O servidor demorou demais para responder.', null, null, { cause })
+    if (controller.signal.aborted && !hasResponseStatus(cause)) {
+      throw new ApiTimeoutError({ cause })
     }
     throw cause
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Se a falha ja traz o status de uma resposta que chegou. */
+function hasResponseStatus(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status !== null
 }
 
 /** Um evento do stream SSE, com o `data` ja desserializado. */

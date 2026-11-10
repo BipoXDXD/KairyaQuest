@@ -1,3 +1,58 @@
+# Prazo que preserva o status e texto que separa demora de rede — 2026-11-10
+
+Pendência 193. Revisão-base: `d65a97d`. Objetivo: depois que o status de
+uma resposta chegou, o prazo do `postJson` não o apaga mais; e a tela diz
+coisas diferentes para "a resposta demorou" e "não conectou".
+
+Decisões:
+
+- **Prazo único sobre cabeçalhos e corpo, status nunca descartado (desenho
+  B).** O timer continua até o fim do corpo; no `catch`, um `ApiError` que já
+  tem `status` sobe intacto (`hasResponseStatus`). Um corpo de erro que não
+  chega no prazo sai como `ApiError(status, code nulo)` e cai no texto
+  genérico, com reenvio seguro. Um 200 cujo corpo não chega continua sendo
+  resultado desconhecido. A alternativa A (prazo só até os cabeçalhos)
+  preservaria o `code` a qualquer hora, mas deixaria sem prazo o corpo que
+  não termina, e o botão voltaria a ficar preso.
+- **`ApiTimeoutError extends ApiError`**, com `status` e `code` nulos e
+  `name = 'ApiTimeoutError'`: o tipo é o que deixa a tela dizer "demorou" sem
+  ler a `message`.
+- **Três aberturas (N1).** `shared/api/transportFailure.ts` classifica a
+  falha (`transportFailureOf`: `ApiTimeoutError` → `timeout`; `ApiError`
+  sem status → `network`; resto → `null`) e `leadFor` dá a abertura. Textos
+  da revisão de ux-writing: timeout "A resposta demorou mais que o
+  esperado." e rede "Não foi possível conectar." (sem "servidor", que é
+  jargão, e sem atribuir a culpa à rede da pessoa). 5xx e `code`
+  desconhecido mantêm a abertura própria de cada tela. Um erro que não é
+  `ApiError` (um `TypeError` de `JSON.parse`) não ganha frase de rede.
+- **Os cinco tradutores trocam só a abertura** (início, reagendamento,
+  conclusão, avaliação, decisão da proposta). O fim "Tentar de novo é seguro:
+  …" fica igual em todos; as cinco traduções terminam com esse passo de
+  recuperação. `describeEvaluationErrorCode` (código gravado, após recarga)
+  não muda. `postStream` e `requestJson` ficam fora: o `open` continua
+  gerando `ApiError(null)` para rede, e as telas de GET mostram essa
+  `message` crua.
+
+Alterações: `frontend/src/shared/api/client.ts` (classe, `catch` e docs do
+`postJson` e de `PostOptions`), `transportFailure.ts` novo, os cinco
+tradutores, seus testes de unidade e as 10 asserções de componente
+disparadas por `TypeError('Failed to fetch')` (`MissionList`,
+`ProposalCard`, `RescheduleProposalCard`, `useDecideAction`), que passam a
+esperar o texto de rede. Nenhuma reprovação de outra origem apareceu.
+O E2E do QG (`toContainText('Tentar de novo é seguro')` depois de
+`route.abort()`) continua válido porque o fim do texto não mudou.
+
+Verificação (nesta sessão): `client.test.ts` vermelho antes da correção nos
+4 casos novos/alterados; sabotagem temporária do `hasResponseStatus`
+(revertida) reprova só "um erro cujo corpo nao chega no prazo mantem o
+status, com code nulo". Os testes de unidade dos tradutores reprovaram só
+nos 14 casos novos de rede e prazo antes da implementação.
+`make check` completo: EXIT 0, com o `check-web` em 1070 testes e
+`Coverage summary` 100% em Statements, Branches, Functions e Lines, o
+`check-api` em 1669 testes e 100%, e o `check-e2e` em 66 passed.
+
+Limitação nova: pendência 211.
+
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -889,7 +944,8 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
 | 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
-| 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
+| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: a tela cai no texto genérico, com reenvio seguro. A distinção demora/rede e o status apagado pelo timer foram resolvidos em 2026-11-10 (seção "Prazo que preserva o status e texto que separa demora de rede"). |
+| 211 | Textos de falha de transporte (`leadFor`) trocam a abertura "Não foi possível <ação>." pela causa, então não nomeiam a ação que falhou, e o de recusar por rede ("Não foi possível conectar. Tentar de novo é seguro.") tem 9 palavras, abaixo da faixa 12–18 da revisão de ux-writing. Rever junto do fim "Tentar de novo é seguro: …", que o E2E do QG verifica. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
 

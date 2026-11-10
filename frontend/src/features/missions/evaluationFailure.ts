@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { EvaluationErrorCode } from './types'
 
 /**
@@ -56,11 +57,15 @@ const FAILURE_BY_CODE: Record<EvaluationErrorCode, EvaluationFailure> = {
   },
 }
 
-/** Rede fora, 5xx, `code` de um backend mais novo: repetir e seguro. */
-const GENERIC: EvaluationFailure = {
-  message:
-    'Não foi possível pedir a avaliação. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
-  recovery: 'retry',
+/**
+ * Rede fora, prazo, 5xx, `code` de um backend mais novo: repetir e seguro. A
+ * abertura recebida diz a causa quando ela e conhecida.
+ */
+const GENERIC_LEAD = 'Não foi possível pedir a avaliação.'
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.'
+
+function generic(lead: string): EvaluationFailure {
+  return { message: `${lead} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }
 
 /**
@@ -78,7 +83,8 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  * pessoa ter visto a falha ao vivo ou depois.
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
-  return knownFailure(code) ?? GENERIC
+  // O `code` gravado nao carrega falha de transporte: a abertura e a generica.
+  return knownFailure(code) ?? generic(GENERIC_LEAD)
 }
 
 /** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
@@ -89,7 +95,7 @@ function knownFailure(code: string | null): EvaluationFailure | null {
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
-    return GENERIC
+    return generic(GENERIC_LEAD)
   }
   const known = knownFailure(error.code)
   if (known !== null) {
@@ -104,5 +110,5 @@ export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if ((error.status === 404 && error.code === null) || error.status === 422) {
     return FAILURE_BY_CODE.missao_nao_encontrada
   }
-  return GENERIC
+  return generic(leadFor(error, GENERIC_LEAD))
 }
