@@ -28,6 +28,18 @@ describe('describeActionFailure', () => {
       'expired',
       'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
     ],
+    [
+      'estimativa_fora_do_limite',
+      422,
+      'out-of-bounds',
+      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
+    ],
+    [
+      'prazo_fora_do_limite',
+      422,
+      'out-of-bounds',
+      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
+    ],
   ])('traduz %s', (code, status, recovery, message) => {
     for (const attempted of ['confirm', 'reject'] as const) {
       for (const kind of ['create_mission', 'reschedule_mission'] as const) {
@@ -117,6 +129,14 @@ describe('failedActionText', () => {
     [
       'reagendamento_invalido',
       'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
+    ],
+    [
+      'estimativa_fora_do_limite',
+      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
+    ],
+    [
+      'prazo_fora_do_limite',
+      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
     ],
     ['proposta_invalida', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
     // Um code que existe no mapa mas nao e gravado na acao cai no generico.

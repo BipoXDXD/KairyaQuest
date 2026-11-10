@@ -1678,7 +1678,9 @@ Arquivos adicionais da estabilização, além da árvore histórica da seção 1
 src/focusquest/core/validation.py
 tests/unit/test_textos_persistiveis.py
 tests/integration/test_cycle_consistency.py
+tests/integration/test_migracoes_offline.py
 tests/integration/test_mission_operations_schema_parity.py
+tests/integration/test_paridade_geral_do_esquema.py
 tests/integration/test_progression_consistency.py
 tests/integration/test_progression_schema_parity.py
 tests/integration/test_request_validation.py
@@ -1694,8 +1696,10 @@ frontend/tests/e2e/tutor-focus.spec.ts
 
 Os testes de paridade de `xp_entries` comparam FKs, UNIQUE e índices ao modelo
 atual, incluindo unicidade por `(mission_id, source)` do E; os de
-`mission_operations` comparam FKs e UNIQUE nomeadas. Isso amplia a comparação,
-sem afirmar paridade geral de todo o esquema. O caso explícito
+`mission_operations` comparam FKs e UNIQUE nomeadas. A paridade geral fica em
+`test_paridade_geral_do_esquema.py` (autogenerate + nomes dos CHECKs); os
+testes delimitados continuam fixando nomes de UNIQUE e a ausência de predicado
+em `ix_xp_entries_user_id_id`. O caso explícito
 `test_ida_e_volta_0004_populada_preserva_legado_e_reconstroi_progressao` exige
 legado/XP/conquistas não vazios, preserva o legado em 0003↔head e compara a
 progressão reconstruída, excluindo missões pendentes (83 já resolvida na base).
