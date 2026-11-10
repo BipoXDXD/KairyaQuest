@@ -1,3 +1,4 @@
+import { useT } from '../../shared/i18n/useT'
 import type { Reward } from '../../shared/types/reward'
 
 /**
@@ -10,22 +11,25 @@ import type { Reward } from '../../shared/types/reward'
  * desenho, com "de bonus" junto do XP para nao parecer uma segunda conclusao.
  */
 export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; bonus?: boolean }) {
+  const t = useT()
   return (
     <div
       data-testid="reward"
       className="mt-2 text-sm text-emerald-200 motion-safe:animate-[reward-in_400ms_ease-out]"
     >
       <p data-testid="reward-xp" className="font-semibold">
-        +{reward.xp_awarded} XP{bonus && ' de bônus'}
+        {t(bonus ? 'missions.reward.bonusXp' : 'missions.reward.xp', { xp: reward.xp_awarded })}
       </p>
       {reward.level_after > reward.level_before && (
-        <p data-testid="reward-level-up">Subiu para o nível {reward.level_after}!</p>
+        <p data-testid="reward-level-up">
+          {t('missions.reward.levelUp', { level: reward.level_after })}
+        </p>
       )}
       {reward.achievements_unlocked.length > 0 && (
         <ul role="list">
           {reward.achievements_unlocked.map((a) => (
             <li key={a.code} data-testid="reward-achievement">
-              Conquista: {a.title}
+              {t('missions.reward.achievement', { title: a.title })}
             </li>
           ))}
         </ul>

@@ -1,3 +1,4 @@
+import type { Counter } from '../../shared/types/counter'
 import type { EvidenceDraft } from './types'
 
 /**
@@ -60,16 +61,19 @@ export function stripEnds(value: string): string {
   return value.slice(start, end)
 }
 
-const LINK_FORMAT_ERROR = 'O link precisa começar com http:// ou https:// e não ter espaços.'
-const LINK_LENGTH_ERROR = `O link passa de ${String(MAX_LINK_LENGTH)} caracteres.`
+/**
+ * Por que o link nao vale: formato fora de `^https?://\S+$` ou acima de
+ * `MAX_LINK_LENGTH`. O texto de cada motivo mora no catalogo de i18n.
+ */
+export type LinkError = 'format' | 'tooLong'
 
 export interface EvidenceDescription {
   /** Texto nao vazio e dentro do limite, e link (se houver) valido. */
   sendable: boolean
-  /** O texto do contador, ou `null` longe do limite. */
-  counter: string | null
+  /** O contador perto do limite, ou `null` longe dele. */
+  counter: Counter | null
   /** O motivo de o link nao valer, ou `null` (link vazio tambem e `null`). */
-  linkError: string | null
+  linkError: LinkError | null
   /** O que vai no POST (sem espacos nas pontas; sem `link` se vazio), ou `null`. */
   body: { text: string; link?: string } | null
 }
@@ -90,26 +94,22 @@ export function describeEvidence(draft: Readonly<EvidenceDraft>): EvidenceDescri
   const sendable = length > 0 && remaining >= 0 && linkError === null
   return {
     sendable,
-    counter: length < COUNTER_VISIBLE_FROM ? null : counterText(remaining),
+    counter: length < COUNTER_VISIBLE_FROM ? null : counterFor(remaining),
     linkError,
     body: sendable ? (link === '' ? { text } : { text, link }) : null,
   }
 }
 
-function describeLinkError(link: string): string | null {
+function describeLinkError(link: string): LinkError | null {
   if (link === '') {
     return null
   }
   if (Array.from(link).length > MAX_LINK_LENGTH) {
-    return LINK_LENGTH_ERROR
+    return 'tooLong'
   }
-  return LINK_PATTERN.test(link) ? null : LINK_FORMAT_ERROR
+  return LINK_PATTERN.test(link) ? null : 'format'
 }
 
-function counterText(remaining: number): string {
-  if (remaining < 0) {
-    const over = -remaining
-    return `Passou ${String(over)} ${over === 1 ? 'caractere' : 'caracteres'} do limite de ${String(MAX_EVIDENCE_LENGTH)}.`
-  }
-  return remaining === 1 ? 'Resta 1 caractere.' : `Restam ${String(remaining)} caracteres.`
+function counterFor(remaining: number): Counter {
+  return remaining < 0 ? { kind: 'over', n: -remaining } : { kind: 'remaining', n: remaining }
 }

@@ -44,21 +44,18 @@ describe('nenhum texto literal no JSX do shell', () => {
     expect(await literalViolations(component('<p>Olá</p>'), 'src/pages/Headquarters.tsx')).toBe(1)
   })
 
-  it('vale para a tutoria', async () => {
-    expect(await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.tsx')).toBe(
-      1,
-    )
-  })
-
-  it('nao vale para o teste da tutoria', async () => {
-    expect(
-      await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.test.tsx'),
-    ).toBe(0)
+  it.each([
+    ['a tutoria', 'src/features/tutoring/Fake.tsx'],
+    ['as missoes', 'src/features/missions/Fake.tsx'],
+  ])('vale para %s, ja migrada', async (_caso, filePath) => {
+    expect(await literalViolations(component('<p>Olá</p>'), filePath)).toBe(1)
   })
 
   it.each([
-    ['feature ainda nao migrada', 'src/features/missions/Fake.tsx'],
+    ['feature ainda nao migrada', 'src/features/progression/Fake.tsx'],
     ['teste do shell', 'src/app/Fake.test.tsx'],
+    ['teste das missoes', 'src/features/missions/Fake.test.tsx'],
+    ['teste da tutoria', 'src/features/tutoring/Fake.test.tsx'],
     ['o proprio i18n', 'src/shared/i18n/Fake.tsx'],
   ])('fora do escopo: %s', async (_caso, filePath) => {
     expect(await literalViolations(component('<p>Olá</p>'), filePath)).toBe(0)

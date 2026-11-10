@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { en } from '../../shared/i18n/messages/en'
 import type { EvaluationSummary, Mission } from '../../shared/types/mission'
 import type { Reward } from '../../shared/types/reward'
 import { EvaluationPanel } from './EvaluationPanel'
@@ -347,7 +348,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
       <EvaluationPanel
         mission={comEvidencia}
         onReload={onReload}
-        reloadLabel="Atualizar o quadro"
+        reloadLabel="missions.reload.board"
       />,
     )
 
@@ -372,7 +373,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
       <EvaluationPanel
         mission={comEvidencia}
         onReload={onReload}
-        reloadLabel="Atualizar o quadro"
+        reloadLabel="missions.reload.board"
         reloadWaiting
       />,
     )
@@ -576,5 +577,123 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
       expect(screen.getByTestId('evaluation-verdict')).toHaveTextContent('Critério não atendido')
     })
     expect(screen.queryByTestId('evaluation-error')).not.toBeInTheDocument()
+  })
+})
+
+describe('EvaluationPanel -- em en', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('autodeclarada: o selo sai do catalogo ingles', () => {
+    routeFetch({})
+    renderWithI18n(<EvaluationPanel mission={concluida} />, { locale: 'en' })
+
+    expect(screen.getByTestId('evaluation-verification')).toHaveTextContent(
+      en['missions.evaluation.verification.selfDeclared'],
+    )
+  })
+
+  it('avaliacao gravada: selo, veredito, rotulo do modelo, link e bonus em ingles', () => {
+    routeFetch({})
+    renderWithI18n(<EvaluationPanel mission={{ ...comEvidencia, evaluation: avaliacao() }} />, {
+      locale: 'en',
+    })
+
+    expect(screen.getByTestId('evaluation-verification')).toHaveTextContent(
+      en['missions.evaluation.verification.withEvidence'],
+    )
+    expect(screen.getByTestId('evaluation-verdict')).toHaveTextContent(
+      en['missions.evaluation.verdict.meets'],
+    )
+    expect(screen.getByTestId('evaluation-label')).toHaveTextContent(
+      en['missions.evaluation.modelLabel'],
+    )
+    expect(screen.getByTestId('evaluation-evidence-link')).toHaveTextContent(
+      `Link: ${comEvidencia.evidence?.link ?? ''} (opens in a new tab)`,
+    )
+    expect(screen.getByTestId('evaluation-bonus-credited')).toHaveTextContent(
+      en['missions.evaluation.bonusCredited'],
+    )
+  })
+
+  it.each([
+    ['parcial', 'missions.evaluation.verdict.partial'],
+    ['nao_atende', 'missions.evaluation.verdict.notMet'],
+  ] as const)('o veredito %s sai em ingles', (verdict, chave) => {
+    routeFetch({})
+    renderWithI18n(
+      <EvaluationPanel mission={{ ...comEvidencia, evaluation: avaliacao({ verdict }) }} />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('evaluation-verdict')).toHaveTextContent(en[chave])
+  })
+
+  it('em andamento: o aviso e o botao de pedir em ingles', () => {
+    routeFetch({})
+    renderWithI18n(
+      <EvaluationPanel
+        mission={{ ...comEvidencia, evaluation: avaliacao({ state: 'avaliando' }) }}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('evaluation-in-progress')).toHaveTextContent(
+      en['missions.evaluation.inProgress'],
+    )
+    expect(
+      screen.getByRole('button', { name: en['missions.evaluation.request'] }),
+    ).toBeInTheDocument()
+  })
+
+  it('pedir: o anuncio de espera, o "Try again" da falha e o anuncio do veredito em ingles', async () => {
+    let release: (r: Response) => void = () => undefined
+    routeFetch({
+      [KEY]: (_init, call) =>
+        call === 1
+          ? Response.json({ detail: 'x', code: 'provedor_indisponivel' }, { status: 502 })
+          : new Promise<Response>((resolve) => {
+              release = resolve
+            }),
+    })
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />, { locale: 'en' })
+
+    fireEvent.click(screen.getByRole('button', { name: en['missions.evaluation.request'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['missions.action.retry'] }))
+
+    expect(screen.getByTestId('evaluation-status-text')).toHaveTextContent(
+      en['missions.evaluation.requesting'],
+    )
+    await act(async () => {
+      release(Response.json({ evaluation: avaliacao(), reward: null }))
+      await Promise.resolve()
+    })
+    expect(await screen.findByTestId('evaluation-verdict')).toBeInTheDocument()
+    expect(screen.getByTestId('evaluation-status-text')).toHaveTextContent(
+      'Evaluation complete: Criterion met.',
+    )
+  })
+
+  it('falha refresh: o botao de recarga diz o rotulo e a missao em ingles', async () => {
+    routeFetch({
+      [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
+    })
+    renderWithI18n(
+      <EvaluationPanel
+        mission={comEvidencia}
+        onReload={vi.fn()}
+        reloadLabel="missions.reload.board"
+      />,
+      { locale: 'en' },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: en['missions.evaluation.request'] }))
+
+    expect(
+      await screen.findByRole('button', {
+        name: `Refresh the board (mission: ${comEvidencia.instructions})`,
+      }),
+    ).toBeInTheDocument()
   })
 })
