@@ -1180,3 +1180,64 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.

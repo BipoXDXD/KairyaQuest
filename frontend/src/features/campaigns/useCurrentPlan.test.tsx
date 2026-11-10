@@ -1,7 +1,8 @@
 import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { READ_TIMEOUT_MS } from '../../shared/api/client'
+import { pendingUntilAborted, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import type { Plan } from './types'
 import { useCurrentPlan } from './useCurrentPlan'
 
@@ -722,5 +723,71 @@ describe('useCurrentPlan', () => {
     })
 
     expect(result.current.state).toEqual({ status: 'loaded', plan: plano, refreshFailed: false })
+  })
+
+  // Pendencia 213: o `refresh` nao tinha prazo. Se o pedido mais recente
+  // nunca respondia, a guarda de sequencia descartava as respostas velhas e
+  // ninguem tirava a tela do estado anterior -- ou de "carregando", quando a
+  // carga inicial tinha sido invalidada. O prazo do `requestJson` faz o
+  // refresh pendurado falhar como qualquer refresh que falha.
+  describe('refresh pendurado (prazo de leitura)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('com a trilha na tela, o refresh mais recente que nunca responde liga o aviso no prazo', async () => {
+      routeFetch({
+        'GET /api/plans/current': (init, call) =>
+          call === 1 ? Response.json({ plan: plano }) : pendingUntilAborted(init, call),
+      })
+      const { result } = renderHook(() => useCurrentPlan())
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(result.current.state).toEqual({ status: 'loaded', plan: plano, refreshFailed: false })
+
+      act(() => {
+        result.current.refresh()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 1)
+      })
+      expect(result.current.state).toEqual({ status: 'loaded', plan: plano, refreshFailed: false })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+
+      expect(result.current.state).toEqual({ status: 'loaded', plan: plano, refreshFailed: true })
+    })
+
+    it('com a carga inicial invalidada, o refresh pendurado tira a tela de carregando no prazo', async () => {
+      // A carga inicial nunca responde nem obedece ao abort: so o refresh
+      // pode decidir, e ele tambem nao responde. Antes do prazo, "carregando"
+      // para sempre.
+      routeFetch({
+        'GET /api/plans/current': (init, call) =>
+          call === 1 ? new Promise<Response>(() => undefined) : pendingUntilAborted(init, call),
+      })
+      const { result } = renderHook(() => useCurrentPlan())
+      act(() => {
+        result.current.refresh()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 1)
+      })
+      expect(result.current.state).toEqual({ status: 'loading' })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'O servidor demorou demais para responder.',
+      })
+    })
   })
 })
