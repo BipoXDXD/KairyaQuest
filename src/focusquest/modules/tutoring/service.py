@@ -25,12 +25,14 @@ from sqlalchemy.orm import Session, aliased
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
+    EstimativaForaDoLimite,
     MensagemEmAndamentoError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
     PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoForaDoLimite,
     PrazoInalteradoError,
 )
 from focusquest.core.validation import rejeitar_nul
@@ -47,11 +49,14 @@ from focusquest.modules.missions.service import (
     listar_missoes,
     missao_reagendavel,
     reagendar_missao,
+    validar_limites_da_avulsa,
 )
 from focusquest.modules.progression.service import ler_progresso
 from focusquest.modules.tutoring.context import montar_turno, tardias_do_ciclo
 from focusquest.modules.tutoring.domain import (
+    ESTIMATIVA_FORA_DO_LIMITE,
     PRAZO_EXPIRADO,
+    PRAZO_FORA_DO_LIMITE,
     REAGENDAMENTO_INVALIDO,
     RESPOSTA_LONGA,
     CodigoDoStream,
@@ -414,7 +419,26 @@ class ReagendamentoInvalido:
     acao: TutorAction
 
 
-ResultadoDaConfirmacao = Executada | PrazoExpirado | ReagendamentoInvalido
+@dataclass(frozen=True)
+class ForaDoLimite:
+    """A proposta saiu dos limites de negocio da avulsa (pendencia 26):
+    estimativa fora de 1..1440 minutos ou prazo alem de 365 dias. A acao foi
+    GRAVADA como `falhou` com `codigo`: o chamador commita e so depois traduz
+    em 422 com o mesmo `code`."""
+
+    acao: TutorAction
+    codigo: str
+
+
+ResultadoDaConfirmacao = (
+    Executada | PrazoExpirado | ReagendamentoInvalido | ForaDoLimite
+)
+
+# O `error_code` gravado na acao para cada recusa de limite da avulsa.
+_CODIGO_DO_LIMITE: dict[type[Exception], str] = {
+    EstimativaForaDoLimite: ESTIMATIVA_FORA_DO_LIMITE,
+    PrazoForaDoLimite: PRAZO_FORA_DO_LIMITE,
+}
 
 # O que o `reagendar_missao` recusa porque a MISSAO mudou depois da proposta
 # (F17): sumiu, e de outro, foi concluida, ja tem aquele prazo ou tem prazo
@@ -475,6 +499,12 @@ def confirmar_acao(
             _gravar_falha(acao, PRAZO_EXPIRADO, operation_id, agora)
             session.flush()
             return PrazoExpirado(acao)
+        try:
+            # O passado ja saiu acima como `prazo_expirado`; aqui so sobra o
+            # teto (estimativa e horizonte de 365 dias), o mesmo da tela.
+            validar_limites_da_avulsa(dados.estimated_minutes, dados.deadline, agora)
+        except (EstimativaForaDoLimite, PrazoForaDoLimite) as recusa:
+            return _falhar_por_limite(session, acao, recusa, operation_id, agora)
         missao = criar_missao(
             session,
             user_id=user_id,
@@ -540,6 +570,8 @@ def _confirmar_reagendamento(
         _gravar_falha(acao, PRAZO_EXPIRADO, operation_id, clock())
         session.flush()
         return PrazoExpirado(acao)
+    except PrazoForaDoLimite as recusa:
+        return _falhar_por_limite(session, acao, recusa, operation_id, clock())
     except _MISSAO_MUDOU:
         _gravar_falha(acao, REAGENDAMENTO_INVALIDO, operation_id, clock())
         session.flush()
@@ -570,6 +602,20 @@ def _exigir_elo_da_kairya(session: Session, operation_id: str) -> None:
     )
     if origem is not OrigemDoReagendamento.KAIRYA:
         raise OperacaoReutilizadaError(_reuso_da_confirmacao(operation_id))
+
+
+def _falhar_por_limite(
+    session: Session,
+    acao: TutorAction,
+    recusa: EstimativaForaDoLimite | PrazoForaDoLimite,
+    operation_id: str,
+    agora: datetime,
+) -> ForaDoLimite:
+    """Grava `falhou` com o code do limite recusado, como o `prazo_expirado`."""
+    codigo = _CODIGO_DO_LIMITE[type(recusa)]
+    _gravar_falha(acao, codigo, operation_id, agora)
+    session.flush()
+    return ForaDoLimite(acao, codigo)
 
 
 def _gravar_falha(
@@ -811,13 +857,15 @@ def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
 def _resultado_anterior(session: Session, acao: TutorAction) -> ResultadoDaConfirmacao:
     """O que a confirmacao com esta chave produziu da primeira vez. So
     `executada` e `falhou` (prazo expirado ou reagendamento invalido) gravam
-    `operation_id`."""
+    `operation_id`. Os limites da avulsa tambem gravam (pendencia 26)."""
     if acao.state is EstadoDaAcao.EXECUTADA:
         missao = session.get(Mission, acao.mission_id)
         assert missao is not None
         return Executada(acao, missao)
     if acao.error_code == REAGENDAMENTO_INVALIDO:
         return ReagendamentoInvalido(acao)
+    if acao.error_code in (ESTIMATIVA_FORA_DO_LIMITE, PRAZO_FORA_DO_LIMITE):
+        return ForaDoLimite(acao, acao.error_code)
     return PrazoExpirado(acao)
 
 
