@@ -1,3 +1,52 @@
+# Engine única sob chamadas simultâneas — 2026-11-10
+
+Pendência 14, parte da corrida. Revisão-base: `2c09706`. `get_engine()` em
+`src/focusquest/core/database.py` ganhou um `threading.Lock` de módulo com
+dupla checagem: lê `_engine` sem trava (caminho comum, engine já criada) e,
+se for `None`, trava, confere de novo e só então cria. O FastAPI roda
+dependências síncronas no threadpool; sem a trava, duas requisições na
+partida podiam criar duas engines, com dois pools, e a perdedora ficava
+órfã. A engine continua preguiçosa e global; `/health`, `/ready` e
+`get_engine_se_configurada` não mudaram. Nenhuma dependência, contrato ou
+configuração mudou.
+
+Testes novos em `tests/unit/test_engine_unica.py`, sem banco (a criação é
+substituída por uma falsa) e sem `sleep`:
+
+- 4 threads chamam `get_engine()`; a primeira criação espera num
+  `threading.Event` (`wait(timeout=1.0)`) a segunda começar. Sem a trava, a
+  segunda entra e a acorda: mais de uma criação (de 2 a 4, conforme o
+  tempo das threads). Com a trava, a segunda fica no
+  lock, a espera expira e há uma criação só; todas as threads recebem o
+  mesmo objeto, e uma chamada posterior devolve o mesmo sem criar outra. O
+  custo do caminho verde é a espera de 1 s. As threads são `daemon` e o
+  `join` tem teto de 10 s: um deadlock vira falha sem segurar o processo.
+  Limite conhecido: o ramo interno `if _engine is None` falso só é coberto
+  se ao menos uma das threads 2–4 passar pela checagem externa durante a
+  espera de 1 s; numa máquina muito carregada isso pode não ocorrer e o
+  `fail_under = 100` acusaria o ramo.
+- Configuração ausente levanta `ValidationError`, `_engine` continua `None`
+  e a segunda chamada (numa thread com teto) levanta de novo, sem deadlock.
+
+Vermelho antes da correção (observado nesta execução): `assert 2 == 1` em `len(criadas)`
+(`test_chamadas_simultaneas_criam_uma_unica_engine`); o teste de
+configuração ausente já passava (guarda de regressão). Depois: `2 passed`,
+repetido 3 vezes. Sabotagem temporária, revertida: com a trava removida
+(volta à checagem única), o mesmo `assert 2 == 1`, `FAILED
+test_chamadas_simultaneas_criam_uma_unica_engine`. Cobertura de ramos de
+`get_engine` pelos testes novos: os quatro ramos cobertos (fora de cobertura
+no arquivo só as linhas de outras funções, exercitadas pelo resto da
+suíte).
+
+Validação: `ruff check`, `ruff format --check` e `mypy --strict` nos dois
+arquivos sem erros; `tests/unit/test_clock.py` e `tests/unit/test_config.py`
+passando. `make check` não executado nesta entrega.
+
+Fora do escopo, resíduo da pendência 14: `dispose()` da engine no shutdown.
+Exige um lifespan em `src/focusquest/main.py`, que está em quatro PRs abertos
+de outras frentes, e mover a criação para o lifespan mudaria o `/health` sem
+configuração.
+
 # Fase 4, Tarefa 4.1: tokens em 3 níveis e teste de contraste — 2026-11-10
 
 Objetivo: criar os tokens do design system "dojo-biblioteca ao anoitecer"
@@ -663,7 +712,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
 | ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção "Paridade geral modelo/migração e Alembic offline"). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
-| 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
+| 14 | Engine global/lazy, sem dispose no shutdown ~~e corrida teórica~~; mover ao lifespan muda liveness sem configuração. Corrida resolvida em 2026-11-10 (trava com dupla checagem em `get_engine`, `tests/unit/test_engine_unica.py`). Resta o dispose no shutdown, via lifespan em `main.py`. |
 | 32/161 | Códigos HTTP/SSE, dificuldade, dias por marco e rótulos Python/frontend espelhados à mão; respostas externas não têm validação runtime geral. |
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
