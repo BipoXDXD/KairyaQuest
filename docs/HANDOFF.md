@@ -1,3 +1,58 @@
+# Log local das falhas do Groq (pendência 100, parte "log") — 2026-11-10
+
+Objetivo: dar ao responsável um diagnóstico local das falhas do Groq (chave
+recusada, cota Free, rede) sem expor segredo nem texto do usuário e sem mudar
+o comportamento público. Revisão-base: `d65a97d`.
+
+Alterações:
+
+- `groq_provider.py` ganhou o logger `focusquest.modules.tutoring.groq_provider`
+  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Cada falha
+  traduzida pelo adaptador (HTTP, timeout, transporte, stream inválido) deixa
+  uma linha `WARNING`, sem `exc_info`. Exceções fora dessas quatro famílias e
+  falhas decididas no serviço (limite total, texto não persistível) não passam
+  por este log:
+  - HTTP: `Falha HTTP do provedor Groq: status=<int>` seguido, na ordem fixa,
+    dos cabeçalhos presentes entre `retry-after` e os seis `x-ratelimit-*` da
+    documentação "Rate Limits" do Groq;
+  - timeout: `Tempo esgotado no provedor Groq: tipo=<classe>`;
+  - transporte e stream inválido: `Falha do provedor Groq: tipo=<classe>`.
+- Cada valor de cabeçalho é cortado em 64 caracteres e todo caractere fora de
+  `[A-Za-z0-9._:,+-]` vira `?`: espaço, `=`, `[`, quebra de linha e controle
+  não forjam campos nem linhas novas.
+
+Decisões (registradas na coordenação, sem mudança de escopo):
+
+- Nível `WARNING`, como o adaptador Anthropic.
+- Stream inválido também é registrado, só com o tipo: sem isso seria o único
+  caminho mudo, e a mensagem do `ValidationError` traz o `input_value` recebido.
+- `x-request-id` fica fora da allowlist; entra num PR futuro se o suporte do
+  Groq o exigir.
+
+O que nunca vai ao log: corpo da resposta, chave, `Authorization`/`Bearer`,
+sistema e mensagens do turno, mensagem da exceção original, traceback e
+cabeçalhos fora da allowlist (`location`, `set-cookie`, `x-request-id`…). O
+teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` na chave, no
+sistema, na mensagem do usuário, no corpo, em `x-groq-debug`, em `set-cookie`,
+na mensagem do `ConnectError` e no `model`, com o `focusquest` em `DEBUG`, nos
+cenários HTTP, transporte e stream; foi conferido que ele reprova se um
+cabeçalho fora da allowlist entrar nela (sabotagem local, desfeita). `location`
+é coberto por outro teste da allowlist, e o timeout por
+`test_erro_de_transporte_registra_so_o_tipo`; `x-request-id` não tem teste
+próprio e fica fora só pela allowlist. O canário cobre o logger `focusquest`;
+os loggers `httpx2` e `httpcore2` (este registra cabeçalhos de resposta em
+`DEBUG`) continuam protegidos pela raiz em `WARNING` (`core/log.py`).
+
+Não mudou: tipos e mensagens das exceções, codes públicos, textos do
+frontend, contrato HTTP/SSE e banco. Nenhuma dependência nova.
+
+Pendências: a 100 segue aberta só na parte de codes/textos públicos para 4xx
+(linha atualizada na tabela). Nenhuma pendência nova.
+
+Comando: `make check` — aprovado (EXIT 0): Vitest 1046 testes em 53 arquivos;
+pytest 1695 passed e 32 subtests, cobertura 100,00% (2231 instruções, 410
+ramificações); Playwright 66 passed; gitleaks sem vazamentos.
+
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -864,7 +919,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | Log local sem segredos nos dois adaptadores: o Groq registra em `WARNING` o status HTTP, `retry-after` e `x-ratelimit-*` (valores saneados, até 64 caracteres), ou só o tipo da exceção em timeout, transporte e stream inválido; nunca corpo, chave, `Authorization` nem texto do usuário. Continua aberto: decidir codes/textos públicos para 4xx (401/403/404/413/429) no tradutor compartilhado chat/avaliação; hoje todos seguem `provedor_indisponivel`. |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
