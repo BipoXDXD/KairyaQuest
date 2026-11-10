@@ -151,8 +151,8 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   `docs/handoff/README.md`); só o PR de consolidação edita o
   `docs/HANDOFF.md`. Objetivo, revisão-base, decisões,
   alterações, comandos, resultados e pendências — sem segredos e sem caminhos
-  pessoais. Um incremento que resolve uma pendência a risca de lá; um que cria
-  uma limitação a escreve lá.
+  pessoais. Um incremento que resolve uma pendência ou cria uma limitação diz
+  isso no seu arquivo, e a consolidação aplica no `docs/HANDOFF.md`.
 
 ## 5. Descoberta de instruções por cada agente
 
