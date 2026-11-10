@@ -97,6 +97,8 @@ def main() -> None:
         max_tokens=settings.tutor_max_tokens,
         timeout_segundos=settings.tutor_timeout_seconds,
         fallback=settings.tutor_fallback,
+        esforco=settings.tutor_effort,
+        esforco_da_avaliacao=settings.evaluation_effort,
     )
     try:
         tipos, entrada = capturar(provedor, espiao)

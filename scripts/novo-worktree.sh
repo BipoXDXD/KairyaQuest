@@ -13,7 +13,7 @@
 #     focusquest_<nome>_test (servidor, credencial e opcoes da URL ficam) e
 #     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o menor livre de 1 a 24;
 #     do .env do principal so a URL do banco de teste e lida. Nenhum outro
-#     valor dele e copiado: as chaves de segredo (FOCUSQUEST_GROQ_API_KEY e
+#     valor dele e copiado: as chaves de segredo (FOCUSQUEST_ANTHROPIC_API_KEY e
 #     afins) nascem em branco, como no exemplo, e quem precisar delas no
 #     worktree as preenche a mao;
 #  3. roda "make bootstrap" nele;
