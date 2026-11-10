@@ -45,6 +45,17 @@ def relogio_fixo() -> Iterator[datetime]:
     app.dependency_overrides.pop(get_clock, None)
 
 
+def _agora_da_api() -> datetime:
+    """O instante que a API vai ler: o do relogio sobreposto, se houver, ou o
+    real. A criacao confere o prazo contra ele (pendencia 26); um prazo
+    relativo ao relogio REAL viraria bomba-relogio nos testes com
+    `relogio_fixo` quando a distancia passasse de 365 dias. Ver
+    `test_missions_api.py`."""
+    relogio = app.dependency_overrides.get(get_clock, get_clock)()
+    instante: datetime = relogio()
+    return instante
+
+
 def _criar(client: TestClient) -> dict[str, Any]:
     resposta = client.post(
         "/api/missions",
@@ -53,7 +64,7 @@ def _criar(client: TestClient) -> dict[str, Any]:
             "completion_criterion": "Resumo de uma pagina entregue",
             "difficulty": 5,
             "estimated_minutes": 30,
-            "deadline": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "deadline": (_agora_da_api() + timedelta(days=1)).isoformat(),
         },
     )
     assert resposta.status_code == 201, resposta.text
