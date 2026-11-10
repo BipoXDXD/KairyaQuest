@@ -148,10 +148,10 @@ describe('client', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('aborta o pedido pendurado ao fim do prazo e falha como rede fora, com a causa', async () => {
+    it('aborta o pedido pendurado ao fim do prazo e falha como prazo (ApiTimeoutError), com a causa', async () => {
       const fetchMock = fetchUntilAborted()
       vi.stubGlobal('fetch', fetchMock)
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const pending = failureOf(
         postJson('/missions/7/start', { operation_id: 'op-1' }, { timeoutMs: 5000 }),
@@ -162,7 +162,10 @@ describe('client', () => {
       const erro = await pending
 
       expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      // Subtipo de ApiError: quem so conhece ApiError continua tratando o prazo.
       expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).name).toBe('ApiTimeoutError')
       // Como a falha de rede: sem status e sem code, e e isso que faz as telas
       // oferecerem o reenvio com a MESMA chave (resultado desconhecido).
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
@@ -187,15 +190,52 @@ describe('client', () => {
         return Promise.resolve(response)
       })
       vi.stubGlobal('fetch', fetchMock)
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
+
+      const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+      await vi.advanceTimersByTimeAsync(5000)
+      const erro = await pending
+
+      // Um 200 cujo corpo nao chegou e resultado DESCONHECIDO, nunca
+      // `ApiError(200)`: a tela precisa oferecer o reenvio com a mesma chave.
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      // Subtipo de ApiError: quem so conhece ApiError continua tratando o prazo.
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).name).toBe('ApiTimeoutError')
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+    })
+
+    it('um erro cujo corpo nao chega no prazo mantem o status, com code nulo', async () => {
+      // Os cabecalhos do 409 chegaram; o corpo, nao. O status ja e fato: o
+      // servidor leu e recusou. Reescreve-lo como "demorou" (status nulo)
+      // fazia a tela oferecer um reenvio que nao era preciso.
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        const response = new Response(null, { status: 409 })
+        vi.spyOn(response, 'json').mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        )
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
       await vi.advanceTimersByTimeAsync(5000)
       const erro = await pending
 
       expect(erro).toBeInstanceOf(ApiError)
-      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
-      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as Error).message).toBe('O servidor respondeu 409.')
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('uma resposta a tempo desarma o timer e chega intacta', async () => {
@@ -233,11 +273,12 @@ describe('client', () => {
     it('transforma falha de rede em ApiError sem status nem code, preservando a causa', async () => {
       const causa = new TypeError('Failed to fetch')
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(causa))
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const erro = await failureOf(postJson('/missions/7/complete', { operation_id: 'op-1' }))
 
       expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
       // status nulo e o que distingue "nao houve resposta" de "o servidor
       // respondeu mal": a tela nao deve dizer 500 quando nada chegou.
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
