@@ -77,10 +77,11 @@ export class ApiError extends Error {
 }
 
 /**
- * O prazo do `postJson` acabou antes da resposta: o resultado e DESCONHECIDO --
- * o servidor pode ter gravado. O tipo proprio e o que deixa a tela dizer
- * "demorou" sem ler a `message`; `status` e `code` seguem nulos, como na rede
- * fora, porque nenhuma resposta foi aproveitada.
+ * O prazo do pedido acabou antes da resposta. No `postJson` o resultado e
+ * DESCONHECIDO -- o servidor pode ter gravado; no `requestJson`, a leitura so
+ * nao chegou. O tipo proprio e o que deixa a tela dizer "demorou" sem ler a
+ * `message`; `status` e `code` seguem nulos, como na rede fora, porque nenhuma
+ * resposta foi aproveitada.
  */
 export class ApiTimeoutError extends ApiError {
   constructor(options?: ErrorOptions) {
@@ -139,13 +140,30 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
 }
 
 /**
+ * O prazo, em milissegundos, que todo GET (`requestJson`) da ao servidor.
+ *
+ * Existe porque um `refresh` sem prazo cujo pedido nunca respondia prendia a
+ * tela no estado anterior, ou em "carregando" (pendencia 213 do HANDOFF): a
+ * guarda "o pedido mais recente decide" descarta as respostas velhas, entao
+ * so a falha do mais recente tira a tela dali. Mesma ordem de grandeza do
+ * `MUTATION_TIMEOUT_MS` -- uma leitura de banco, sem modelo no caminho --, e
+ * tambem sem medida real de rede (pendencia 193).
+ */
+export const READ_TIMEOUT_MS = 20_000
+
+/**
  * Faz um GET em `path` e devolve o JSON desserializado.
  *
  * `path` comeca com barra e NAO termina com barra: `/api/missions/` responde
  * 307 e gasta um round-trip a cada chamada, em silencio.
+ *
+ * Todo GET tem o prazo `READ_TIMEOUT_MS`, e estoura-lo sai como
+ * `ApiTimeoutError`, com as mesmas regras do `postJson`. O `signal` de quem
+ * chama continua abortando o pedido, e esse aborto NAO vira prazo: quem
+ * cancelou sabe por que cancelou.
  */
 export async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  return send<T>(path, { headers: { Accept: 'application/json' }, signal })
+  return sendWithin<T>(path, { headers: { Accept: 'application/json' } }, READ_TIMEOUT_MS, signal)
 }
 
 /**
@@ -211,8 +229,7 @@ export interface PostOptions {
  * como `ApiError` com esse status, e o `code` sai nulo se o corpo de erro nao
  * chegou no prazo.
  *
- * `setTimeout` com `AbortController`, e nao `AbortSignal.timeout`: o timer do
- * segundo e interno ao navegador, e os testes com timers falsos nao o alcancam.
+ * O prazo mora em `sendWithin`, o mesmo do `requestJson`.
  */
 export async function postJson<T>(
   path: string,
@@ -228,15 +245,36 @@ export async function postJson<T>(
   if (timeoutMs === undefined) {
     return send<T>(path, init)
   }
+  return sendWithin<T>(path, init, timeoutMs)
+}
 
-  const controller = new AbortController()
+/**
+ * O `send` com prazo: aborta o pedido ao fim de `timeoutMs` e traduz esse
+ * aborto em `ApiTimeoutError`, salvo quando o status de erro ja tinha chegado
+ * (ver `postJson`).
+ *
+ * `signal`, quando vem, e o cancelamento de quem chama, combinado com o do
+ * prazo: qualquer um dos dois aborta o pedido, mas so o do prazo vira
+ * `ApiTimeoutError`. `setTimeout` com `AbortController`, e nao
+ * `AbortSignal.timeout`: o timer do segundo e interno ao navegador, e os
+ * testes com timers falsos nao o alcancam.
+ */
+async function sendWithin<T>(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  const deadline = new AbortController()
   const timer = setTimeout(() => {
-    controller.abort()
+    deadline.abort()
   }, timeoutMs)
+  const combined =
+    signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal])
   try {
-    return await send<T>(path, { ...init, signal: controller.signal })
+    return await send<T>(path, { ...init, signal: combined })
   } catch (cause) {
-    if (controller.signal.aborted && !hasResponseStatus(cause)) {
+    if (deadline.signal.aborted && !hasResponseStatus(cause)) {
       throw new ApiTimeoutError({ cause })
     }
     throw cause
