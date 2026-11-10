@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { saveLocale, type ServerLocale } from '../api/me'
 import { I18nContext, ServerSyncContext } from './i18nContext'
 import { initialLocale as bootLocale, openStorage, writeCachedLocale, type Locale } from './locale'
@@ -40,7 +40,10 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
   /** A cauda da fila de escritas; nunca rejeita, para a falha nao travar a fila. */
   const writes = useRef<Promise<void>>(Promise.resolve())
 
-  useEffect(() => {
+  // Layout effect, nao `useEffect`: o `lang` muda no mesmo commit que o resto
+  // da tela. Com `useEffect` ele ficava para depois, e a tela chegava a
+  // mostrar o aviso de falha, ja em PT, com o `<html lang>` ainda em `en`.
+  useLayoutEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
 

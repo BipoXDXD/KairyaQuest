@@ -75,6 +75,34 @@ describe('I18nProvider com o servidor', () => {
     )
   })
 
+  it('o aviso de falha nunca aparece com o idioma ainda trocado', async () => {
+    routeFetch({ [PATCH_ME]: () => new Response(null, { status: 503 }) })
+    renderSwitcher()
+    const status = screen.getByRole('status')
+    const pt = screen.getByRole('button', { name: 'PT, Português (Brasil)' })
+    /** O estado da tela no primeiro commit que pos texto no aviso. */
+    let seen: { lang: string; ptPressed: string | null } | null = null
+    // O callback roda logo depois do commit que mexeu no aviso, antes de
+    // qualquer trabalho agendado pelo React para depois (os passive effects).
+    const observer = new MutationObserver(() => {
+      if (seen === null && status.textContent !== '') {
+        seen = {
+          lang: document.documentElement.lang,
+          ptPressed: pt.getAttribute('aria-pressed'),
+        }
+      }
+    })
+    observer.observe(status, { childList: true, subtree: true, characterData: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
+    await waitFor(() => {
+      expect(seen).not.toBeNull()
+    })
+    observer.disconnect()
+
+    expect(seen).toEqual({ lang: 'pt-BR', ptPressed: 'true' })
+  })
+
   it('o nome do português na mensagem em EN leva lang pt-BR', async () => {
     routeFetch({ [PATCH_ME]: () => new Response(null, { status: 503 }) })
     render(

@@ -34,6 +34,14 @@ existe vazia desde o primeiro render (leitor de tela só anuncia mudança em
 região viva que já estava no documento). Trocar para o idioma atual não chama
 o servidor.
 
+**`<html lang>` no mesmo commit.** O provider escreve o `lang` num
+`useLayoutEffect`, não num `useEffect`: com o passive effect, o commit que
+mostrava o aviso de falha (já revertido para PT) ainda deixava o `<html lang>`
+em `en` por um instante, e o teste "PATCH falhando reverte e avisa" reprovava
+de forma intermitente no CI. O teste "o aviso de falha nunca aparece com o
+idioma ainda trocado" observa o primeiro commit do aviso e reprova sempre com
+o `useEffect`.
+
 **Contador de geração (ordem no cliente).** Cada troca incrementa a geração;
 o boot a captura antes do `GET` (`beginServerSync`) e o resultado só se
 aplica (`applyServerLocale`), inclusive a escrita silenciosa do caso `null`,
