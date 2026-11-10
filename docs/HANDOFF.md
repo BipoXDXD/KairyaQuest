@@ -1,3 +1,131 @@
+# Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
+
+Objetivo: provar, em conexões reais, a ordem global **ação → missão →
+avaliação → usuário** e os conflitos cruzados da escrita da avaliação, só
+com teste novo, sem mudar produção. Revisão-base: `2c09706`.
+
+Decisões:
+
+- **Recorte: a escrita da avaliação (transação 2 de `avaliar_missao`) contra
+  os dois fluxos de produção que disputam as mesmas linhas, nas duas ordens.**
+  É a única transação que passa por missão, avaliação e usuário; a
+  confirmação da Kairya cobre "ação → missão" e a conclusão cobre "missão →
+  usuário".
+- **Como a ordem é observada.** O PostgreSQL diz quem bloqueia quem
+  (`pg_blocking_pids`) e em qual tabela está a espera (`pg_locks`,
+  `locktype = 'tuple'`). Só então uma sonda `NOWAIT` (KEY SHARE para missão e
+  ação, SHARE para avaliação e usuário) confere o que quem espera **já**
+  segura e o que ainda não tocou. Sem `sleep` cego: o provedor falso segura a
+  resposta e a sessão da transação 2 pode segurar o próprio `commit`, por
+  eventos.
+- **A ordem "ação antes da missão" é observada em `confirmar_acao`.** O
+  cenário 3 abaixo mostra a confirmação esperando a missão já segurando a
+  ação. Isso contradiz a frase da F14 em `docs/ARCHITECTURE.md`, que a dá
+  como não observável por teste; o ARCHITECTURE.md não foi editado (está em
+  PRs abertos), e a correção ficou como pendência 209.
+- Helpers de espera e sonda são locais ao módulo: os equivalentes existentes
+  são privados de `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`, que outros PRs abertos tocam.
+  Reaproveitadas as fixtures `banco_migrado` e `fabrica` do `conftest.py`.
+
+Matriz provada (`tests/integration/test_ordem_global_das_travas.py`):
+
+| Teste | Quem segura | Quem espera, e onde | O que a sonda prova |
+|---|---|---|---|
+| `test_avaliacao_espera_o_usuario_ja_segurando_missao_e_avaliacao` | conclusão de outra missão do mesmo usuário (outra missão + usuário) | escrita da avaliação, em `users` | missão e avaliação já travadas |
+| `test_avaliacao_espera_a_missao_sem_tocar_avaliacao_nem_usuario` | confirmação da Kairya, reagendar a missão avaliada (ação + missão) | escrita da avaliação, em `missions` | avaliação e usuário livres |
+| `test_confirmacao_espera_a_missao_ja_segurando_a_acao` | escrita da avaliação retida no `commit` (missão, avaliação, usuário) | confirmação da Kairya, em `missions` | ação já travada |
+| `test_conclusao_espera_o_usuario_ja_segurando_a_propria_missao` | escrita da avaliação retida no `commit` | conclusão de outra missão, em `users` | a própria missão já travada |
+
+Depois de liberar o dono, o que cada teste afirma:
+
+- **Todos os quatro:** as duas transações terminam (o resultado de cada uma é
+  lido, sem `DeadlockDetected` nem outra exceção) e a avaliação fica
+  `concluida`, tentativa 1, veredito `atende`, com o modelo e o feedback do
+  provedor e bônus de 20.
+- **Testes 2 e 3:** a ação fica `falhou`/`reagendamento_invalido`, sem
+  `mission_id`, e o prazo da missão avaliada não muda. O teste 3 confere
+  também que a confirmação devolveu `ReagendamentoInvalido`.
+- **Testes 1, 2 e 4:** a ordem dos créditos das duas missões no livro-razão
+  (`xp_entries.id`) é a da serialização observada: teste 1, conclusão da
+  avaliada, conclusão da outra, bônus; teste 2, conclusão e bônus da
+  avaliada; teste 4, conclusão da avaliada, bônus, conclusão da outra. O
+  teste 3 não confere créditos.
+
+**Correção depois da revisão independente (corrida nos testes 3 e 4).** A
+primeira versão ligava `devolver_resposta` logo depois de submeter a
+avaliação, e a sessão observada marcava como transação 2 a primeira sessão
+aberta depois disso; se a transação 1 abrisse mais tarde, ela era tomada pela
+2. Duas mudanças: os testes 3 e 4 esperam `entrou_modelo` antes de liberar a
+resposta, como os testes 1 e 2; e a transação 2 passou a ser a primeira
+sessão aberta depois de o provedor **devolver** a resposta
+(`modelo_respondeu`, marcado na própria thread da avaliação), o que não
+depende de escalonamento. As outras passagens foram revistas: as sondas e a
+liberação do dono só acontecem depois de uma condição observada no banco ou
+num evento da thread.
+
+O que ficou de fora (não inventei teste para fechar):
+
+- Transação 1 (`abrir_tentativa`) e `registrar_falha` contra outros fluxos;
+  já há provas de 409, retomada e relógio em `test_evaluation_concorrencia.py`.
+- `iniciar_missao` e `reagendar_missao` pela tela × escrita da avaliação:
+  travam só a missão, como a confirmação, sem a ação na frente.
+- Confirmação de **criação** da Kairya (ação → `INSERT` de missão, que toma
+  KEY SHARE no usuário) × bônus.
+- `preparar_turno` da tutoria (FOR UPDATE no usuário, sem missão) × bônus e
+  × conclusão.
+- Duas escritas de avaliação de missões diferentes do mesmo usuário (as duas
+  missão → usuário; disputa só o usuário).
+- HTTP: a matriz roda nos serviços, não pelas rotas.
+
+Sabotagens (temporárias, revertidas com `git checkout -- src`; depois de cada
+uma, `git diff --exit-code -- src` saiu com 0):
+
+| Sabotagem | Reprovou |
+|---|---|
+| S1: transação 2 da avaliação trava o usuário antes da missão (`evaluation/service.py`) | testes 1 (`DID NOT RAISE` na sonda da missão) e 2 (`LockNotAvailable` em `users` na sonda que devia aceitar) |
+| S2: `_buscar_acao` sem `with_for_update` (`tutoring/service.py`) | teste 3 (`DID NOT RAISE` na sonda da ação) |
+| S3: `concluir_missao` trava o usuário antes da missão (`missions/service.py`) | teste 4 (`DID NOT RAISE` na sonda da própria missão) |
+| S4: `_corrente` sem `with_for_update` na missão (`evaluation_records.py`) | testes 1 (`DID NOT RAISE`, linha 458, sonda da missão), 2 e 3 (`DID NOT RAISE`, linha 541, sonda da missão) |
+
+S1, S2 e S3 foram refeitas depois da correção da corrida, com as mesmas
+reprovações da tabela.
+
+S4 refeita depois da correção, com a saída lida no teste 2: ele **não** para
+em `_esperar_bloqueio`. A transação 2 passa pela espera em `missions`
+(linha 497, aprovada) e reprova na linha 502, `_aceita` da avaliação, com
+`LockNotAvailable: could not obtain lock on row in relation
+"mission_evaluations"` na consulta `... FOR SHARE NOWAIT`. Leitura: sem o
+FOR UPDATE da missão, a transação 2 grava a avaliação e trava o usuário sem
+esperar ninguém, e só para no `INSERT` do bônus em `xp_entries`, cuja FK para
+`missions` toma FOR KEY SHARE na missão, que a confirmação segura com FOR
+UPDATE. Por isso ela ainda espera em `missions`, mas já segurando a
+avaliação, e o teste reprova pela ordem errada, não por "thread terminou
+antes". Depois da reversão, `git diff --exit-code -- src` saiu com 0.
+
+Comandos e resultados lidos (com `UV_PYTHON=3.14.10`):
+
+- Os plugins de estresse do revisor (`troca_rapida.py`, que faz
+  `sys.setswitchinterval(1e-6)`, e `atraso_tx1.py`, que atrasa 50 ms a
+  entrada de `avaliar_missao`) ficam fora do repositório e foram carregados
+  com `PYTHONPATH=<scratchpad> uv run pytest ... -p <plugin>`.
+- Na versão **anterior** à correção: `-p atraso_tx1`, testes 3 e 4
+  reprovados; `-p troca_rapida`, 3 execuções, testes 3 e 4 reprovados nas 3.
+- Na versão corrigida, 10 execuções de cada: `-p atraso_tx1` 10/10 verdes;
+  `-p troca_rapida` 10/10; `-p troca_rapida -p atraso_tx1` 10/10. Sem
+  plugin, 5/5 verdes. São as execuções feitas; não afirmam estabilidade
+  além delas.
+- Com os vizinhos `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`: 14 aprovados. Rodado de novo depois da
+  correção: 14 aprovados.
+- `ruff check`, `ruff format --check` e `mypy` no arquivo novo: sem erros.
+- `make check` e a suíte inteira **não executados** neste incremento.
+
+Defeitos de produção encontrados: nenhum.
+
+Alterações: novo `tests/integration/test_ordem_global_das_travas.py`; este
+HANDOFF (seção, linha 104 e pendência nova 209).
+
 # Engine única sob chamadas simultâneas — 2026-11-10
 
 Pendência 14, parte da corrida. Revisão-base: `2c09706`. `get_engine()` em
@@ -724,10 +852,11 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 97(a/c/g/i) | TypeDecorators semelhantes/cascade sem passive_deletes; último tool_use da mesma ferramenta vence e falso tem dois membros tool_input; rascunho retido após refresh; downgrade0005 pode falhar pela guarda0006 antes do bônus. |
 | 97/S-M6 | Só o rótulo foi recuperado; falta requisito verificável. Não inventar teste para fechar o item. |
 | 97/T-M1 | Provas de ausência de escrita antes do rollback são parciais; faltam todas as falhas, _mesma_evidencia, disputa UNIQUE e HTTP. Casos sequenciais não provam todos os entrelaçamentos. |
-| 104 | Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário. |
+| ~~104~~ | ~~Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário.~~ Resolvida em 2026-11-10 (seção "Pendência 104: matriz de conflitos cruzados e ordem global das travas"): escrita da avaliação × confirmação da Kairya e × conclusão de outra missão, nas duas ordens, com sonda NOWAIT do que já está travado. Resíduo declarado: transação 1 e `registrar_falha`, início/reagendamento pela tela, confirmação de criação × bônus, `preparar_turno` × bônus/conclusão, duas avaliações do mesmo usuário e HTTP. |
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
+| 209 | A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos). |
 
 ### Provedor, custo e diagnósticos
 
