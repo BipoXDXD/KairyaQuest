@@ -253,9 +253,10 @@ contagens) e o código de saída.
 - **Fora:** `tests/` (os próprios testes) e `alembic/` (as migrações e o
   `env.py`). `alembic/` não fica sem verificação: o Ruff e o mypy estrito o
   cobrem, e os testes de integração aplicam a migração, fazem o downgrade e
-  a aplicam de novo. O que fica sem exercício é o caminho
-  `run_migrations_offline()` do `alembic/env.py`, que o projeto não usa
-  (registrado em `docs/HANDOFF.md`).
+  a aplicam de novo. O caminho `run_migrations_offline()` é exercitado por
+  `tests/integration/test_migracoes_offline.py`, nas faixas sem leitura de
+  dados; a 0004 e as guardas de downgrade 0003/0005/0006 ficam fora
+  (`docs/HANDOFF.md`, 9/10).
 
 Esta lista segue o README §9: "Declare o denominador: testes, dependências,
 arquivos gerados, CSS e configuração de ferramentas não são código de

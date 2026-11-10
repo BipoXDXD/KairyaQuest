@@ -42,6 +42,108 @@ existe se ele passar).
 **Pendência.** Worktrees criados antes desta mudança ainda guardam a cópia
 da chave no próprio `.env`; apagá-la é manual.
 
+# Porta do PostgreSQL com prova de concordância — 2026-11-10
+
+Pendência 11 resolvida. Revisão-base: `e57fa2b`. `tests/unit/test_porta_do_banco.py`
+toma `Settings.db_port` como referência e confere, com contagem esperada por
+extrator, `compose.yaml` (1), `.env.example` (variável 1, URLs 2) e
+`.github/workflows/quality.yml` (`ports` 2, URLs 4, `psql -p` 2). Varre
+menções `55xxx` em `config.py`, `.env.example`, `compose.yaml`, workflow,
+`docs/QUALITY.md` e `frontend/tests/e2e/servers.ts`, e usa `git grep` para
+recusar arquivo rastreado que repita a porta fora dessa lista (exceto
+`tests/`, este HANDOFF e os lockfiles). URL sem porta explícita é recusada com
+`arquivo:linha`. Teste unitário, sem banco; nenhum contrato, dependência ou
+configuração mudou. Fonte única (workflow montando URLs de uma `env` comum,
+compose sem padrão) foi avaliada e descartada: mudaria contratos do CI e
+quebraria `docker compose up` sem `.env`.
+
+Vermelho antes da implementação: `3 failed` (`NameError` nos extratores).
+Depois: `12 passed`. Sabotagens temporárias, cada uma revertida antes da
+seguinte, com a falha lida na saída:
+
+| Sabotagem | Resultado |
+|---|---|
+| `.env.example:4` → `FOCUSQUEST_DB_PORT=55433` | `2 failed`: extrator da variável e varredura, ambos `.env.example:4: 55433` |
+| `compose.yaml:16` → `:-55433}` | `2 failed`: extrator do compose e varredura, ambos `compose.yaml:16: 55433` |
+| `quality.yml:88` → `- "55432:5432"` | `1 failed`: extrator de `ports`, "esperadas 2 … achadas 1" |
+| `docs/QUALITY.md:24` → `55433` | `1 failed`: só a varredura, `docs/QUALITY.md:24: 55433` |
+| `scripts/porta.txt` com `55432` (`git add -N`) | `1 failed`: `git grep`, `['scripts/porta.txt']` |
+
+Limitação: uma porta DIFERENTE num arquivo novo fora da lista não é
+detectada; a lista é o que se declarou como fonte.
+
+Validação: `ruff check`, `ruff format --check` e `mypy` no arquivo novo sem
+erros. `make check`: completo
+no hook `pre-commit` deste commit (o commit só existe se ele passar).
+
+# Paridade geral modelo/migração e Alembic offline — 2026-11-10
+
+Pendência 9/10. Revisão-base: `e57fa2b`. Nenhuma migração, modelo,
+dependência ou contrato mudou.
+
+`tests/integration/test_paridade_geral_do_esquema.py` roda `compare_metadata`
+do Alembic (`compare_type` e `compare_server_default` ligados, sem filtro)
+contra o banco migrado até `head`: diff vazio. Cobre tabelas, colunas, tipos,
+nulabilidade, server defaults, FKs com `ON DELETE`, UNIQUE e índices. Um
+segundo teste compara os nomes dos CHECKs por tabela, porque o autogenerate
+não compara CHECK. O autogenerate **não** compara, e por isso fica fora:
+
+- o texto dos CHECKs (só o nome é comparado; o texto segue provado pelos
+  testes de comportamento, INSERT recusado);
+- o predicado de índice parcial (`postgresql_where` de
+  `uq_missions_especial_por_plano` e dos índices parciais de
+  `tutor_messages`): só unicidade e colunas entram.
+
+Sabotagens temporárias no modelo, revertidas (`git diff --exit-code -- src`
+vazio), cada uma reprovando o teste esperado:
+
+- `ondelete` da FK `xp_entries.mission_id` de `CASCADE` para `SET NULL`:
+  `remove_fk` + `add_fk` em `xp_entries`;
+- sem `server_default=func.now()` em `users.created_at`: `modify_default`
+  em `users.created_at`;
+- `missions.instructions` de `Text` para `String(50)`: `modify_type`
+  `TEXT()` → `String(length=50)`;
+- `ck_xp_entries_amount` renomeado: "so no banco:
+  [('xp_entries', 'ck_xp_entries_amount')]; so no modelo:
+  [('xp_entries', 'ck_xp_entries_valor')]".
+
+`tests/integration/test_migracoes_offline.py` gera SQL com `sql=True`, sem
+conexão, nas faixas: upgrade `base→0003` e `0004→head` (0005, 0006, 0007);
+downgrade `0007→0006`, `0004→0003` e `0002→base`. Exclusões, porque
+`op.get_bind()` offline não devolve resultado e a migração lê dados:
+
+- upgrade da 0004 (backfill): `alembic -x test=true upgrade 0003:0004 --sql`
+  termina em `AttributeError: 'NoneType' object has no attribute 'scalars'`;
+- downgrade de 0003, 0005 e 0006 (guardas que contam linhas): cada um
+  termina em `AttributeError: 'NoneType' object has no attribute
+  'scalar_one'`.
+
+Sabotagens temporárias, revertidas (`git diff --exit-code -- alembic` vazio):
+faixa `0003:head` no lugar de `0004:head` e uma leitura de dados no upgrade da
+0007 reprovam só o caso `0004-ate-head` (1 failed, 4 passed).
+
+Resultados lidos: os dois arquivos com `pytest` 7 passed; Ruff check, Ruff
+format `--check` e mypy estrito sem erros nos dois arquivos.
+
+Validação: `make check` completo roda no hook `pre-commit` deste commit (o
+commit só existe se ele passar); o resultado do CI fica no PR. Um gate anterior,
+rodado ao mesmo tempo que o de outro worktree, mostrou 2 `F` no pytest e foi
+cortado por timeout antes do resumo, sem nome dos testes; a suíte pytest
+inteira, rodada sozinha logo depois, passou sem falha. Possível intermitência
+sob carga, não reproduzida nem investigada.
+
+# Bíblia e voz da Kairya — 2026-11-10
+
+`docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
+visual, paleta, expressões, máquina de estados e limites) e
+`docs/kairya/voz.md` (princípios, exemplos PT/EN, padrão de erro, forma do
+chat, gatilhos das 36 falas por idioma e descrições das vozes) passam a ser a
+fonte da persona da tutora, dos prompts de arte e do roteiro das falas. A
+Kairya é original e descrita só por traços próprios: nenhum desses textos
+compara a personagem com obra ou franquia existente. O texto final de cada
+fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
+código, dependência, endpoint ou custo.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
@@ -341,6 +443,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, depois da persona e de uma linha em branco. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -449,8 +552,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 4/5 | Autenticação/autorização por recurso; conferir dono antes de prender linha em missions/tutor_actions quando houver contas. Hoje é contenção teórica no recorte único, sem 404 diferente. |
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
-| 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
-| 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
+| ~~26~~ | ~~Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos.~~ Resolvida na Fase 1 (Tarefa 1.5): `POST /api/missions` recusa estimativa fora de 1–1440 min (422 `estimativa_fora_do_limite`) e prazo fora de `(agora, agora+365 dias]` (422 `prazo_fora_do_limite`), contra o relógio injetado e antes de qualquer escrita; o reagendamento recusa acima de 365 dias com o mesmo code (o passado segue `prazo_expirado`). Schema intacto: 0/negativo continuam no 422 nativo, e a ferramenta da Kairya não muda. A confirmação pela Kairya aplica os mesmos limites: criação e reagendamento fora deles gravam a ação `falhou` com o `error_code` igual ao `code` do 422, e o cartão mostra o texto próprio. Resíduo: não há formulário de criação no frontend, então `estimativa_fora_do_limite` só aparece no cartão da Kairya; o formulário de reagendar ganhou `min`/`max` e o bloqueio do teto. Os prazos literais do E2E do QG ficam na pendência 207. |
 | 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
@@ -468,8 +570,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | ID | O que continua aberto |
 |---|---|
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
-| 9/10 | Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado. |
-| 11 | Porta 55432 repetida em Settings/compose/exemplo/workflow, sem prova geral de divergência. |
+| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção "Paridade geral modelo/migração e Alembic offline"). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
 | 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
 | 32/161 | Códigos HTTP/SSE, dificuldade, dias por marco e rótulos Python/frontend espelhados à mão; respostas externas não têm validação runtime geral. |
@@ -500,10 +601,11 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 | Instruções com quebras entram cruas no contexto e podem forjar cabeçalhos; efeito no modelo real não medido. Normalização/recusa ainda não decidida. |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e `make check` ainda **não executados** (sem banco nesta janela). |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
 
 ### Interface, acessibilidade e manutenção
 
@@ -520,6 +622,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
 | 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
+| 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
 
 ## Decisões aceitas e limitações operacionais
 
@@ -531,6 +634,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 22/23 | Lock npm pode divergir local/CI; tabela Vitest vazia não prova cobertura, limiar/resumo sim. Limites em QUALITY. |
 | 29/30 | Raiz é convenção com receita externa; barra final produz307. Não mudar Settings/redirect por estética. |
 | 39 | Preparação Playwright usa rede/apt; falha reprova fechado. Sem cache parcial introduzido. |
+| 41 | Pergunta à tutora limitada a 4000 caracteres, decidido pelo dono. O espelho `MAX_QUESTION_LENGTH` (frontend) ↔ `TAMANHO_MAXIMO_DA_PERGUNTA` (backend) é provado por `tests/unit/test_limite_da_pergunta.py`, que reprova com `arquivo:linha` dos dois lados se divergirem, e com o caminho do arquivo se a constante do frontend sumir. Mudar o número é decisão de produto. |
 | 44/71 | Medições antigas de mutações são histórico de prova, não taxas universais atuais nem tarefas por repetir. |
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
@@ -540,7 +644,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |
 | 98 | PRs antigos #4–#18 podem pertencer ao remoto anterior, recriado; usar hash/época para identificar. Não confundir com PRs atuais de mesmo número. |
 | 108 | Banco E2E limpo por execução, mas compartilhado entre specs; falso reiniciar não limpa banco. Assertar IDs/deltas, não contagens/XP absolutos; axe de uma spec pode incluir cartões anteriores. |
-| 110 | Reagendar sem teto é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. |
+| 110 | Reagendar sem teto de quantidade é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. O novo prazo, pela tela ou pela Kairya, tem desde a Tarefa 1.5 o horizonte de 365 dias (`prazo_fora_do_limite`, pendência 26); a contagem de reagendamentos continua sem teto. |
 | 164(b) | Reenvio de ação executada devolve missão atual, não sua fotografia antiga; a ação/idempotência permanece igual. |
 | 170/171/172 | error_code também marca corte; stop_sequence/pause_turn hoje normais pois ferramentas de servidor inexistem; parcial pode aparecer antes da recusa final e depois sumir. Fallback atenua, não elimina a última limitação. |
 | 182/185 | _completar usa sessão própria sem cache anterior; risco se contrato mudar. Chat depende de ciclo legível, confiando em CHECK/FKs, sem proteção para dado impossível por eles. |
