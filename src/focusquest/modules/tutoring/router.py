@@ -11,14 +11,22 @@ from sqlalchemy.orm import sessionmaker
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import SessaoDaRequisicao, get_engine
 from focusquest.core.errors import (
+    EstimativaForaDoLimite,
     PrazoExpiradoError,
+    PrazoForaDoLimite,
     ProvedorNaoConfiguradoError,
     ReagendamentoInvalidoError,
 )
 from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa
 from focusquest.modules.missions.schemas import MAIOR_INTEIRO_DA_COLUNA, MissionRead
+from focusquest.modules.missions.service import (
+    ESTIMATIVA_MAXIMA_DA_AVULSA,
+    ESTIMATIVA_MINIMA_DA_AVULSA,
+    HORIZONTE_DO_PRAZO_DA_AVULSA,
+)
 from focusquest.modules.tutoring.dependencies import get_tutoria
+from focusquest.modules.tutoring.domain import ESTIMATIVA_FORA_DO_LIMITE
 from focusquest.modules.tutoring.schemas import (
     ActionConfirm,
     ActionRead,
@@ -32,6 +40,7 @@ from focusquest.modules.tutoring.schemas import (
 )
 from focusquest.modules.tutoring.service import (
     EventoDoTurno,
+    ForaDoLimite,
     PerguntaGravada,
     PrazoExpirado,
     ReagendamentoInvalido,
@@ -146,6 +155,8 @@ def confirmar(
     session.commit()
     if isinstance(resultado, PrazoExpirado):
         raise PrazoExpiradoError("o prazo proposto ja passou; peca outra proposta")
+    if isinstance(resultado, ForaDoLimite):
+        raise _recusa_de_limite(resultado.codigo)
     if isinstance(resultado, ReagendamentoInvalido):
         raise ReagendamentoInvalidoError(
             "a missao mudou depois da proposta; peca outra proposta"
@@ -163,3 +174,17 @@ def recusar(
     acao = rejeitar_acao(session, USUARIO_UNICO, action_id, clock=clock)
     session.commit()
     return RejectRead(action=ActionRead.model_validate(acao))
+
+
+def _recusa_de_limite(codigo: str) -> EstimativaForaDoLimite | PrazoForaDoLimite:
+    """O erro de dominio do limite que a confirmacao gravou; o `main.py` o
+    traduz no 422 com o mesmo `code` da criacao pela tela."""
+    if codigo == ESTIMATIVA_FORA_DO_LIMITE:
+        return EstimativaForaDoLimite(
+            f"a estimativa proposta precisa ficar entre {ESTIMATIVA_MINIMA_DA_AVULSA}"
+            f" e {ESTIMATIVA_MAXIMA_DA_AVULSA} minutos; peca outra proposta"
+        )
+    return PrazoForaDoLimite(
+        f"o prazo proposto passa de {HORIZONTE_DO_PRAZO_DA_AVULSA.days} dias a "
+        "partir de agora; peca outra proposta"
+    )

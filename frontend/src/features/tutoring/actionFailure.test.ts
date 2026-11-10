@@ -18,6 +18,16 @@ const INVALIDATED = {
   recovery: 'tutoring.actionFailure.askNewProposal',
 }
 
+const ESTIMATE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.estimateOutOfBounds.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const DEADLINE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
 const ALREADY_DECIDED = {
   message: 'tutoring.actionFailure.alreadyDecided.message',
   recovery: 'tutoring.actionFailure.refreshConversation',
@@ -52,6 +62,8 @@ describe('describeActionFailure', () => {
       },
     ],
     ['prazo_expirado', 422, { ...EXPIRED, action: 'expired' }],
+    ['estimativa_fora_do_limite', 422, { ...ESTIMATE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
+    ['prazo_fora_do_limite', 422, { ...DEADLINE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
   ])('traduz %s', (code, status, esperado) => {
     for (const attempted of ['confirm', 'reject'] as const) {
       for (const kind of ['create_mission', 'reschedule_mission'] as const) {
@@ -133,6 +145,8 @@ describe('failedActionText', () => {
   it.each([
     ['prazo_expirado', EXPIRED],
     ['reagendamento_invalido', INVALIDATED],
+    ['estimativa_fora_do_limite', ESTIMATE_OUT_OF_BOUNDS],
+    ['prazo_fora_do_limite', DEADLINE_OUT_OF_BOUNDS],
     ['proposta_invalida', FAILED],
     // Um code que existe no mapa mas nao e gravado na acao cai no generico.
     ['transicao_ilegal', FAILED],

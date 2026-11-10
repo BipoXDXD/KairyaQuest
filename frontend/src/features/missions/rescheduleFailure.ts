@@ -32,6 +32,11 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
       recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
       action: 'edit',
     },
+    prazo_fora_do_limite: {
+      message: 'missions.rescheduleFailure.tooFar.message',
+      recovery: 'missions.rescheduleFailure.tooFar.recovery',
+      action: 'edit',
+    },
     prazo_inalterado: {
       message: 'missions.rescheduleFailure.unchanged.message',
       recovery: 'missions.rescheduleFailure.unchanged.recovery',

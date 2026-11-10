@@ -35,6 +35,7 @@ from focusquest.modules.missions.service import (
     iniciar_missao,
     listar_missoes,
     reagendar_missao,
+    validar_limites_da_avulsa,
 )
 from focusquest.modules.progression.schemas import RewardRead
 from focusquest.modules.progression.service import recompensa_da_missao
@@ -50,8 +51,17 @@ IdDaMissao = Annotated[int, Path(ge=1, le=MAIOR_INTEIRO_DA_COLUNA)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def criar(dados: MissionCreate, session: SessaoDaRequisicao) -> MissionRead:
+def criar(
+    dados: MissionCreate,
+    session: SessaoDaRequisicao,
+    clock: Annotated[Clock, Depends(get_clock)],
+) -> MissionRead:
     """Cria a missao e devolve 201 com o recurso criado.
+
+    Os limites de negocio da avulsa (pendencia 26) sao conferidos ANTES da
+    escrita, com o instante do relogio injetado: o schema so guarda a forma e
+    os tetos tecnicos, porque nao le hora. A recusa sobe como erro de dominio e
+    `main.py` a traduz em 422 com `code`.
 
     Os argumentos sao passados um por um, e nao com `**dados.model_dump()`: o
     servico declarou `difficulty` e `estimated_minutes` como somente-nomeados
@@ -60,6 +70,7 @@ def criar(dados: MissionCreate, session: SessaoDaRequisicao) -> MissionRead:
     no schema passaria a chegar como argumento inesperado em tempo de execucao,
     nao no mypy.
     """
+    validar_limites_da_avulsa(dados.estimated_minutes, dados.deadline, clock())
     missao = criar_missao(
         session,
         user_id=USUARIO_UNICO,

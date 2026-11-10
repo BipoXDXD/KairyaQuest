@@ -72,6 +72,9 @@ export const ptBR = {
 
   'missions.rescheduleFailure.deadlinePassed.message': 'O novo prazo precisa estar no futuro.',
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Escolha uma data e um horário futuros.',
+  'missions.rescheduleFailure.tooFar.message':
+    'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+  'missions.rescheduleFailure.tooFar.recovery': 'Escolha uma data mais próxima.',
   'missions.rescheduleFailure.unchanged.message': 'O novo prazo é igual ao atual.',
   'missions.rescheduleFailure.unchanged.recovery': 'Escolha outro horário.',
   'missions.rescheduleFailure.alreadyCompleted.message':
@@ -201,6 +204,10 @@ export const ptBR = {
   'tutoring.actionFailure.expired.message': 'O prazo desta proposta já passou.',
   'tutoring.actionFailure.rescheduleInvalid.message':
     'A missão mudou desde a proposta e não pôde ser reagendada.',
+  'tutoring.actionFailure.estimateOutOfBounds.message':
+    'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos.',
+  'tutoring.actionFailure.deadlineOutOfBounds.message':
+    'O prazo desta proposta passa de 365 dias a partir de agora.',
   'tutoring.actionFailure.unconfirmedCreate.message': 'Não foi possível confirmar a missão.',
   'tutoring.actionFailure.unconfirmedCreate.recovery':
     'Tentar de novo é seguro: a missão não será criada duas vezes.',
