@@ -53,7 +53,14 @@ _FALHAS_SQL = ", ".join(f"'{f.value}'" for f in FalhaDaAvaliacao)
 
 # Mesmo motivo, para o historico de reagendamentos e o `kind` das operacoes.
 _MOTIVOS_SQL = ", ".join(f"'{m.value}'" for m in MotivoDoReagendamento)
-_ORIGENS_SQL = ", ".join(f"'{o.value}'" for o in OrigemDoReagendamento)
+
+# Tolerant reader da 0008 (expand): o valor antigo da origem ainda cabe no
+# CHECK e, lido, vira o membro novo. Sai na Tarefa 2.2, junto com o valor
+# antigo do CHECK. O dominio nunca escreve o valor antigo.
+_ORIGENS_ANTIGAS: dict[str, OrigemDoReagendamento] = {
+    "tifa": OrigemDoReagendamento.KAIRYA,
+}
+_ORIGENS_SQL = ", ".join(f"'{o}'" for o in (*OrigemDoReagendamento, *_ORIGENS_ANTIGAS))
 _TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
 
 
@@ -149,7 +156,9 @@ class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
     def process_result_value(
         self, value: Any, dialect: Dialect
     ) -> OrigemDoReagendamento:
-        return OrigemDoReagendamento(value)
+        # Sem tratar None, como MissionStateText: a coluna e NOT NULL e nenhuma
+        # leitura passa por outer join; um NULL aqui e divergencia de esquema.
+        return _ORIGENS_ANTIGAS.get(value) or OrigemDoReagendamento(value)
 
 
 class WeeklyPlan(Base):

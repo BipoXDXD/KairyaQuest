@@ -13,7 +13,7 @@ const CATALOGO = [
   ['veteran_10', 'Veterano I', 'Conclua 10 missões.'],
   ['veteran_50', 'Veterano II', 'Conclua 50 missões.'],
   ['veteran_100', 'Veterano III', 'Conclua 100 missões.'],
-  ['tifa_partnership', 'Parceria com a Kairya', 'Conclua uma missão proposta pela Kairya.'],
+  ['kairya_partnership', 'Parceria com a Kairya', 'Conclua uma missão proposta pela Kairya.'],
 ] as const
 
 function progress(
@@ -102,7 +102,7 @@ describe('ProgressPanel', () => {
   })
 
   it('conquistas recolhem sem esconder nivel ou XP e abrem as sete informacoes', async () => {
-    serve(progress(260, 2, 100, 300, ['first_steps', 'tifa_partnership']))
+    serve(progress(260, 2, 100, 300, ['first_steps', 'kairya_partnership']))
     render(<ProgressPanel />)
     const level = await screen.findByTestId('progress-level')
     const total = screen.getByTestId('progress-total')

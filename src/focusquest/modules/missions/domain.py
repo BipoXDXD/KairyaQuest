@@ -204,8 +204,7 @@ class OrigemDoReagendamento(StrEnum):
     """Quem pediu: a pessoa pela tela, ou a Kairya por proposta confirmada."""
 
     USUARIO = "usuario"
-    # Valor persistido legado: mantém o histórico de reagendamentos existente.
-    KAIRYA = "tifa"
+    KAIRYA = "kairya"
 
 
 class ProblemaDoNovoPrazo(StrEnum):

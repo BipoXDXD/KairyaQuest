@@ -2455,7 +2455,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
             ...reagendamento,
             previous_deadline: reagendamento.new_deadline,
             new_deadline: '2026-10-07T21:00:00Z',
-            origin: 'tifa',
+            origin: 'kairya',
           },
         ],
       }
