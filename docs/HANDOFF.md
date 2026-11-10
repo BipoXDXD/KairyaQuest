@@ -56,6 +56,179 @@ Vitest `Tests 1057 passed (1057)`; cobertura 100% (Statements 1337/1337,
 Branches 996/996, Functions 371/371, Lines 1298/1298); pytest `1669 passed,
 32 subtests passed`; Playwright `66 passed`; gitleaks `no leaks found`.
 
+# Prazo que preserva o status e texto que separa demora de rede — 2026-11-10
+
+Pendência 193. Revisão-base: `d65a97d`. Objetivo: depois que o status de
+uma resposta chegou, o prazo do `postJson` não o apaga mais; e a tela diz
+coisas diferentes para "a resposta demorou" e "não conectou".
+
+Decisões:
+
+- **Prazo único sobre cabeçalhos e corpo, status nunca descartado (desenho
+  B).** O timer continua até o fim do corpo; no `catch`, um `ApiError` que já
+  tem `status` sobe intacto (`hasResponseStatus`). Um corpo de erro que não
+  chega no prazo sai como `ApiError(status, code nulo)` e cai no texto
+  genérico, com reenvio seguro. Um 200 cujo corpo não chega continua sendo
+  resultado desconhecido. A alternativa A (prazo só até os cabeçalhos)
+  preservaria o `code` a qualquer hora, mas deixaria sem prazo o corpo que
+  não termina, e o botão voltaria a ficar preso.
+- **`ApiTimeoutError extends ApiError`**, com `status` e `code` nulos e
+  `name = 'ApiTimeoutError'`: o tipo é o que deixa a tela dizer "demorou" sem
+  ler a `message`.
+- **Três aberturas (N1).** `shared/api/transportFailure.ts` classifica a
+  falha (`transportFailureOf`: `ApiTimeoutError` → `timeout`; `ApiError`
+  sem status → `network`; resto → `null`) e `leadFor` dá a abertura. Textos
+  da revisão de ux-writing: timeout "A resposta demorou mais que o
+  esperado." e rede "Não foi possível conectar." (sem "servidor", que é
+  jargão, e sem atribuir a culpa à rede da pessoa). 5xx e `code`
+  desconhecido mantêm a abertura própria de cada tela. Um erro que não é
+  `ApiError` (um `TypeError` de `JSON.parse`) não ganha frase de rede.
+- **Os cinco tradutores trocam só a abertura** (início, reagendamento,
+  conclusão, avaliação, decisão da proposta). O fim "Tentar de novo é seguro:
+  …" fica igual em todos; as cinco traduções terminam com esse passo de
+  recuperação. `describeEvaluationErrorCode` (código gravado, após recarga)
+  não muda. `postStream` e `requestJson` ficam fora: o `open` continua
+  gerando `ApiError(null)` para rede, e as telas de GET mostram essa
+  `message` crua.
+
+Alterações: `frontend/src/shared/api/client.ts` (classe, `catch` e docs do
+`postJson` e de `PostOptions`), `transportFailure.ts` novo, os cinco
+tradutores, seus testes de unidade e as 10 asserções de componente
+disparadas por `TypeError('Failed to fetch')` (`MissionList`,
+`ProposalCard`, `RescheduleProposalCard`, `useDecideAction`), que passam a
+esperar o texto de rede. Nenhuma reprovação de outra origem apareceu.
+O E2E do QG (`toContainText('Tentar de novo é seguro')` depois de
+`route.abort()`) continua válido porque o fim do texto não mudou.
+
+Verificação (nesta sessão): `client.test.ts` vermelho antes da correção nos
+4 casos novos/alterados; sabotagem temporária do `hasResponseStatus`
+(revertida) reprova só "um erro cujo corpo nao chega no prazo mantem o
+status, com code nulo". Os testes de unidade dos tradutores reprovaram só
+nos 14 casos novos de rede e prazo antes da implementação.
+`make check` completo: EXIT 0, com o `check-web` em 1070 testes e
+`Coverage summary` 100% em Statements, Branches, Functions e Lines, o
+`check-api` em 1669 testes e 100%, e o `check-e2e` em 66 passed.
+
+Limitação nova: pendência 211.
+
+# Pendência 192/37: prazo no Concluir e na avaliação — 2026-11-10
+
+Objetivo: um Concluir ou uma avaliação pendurados deixam de prender o cartão
+e a espera do "Atualizar o quadro". Revisão-base: `d65a97d`. Só frontend;
+nenhuma dependência, endpoint ou configuração entrou.
+
+Decisões:
+
+- **Concluir: `MUTATION_TIMEOUT_MS` (20 s), o prazo que os outros POSTs de
+  banco já usam.** `concluir_missao` não tem modelo no caminho. Ao fim do
+  prazo a falha sai como `ApiTimeoutError` (`status` e `code` nulos), o tradutor
+  devolve `recovery: 'retry'`, a chave e o rascunho ficam no registro, o
+  retry pendente é marcado e o `registry.settled()` solta a recarga em
+  espera.
+- **Avaliação: `EVALUATION_TIMEOUT_MS = 105_000` (decisão do responsável),
+  nova constante em `frontend/src/shared/api/client.ts`.** O número espelha
+  à mão três valores, conferidos na `main` nesta entrega e sem mudança desde
+  o plano:
+
+  | Fonte | Valor | Efeito |
+  |---|---|---|
+  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só depois que o provedor responde; uma resposta legítima pode sair depois de 60 s |
+  | `FOLGA_DO_ORFAO` (`tutoring/service.py`) | 30 s | o corte do órfão da avaliação é 60 + 30 = 90 s; antes disso o reenvio recebe 409 `avaliacao_em_andamento` |
+  | `proxy_read_timeout` (`docker/nginx.conf`) | 90 s | em produção o nginx já responde 504 a um backend mudo aos 90 s |
+
+  90 s + 15 s de margem para a gravação final e a volta pela rede. Abaixo de
+  90 s o frontend cortaria respostas legítimas e o próprio `tempo_esgotado`;
+  acima, não compete com o 504 do nginx e só age quando nenhuma camada
+  responde. **O timeout do proxy da Coolify (Traefik) não foi verificado.**
+  Se `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS`, a folga ou o nginx mudarem, a
+  constante muda junto (o teste E7 fixa o literal para isso aparecer).
+
+Alterações:
+
+- `useCompleteMission.ts` e `useRequestEvaluation.ts` passam `{ timeoutMs }`
+  ao `postJson`; a doc dos dois hooks e a de `MUTATION_TIMEOUT_MS` foram
+  atualizadas.
+- Testes novos: `useCompleteMission.test.tsx` — E1 (falha `retry` só ao fim
+  dos 20 s), E2 (a recarga pedida durante o voo acontece quando o prazo
+  vence), E3 (o reenvio usa a MESMA `operation_id` e o timer é desarmado),
+  E4 (rascunho, chave e retry pendente ficam no registro);
+  `useRequestEvaluation.test.tsx` — E5 (falha `retry` só ao fim dos 105 s),
+  E6 (reenvio que encontra 409 `avaliacao_em_andamento` pede para esperar),
+  E7 (o literal 105 000), E8 (504 `tempo_esgotado` antes do prazo mantém o
+  texto próprio e não deixa timer). Os testes afirmam `recovery` e estado,
+  não o texto da falha de prazo, para não depender do PR-D.
+
+Comandos e resultados lidos:
+
+- Vermelho antes da implementação: `npx vitest run
+  src/features/missions/useCompleteMission.test.tsx` → 4 failed (E1–E4,
+  estado preso em `submitting`); `npx vitest run
+  src/features/missions/useRequestEvaluation.test.tsx` → 3 failed (E5–E7;
+  E8 já passava, é guarda de regressão).
+- Depois: `npx vitest run src/features/missions` → 20 arquivos, 528 testes
+  passando, sem aviso de `act` nem de atualização após unmount (os testes
+  antigos com POST que nunca responde só deixam um timer pendente).
+- `eslint`, `prettier --check` e `tsc -b --noEmit` nos arquivos tocados sem
+  erros.
+- `make check` completo: `EXIT 0`. Frontend 53 arquivos, 1054 testes,
+  cobertura 100% em instruções, ramos, funções e linhas; pytest 1669
+  passando; Playwright 66 passando; gitleaks sem vazamento.
+
+# Log local das falhas do Groq (pendência 100, parte "log") — 2026-11-10
+
+Objetivo: dar ao responsável um diagnóstico local das falhas do Groq (chave
+recusada, cota Free, rede) sem expor segredo nem texto do usuário e sem mudar
+o comportamento público. Revisão-base: `d65a97d`.
+
+Alterações:
+
+- `groq_provider.py` ganhou o logger `focusquest.modules.tutoring.groq_provider`
+  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Cada falha
+  traduzida pelo adaptador (HTTP, timeout, transporte, stream inválido) deixa
+  uma linha `WARNING`, sem `exc_info`. Exceções fora dessas quatro famílias e
+  falhas decididas no serviço (limite total, texto não persistível) não passam
+  por este log:
+  - HTTP: `Falha HTTP do provedor Groq: status=<int>` seguido, na ordem fixa,
+    dos cabeçalhos presentes entre `retry-after` e os seis `x-ratelimit-*` da
+    documentação "Rate Limits" do Groq;
+  - timeout: `Tempo esgotado no provedor Groq: tipo=<classe>`;
+  - transporte e stream inválido: `Falha do provedor Groq: tipo=<classe>`.
+- Cada valor de cabeçalho é cortado em 64 caracteres e todo caractere fora de
+  `[A-Za-z0-9._:,+-]` vira `?`: espaço, `=`, `[`, quebra de linha e controle
+  não forjam campos nem linhas novas.
+
+Decisões (registradas na coordenação, sem mudança de escopo):
+
+- Nível `WARNING`, como o adaptador Anthropic.
+- Stream inválido também é registrado, só com o tipo: sem isso seria o único
+  caminho mudo, e a mensagem do `ValidationError` traz o `input_value` recebido.
+- `x-request-id` fica fora da allowlist; entra num PR futuro se o suporte do
+  Groq o exigir.
+
+O que nunca vai ao log: corpo da resposta, chave, `Authorization`/`Bearer`,
+sistema e mensagens do turno, mensagem da exceção original, traceback e
+cabeçalhos fora da allowlist (`location`, `set-cookie`, `x-request-id`…). O
+teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` na chave, no
+sistema, na mensagem do usuário, no corpo, em `x-groq-debug`, em `set-cookie`,
+na mensagem do `ConnectError` e no `model`, com o `focusquest` em `DEBUG`, nos
+cenários HTTP, transporte e stream; foi conferido que ele reprova se um
+cabeçalho fora da allowlist entrar nela (sabotagem local, desfeita). `location`
+é coberto por outro teste da allowlist, e o timeout por
+`test_erro_de_transporte_registra_so_o_tipo`; `x-request-id` não tem teste
+próprio e fica fora só pela allowlist. O canário cobre o logger `focusquest`;
+os loggers `httpx2` e `httpcore2` (este registra cabeçalhos de resposta em
+`DEBUG`) continuam protegidos pela raiz em `WARNING` (`core/log.py`).
+
+Não mudou: tipos e mensagens das exceções, codes públicos, textos do
+frontend, contrato HTTP/SSE e banco. Nenhuma dependência nova.
+
+Pendências: a 100 segue aberta só na parte de codes/textos públicos para 4xx
+(linha atualizada na tabela). Nenhuma pendência nova.
+
+Comando: `make check` — aprovado (EXIT 0): Vitest 1046 testes em 53 arquivos;
+pytest 1695 passed e 32 subtests, cobertura 100,00% (2231 instruções, 410
+ramificações); Playwright 66 passed; gitleaks sem vazamentos.
+
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -914,7 +1087,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
-| 209 | A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos). |
+| ~~209~~ | ~~A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos).~~ Resolvida em 2026-11-10: a F14 passou a citar a prova de `test_ordem_global_das_travas.py` para ação→missão e para missão/avaliação→usuário. |
 
 ### Provedor, custo e diagnósticos
 
@@ -922,7 +1095,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | Log local sem segredos nos dois adaptadores: o Groq registra em `WARNING` o status HTTP, `retry-after` e `x-ratelimit-*` (valores saneados, até 64 caracteres), ou só o tipo da exceção em timeout, transporte e stream inválido; nunca corpo, chave, `Authorization` nem texto do usuário. Continua aberto: decidir codes/textos públicos para 4xx (401/403/404/413/429) no tradutor compartilhado chat/avaliação; hoje todos seguem `provedor_indisponivel`. |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
@@ -946,8 +1119,9 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 94/150 | Logs frontend só console; backend simples sem correlação/JSON. Reload/workers/log-config uvicorn não exercitados; Alembic usa log próprio; nova interpolação de segredo exige revisão. |
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
-| 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
-| 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
+| 192/37 | Prazo da avaliação (105 s) espelha à mão tutor_timeout_seconds + FOLGA_DO_ORFAO (= proxy_read_timeout 90 s) + 15 s; sem medida real de latência (177/203) e sem verificar o timeout do proxy da Coolify (Traefik). Reenvio após o prazo passa do corte do órfão e pode repetir a chamada ao provedor (106). |
+| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: os erros só distinguíveis pelo code (409, e o 504 `tempo_esgotado` da avaliação) caem no texto genérico, com reenvio seguro. |
+| 211 | Textos de falha de transporte (`leadFor`) trocam a abertura "Não foi possível <ação>." pela causa, então não nomeiam a ação que falhou, e o de recusar por rede ("Não foi possível conectar. Tentar de novo é seguro.") tem 9 palavras, abaixo da faixa 12–18 da revisão de ux-writing. Rever junto do fim "Tentar de novo é seguro: …", que o E2E do QG verifica. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
 | 213 | `refresh` de useCycle/useCurrentPlan não tem prazo (`requestJson` sem `signal`). Se o pedido mais recente nunca responde, as respostas mais velhas são todas descartadas e a tela fica no estado anterior, ou em "carregando" se a carga inicial foi invalidada. Vale para um refresh só; prazo pede decisão de valor e de mensagem. |
