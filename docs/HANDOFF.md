@@ -7,8 +7,11 @@ o comportamento público. Revisão-base: `d65a97d`.
 Alterações:
 
 - `groq_provider.py` ganhou o logger `focusquest.modules.tutoring.groq_provider`
-  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Toda falha deixa
-  uma linha `WARNING`, sem `exc_info`:
+  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Cada falha
+  traduzida pelo adaptador (HTTP, timeout, transporte, stream inválido) deixa
+  uma linha `WARNING`, sem `exc_info`. Exceções fora dessas quatro famílias e
+  falhas decididas no serviço (limite total, texto não persistível) não passam
+  por este log:
   - HTTP: `Falha HTTP do provedor Groq: status=<int>` seguido, na ordem fixa,
     dos cabeçalhos presentes entre `retry-after` e os seis `x-ratelimit-*` da
     documentação "Rate Limits" do Groq;
@@ -29,10 +32,16 @@ Decisões (registradas na coordenação, sem mudança de escopo):
 O que nunca vai ao log: corpo da resposta, chave, `Authorization`/`Bearer`,
 sistema e mensagens do turno, mensagem da exceção original, traceback e
 cabeçalhos fora da allowlist (`location`, `set-cookie`, `x-request-id`…). O
-teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` em todos
-esses lugares, com o `focusquest` em `DEBUG`, nos cenários HTTP, transporte e
-stream; foi conferido que ele reprova se um cabeçalho fora da allowlist entrar
-nela (sabotagem local, desfeita).
+teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` na chave, no
+sistema, na mensagem do usuário, no corpo, em `x-groq-debug`, em `set-cookie`,
+na mensagem do `ConnectError` e no `model`, com o `focusquest` em `DEBUG`, nos
+cenários HTTP, transporte e stream; foi conferido que ele reprova se um
+cabeçalho fora da allowlist entrar nela (sabotagem local, desfeita). `location`
+é coberto por outro teste da allowlist, e o timeout por
+`test_erro_de_transporte_registra_so_o_tipo`; `x-request-id` não tem teste
+próprio e fica fora só pela allowlist. O canário cobre o logger `focusquest`;
+os loggers `httpx2` e `httpcore2` (este registra cabeçalhos de resposta em
+`DEBUG`) continuam protegidos pela raiz em `WARNING` (`core/log.py`).
 
 Não mudou: tipos e mensagens das exceções, codes públicos, textos do
 frontend, contrato HTTP/SSE e banco. Nenhuma dependência nova.
