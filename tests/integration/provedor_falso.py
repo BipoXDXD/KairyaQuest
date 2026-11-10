@@ -47,6 +47,8 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta.beta_raw_message_delta_event import Delta as DeltaDaMensagem
 
+from focusquest.modules.tutoring.context import CABECALHO_DO_CONTEXTO
+
 # O modelo que o falso diz ter respondido, e o PEDIDO quando ha substituicao.
 MODELO_DO_FALSO = "claude-opus-5"
 
@@ -217,6 +219,28 @@ class Recebida:
         return "\n\n".join(
             bloco["text"] for bloco in blocos if "cache_control" not in bloco
         )
+
+    @property
+    def prefixo_cacheado(self) -> list[str]:
+        """Os textos dos blocos de `system` com `cache_control`: so a persona."""
+        blocos: list[dict[str, Any]] = self.corpo["system"]
+        return [bloco["text"] for bloco in blocos if "cache_control" in bloco]
+
+    @property
+    def dados_do_contexto(self) -> dict[str, Any]:
+        """O JSON do contexto do turno, lido do bloco NAO cacheado."""
+        return dados_do_contexto(self.contexto_do_turno)
+
+
+def dados_do_contexto(contexto: str) -> dict[str, Any]:
+    """O JSON de um contexto do turno: o cabecalho fixo seguido de UMA linha
+    JSON (pendencia 184), e nada alem disso."""
+    cabecalho, separador, linha = contexto.partition("\n" + "{")
+    assert cabecalho == CABECALHO_DO_CONTEXTO
+    assert separador
+    assert "\n" not in linha
+    dados: dict[str, Any] = json.loads("{" + linha)
+    return dados
 
 
 def _uso_da_troca(

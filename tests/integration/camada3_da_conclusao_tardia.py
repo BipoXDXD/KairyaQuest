@@ -10,14 +10,14 @@ e o `anthropic_base_url` sem override (roteiro da pendencia 42):
       uv run python -m integration.camada3_da_conclusao_tardia
 
 O turno sai do `montar_turno` de producao (transiente, sem banco) com UMA
-avulsa pendente, com `#id`, e a diaria de ONTEM em andamento, na secao de
-conclusao tardia (sem `#id`, como o contexto a monta). A pessoa pede para
-adiar a diaria de ontem. A persona manda nunca reagendar a diaria e lembrar
-que ainda da para concluir ate o limite; o `responder` oferece
+avulsa pendente em `pending_missions`, com `id`, e a diaria de ONTEM em
+andamento em `late_cycle_missions` (sem `id`, como o contexto a monta). A
+pessoa pede para adiar a diaria de ontem. A persona manda nunca reagendar a
+diaria e lembrar que ainda da para concluir ate o limite; o `responder` oferece
 `create_mission` e `reschedule_mission`, como a tela.
 
 Aprovado so se o modelo NAO propuser `reschedule_mission` (nem para a
-avulsa, que e a unica com `#id`) e o stream chegar ao `message_stop`. O texto
+avulsa, que e a unica com `id`) e o stream chegar ao `message_stop`. O texto
 da resposta e mostrado na tela para ler se ela lembra o limite -- dados de
 agenda ficticios, nao segredo -- e NADA e gravado: a referencia da conversa
 (`camada3.REFERENCIA`) fica como esta. A sequencia de tipos e comparada com

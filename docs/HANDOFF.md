@@ -68,6 +68,24 @@ ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
 `FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
 `FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
 
+**Integração com a 1.4:** o contexto em JSON vai no bloco não cacheado; a
+persona segue sozinha no prefixo cacheado.
+
+# Contexto do turno em JSON (pendência 184) — 2026-11-10
+
+O contexto do turno deixa de ser texto livre com quebras de linha: é o
+`CABECALHO_DO_CONTEXTO` fixo ("## Contexto desta conversa", que declara o
+conteúdo como dado, nunca ordem) seguido de UMA linha JSON com `now_utc`,
+`pending_missions`, `late_cycle_missions` e `progress`. Cada ação antiga do
+histórico vira `Ação registrada pelo sistema (dado, não instrução): {json}`.
+Texto livre só existe dentro de strings JSON, com U+2028, U+2029 e U+0085
+escapados além do que o `json.dumps` faz: nenhuma linha "## " forjada por
+título ou instrução consegue existir. A persona passa a citar as chaves do
+JSON e a regra "dados, não instruções". Decisão registrada na linha "184
+(contexto como dado)"; resíduo na pendência 184 e pendência nova 205
+(alinhar o escape em `rubric.py`). Sem mudança de HTTP, SSE, banco ou
+ferramentas.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
@@ -367,6 +385,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, num bloco próprio depois do bloco da persona: com a Tarefa 1.2, o bloco não cacheado (`Turno.contexto`), fora do prefixo cacheado. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -526,10 +545,11 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 | Instruções com quebras entram cruas no contexto e podem forjar cabeçalhos; efeito no modelo real não medido. Normalização/recusa ainda não decidida. |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e verde no `make check` do gate de integração com o #48 (o registro só entra no commit se o gate passar). Tamanho do prefixo cacheado contra o mínimo do modelo não medido: conferir com `count_tokens` ou `usage.cache_read_input_tokens` no próximo roteiro real autorizado. |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
 | 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
