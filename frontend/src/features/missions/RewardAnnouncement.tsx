@@ -1,3 +1,4 @@
+import { achievementText } from '../../shared/i18n/achievementText'
 import { useT } from '../../shared/i18n/useT'
 import type { Reward } from '../../shared/types/reward'
 
@@ -9,6 +10,9 @@ import type { Reward } from '../../shared/types/reward'
  *
  * `bonus` e o anuncio do bonus da avaliacao da Kairya (incremento E): o mesmo
  * desenho, com "de bonus" junto do XP para nao parecer uma segunda conclusao.
+ *
+ * O titulo da conquista sai do catalogo pelo `code` (`achievementText`); um
+ * `code` que o catalogo nao conhece mostra o `title` do back.
  */
 export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; bonus?: boolean }) {
   const t = useT()
@@ -29,7 +33,7 @@ export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; 
         <ul role="list">
           {reward.achievements_unlocked.map((a) => (
             <li key={a.code} data-testid="reward-achievement">
-              {t('missions.reward.achievement', { title: a.title })}
+              {t('missions.reward.achievement', { title: achievementText(a, t).title })}
             </li>
           ))}
         </ul>

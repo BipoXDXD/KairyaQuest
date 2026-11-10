@@ -71,7 +71,7 @@ describe('useCurrentPlan', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        failure: { kind: 'unexpected', message: 'Falha inesperada ao carregar a trilha.' },
+        failure: { kind: 'unexpected' },
       })
     })
   })

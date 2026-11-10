@@ -1,3 +1,54 @@
+# i18n: progressão e campanhas no catálogo, regra global contra literal — 2026-11-10
+
+Tarefa 9 do plano de i18n. `ProgressPanel`, `unlockedDate`, `CampaignTrail`,
+`availability` e `pages/Campaigns.tsx` passam pelo `t()`, com chaves
+`progression.*` e `campaigns.*` nos dois catálogos; o PT é o texto anterior, e
+os 14 textos das conquistas são cópia do `CATALOGO` do back. O XP sai por
+`formatXp(value, locale)` (`features/progression/xpFormat.ts`, um
+`Intl.NumberFormat` por idioma) e a data da conquista por
+`formatUnlockedAt(…, locale)`; a constante `DATE_LOCALE` das campanhas saiu.
+
+`achievementText(achievement, t)` (`shared/i18n/achievementText.ts`) dá o
+título e a descrição da conquista no idioma corrente, para o painel e para o
+`RewardAnnouncement`. Code que o catálogo não conhece mostra o `title` e a
+`description` do back (tolerant reader), nunca a chave crua.
+
+`LoadFailure` virou `{ kind: 'api'; text } | { kind: 'unexpected' }`, sem
+texto no estado; `loadFailureFor(error)` não recebe mais mensagem, e
+`LoadFailureMessage` recebe a chave `unexpected` da área e traduz no idioma
+corrente. As quatro cargas (`useMissions`, `useCycle`, `useProgress`,
+`useCurrentPlan`) usam esse tipo, e `features/missions/loadFailure.ts`
+(`MissionsLoadFailure`) foi removido. `MissionList` e `CycleSection` também
+exibem a falha pelo `LoadFailureMessage`.
+
+Fitness function: a regra `no-restricted-syntax` de `eslint.config.js` passa a
+valer para todo `src/**/*.tsx`, menos `src/shared/i18n/**` e os testes, e
+substitui o escopo por pasta das tarefas anteriores. Ela reprova literal com
+letra em `JSXText`, em `aria-label`/`title`/`placeholder`/`alt` e, agora,
+dentro de `{}`: string (`{'Olá'}`, `aria-label={'Fechar'}`) e template literal
+com letra. Glifos sem letra, `alt=""` e `{''}` passam. Cada caso está em
+`tests/unit/no-literal-jsx.test.ts`. Limite conhecido: literal dentro de
+ternário, de `&&` ou guardado em variável (`{ok ? 'Sim' : 'Não'}`) passa pela
+regra; cobri-lo reprovaria também `className` condicional, então fica para a
+revisão de código.
+
+Paridade com o back: `tests/unit/test_conquistas_paridade_i18n.py` compara o
+`title`/`description` serializados por `UnlockedAchievementRead.da_conquista`
+com as chaves de `pt-BR.ts`. Desvio do plano: não passa pelo
+`GET /api/progress`, que exige banco; o teste completo pelo endpoint fica como
+follow-up para quando a suíte tiver banco.
+
+**Limitação visível até a migração da F2 (2.1/2.2).** O back desta base ainda
+envia o code legado da conquista de parceria, que o front não conhece. Até a
+migração trocar o valor para `kairya_partnership`, essa conquista aparece com
+o título e a descrição do back, em PT, também no idioma EN. Depois do merge
+da F2, o code casa com o catálogo sem mudança no front.
+
+Pendências:
+
+- `formatXp` e `formatterPerLocale` repetem o cache por idioma; num terceiro
+  formatador, generalizar (Rule of Three).
+
 # i18n: tutoria no catálogo pt-BR/en — 2026-11-10
 
 Tarefa 7 do plano de i18n (PR 6). Os textos fixos de `TutorConversation`,
@@ -24,6 +75,7 @@ texto.
 
 A regra `no-restricted-syntax` do ESLint passa a valer em
 `src/features/tutoring/**/*.tsx`, com caso em `tests/unit/no-literal-jsx.test.ts`.
+(Escopo por pasta substituído na Tarefa 9 pela regra global em `src/**/*.tsx`.)
 Cada arquivo de teste de componente da área ganhou casos em `en` que leem o
 esperado do catálogo `en`. O P7d (teto diário em inglês) passou a achar o
 campo pelo rótulo EN, que agora existe.
@@ -46,7 +98,8 @@ explícito, com um formatador por idioma (`shared/lib/formatterPerLocale.ts`);
 quem chama obtém o idioma de `useLocale()`. A tutoria já formata o prazo pelo
 idioma de `useLocale()`; só as campanhas (`CampaignTrail.tsx`), ainda não
 migradas, passam `'pt-BR'` por uma constante `DATE_LOCALE`. A regra contra
-literal no JSX passou a valer em `src/features/missions/**`.
+literal no JSX passou a valer em `src/features/missions/**` (escopo por pasta
+substituído na Tarefa 9 pela regra global em `src/**/*.tsx`).
 
 **Exceção registrada: números do texto sem formatação por idioma.** O `{max}`
 dos limites de evidência e de link ("4000", "2000") entra como `String(n)`,
@@ -55,8 +108,10 @@ sem `Intl.NumberFormat`, igual ao `questionLimit` da tutoria. O EN mostra
 mudaria o texto atual). Follow-up: formatar as variáveis numéricas dentro do
 `translate`, pelo idioma, para todas as áreas de uma vez.
 
-**Pendência para a migração de `campaigns`.** A falha de carga de missions usa
-`MissionsLoadFailure` (`features/missions/loadFailure.ts`): o estado guarda
+**Pendência para a migração de `campaigns`** (resolvida na Tarefa 9:
+`MissionsLoadFailure` saiu e o `LoadFailure` compartilhado não grava texto;
+`LoadFailureMessage` ficou, com a chave `unexpected`). A falha de carga de
+missions usava `MissionsLoadFailure` (`features/missions/loadFailure.ts`): o estado guarda
 `{ kind: 'unexpected' }` sem texto, e a tela traduz no idioma corrente. O
 `LoadFailure` compartilhado (`shared/i18n/failureText.ts`) ainda grava a
 mensagem inesperada como texto. Quando `campaigns` migrar, ele deve adotar
@@ -92,8 +147,9 @@ Shell (`SideNav`, `areas.ts`) e o cabeçalho do `Headquarters` passam pelo
 `t()`. Fitness function: `no-restricted-syntax` em `eslint.config.js` contra
 literal com letra no JSX e em `aria-label`/`title`/`placeholder`/`alt`, só em
 `src/app/**` e `src/pages/Headquarters.tsx`. A prova está em
-`tests/unit/no-literal-jsx.test.ts`, inclusive o `\p{L}` com acento. Cada PR de
-área acrescenta a sua pasta ao `files`.
+`tests/unit/no-literal-jsx.test.ts`, inclusive o `\p{L}` com acento. ~~Cada PR
+de área acrescenta a sua pasta ao `files`.~~ Substituído na Tarefa 9: a regra
+vale para todo `src/**/*.tsx`, sem lista de pastas.
 
 `renderWithI18n` ganhou `strict`, que liga o StrictMode pela opção
 `reactStrictMode` do Testing Library. Um `<StrictMode>` dentro da árvore fica
@@ -120,19 +176,20 @@ won't repeat") e o `shell.locale.saveFailed` tinha 11 (ganhou "to the server").
 
 Pendências:
 - ~~`useMissions`, `useCycle`, `useProgress` e `useCurrentPlan` ainda exibem
-  `ApiError.message`.~~ Resolvida neste PR (`LoadFailure`, acima). O fallback
+  `ApiError.message`.~~ Resolvida neste PR (`LoadFailure`, acima). ~~O fallback
   "Falha inesperada ao carregar …" continua literal e vira chave no PR de cada
-  área.
+  área.~~ Resolvida na Tarefa 9: é chave nas quatro áreas.
 - Os demais literais dos componentes que exibem falha migram no PR da área.
 - PR da área da tutoria: com `action: 'unavailable'`, o `TutorConversation`
   mostra a constante literal `UNAVAILABLE_TEXT`, e o recovery
   `tutoring.messageFailure.providerNotConfigured.recovery` nunca aparece. Trocar
   por `<FailureMessage failure={PRE_STREAM_FAILURE_BY_CODE.provedor_nao_configurado} />`
   ou por uma chave própria.
-- Tarefa 9: a fitness function só olha `JSXText` e `JSXAttribute > Literal`, e
+- ~~Tarefa 9: a fitness function só olha `JSXText` e `JSXAttribute > Literal`, e
   deixa passar `<p>{'Olá'}</p>`, `aria-label={'Fechar'}` e template literal com
   letra. Acrescentar seletores de `Literal` e `TemplateLiteral` dentro de
-  `JSXExpressionContainer`, cada um com caso em `no-literal-jsx.test.ts`.
+  `JSXExpressionContainer`, cada um com caso em `no-literal-jsx.test.ts`.~~
+  Resolvida na Tarefa 9 (seletores e casos acrescentados).
 
 # i18n: catálogo tipado e seletor de idioma — 2026-11-10
 

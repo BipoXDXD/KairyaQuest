@@ -69,18 +69,13 @@ describe('loadFailureFor', () => {
   it('um ApiError vira o texto do catalogo pelo kind, sem a message de depuracao', () => {
     const error = new ApiError('O servidor respondeu 503.', 503, null)
 
-    expect(loadFailureFor(error, 'Falha inesperada ao carregar X.')).toEqual({
+    expect(loadFailureFor(error)).toEqual({
       kind: 'api',
       text: { message: 'shared.apiError.http.message', recovery: 'shared.apiError.http.recovery' },
     })
   })
 
-  it('o que nao e ApiError e defeito nosso e recebe a mensagem da area', () => {
-    expect(
-      loadFailureFor(new SyntaxError('Unexpected token'), 'Falha inesperada ao carregar X.'),
-    ).toEqual({
-      kind: 'unexpected',
-      message: 'Falha inesperada ao carregar X.',
-    })
+  it('o que nao e ApiError e defeito nosso, sem texto: quem traduz e a tela', () => {
+    expect(loadFailureFor(new SyntaxError('Unexpected token'))).toEqual({ kind: 'unexpected' })
   })
 })

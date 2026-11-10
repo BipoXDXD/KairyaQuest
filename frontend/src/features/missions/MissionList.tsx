@@ -2,7 +2,7 @@ import { useEffect, useImperativeHandle, type ReactElement, type Ref } from 'rea
 import { MissionCard } from './MissionCard'
 import { useCompletionRegistry, type CompletionRegistry } from './useCompletionRegistry'
 import { useMissions, type MissionsState } from './useMissions'
-import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import { useT } from '../../shared/i18n/useT'
 
 /**
@@ -54,11 +54,10 @@ function MissionsContent({
         >
           <p className="font-semibold">{t('missions.list.loadFailed')}</p>
           <p className="mt-1">
-            {state.failure.kind === 'api' ? (
-              <FailureMessage failure={state.failure.text} />
-            ) : (
-              t('missions.list.unexpectedFailure')
-            )}
+            <LoadFailureMessage
+              failure={state.failure}
+              unexpected="missions.list.unexpectedFailure"
+            />
           </p>
           <button
             type="button"

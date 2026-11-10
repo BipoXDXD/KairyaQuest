@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
 import type { Reward } from '../../shared/types/reward'
+import { en } from '../../shared/i18n/messages/en'
 import { RewardAnnouncement } from './RewardAnnouncement'
 
 const reward = (ajustes: Partial<Reward> = {}): Reward => ({
@@ -102,10 +103,44 @@ describe('RewardAnnouncement', () => {
 
     expect(screen.getByTestId('reward-xp')).toHaveTextContent(/^\+110 bonus XP$/)
     expect(screen.getByTestId('reward-level-up')).toHaveTextContent('You reached level 5!')
-    expect(screen.getByTestId('reward-achievement')).toHaveTextContent('Achievement: Veterano I')
+    expect(screen.getByTestId('reward-achievement')).toHaveTextContent('Achievement: Veteran I')
 
     rerender(<RewardAnnouncement reward={reward({ xp_awarded: 110 })} />)
 
     expect(screen.getByTestId('reward-xp')).toHaveTextContent(/^\+110 XP$/)
+  })
+
+  it('em en, a conquista conhecida sai do catalogo ingles, e nao do title PT do back', () => {
+    renderWithI18n(
+      <RewardAnnouncement
+        reward={reward({
+          achievements_unlocked: [
+            {
+              code: 'streak_7',
+              title: 'Uma semana inteira',
+              description: 'Complete a diária 7 dias seguidos.',
+            },
+          ],
+        })}
+      />,
+      { locale: 'en' },
+    )
+
+    const item = screen.getByTestId('reward-achievement')
+    expect(item).toHaveTextContent(`Achievement: ${en['progression.achievement.streak_7.title']}`)
+    expect(item).not.toHaveTextContent('Uma semana inteira')
+  })
+
+  it('em en, a conquista com code desconhecido mostra o title do back', () => {
+    renderWithI18n(
+      <RewardAnnouncement
+        reward={reward({
+          achievements_unlocked: [{ code: 'conquista_nova', title: 'Nova', description: 'Desc' }],
+        })}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('reward-achievement')).toHaveTextContent(/^Achievement: Nova$/)
   })
 })

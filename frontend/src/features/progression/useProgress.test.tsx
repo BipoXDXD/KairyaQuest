@@ -65,7 +65,7 @@ describe('useProgress', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        failure: { kind: 'unexpected', message: 'Falha inesperada ao carregar o progresso.' },
+        failure: { kind: 'unexpected' },
       })
     })
   })
