@@ -1,5 +1,5 @@
 /* Base tipográfica: corpo em Alegreya Sans e títulos em Alegreya.
-   Fica em @layer base para que as utilities (font-semibold, text-lg etc.)
+   Fica em @layer base para que as utilities (font-bold, text-lg etc.)
    num título continuem vencendo; uma regra fora de layer ganharia delas. */
 @layer base {
   body {

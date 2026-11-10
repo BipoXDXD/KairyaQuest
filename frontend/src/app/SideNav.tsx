@@ -1,3 +1,4 @@
+import { LocaleSwitcher } from '../shared/i18n/LocaleSwitcher'
 import { AREAS, type Area } from './areas'
 
 const ITEM_CLASS =
@@ -39,6 +40,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
           <p className="rpg-wordmark">KairyaQuest</p>
           <p className="rpg-brand-note">Sua jornada de estudos</p>
         </div>
+        <LocaleSwitcher />
       </div>
       <p className="rpg-nav-caption" aria-hidden="true">
         Explorar
