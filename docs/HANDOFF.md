@@ -1,3 +1,55 @@
+# Pendência 65: três ou mais refresh concorrentes — 2026-11-10
+
+Objetivo: trocar o argumento estrutural da pendência 65 ("a guarda de
+sequência não depende de quantos pedidos estão em voo") por prova, em
+`useCycle` e `useCurrentPlan`. Revisão-base: `d65a97d`. **Só testes**:
+nenhuma linha de `src/` não-teste mudou, e o denominador da cobertura é o
+mesmo.
+
+Testes novos, num `describe('tres ou mais refresh concorrentes')` em
+`frontend/src/features/missions/useCycle.test.tsx` e
+`frontend/src/features/campaigns/useCurrentPlan.test.tsx`. Um helper local
+(`emVoo`) deixa cada chamada em voo até o teste responder pelo índice, e cada
+resposta cede um macrotask dentro do `act` (mesmo recurso do teste da carga
+inicial que assenta depois), para que um "ignorado" não passe vacuamente.
+Sem relógio, sem `sleep`; a ordem é a das chamadas ao `routeFetch`.
+
+| Teste | Cenário | Estado afirmado |
+|---|---|---|
+| F1 | três refresh respondendo na ordem inversa (3, 2, 1) | dado do terceiro |
+| F2 | dois sucessos velhos, depois falha do mais recente | dado da carga, `refreshFailed: true` |
+| F3 | sucesso do mais recente, depois duas falhas velhas | dado do mais recente, sem aviso |
+| F4 | dois refresh, `reload`, um terceiro refresh (quatro em voo) | só o refresh pedido depois do `reload` conta, inclusive contra a carga do próprio `reload` |
+| F5 | três refresh durante a carga inicial | sucesso velho não tira de "carregando"; falha do mais recente vira erro; respostas velhas depois não mudam o erro |
+| F6 (só plano) | o mais recente responde `plan: null`, os velhos com plano depois | `no-plan` |
+
+Sabotagens temporárias, todas desfeitas com `git checkout` e lidas na saída
+do `vitest` (os dois arquivos se comportaram igual):
+
+- (a) refresh aceita o penúltimo (`requestId.current - id > 1` no `then` e no
+  `catch`): F1, F2, F3, F5 (e F6) reprovam, junto com os três testes antigos
+  de dois refresh. F4 não reprova: os dois refresh velhos ficam a mais de um
+  passo depois do `reload`.
+- (b) `catch` do refresh sem checagem de `id`: F3 reprova (com os dois
+  testes antigos que já cobriam isso).
+- (c) refresh descarta **só** o penúltimo (`requestId.current - id === 1`):
+  os três testes antigos de dois refresh puros **continuam verdes**; F1–F5
+  (e F6) reprovam. É a prova de que o caso de dois não bastava.
+- (d) `then` do efeito sem checagem de `id`: F4 e F5 reprovam (a carga do
+  `reload` e a carga inicial velhas sobrescreveriam).
+
+Decisão do dono (F5): a regra atual fica. Durante a carga inicial, se um
+refresh velho responde com dado bom e o mais recente falha, a tela vai para
+erro e o dado bom é descartado: "o pedido mais recente é a última palavra".
+Registrado em "Decisões aceitas" (65).
+
+Limitação registrada como pendência 213: o `refresh` não tem prazo. Vale já
+para um pedido só, por isso não é da pendência 65.
+
+Validação: os dois arquivos de teste passando (`45 passed`), `tsc -b`,
+`eslint` e `prettier --check` sem erro; `make check` no fim desta entrega
+(resultado no PR).
+
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -845,7 +897,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
 | 47 | Revalidar payload histórico com schema endurecido pode produzir ValidationError/500 na confirmação de create/reschedule; falta versionamento/compatibilidade dessas propostas. |
-| 65 | Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural. |
+| ~~65~~ | ~~Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural.~~ Resolvida em 2026-11-10 (seção "Pendência 65: três ou mais refresh concorrentes"): três e quatro pedidos em voo, em ordens adversas, nos dois hooks, com sabotagem que só o caso de três detecta. |
 | 80 | Sequência O(D) por conclusão; backfill 0004 O(N·D). Rever quando histórico justificar, sem otimização especulativa. |
 | 81 | CASCADE de xp_entry pode remover conquista em exclusão futura; hoje não há rota de exclusão. Conquista deve sobreviver se esse fluxo nascer. |
 | 88 | Pares missions↔progression e progression↔tutoring continuam no nível de pacote; constante de usuário/router foi corrigida. Evaluation não cria terceiro par. |
@@ -892,6 +944,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
+| 213 | `refresh` de useCycle/useCurrentPlan não tem prazo (`requestJson` sem `signal`). Se o pedido mais recente nunca responde, as respostas mais velhas são todas descartadas e a tela fica no estado anterior, ou em "carregando" se a carga inicial foi invalidada. Vale para um refresh só; prazo pede decisão de valor e de mensagem. |
 
 ## Decisões aceitas e limitações operacionais
 
@@ -908,6 +961,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
 | 54/56 | Janela E2E perto da meia-noite SP aceita; segunda leitura de clock pós-commit é risco teórico, não bug reproduzido. |
+| 65 | Durante a carga inicial, com vários refresh em voo, o pedido mais recente decide: se ele falha, a tela vai para erro mesmo que um refresh mais velho tenha trazido dado válido (teste F5). Decidido pelo dono; mudar é alteração de comportamento. |
 | 67/68/69/70 | Subtítulo/fixture aceitos; reload invalida imediatamente e efeito cria outra geração; refresh após unmount é no-op sem efeito observável, aceito. |
 | 73/74/75/76 | Compose só no principal; bancos sobrevivem à remoção de worktree; limpeza DB manual, sem DROP automático. Push simultâneo mesma árvore colide; script não atualiza main pela rede. |
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |
