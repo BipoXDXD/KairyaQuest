@@ -8,7 +8,7 @@ tornar tudo permanente para o dono da transacao.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from focusquest.core.clock import Clock
 from focusquest.core.errors import (
+    EstimativaForaDoLimite,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
     NaoPertenceAoUsuarioError,
     OperacaoReutilizadaError,
     PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoForaDoLimite,
     PrazoInalteradoError,
 )
 from focusquest.modules.missions.cycle_domain import NAO_CONCLUIVEIS
@@ -66,6 +68,51 @@ REAGENDAMENTO = TipoDeOperacao.REAGENDAMENTO
 # IntegrityError faria uma violacao de chave estrangeira ser reportada ao
 # cliente como "chave reutilizada", que e mentira.
 UNICIDADE_DA_OPERACAO = "uq_mission_operations_operation_id"
+
+# Os limites de NEGOCIO da avulsa (pendencia 26), distintos do teto tecnico
+# `MAIOR_INTEIRO_DA_COLUNA` do schema, que so protege a coluna int4. A
+# estimativa vai de um minuto a um dia inteiro (o teto que o ciclo ja dava a
+# diaria e a especial); o prazo, de logo depois de agora ate um ano a frente.
+# Um ano e o horizonte em que uma missao avulsa ainda e planejamento, e nao
+# lembrete; alem dele o prazo deixa de pressionar e a missao some da agenda.
+ESTIMATIVA_MINIMA_DA_AVULSA = 1
+ESTIMATIVA_MAXIMA_DA_AVULSA = 1440
+HORIZONTE_DO_PRAZO_DA_AVULSA = timedelta(days=365)
+
+
+def validar_limites_da_avulsa(
+    estimated_minutes: int, deadline: datetime, agora: datetime
+) -> None:
+    """Recusa a avulsa fora dos limites de negocio, estimativa primeiro.
+
+    `agora` vem do relogio injetado de quem chama: o schema nao le hora, e esta
+    funcao tambem nao. A ordem e fixa para que o mesmo pedido receba sempre o
+    mesmo `code`.
+    """
+    if not (
+        ESTIMATIVA_MINIMA_DA_AVULSA <= estimated_minutes <= ESTIMATIVA_MAXIMA_DA_AVULSA
+    ):
+        raise EstimativaForaDoLimite(
+            f"a estimativa precisa ficar entre {ESTIMATIVA_MINIMA_DA_AVULSA} e "
+            f"{ESTIMATIVA_MAXIMA_DA_AVULSA} minutos; veio {estimated_minutes}"
+        )
+    validar_prazo_da_avulsa(deadline, agora)
+
+
+def validar_prazo_da_avulsa(deadline: datetime, agora: datetime) -> None:
+    """Recusa o prazo fora de `(agora, agora + 365 dias]`.
+
+    O intervalo e semiaberto no inicio: um prazo igual a `agora` ja venceu.
+    Instantes sem fuso sao recusados com `ValueError` antes da comparacao, que
+    estouraria `TypeError` cru.
+    """
+    if deadline.utcoffset() is None or agora.utcoffset() is None:
+        raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
+    if not agora < deadline <= agora + HORIZONTE_DO_PRAZO_DA_AVULSA:
+        raise PrazoForaDoLimite(
+            "o prazo precisa estar no futuro e a no maximo "
+            f"{HORIZONTE_DO_PRAZO_DA_AVULSA.days} dias de agora"
+        )
 
 
 def criar_missao(
@@ -372,6 +419,10 @@ def reagendar_missao(
         raise PrazoExpiradoError("o novo prazo precisa estar no futuro")
     if problema is ProblemaDoNovoPrazo.INALTERADO:
         raise PrazoInalteradoError("o novo prazo e igual ao prazo atual")
+    # O teto do horizonte (pendencia 26), DEPOIS das recusas de F9: o passado
+    # continua `prazo_expirado`, contrato que a tela e a Kairya ja traduzem.
+    # Antes da primeira escrita, como toda recusa daqui.
+    validar_prazo_da_avulsa(novo_prazo, agora)
 
     # A operacao primeiro: a linha do historico tem FK para ela.
     session.add(

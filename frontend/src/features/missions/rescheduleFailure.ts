@@ -29,6 +29,10 @@ const FAILURE_BY_CODE: Record<RescheduleErrorCode, RescheduleFailure> = {
     message: 'O novo prazo precisa estar no futuro.',
     recovery: 'edit',
   },
+  prazo_fora_do_limite: {
+    message: 'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+    recovery: 'edit',
+  },
   prazo_inalterado: {
     message: 'O novo prazo é igual ao atual. Escolha outro horário.',
     recovery: 'edit',
