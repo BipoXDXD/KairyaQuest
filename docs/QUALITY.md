@@ -79,9 +79,12 @@ make check
 ```
 
 O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
-`main`), escreve o `.env` a partir do do principal com um banco de teste
-próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
-roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
+`main`), gera o `.env` a partir do `.env.example` da `main` com um banco de
+teste próprio (`focusquest_<nome>_test`, no servidor e com a credencial e as
+opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre,
+e roda `make bootstrap`. Do `.env` do principal só a URL do banco de teste é
+lida: as chaves de segredo (`FOCUSQUEST_GROQ_API_KEY` e afins) nascem em
+branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
 PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
 container (seção 6). O nome `push` é **reservado** (o banco dele seria o

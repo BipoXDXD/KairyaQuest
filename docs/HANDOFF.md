@@ -1,3 +1,47 @@
+# `.env` de worktree sem segredo — 2026-11-10
+
+**Objetivo.** O `scripts/novo-worktree.sh` montava o `.env` do worktree novo
+copiando linha a linha o `.env` do principal, inclusive chaves de segredo
+reais (`FOCUSQUEST_GROQ_API_KEY`). Cada worktree multiplicava as cópias da
+chave em disco.
+
+**Decisão.** O `.env` do worktree passa a ser gerado a partir do
+`.env.example` da `main` (lido com `git show main:.env.example`, a mesma
+revisão de onde o worktree nasce, antes de criar qualquer coisa). Do `.env`
+do principal só se lê `FOCUSQUEST_TEST_DATABASE_URL`, como antes: o nome do
+banco vira `focusquest_<nome>_test`, e servidor, credencial local e opções da
+URL ficam. O deslocamento do E2E continua sendo escrito no fim. Alternativa
+descartada: continuar copiando o principal e apagar chaves por padrão de nome
+(`*_API_KEY`, `*_TOKEN`...). É uma denylist: a próxima chave com outro nome
+vazaria em silêncio. O exemplo funciona como allowlist, porque só tem o que é
+seguro versionar. O custo é que ajustes não secretos do `.env` do principal
+(nível de log, modelo, URL do banco de desenvolvimento) não passam para o
+worktree, que fica com os valores do exemplo. Quem precisa de uma chave no
+worktree a preenche à mão.
+
+**Alterações.** `scripts/novo-worktree.sh`: gera a partir do exemplo, recusa
+se a `main` não tiver `.env.example` e acrescenta a linha do banco de teste
+se o exemplo não a tiver (sem ela, o worktree cairia no banco do principal).
+Trava, validações, `noclobber` e as demais recusas não mudaram.
+`tests/integration/test_novo_worktree.py`: o repositório sintético versiona
+uma cópia do `.env.example` real. Teste novo com canários (`CANARY-<uuid>`)
+em toda chave que o exemplo deixa em branco, mais uma que ele não conhece.
+Dois testes novos cobrem as bordas acima. Dois testes antigos afirmavam a
+cópia de valores do principal (`FOCUSQUEST_TUTOR_MODEL`); passaram a afirmar
+o contrário, ou, no da chamada por outro worktree, que o servidor do banco de
+teste vem do principal e não do worktree que chamou. `docs/QUALITY.md`
+descreve a geração.
+
+**Resultados.** O teste dos canários falhou antes da implementação, com dois
+canários no `.env` gerado. Depois dela, o arquivo
+`tests/integration/test_novo_worktree.py` inteiro passou: 56 testes. Ruff,
+`ruff format --check` e mypy passaram nesse arquivo, e `shellcheck -x` no
+script. `make check` completo roda no hook `pre-commit` deste commit (o commit só
+existe se ele passar).
+
+**Pendência.** Worktrees criados antes desta mudança ainda guardam a cópia
+da chave no próprio `.env`; apagá-la é manual.
+
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
