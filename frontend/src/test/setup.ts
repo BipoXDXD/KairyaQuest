@@ -1,5 +1,5 @@
 import { cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // O React so entra em "modo de teste" quando este sinalizador global esta
@@ -35,3 +35,33 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 // tempo enquanto o elemento certo esta na tela -- medido nesta tarefa, com
 // oito testes reprovando por este motivo.
 afterEach(cleanup)
+
+// O idioma do navegador fixado em `pt-BR`: o `I18nProvider` sem
+// `initialLocale` (o de main.tsx) detecta o idioma por ele, e os testes
+// existentes estao todos escritos em PT. No jsdom a propriedade vem do
+// prototipo; redefini-la aqui como `configurable` e o que deixa um teste usar
+// `vi.spyOn(navigator, 'language', 'get')` para simular outro idioma.
+Object.defineProperty(navigator, 'language', { configurable: true, get: () => 'pt-BR' })
+
+// Nenhum teste vaza para o seguinte o idioma que simulou (spy do
+// `navigator.language`), o que gravou no cache nem o `<html lang>`.
+//
+// O `restoreAllMocks` e global de proposito: um spy que vaza de um teste para
+// o seguinte faz o resultado depender da ordem. O custo: TODO `vi.spyOn` volta
+// ao original apos cada teste, entao um spy criado em `beforeAll` (ou no topo
+// de um `describe`) vale so para o primeiro teste do arquivo, e os demais
+// rodam contra a implementacao real -- a falha aparece como "o mock nao
+// pegou" a partir do segundo teste. Crie spies em `beforeEach` ou no proprio
+// teste. (`vi.fn()` solto nao e afetado.)
+afterEach(() => {
+  vi.restoreAllMocks()
+  // Mesma guarda do localStorage abaixo: sem DOM no ambiente node.
+  if (typeof document !== 'undefined') {
+    document.documentElement.removeAttribute('lang')
+  }
+  // Os testes com `@vitest-environment node` (tests/unit/) nao tem
+  // localStorage, e este setup roda para eles tambem.
+  if (typeof localStorage !== 'undefined') {
+    localStorage.clear()
+  }
+})

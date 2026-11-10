@@ -61,6 +61,23 @@ function caixasSeSobrepoem(
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
+/**
+ * Os dois botoes do seletor de idioma (PT/EN) tem alvo de toque de pelo menos
+ * 44x44 px (WCAG 2.5.5). O teste unitario so ve a classe `min-h-11 min-w-11`;
+ * a medida de verdade e esta. O grupo e achado pelo papel, sem o nome: o
+ * rotulo ("Idioma"/"Language") depende do idioma em que o navegador sobe.
+ */
+async function afirmarAlvosDoSeletorDeIdioma(page: Page): Promise<void> {
+  const botoes = await page.getByTestId('side-nav').getByRole('group').getByRole('button').all()
+  expect(botoes.length).toBe(2)
+  for (const botao of botoes) {
+    const caixa = await botao.boundingBox()
+    expect(caixa, 'boundingBox() nulo: o botao do idioma nao tem caixa').not.toBeNull()
+    expect(caixa?.width).toBeGreaterThanOrEqual(44)
+    expect(caixa?.height).toBeGreaterThanOrEqual(44)
+  }
+}
+
 /** Sem rolagem horizontal no documento inteiro (README §7: o celular nao ganha rolagem lateral). */
 async function semRolagemHorizontal(page: Page): Promise<boolean> {
   return page.evaluate(
@@ -244,6 +261,8 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   page,
 }) => {
   await page.goto('/')
+  // Desktop (projeto chromium padrao): o seletor fica na coluna lateral.
+  await afirmarAlvosDoSeletorDeIdioma(page)
   await page.getByTestId('nav-campaigns').click()
 
   const campanhas = page.getByTestId('campaigns')
@@ -302,11 +321,17 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   expect(resultadoQuartel.violations).toEqual([])
 })
 
-test('Campanhas abre pelo teclado: Tab ate a navegacao, Enter, e o foco vai para o titulo', async ({
+test('Campanhas abre pelo teclado: Tab pelo seletor de idioma ate a navegacao, Enter, e o foco vai para o titulo', async ({
   page,
 }) => {
   await page.goto('/')
 
+  // O seletor de idioma (PT, EN) fica no bloco da marca, antes das areas.
+  const idiomas = page.getByTestId('side-nav').getByRole('group').getByRole('button')
+  await page.keyboard.press('Tab')
+  await expect(idiomas.nth(0)).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(idiomas.nth(1)).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByTestId('nav-headquarters')).toBeFocused()
   await page.keyboard.press('Tab')
@@ -335,12 +360,15 @@ test.describe('celular', () => {
     const kairya = page.getByTestId('tutor-sheet-open')
     await expect(kairya).toBeVisible()
     const caixaKairya = await kairya.boundingBox()
+    // Os dois botoes das areas e os dois do seletor de idioma (PT/EN), que
+    // fica no bloco da marca, dentro da mesma nav: nenhum cobre a Kairya.
     const botoesNav = await nav.getByRole('button').all()
-    expect(botoesNav.length).toBe(2)
+    expect(botoesNav.length).toBe(4)
     for (const botao of botoesNav) {
       const caixaBotao = await botao.boundingBox()
       expect(caixasSeSobrepoem(caixaKairya, caixaBotao)).toBe(false)
     }
+    await afirmarAlvosDoSeletorDeIdioma(page)
 
     // A mesma checagem na area de Campanhas: sem rolagem horizontal la
     // tambem, e a navegacao continua visivel no topo.
