@@ -459,6 +459,151 @@ describe('Headquarters', () => {
   })
 })
 
+describe('Headquarters: a celebracao da Kairya', () => {
+  const base: Mission = {
+    id: 31,
+    instructions: 'Resolver 5 exercicios de recursao',
+    completion_criterion: 'Cinco exercicios corrigidos',
+    difficulty: 2,
+    estimated_minutes: 45,
+    mission_type: 'avulsa',
+    day: null,
+    deadline: '2026-09-24T00:00:00-03:00',
+    state: 'pendente',
+    availability: 'disponivel',
+    started_at: null,
+    completed_at: null,
+    xp: 80,
+    actual_duration_minutes: null,
+    verification: null,
+    evidence: null,
+    evaluation: null,
+    reschedules: [],
+  }
+  const concluida: Mission = {
+    ...base,
+    state: 'concluida',
+    availability: 'concluida',
+    completed_at: '2026-09-23T15:00:00Z',
+    verification: 'autodeclarada',
+  }
+
+  function stubBoard(
+    cycleMission: Mission | null,
+    missions: Mission[],
+    extra: Record<string, Route>,
+  ) {
+    stubViewport('desktop')
+    routeFetch({
+      'GET /api/cycle': () =>
+        Response.json({
+          today: '2026-09-23',
+          mission: cycleMission,
+          streak: 0,
+          days_to_milestone: 7,
+          special: null,
+          late_daily: null,
+        }),
+      'GET /api/missions': () => Response.json(missions),
+      'GET /api/tutoring/status': () => Response.json({ available: true }),
+      'GET /api/tutoring/messages': () => Response.json([]),
+      'GET /api/progress': () => Response.json(progressBody(20)),
+      ...extra,
+    })
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('concluir a diária que sobe de nível e destrava conquista celebra uma bolha só, com a fala do nível', async () => {
+    const reward: Reward = {
+      xp_awarded: 40,
+      xp_total: 140,
+      level_before: 1,
+      level_after: 2,
+      achievements_unlocked: [
+        { code: 'streak_7', title: 'Sequência de 7', description: 'Sete dias seguidos' },
+      ],
+    }
+    const diaria: Mission = { ...base, id: 32, mission_type: 'diaria', day: '2026-09-23' }
+    const completion: MissionCompletion = {
+      ...diaria,
+      state: 'concluida',
+      availability: 'concluida',
+      completed_at: '2026-09-23T15:00:00Z',
+      verification: 'autodeclarada',
+      reward,
+    }
+    stubBoard(diaria, [], { 'POST /api/missions/32/complete': () => Response.json(completion) })
+
+    renderWithI18n(<Headquarters />)
+    await settle()
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
+    )
+
+    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    expect(bubble).toHaveAttribute('data-tone', 'celebrating')
+    expect(bubble).toHaveTextContent('Você construiu isso, dia após dia.')
+    expect(bubble).toHaveTextContent('Subiu para o nível 2!')
+    // O reducer guarda so a celebracao de maior prioridade (D2): a legenda da
+    // conquista nao entra na bolha; ela aparece no anuncio da recompensa.
+    expect(bubble).not.toHaveTextContent('Conquista:')
+    expect(await screen.findByTestId('reward')).toHaveTextContent('Conquista: Uma semana inteira')
+  })
+
+  it('concluir uma avulsa sem reward celebra só a missão, sem erro no console', async () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    stubBoard(null, [base], {
+      'POST /api/missions/31/complete': () => Response.json(concluida),
+    })
+
+    renderWithI18n(<Headquarters />)
+    await screen.findByTestId('missions-list')
+    await screen.findByTestId('progress-level')
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Concluir a missão: ${base.instructions}` }),
+    )
+
+    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    expect(bubble).toHaveTextContent('Feito. Isso é treino de verdade.')
+    expect(bubble.querySelectorAll('p.text-sm')).toHaveLength(0)
+    expect(erro).not.toHaveBeenCalled()
+  })
+
+  it('avaliação que não atende deixa a Kairya preocupada, com a fala dela', async () => {
+    const comEvidencia: Mission = {
+      ...concluida,
+      verification: 'com_evidencia',
+      evidence: { text: 'Resolvi os exercicios.', link: null },
+    }
+    stubBoard(null, [comEvidencia], {
+      'POST /api/missions/31/evaluation': () =>
+        Response.json({
+          evaluation: {
+            state: 'concluida',
+            verdict: 'nao_atende',
+            feedback: 'Faltou o ultimo exercicio.',
+            error_code: null,
+            model: 'm',
+          },
+          reward: null,
+        }),
+    })
+
+    renderWithI18n(<Headquarters />)
+    await screen.findByTestId('missions-list')
+    await screen.findByTestId('progress-level')
+    fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
+
+    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    expect(bubble).toHaveAttribute('data-tone', 'concerned')
+    expect(bubble).toHaveTextContent('Ainda não atende. Vamos olhar juntos o que falta?')
+  })
+})
+
 describe('Headquarters: a missao criada pela Kairya', () => {
   const MISSIONS = 'GET /api/missions'
   const CONFIRM = 'POST /api/tutoring/actions/5/confirm'
