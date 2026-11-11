@@ -1,3 +1,234 @@
+# Pendência 65: três ou mais refresh concorrentes — 2026-11-10
+
+Objetivo: trocar o argumento estrutural da pendência 65 ("a guarda de
+sequência não depende de quantos pedidos estão em voo") por prova, em
+`useCycle` e `useCurrentPlan`. Revisão-base: `d65a97d`. **Só testes**:
+nenhuma linha de `src/` não-teste mudou, e o denominador da cobertura é o
+mesmo.
+
+Testes novos, num `describe('tres ou mais refresh concorrentes')` em
+`frontend/src/features/missions/useCycle.test.tsx` e
+`frontend/src/features/campaigns/useCurrentPlan.test.tsx`. Um helper local
+(`emVoo`) deixa cada chamada em voo até o teste responder pelo índice, e cada
+resposta cede um macrotask dentro do `act` (mesmo recurso do teste da carga
+inicial que assenta depois), para que um "ignorado" não passe vacuamente.
+Sem relógio, sem `sleep`; a ordem é a das chamadas ao `routeFetch`.
+
+| Teste | Cenário | Estado afirmado |
+|---|---|---|
+| F1 | três refresh respondendo na ordem inversa (3, 2, 1) | dado do terceiro |
+| F2 | dois sucessos velhos, depois falha do mais recente | dado da carga, `refreshFailed: true` |
+| F3 | sucesso do mais recente, depois duas falhas velhas | dado do mais recente, sem aviso |
+| F4 | dois refresh, `reload`, um terceiro refresh (quatro em voo) | só o refresh pedido depois do `reload` conta, inclusive contra a carga do próprio `reload` |
+| F5 | três refresh durante a carga inicial | sucesso velho não tira de "carregando"; falha do mais recente vira erro; respostas velhas depois não mudam o erro |
+| F6 (só plano) | o mais recente responde `plan: null`, os velhos com plano depois | `no-plan` |
+
+Sabotagens temporárias, todas desfeitas com `git checkout` e lidas na saída
+do `vitest` (os dois arquivos se comportaram igual):
+
+- (a) refresh aceita o penúltimo (`requestId.current - id > 1` no `then` e no
+  `catch`): F1, F2, F3, F5 (e F6) reprovam, junto com os três testes antigos
+  de dois refresh. F4 não reprova: os dois refresh velhos ficam a mais de um
+  passo depois do `reload`.
+- (b) `catch` do refresh sem checagem de `id`: F3 reprova (com os dois
+  testes antigos que já cobriam isso).
+- (c) refresh descarta **só** o penúltimo (`requestId.current - id === 1`):
+  F1–F5 (e F6) reprovam. Antes deste PR, (c) passava pelos três testes
+  antigos de dois refresh puros (que continuam verdes) e só era pega pelos
+  dois testes antigos de `reload` ("um reload que comeca com um refresh em
+  voo..." e "o refresh que falha durante um reload..."); F1–F5/F6 a provam
+  no caso direto.
+- (d) `then` do efeito sem checagem de `id`: F4 e F5 reprovam (a carga do
+  `reload` e a carga inicial velhas sobrescreveriam).
+
+Decisão da coordenação (F5, autonomia delegada): a regra atual fica. Durante a carga inicial, se um
+refresh velho responde com dado bom e o mais recente falha, a tela vai para
+erro e o dado bom é descartado: "o pedido mais recente é a última palavra".
+Registrado em "Decisões aceitas" (65).
+
+Limitação registrada como pendência 213: o `refresh` não tem prazo. Vale já
+para um pedido só, por isso não é da pendência 65.
+
+Validação: os dois arquivos de teste passando (`45 passed`), `tsc -b`,
+`eslint` e `prettier --check` sem erro. `make check` no worktree, com a
+revisão do texto e o helper `pedirTresRefresh` já aplicados: `EXIT=0`;
+Vitest `Tests 1057 passed (1057)`; cobertura 100% (Statements 1337/1337,
+Branches 996/996, Functions 371/371, Lines 1298/1298); pytest `1669 passed,
+32 subtests passed`; Playwright `66 passed`; gitleaks `no leaks found`.
+
+# Prazo que preserva o status e texto que separa demora de rede — 2026-11-10
+
+Pendência 193. Revisão-base: `d65a97d`. Objetivo: depois que o status de
+uma resposta chegou, o prazo do `postJson` não o apaga mais; e a tela diz
+coisas diferentes para "a resposta demorou" e "não conectou".
+
+Decisões:
+
+- **Prazo único sobre cabeçalhos e corpo, status nunca descartado (desenho
+  B).** O timer continua até o fim do corpo; no `catch`, um `ApiError` que já
+  tem `status` sobe intacto (`hasResponseStatus`). Um corpo de erro que não
+  chega no prazo sai como `ApiError(status, code nulo)` e cai no texto
+  genérico, com reenvio seguro. Um 200 cujo corpo não chega continua sendo
+  resultado desconhecido. A alternativa A (prazo só até os cabeçalhos)
+  preservaria o `code` a qualquer hora, mas deixaria sem prazo o corpo que
+  não termina, e o botão voltaria a ficar preso.
+- **`ApiTimeoutError extends ApiError`**, com `status` e `code` nulos e
+  `name = 'ApiTimeoutError'`: o tipo é o que deixa a tela dizer "demorou" sem
+  ler a `message`.
+- **Três aberturas (N1).** `shared/api/transportFailure.ts` classifica a
+  falha (`transportFailureOf`: `ApiTimeoutError` → `timeout`; `ApiError`
+  sem status → `network`; resto → `null`) e `leadFor` dá a abertura. Textos
+  da revisão de ux-writing: timeout "A resposta demorou mais que o
+  esperado." e rede "Não foi possível conectar." (sem "servidor", que é
+  jargão, e sem atribuir a culpa à rede da pessoa). 5xx e `code`
+  desconhecido mantêm a abertura própria de cada tela. Um erro que não é
+  `ApiError` (um `TypeError` de `JSON.parse`) não ganha frase de rede.
+- **Os cinco tradutores trocam só a abertura** (início, reagendamento,
+  conclusão, avaliação, decisão da proposta). O fim "Tentar de novo é seguro:
+  …" fica igual em todos; as cinco traduções terminam com esse passo de
+  recuperação. `describeEvaluationErrorCode` (código gravado, após recarga)
+  não muda. `postStream` e `requestJson` ficam fora: o `open` continua
+  gerando `ApiError(null)` para rede, e as telas de GET mostram essa
+  `message` crua.
+
+Alterações: `frontend/src/shared/api/client.ts` (classe, `catch` e docs do
+`postJson` e de `PostOptions`), `transportFailure.ts` novo, os cinco
+tradutores, seus testes de unidade e as 10 asserções de componente
+disparadas por `TypeError('Failed to fetch')` (`MissionList`,
+`ProposalCard`, `RescheduleProposalCard`, `useDecideAction`), que passam a
+esperar o texto de rede. Nenhuma reprovação de outra origem apareceu.
+O E2E do QG (`toContainText('Tentar de novo é seguro')` depois de
+`route.abort()`) continua válido porque o fim do texto não mudou.
+
+Verificação (nesta sessão): `client.test.ts` vermelho antes da correção nos
+4 casos novos/alterados; sabotagem temporária do `hasResponseStatus`
+(revertida) reprova só "um erro cujo corpo nao chega no prazo mantem o
+status, com code nulo". Os testes de unidade dos tradutores reprovaram só
+nos 14 casos novos de rede e prazo antes da implementação.
+`make check` completo: EXIT 0, com o `check-web` em 1070 testes e
+`Coverage summary` 100% em Statements, Branches, Functions e Lines, o
+`check-api` em 1669 testes e 100%, e o `check-e2e` em 66 passed.
+
+Limitação nova: pendência 211.
+
+# Pendência 192/37: prazo no Concluir e na avaliação — 2026-11-10
+
+Objetivo: um Concluir ou uma avaliação pendurados deixam de prender o cartão
+e a espera do "Atualizar o quadro". Revisão-base: `d65a97d`. Só frontend;
+nenhuma dependência, endpoint ou configuração entrou.
+
+Decisões:
+
+- **Concluir: `MUTATION_TIMEOUT_MS` (20 s), o prazo que os outros POSTs de
+  banco já usam.** `concluir_missao` não tem modelo no caminho. Ao fim do
+  prazo a falha sai como `ApiTimeoutError` (`status` e `code` nulos), o tradutor
+  devolve `recovery: 'retry'`, a chave e o rascunho ficam no registro, o
+  retry pendente é marcado e o `registry.settled()` solta a recarga em
+  espera.
+- **Avaliação: `EVALUATION_TIMEOUT_MS = 105_000` (decisão do responsável),
+  nova constante em `frontend/src/shared/api/client.ts`.** O número espelha
+  à mão três valores, conferidos na `main` nesta entrega e sem mudança desde
+  o plano:
+
+  | Fonte | Valor | Efeito |
+  |---|---|---|
+  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só depois que o provedor responde; uma resposta legítima pode sair depois de 60 s |
+  | `FOLGA_DO_ORFAO` (`tutoring/service.py`) | 30 s | o corte do órfão da avaliação é 60 + 30 = 90 s; antes disso o reenvio recebe 409 `avaliacao_em_andamento` |
+  | `proxy_read_timeout` (`docker/nginx.conf`) | 90 s | em produção o nginx já responde 504 a um backend mudo aos 90 s |
+
+  90 s + 15 s de margem para a gravação final e a volta pela rede. Abaixo de
+  90 s o frontend cortaria respostas legítimas e o próprio `tempo_esgotado`;
+  acima, não compete com o 504 do nginx e só age quando nenhuma camada
+  responde. **O timeout do proxy da Coolify (Traefik) não foi verificado.**
+  Se `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS`, a folga ou o nginx mudarem, a
+  constante muda junto (o teste E7 fixa o literal para isso aparecer).
+
+Alterações:
+
+- `useCompleteMission.ts` e `useRequestEvaluation.ts` passam `{ timeoutMs }`
+  ao `postJson`; a doc dos dois hooks e a de `MUTATION_TIMEOUT_MS` foram
+  atualizadas.
+- Testes novos: `useCompleteMission.test.tsx` — E1 (falha `retry` só ao fim
+  dos 20 s), E2 (a recarga pedida durante o voo acontece quando o prazo
+  vence), E3 (o reenvio usa a MESMA `operation_id` e o timer é desarmado),
+  E4 (rascunho, chave e retry pendente ficam no registro);
+  `useRequestEvaluation.test.tsx` — E5 (falha `retry` só ao fim dos 105 s),
+  E6 (reenvio que encontra 409 `avaliacao_em_andamento` pede para esperar),
+  E7 (o literal 105 000), E8 (504 `tempo_esgotado` antes do prazo mantém o
+  texto próprio e não deixa timer). Os testes afirmam `recovery` e estado,
+  não o texto da falha de prazo, para não depender do PR-D.
+
+Comandos e resultados lidos:
+
+- Vermelho antes da implementação: `npx vitest run
+  src/features/missions/useCompleteMission.test.tsx` → 4 failed (E1–E4,
+  estado preso em `submitting`); `npx vitest run
+  src/features/missions/useRequestEvaluation.test.tsx` → 3 failed (E5–E7;
+  E8 já passava, é guarda de regressão).
+- Depois: `npx vitest run src/features/missions` → 20 arquivos, 528 testes
+  passando, sem aviso de `act` nem de atualização após unmount (os testes
+  antigos com POST que nunca responde só deixam um timer pendente).
+- `eslint`, `prettier --check` e `tsc -b --noEmit` nos arquivos tocados sem
+  erros.
+- `make check` completo: `EXIT 0`. Frontend 53 arquivos, 1054 testes,
+  cobertura 100% em instruções, ramos, funções e linhas; pytest 1669
+  passando; Playwright 66 passando; gitleaks sem vazamento.
+
+# Log local das falhas do Groq (pendência 100, parte "log") — 2026-11-10
+
+Objetivo: dar ao responsável um diagnóstico local das falhas do Groq (chave
+recusada, cota Free, rede) sem expor segredo nem texto do usuário e sem mudar
+o comportamento público. Revisão-base: `d65a97d`.
+
+Alterações:
+
+- `groq_provider.py` ganhou o logger `focusquest.modules.tutoring.groq_provider`
+  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Cada falha
+  traduzida pelo adaptador (HTTP, timeout, transporte, stream inválido) deixa
+  uma linha `WARNING`, sem `exc_info`. Exceções fora dessas quatro famílias e
+  falhas decididas no serviço (limite total, texto não persistível) não passam
+  por este log:
+  - HTTP: `Falha HTTP do provedor Groq: status=<int>` seguido, na ordem fixa,
+    dos cabeçalhos presentes entre `retry-after` e os seis `x-ratelimit-*` da
+    documentação "Rate Limits" do Groq;
+  - timeout: `Tempo esgotado no provedor Groq: tipo=<classe>`;
+  - transporte e stream inválido: `Falha do provedor Groq: tipo=<classe>`.
+- Cada valor de cabeçalho é cortado em 64 caracteres e todo caractere fora de
+  `[A-Za-z0-9._:,+-]` vira `?`: espaço, `=`, `[`, quebra de linha e controle
+  não forjam campos nem linhas novas.
+
+Decisões (registradas na coordenação, sem mudança de escopo):
+
+- Nível `WARNING`, como o adaptador Anthropic.
+- Stream inválido também é registrado, só com o tipo: sem isso seria o único
+  caminho mudo, e a mensagem do `ValidationError` traz o `input_value` recebido.
+- `x-request-id` fica fora da allowlist; entra num PR futuro se o suporte do
+  Groq o exigir.
+
+O que nunca vai ao log: corpo da resposta, chave, `Authorization`/`Bearer`,
+sistema e mensagens do turno, mensagem da exceção original, traceback e
+cabeçalhos fora da allowlist (`location`, `set-cookie`, `x-request-id`…). O
+teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` na chave, no
+sistema, na mensagem do usuário, no corpo, em `x-groq-debug`, em `set-cookie`,
+na mensagem do `ConnectError` e no `model`, com o `focusquest` em `DEBUG`, nos
+cenários HTTP, transporte e stream; foi conferido que ele reprova se um
+cabeçalho fora da allowlist entrar nela (sabotagem local, desfeita). `location`
+é coberto por outro teste da allowlist, e o timeout por
+`test_erro_de_transporte_registra_so_o_tipo`; `x-request-id` não tem teste
+próprio e fica fora só pela allowlist. O canário cobre o logger `focusquest`;
+os loggers `httpx2` e `httpcore2` (este registra cabeçalhos de resposta em
+`DEBUG`) continuam protegidos pela raiz em `WARNING` (`core/log.py`).
+
+Não mudou: tipos e mensagens das exceções, codes públicos, textos do
+frontend, contrato HTTP/SSE e banco. Nenhuma dependência nova.
+
+Pendências: a 100 segue aberta só na parte de codes/textos públicos para 4xx
+(linha atualizada na tabela). Nenhuma pendência nova.
+
+Comando: `make check` — aprovado (EXIT 0): Vitest 1046 testes em 53 arquivos;
+pytest 1695 passed e 32 subtests, cobertura 100,00% (2231 instruções, 410
+ramificações); Playwright 66 passed; gitleaks sem vazamentos.
+
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -412,62 +643,93 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Kairya: catálogo das 36 falas — 2026-11-10
+# Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
-Tarefa 1 da Fase 6 (presença da Kairya). Cria `frontend/src/features/kairya/`
-com `events.ts` (os tipos `Mood`, `KairyaEvent`, `SpokenEvent` e afins) e
-`lines.ts`: `LINE_GROUPS` com 16 grupos e 36 ids, `linesFor` (evento → falas
-possíveis, vazio para evento sem fala), `pickLine` (escolha determinística
-pela semente, sem `Math.random`), `isOpeningLine` (só saudações e retorno são
-anunciadas, D11) e `sentenceCount`. Os textos entram no catálogo da F3 como
-`kairya.lines.<id>`, 36 em PT e 36 em EN. Zero dependências novas.
+**Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
+ser a API da Anthropic. `get_tutoria` monta `ProvedorAnthropic` com
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, `None` e tela de indisponível. O
+Groq saiu do código, dos testes e da documentação viva (`groq_provider.py`,
+os testes dele, `docs/GROQ.md` e o plano de 22/10); a seção "Groq Free"
+abaixo fica só como histórico. `tests/unit/test_sem_groq.py` impede a volta
+do nome em `src`, `tests`, `frontend/src`, `frontend/tests`, `docs` (exceto
+este arquivo), `scripts`, `.github`, `alembic`, `.env.example`,
+`README.md`, `AGENTS.md`, `Makefile`, `pyproject.toml`,
+`.pre-commit-config.yaml`, `compose*.yaml` e a configuração da raiz de
+`frontend/` (`package.json`, `vite.config.ts`, `playwright.config.ts`,
+`tsconfig*` e afins), pulando `node_modules`, binários, `.env` privados e os
+lockfiles (`uv.lock`, `package-lock.json`: espelham os manifestos, e os
+hashes de integridade dariam falso positivo). Nenhuma dependência nova.
+`FOCUSQUEST_GROQ_API_KEY` deixou de existir; com `extra="forbid"`, um `.env`
+que ainda a tenha impede a partida: retire a linha do `.env` local e da
+configuração do deploy.
 
-Os testes reprovam qualquer fala com dígito, placeholder, mais de 12 palavras,
-mais de 3 frases ou frase de aversão à perda, nos dois idiomas, sem allowlist.
+- Padrões: `tutor_model=claude-sonnet-5-5`, `tutor_fallback=true`,
+  `tutor_effort=low` (conversa), `evaluation_effort=medium` (avaliação). O
+  esforço vai em `output_config.effort`; nenhum pedido envia `temperature`,
+  `top_p`, `top_k` nem `budget_tokens`.
+- Cache do prefixo estático: `cache_control` ephemeral na última ferramenta e
+  no bloco da persona. O `Turno` separa `sistema` (persona) de `contexto`
+  (missões, progresso, hora); o contexto vai num bloco DEPOIS do ponto de
+  cache, e o histórico nas mensagens, ambos fora do prefixo. A avaliação não
+  usa cache.
+- Teto diário: `tutor_daily_turn_limit=60` turnos por dia de
+  America/Sao_Paulo. **Turno é chamada ao modelo** (uma resposta da Kairya),
+  não pergunta: o teto é guarda de orçamento, e o reenvio de uma pergunta
+  interrompida ou falhada também é pago. `turnos_de_hoje` conta as respostas
+  da tutora com `created_at` no dia de São Paulo, e a checagem roda antes de
+  criar QUALQUER resposta `gerando`, inclusive no reenvio. Só o reenvio de
+  pergunta já respondida (`JaRespondida`) sai sem chamar o modelo e sem
+  contar. Acima do teto: 429 `limite_diario_da_tutoria` com `Retry-After`
+  até a meia-noite; nada é gravado e o provedor não é chamado. A tela
+  desabilita o campo com "Você chegou ao limite de conversas de hoje. A
+  Kairya volta à meia-noite." (EN na Fase 3).
+- Contrato do 429: é o status de cota excedida (RFC 6585), que é o que o
+  teto é. `Retry-After` vai em segundos (a forma delta-seconds, sem depender
+  do relógio do cliente), calculados em UTC até a meia-noite de São Paulo,
+  arredondados para cima, e corretos também nos dias de 23 e 25 horas do
+  antigo horário de verão. O `code` é próprio porque a tela precisa
+  distinguir este 429 de uma falha: desabilita o campo e não oferece "Tentar
+  de novo", que só gastaria outra requisição. O membro novo do `CodigoDeErro`
+  tem handler (`_limite_diario` em `main.py`) e entra na lista "Erros antes
+  do stream" do `docs/ARCHITECTURE.md`.
+- O teto é guarda de orçamento, não invariante. Duas requisições simultâneas
+  poderiam passar 1 turno do teto; na implementação atual a trava `FOR
+  UPDATE` na linha do usuário serializa as duas, então isso não acontece
+  hoje. A frase vale como contrato: o teto não é invariante e pode deixar de
+  ser exato se a trava mudar.
+- Pendência 100 encerrada. Itens G e H da fila antiga cancelados (eram do
+  Groq).
+- Pendência nova 206: a tela de limite diário não destrava sozinha à
+  meia-noite; hoje basta recarregar. Fica para a Fase 3, que refaz essa tela.
 
-As 36 falas do catálogo são a fonte do roteiro de gravação da F8: a gravação
-segue o texto de `kairya.lines.*`, e mudar uma fala depois de gravada exige
-regravar o áudio.
+**Passos de deploy.** Antes do deploy, o responsável remove
+`FOCUSQUEST_GROQ_API_KEY` e ajusta `FOCUSQUEST_TUTOR_MODEL` no `.env` de
+produção e no Coolify. Com a variável antiga, a aplicação não sobe
+(`extra_forbidden`).
+Antes do deploy, o responsável também confere que
+`FOCUSQUEST_ANTHROPIC_API_KEY` existe no Coolify (sem expor o valor): sem
+ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
+`None`). As variáveis novas `FOCUSQUEST_TUTOR_EFFORT`,
+`FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
+`FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
 
-Pendência (D6): `week_plan_created_*` e `farewell_*` estão no catálogo e em
-`linesFor`, mas nada os dispara ainda. Quem criar a tela de plano da semana
-ou o resumo do dia despacha `{ type: 'say', topic: 'weekPlanCreated' }` ou
-`{ type: 'say', topic: 'farewell' }`.
+**Integração com a 1.4:** o contexto em JSON vai no bloco não cacheado; a
+persona segue sozinha no prefixo cacheado.
 
-# i18n: catálogo tipado e seletor de idioma — 2026-11-10
+# Contexto do turno em JSON (pendência 184) — 2026-11-10
 
-Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
-`frontend/src/shared/i18n/`: catálogo próprio e tipado (`ptBR` define as chaves,
-`en` faz `satisfies Messages`), `translate` com interpolação `{nome}` que lança
-quando falta variável, `plural` sobre `Intl.PluralRules` com a forma opcional
-`zero`, e a detecção do idioma (cache `kairyaquest.locale` válido, senão
-`navigator.language`: `pt*` → `pt-BR`, o resto → `en`). O storage que lança
-(modo privado, cota) é tolerado: o cache só evita o "pisca" do idioma.
-
-O `I18nProvider` envolve o `<App/>` em `main.tsx`, guarda o idioma, espelha em
-`<html lang>` e no cache. O seletor PT/EN fica no bloco da marca da `SideNav`,
-dentro do landmark "Áreas" (`role="group"`, `aria-pressed`, `lang` e nome
-completo por botão). Neste PR a troca é só local: `users.locale` e
-`/api/me` entram nos PRs seguintes. Zero dependências novas.
-
-Convenções do catálogo, válidas para os PRs seguintes: chaves planas
-`<área>.<componente>.<papel>`; plural em chaves irmãs `.one`/`.other` (e
-`.zero` quando o texto do zero difere); números e datas formatados por
-`Intl.*` antes de entrar como variável. Testes de componente renderizam com
-`renderWithI18n` (`src/test/i18n.ts`); o setup do Vitest fixa
-`navigator.language` em `pt-BR` e limpa mocks e `localStorage` após cada teste.
-As strings da interface ainda estão fixas em PT; a migração é por área.
-
-O nome acessível de cada botão do seletor começa pelo texto visível ("PT,
-Português (Brasil)", "EN, English", WCAG 2.5.3), e o alvo de toque é de 44×44 px.
-O `vi.restoreAllMocks()` global do setup desfaz todo `vi.spyOn` após cada
-teste: spy criado em `beforeAll` vale só para o primeiro teste do arquivo,
-então spies nascem em `beforeEach` ou no próprio teste.
-
-Pendências deste PR: a conferência visual do seletor na coluna de 224px do
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
+O contexto do turno deixa de ser texto livre com quebras de linha: é o
+`CABECALHO_DO_CONTEXTO` fixo ("## Contexto desta conversa", que declara o
+conteúdo como dado, nunca ordem) seguido de UMA linha JSON com `now_utc`,
+`pending_missions`, `late_cycle_missions` e `progress`. Cada ação antiga do
+histórico vira `Ação registrada pelo sistema (dado, não instrução): {json}`.
+Texto livre só existe dentro de strings JSON, com U+2028, U+2029 e U+0085
+escapados além do que o `json.dumps` faz: nenhuma linha "## " forjada por
+título ou instrução consegue existir. A persona passa a citar as chaves do
+JSON e a regra "dados, não instruções". Decisão registrada na linha "184
+(contexto como dado)"; resíduo na pendência 184 e pendência nova 205
+(alinhar o escape em `rubric.py`). Sem mudança de HTTP, SSE, banco ou
+ferramentas.
 
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
@@ -768,7 +1030,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
-| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, depois da persona e de uma linha em branco. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, num bloco próprio depois do bloco da persona: com a Tarefa 1.2, o bloco não cacheado (`Turno.contexto`), fora do prefixo cacheado. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -902,7 +1164,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
 | 47 | Revalidar payload histórico com schema endurecido pode produzir ValidationError/500 na confirmação de create/reschedule; falta versionamento/compatibilidade dessas propostas. |
-| 65 | Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural. |
+| ~~65~~ | ~~Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural.~~ Resolvida em 2026-11-10 (seção "Pendência 65: três ou mais refresh concorrentes"): três e quatro pedidos em voo, em ordens adversas, nos dois hooks, com sabotagem (descartar só o penúltimo) que os testes de dois refresh puros deixavam passar e só os de `reload` pegavam; F1–F5/F6 a provam no caso direto. |
 | 80 | Sequência O(D) por conclusão; backfill 0004 O(N·D). Rever quando histórico justificar, sem otimização especulativa. |
 | 81 | CASCADE de xp_entry pode remover conquista em exclusão futura; hoje não há rota de exclusão. Conquista deve sobreviver se esse fluxo nascer. |
 | 88 | Pares missions↔progression e progression↔tutoring continuam no nível de pacote; constante de usuário/router foi corrigida. Evaluation não cria terceiro par. |
@@ -913,7 +1175,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
-| 209 | A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos). |
+| ~~209~~ | ~~A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos).~~ Resolvida em 2026-11-10: a F14 passou a citar a prova de `test_ordem_global_das_travas.py` para ação→missão e para missão/avaliação→usuário. |
 
 ### Provedor, custo e diagnósticos
 
@@ -921,17 +1183,19 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
-| 100 | Log local HTTP/tipo SDK já integrado, sem segredos; decidir codes/textos públicos para 4xx de configuração no tradutor compartilhado chat/avaliação. |
+| 100 | Log local sem segredos nos dois adaptadores: o Groq registra em `WARNING` o status HTTP, `retry-after` e `x-ratelimit-*` (valores saneados, até 64 caracteres), ou só o tipo da exceção em timeout, transporte e stream inválido; nunca corpo, chave, `Authorization` nem texto do usuário. Continua aberto: decidir codes/textos públicos para 4xx (401/403/404/413/429) no tradutor compartilhado chat/avaliação; hoje todos seguem `provedor_indisponivel`. |
+| 100 | **Encerrada em 2026-11-10** com a volta à Anthropic (ver topo). |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e `make check` ainda **não executados** (sem banco nesta janela). |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e verde no `make check` do gate de integração com o #48 (o registro só entra no commit se o gate passar). Tamanho do prefixo cacheado contra o mínimo do modelo não medido: conferir com `count_tokens` ou `usage.cache_read_input_tokens` no próximo roteiro real autorizado. |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
 | 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
+| 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
 
@@ -945,10 +1209,12 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 94/150 | Logs frontend só console; backend simples sem correlação/JSON. Reload/workers/log-config uvicorn não exercitados; Alembic usa log próprio; nova interpolação de segredo exige revisão. |
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
-| 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
-| 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
+| 192/37 | Prazo da avaliação (105 s) espelha à mão tutor_timeout_seconds + FOLGA_DO_ORFAO (= proxy_read_timeout 90 s) + 15 s; sem medida real de latência (177/203) e sem verificar o timeout do proxy da Coolify (Traefik). Reenvio após o prazo passa do corte do órfão e pode repetir a chamada ao provedor (106). |
+| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: os erros só distinguíveis pelo code (409, e o 504 `tempo_esgotado` da avaliação) caem no texto genérico, com reenvio seguro. |
+| 211 | Textos de falha de transporte (`leadFor`) trocam a abertura "Não foi possível <ação>." pela causa, então não nomeiam a ação que falhou, e o de recusar por rede ("Não foi possível conectar. Tentar de novo é seguro.") tem 9 palavras, abaixo da faixa 12–18 da revisão de ux-writing. Rever junto do fim "Tentar de novo é seguro: …", que o E2E do QG verifica. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
 | 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
+| 213 | `refresh` de useCycle/useCurrentPlan não tem prazo (`requestJson` sem `signal`). Se o pedido mais recente nunca responde, as respostas mais velhas são todas descartadas e a tela fica no estado anterior, ou em "carregando" se a carga inicial foi invalidada. Vale para um refresh só; prazo pede decisão de valor e de mensagem. |
 
 ## Decisões aceitas e limitações operacionais
 
@@ -965,6 +1231,7 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
 | 54/56 | Janela E2E perto da meia-noite SP aceita; segunda leitura de clock pós-commit é risco teórico, não bug reproduzido. |
+| 65 | Durante a carga inicial, com vários refresh em voo, o pedido mais recente decide: se ele falha, a tela vai para erro mesmo que um refresh mais velho tenha trazido dado válido (teste F5). Decisão da coordenação (F5, autonomia delegada); mudar é alteração de comportamento. |
 | 67/68/69/70 | Subtítulo/fixture aceitos; reload invalida imediatamente e efeito cria outra geração; refresh após unmount é no-op sem efeito observável, aceito. |
 | 73/74/75/76 | Compose só no principal; bancos sobrevivem à remoção de worktree; limpeza DB manual, sem DROP automático. Push simultâneo mesma árvore colide; script não atualiza main pela rede. |
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |
@@ -1003,3 +1270,204 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
+
+# Pendência 211: textos de falha de transporte — 2026-11-10
+
+A linha 211 da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** A falha de transporte (rede fora ou prazo esgotado) trocava a
+abertura do texto pela causa ("Não foi possível conectar." / "A resposta
+demorou mais que o esperado.") e deixava de nomear a ação que falhou.
+
+**Decisão.** A abertura nomeia a ação, com objeto, e a causa numa frase só:
+"Não foi possível <ação>: <causa>.". As causas são "sem conexão com o
+servidor" (rede) e "o servidor demorou demais para responder" (prazo). O fim
+"Tentar de novo é seguro: …" fica como estava; o E2E do QG continua conferindo
+esse trecho. `leadFor` passa a receber `{ action, fallback }` (`FailureLead`):
+a frase do transporte é montada num lugar só, e o `fallback` continua sendo a
+abertura própria de cada tradutor para 5xx e `code` desconhecido, que não muda.
+
+**Alterações.** `frontend/src/shared/api/transportFailure.ts` (assinatura e
+causas), os tradutores `completion`, `start`, `reschedule` e
+`evaluationFailure.ts` em `features/missions`, `features/tutoring/actionFailure.ts`
+e os testes unitários que conferem esses textos. Ações usadas: concluir a
+missão, iniciar a missão, reagendar a missão, pedir a avaliação, confirmar a
+missão, confirmar o reagendamento e recusar a proposta.
+
+**Limitação nova.** Só o texto de recusar ficou na faixa de 12–18 palavras da
+revisão de ux-writing (16 por rede, 17 por prazo). As outras seis mensagens de
+transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
+a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
+ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
+
+**Teste instável corrigido.** O gate do pre-push reprovou uma vez no D1 de
+`useDecideAction.test.tsx` (`confirming` no lugar de `idle`), num teste que
+este PR não tinha tocado. A causa é uma race no teste: o `then` do hook faz
+`setState` e chama os callbacks fora de `act`, e o `waitFor` esperava o
+callback, de modo que o render com `idle` podia ainda não ter chegado. D1, D6
+e o caso da chave que falha ao ser gerada passam a esperar o estado dentro do
+`waitFor`; as expectativas não mudam.
+
+**Comandos e resultado.** `make check` completo; resultado no corpo do PR.
+
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.
