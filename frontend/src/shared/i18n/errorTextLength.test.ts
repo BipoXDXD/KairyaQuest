@@ -20,6 +20,7 @@ import {
 import {
   PRE_STREAM_FAILURE_BY_CODE,
   STREAM_FAILURE_BY_CODE,
+  UNKNOWN_RESULT,
   describePreStreamFailure,
   describeStreamFailure,
 } from '../../features/tutoring/messageFailure'
@@ -67,6 +68,7 @@ function allFailures(): FailureText[] {
       describePreStreamFailure,
     ),
     ...[...Object.keys(STREAM_FAILURE_BY_CODE), 'desconhecido'].map(describeStreamFailure),
+    UNKNOWN_RESULT,
     ...withCodes(Object.keys(ACTION_FAILURE_BY_CODE)).flatMap((error) => [
       describeActionFailure(error, 'confirm', 'create_mission'),
       describeActionFailure(error, 'confirm', 'reschedule_mission'),
@@ -106,8 +108,12 @@ describe('mensagens de erro em ingles com a frase de causa', () => {
       "This mission isn't on the board anymore. It may have been removed. Refresh to see the current missions.",
     ],
     [
-      describeStreamFailure('desconhecido'),
+      UNKNOWN_RESULT,
       "Couldn't tell whether Kairya's answer arrived. The reply was cut off. Retrying is safe: your question won't repeat.",
+    ],
+    [
+      describeStreamFailure('desconhecido'),
+      "Kairya couldn't answer this question. The reply wasn't completed. Retrying is safe: your question won't repeat.",
     ],
     [
       describeStreamFailure('resposta_recusada'),

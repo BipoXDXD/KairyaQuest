@@ -369,6 +369,8 @@ export const ptBR = {
   'tutoring.messageFailure.refused.message':
     'A Kairya não pôde responder a esta pergunta. O conteúdo foi recusado.',
   'tutoring.messageFailure.refused.recovery': 'Pergunte de outro jeito.',
+  'tutoring.messageFailure.unrecognizedFailure.message':
+    'A Kairya não conseguiu responder a esta pergunta.',
   'tutoring.messageFailure.rejectedBody.message': 'A pergunta não foi aceita.',
   'tutoring.messageFailure.rejectedBody.recovery': 'Confira o texto e envie de novo.',
 

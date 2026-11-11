@@ -393,6 +393,8 @@ export const en = {
   'tutoring.messageFailure.refused.message':
     "Kairya couldn't answer this question. Its content was declined.",
   'tutoring.messageFailure.refused.recovery': 'Ask it a different way.',
+  'tutoring.messageFailure.unrecognizedFailure.message':
+    "Kairya couldn't answer this question. The reply wasn't completed.",
   'tutoring.messageFailure.rejectedBody.message':
     "Your question wasn't accepted. The text is invalid.",
   'tutoring.messageFailure.rejectedBody.recovery': 'Check the text and send it again.',
