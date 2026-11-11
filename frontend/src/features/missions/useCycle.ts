@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestJson } from '../../shared/api/client'
-import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
+import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { Cycle } from './types'
 
@@ -15,7 +15,7 @@ import type { Cycle } from './types'
  */
 export type CycleState =
   | { status: 'loading' }
-  | { status: 'error'; failure: LoadFailure }
+  | { status: 'error'; failure: MissionsLoadFailure }
   | { status: 'loaded'; cycle: Cycle; refreshFailed: boolean }
 
 export interface UseCycleResult {
@@ -27,16 +27,6 @@ export interface UseCycleResult {
    * uma conclusao, para a sequencia mudar sem desmontar o cartao concluido.
    */
   refresh: () => void
-}
-
-/**
- * A falha da carga, para a tela. O `ApiError` vira o texto do catalogo pelo
- * `kind`; sua `message` e de depuracao e nunca chega a tela. A leitura nao tem
- * erro de dominio com `code`: o que chega e rede ou servidor, e qualquer outra
- * coisa e defeito nosso, sem mensagem propria que ajude alguem.
- */
-function failureFor(error: unknown): LoadFailure {
-  return loadFailureFor(error, 'Falha inesperada ao carregar o ciclo.')
 }
 
 export function useCycle(): UseCycleResult {
@@ -85,7 +75,7 @@ export function useCycle(): UseCycleResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', failure: failureFor(error) })
+        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -116,7 +106,7 @@ export function useCycle(): UseCycleResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', failure: failureFor(error) }
+              ? { status: 'error', failure: missionsLoadFailureFor(error) }
               : atual,
         )
       })

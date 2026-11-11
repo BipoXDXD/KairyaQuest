@@ -111,17 +111,17 @@ describe('RescheduleProposalCard', () => {
     const atual = screen.getByTestId('reschedule-previous-deadline')
     expect(atual.tagName).toBe('TIME')
     expect(atual).toHaveAttribute('dateTime', PREVIOUS)
-    expect(atual).toHaveTextContent(formatDeadline(PREVIOUS))
+    expect(atual).toHaveTextContent(formatDeadline(PREVIOUS, 'pt-BR'))
     expect(atual).toHaveTextContent(/02\/10\/2026.*18:00/)
 
     const proposto = screen.getByTestId('reschedule-new-deadline')
     expect(proposto.tagName).toBe('TIME')
     expect(proposto).toHaveAttribute('dateTime', PROPOSED)
-    expect(proposto).toHaveTextContent(formatDeadline(PROPOSED))
+    expect(proposto).toHaveTextContent(formatDeadline(PROPOSED, 'pt-BR'))
     expect(proposto).toHaveTextContent(/05\/10\/2026.*18:00/)
 
-    expect(card()).toHaveTextContent(`Prazo atual${formatDeadline(PREVIOUS)}`)
-    expect(card()).toHaveTextContent(`Prazo proposto${formatDeadline(PROPOSED)}`)
+    expect(card()).toHaveTextContent(`Prazo atual${formatDeadline(PREVIOUS, 'pt-BR')}`)
+    expect(card()).toHaveTextContent(`Prazo proposto${formatDeadline(PROPOSED, 'pt-BR')}`)
     expect(screen.getByTestId('reschedule-reason')).toHaveTextContent('Motivo: Falta de tempo')
     // O valor cru do motivo nunca vai para a tela.
     expect(card()).not.toHaveTextContent('falta_de_tempo')
@@ -363,10 +363,10 @@ describe('RescheduleProposalCard em ingles', () => {
       within(card()).getByRole('heading', { name: en['tutoring.reschedule.title'] }),
     ).toBeInTheDocument()
     expect(card()).toHaveTextContent(
-      `${en['tutoring.reschedule.previousDeadline']}${formatDeadline(PREVIOUS)}`,
+      `${en['tutoring.reschedule.previousDeadline']}${formatDeadline(PREVIOUS, 'en')}`,
     )
     expect(card()).toHaveTextContent(
-      `${en['tutoring.reschedule.newDeadline']}${formatDeadline(PROPOSED)}`,
+      `${en['tutoring.reschedule.newDeadline']}${formatDeadline(PROPOSED, 'en')}`,
     )
     expect(screen.getByTestId('reschedule-reason')).toHaveTextContent(
       `${en['tutoring.reschedule.reason']} ${en['missions.rescheduleReason.lackOfTime']}`,

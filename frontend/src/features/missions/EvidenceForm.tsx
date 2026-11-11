@@ -1,24 +1,16 @@
 import { useId, useState } from 'react'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 import { describeEvidence, stripEnds } from './evidenceLimit'
+import { counterText, linkErrorText } from './evidenceText'
 import type { EvidenceDraft } from './types'
-
-const TOGGLE_CLASS =
-  'rounded text-sm font-medium text-emerald-200 underline-offset-2 hover:underline ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none'
-
-const FIELD_CLASS =
-  'w-full rounded border border-slate-600 bg-slate-900 p-2 text-sm text-slate-100 ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ' +
-  'disabled:opacity-60'
+import { Button, Field } from '../../shared/ui'
 
 /** Os ids de `aria-describedby` presentes, juntos; `undefined` sem nenhum. */
 function joinIds(...ids: (string | null)[]): string | undefined {
   const present = ids.filter((id) => id !== null)
   return present.length === 0 ? undefined : present.join(' ')
 }
-
-const RETRY_NOTICE =
-  'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.'
 
 /**
  * A entrega com evidencia, recolhida por padrao (E17): Concluir continua a um
@@ -59,12 +51,12 @@ export function EvidenceForm({
   retryPending?: boolean
   describedBy?: string
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   const [linkTouched, setLinkTouched] = useState(false)
   const [expanded, setExpanded] = useState(() => draft.text !== '' || draft.link !== '')
   const id = useId()
   const regionId = `${id}-region`
-  const textId = `${id}-text`
-  const linkId = `${id}-link`
   const counterId = `${id}-counter`
   const linkErrorId = `${id}-link-error`
   const textMissingId = `${id}-text-missing`
@@ -79,8 +71,8 @@ export function EvidenceForm({
 
   return (
     <div className="mt-3">
-      <button
-        type="button"
+      <Button
+        variant="tertiary"
         data-testid="evidence-toggle"
         aria-expanded={expanded}
         aria-controls={regionId}
@@ -88,94 +80,98 @@ export function EvidenceForm({
         onClick={() => {
           setExpanded((open) => !open)
         }}
-        className={TOGGLE_CLASS}
       >
-        Entregar com evidência (opcional)
-      </button>
-      <div id={regionId} className="mt-2 flex flex-col gap-2">
+        {t('missions.evidence.toggle')}
+      </Button>
+      {/* A margem so existe com o formulario aberto: fechada, a regiao fica
+          vazia e nao empurra a acao do cartao para baixo da dobra. */}
+      <div id={regionId} className="flex flex-col gap-2 not-empty:mt-2">
         {expanded && (
           <>
             {retryPending && (
               <p
                 id={retryNoticeId}
                 data-testid="evidence-retry-notice"
-                className="text-xs text-amber-200"
+                className="text-xs text-text-muted"
               >
-                {RETRY_NOTICE}
+                {t('missions.evidence.retryNotice')}
               </p>
             )}
-            <label htmlFor={textId} className="text-sm font-medium text-slate-200">
-              O que você fez
-            </label>
-            <textarea
-              id={textId}
-              data-testid="evidence-text"
-              rows={3}
-              value={draft.text}
-              disabled={disabled}
-              readOnly={retryPending}
-              aria-readonly={retryPending ? true : undefined}
-              aria-describedby={joinIds(
-                retryPending ? retryNoticeId : null,
-                described.counter === null ? null : counterId,
-                textMissing ? textMissingId : null,
+            <Field label={t('missions.evidence.textLabel')}>
+              {(control) => (
+                <textarea
+                  {...control}
+                  data-testid="evidence-text"
+                  rows={3}
+                  value={draft.text}
+                  disabled={disabled}
+                  readOnly={retryPending}
+                  aria-readonly={retryPending ? true : undefined}
+                  aria-describedby={joinIds(
+                    retryPending ? retryNoticeId : null,
+                    described.counter === null ? null : counterId,
+                    textMissing ? textMissingId : null,
+                  )}
+                  onChange={(event) => {
+                    onChange({ ...draft, text: event.target.value })
+                  }}
+                  className={`${control.className} resize-y`}
+                />
               )}
-              onChange={(event) => {
-                onChange({ ...draft, text: event.target.value })
-              }}
-              className={`${FIELD_CLASS} resize-y`}
-            />
-            <p id={counterId} data-testid="evidence-counter" className="text-xs text-slate-400">
-              {described.counter}
+            </Field>
+            <p id={counterId} data-testid="evidence-counter" className="text-xs text-text-muted">
+              {described.counter === null ? null : counterText(described.counter, locale, t)}
             </p>
             {textMissing && (
               <p
                 id={textMissingId}
                 data-testid="evidence-text-missing"
-                className="text-xs text-amber-200"
+                className="text-xs text-feedback-danger"
               >
-                Para entregar o link, conte também o que você fez.
+                {t('missions.evidence.textMissing')}
               </p>
             )}
-            <label htmlFor={linkId} className="text-sm font-medium text-slate-200">
-              Link (opcional)
-            </label>
-            <input
-              id={linkId}
-              data-testid="evidence-link"
-              type="url"
-              inputMode="url"
-              value={draft.link}
-              disabled={disabled}
-              readOnly={retryPending}
-              aria-readonly={retryPending ? true : undefined}
-              aria-invalid={linkError === null ? undefined : true}
-              aria-describedby={joinIds(
-                retryPending ? retryNoticeId : null,
-                linkError === null ? null : linkErrorId,
+            <Field label={t('missions.evidence.linkLabel')}>
+              {(control) => (
+                <input
+                  {...control}
+                  data-testid="evidence-link"
+                  type="url"
+                  inputMode="url"
+                  value={draft.link}
+                  disabled={disabled}
+                  readOnly={retryPending}
+                  aria-readonly={retryPending ? true : undefined}
+                  aria-invalid={linkError === null ? undefined : true}
+                  aria-describedby={joinIds(
+                    retryPending ? retryNoticeId : null,
+                    linkError === null ? null : linkErrorId,
+                  )}
+                  onBlur={() => {
+                    setLinkTouched(true)
+                  }}
+                  onChange={(event) => {
+                    // O erro reaparece so na proxima saida do campo: com o link valido (ou
+                    // vazio) o "tocado" volta a falso, e digitar depois de sair do campo
+                    // nao dispara o `alert` a cada tecla.
+                    if (
+                      describeEvidence({ ...draft, link: event.target.value }).linkError === null
+                    ) {
+                      setLinkTouched(false)
+                    }
+                    onChange({ ...draft, link: event.target.value })
+                  }}
+                />
               )}
-              onBlur={() => {
-                setLinkTouched(true)
-              }}
-              onChange={(event) => {
-                // O erro reaparece so no proximo blur: com o link valido (ou
-                // vazio) o "tocado" volta a falso, e digitar depois de um blur
-                // nao dispara o `alert` a cada tecla.
-                if (describeEvidence({ ...draft, link: event.target.value }).linkError === null) {
-                  setLinkTouched(false)
-                }
-                onChange({ ...draft, link: event.target.value })
-              }}
-              className={FIELD_CLASS}
-            />
+            </Field>
             {linkError !== null && (
               <p
                 id={linkErrorId}
                 role="alert"
                 data-testid="evidence-link-error"
-                className="text-xs text-red-300"
+                className="text-xs text-feedback-danger"
               >
-                {linkError}
+                {linkErrorText(linkError, t)}
               </p>
             )}
           </>
