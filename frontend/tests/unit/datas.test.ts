@@ -13,10 +13,12 @@ import {
   diaCivil,
   diaEMes,
   diaRelativo,
+  diasEntre,
   instanteRelativo,
   isoSaoPaulo,
   isoUtc,
   prazoNaTela,
+  segundaDaSemana,
   somarDias,
 } from '../e2e/datas'
 
@@ -42,6 +44,32 @@ describe('somarDias e diaRelativo', () => {
     expect(diaRelativo(0, agora)).toBe('2026-11-09')
     expect(diaRelativo(1, agora)).toBe('2026-11-10')
     expect(diaRelativo(-6, agora)).toBe('2026-11-03')
+  })
+})
+
+describe('segundaDaSemana', () => {
+  // 2026-11-09 e segunda-feira; o plano semanal do backend sempre comeca numa.
+  it.each([
+    ['2026-11-09', '2026-11-09'],
+    ['2026-11-10', '2026-11-09'],
+    ['2026-11-14', '2026-11-09'],
+    ['2026-11-15', '2026-11-09'],
+    ['2026-11-16', '2026-11-16'],
+  ])('a semana de %s comeca em %s', (dia, segunda) => {
+    expect(segundaDaSemana(dia)).toBe(segunda)
+  })
+
+  it('atravessa a virada do ano', () => {
+    expect(segundaDaSemana('2027-01-01')).toBe('2026-12-28')
+  })
+})
+
+describe('diasEntre', () => {
+  it('conta os dias civis de um dia ate outro', () => {
+    expect(diasEntre('2026-11-09', '2026-11-09')).toBe(0)
+    expect(diasEntre('2026-11-09', '2026-11-15')).toBe(6)
+    expect(diasEntre('2026-12-28', '2027-01-01')).toBe(4)
+    expect(diasEntre('2026-11-10', '2026-11-09')).toBe(-1)
   })
 })
 

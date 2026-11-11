@@ -93,7 +93,7 @@ def test_o_catalogo_tem_os_sete_codigos_na_ordem_do_painel() -> None:
         "veteran_10",
         "veteran_50",
         "veteran_100",
-        "tifa_partnership",
+        "kairya_partnership",
     ]
     assert [c.titulo for c in CATALOGO] == [
         "Primeiros passos",

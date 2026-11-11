@@ -15,6 +15,7 @@ import type { Cycle } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useCycle, type CycleState } from './useCycle'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 
 export interface CycleSectionHandle {
   refresh: () => void
@@ -219,7 +220,9 @@ function CycleContent({
           className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
         >
           <p className="font-semibold">Falha ao carregar o ciclo.</p>
-          <p className="mt-1">{state.message}</p>
+          <p className="mt-1">
+            <LoadFailureMessage failure={state.failure} />
+          </p>
           <button
             type="button"
             data-testid="cycle-retry"

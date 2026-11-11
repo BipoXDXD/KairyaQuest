@@ -39,7 +39,7 @@ from focusquest.modules.progression.domain import nivel_do_saldo
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.domain import CodigoDoStream
 from focusquest.modules.tutoring.service import Tutoria
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_DA_DEMORA, TIMEOUT_FOLGADO
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     Roteiro,
@@ -307,11 +307,16 @@ def test_id_zero_e_422(cliente: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    ("roteiro", "status", "codigo"),
+    ("roteiro", "status", "codigo", "prazo_do_provedor"),
     [
-        (Roteiro(status_http=500), 502, "provedor_indisponivel"),
-        (Roteiro(atrasar_cabecalhos=TIMEOUT_DE_TESTE * 3), 504, "tempo_esgotado"),
-        (_veredito("otimo"), 502, "avaliacao_invalida"),
+        (Roteiro(status_http=500), 502, "provedor_indisponivel", TIMEOUT_FOLGADO),
+        (
+            Roteiro(atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 3),
+            504,
+            "tempo_esgotado",
+            TIMEOUT_DA_DEMORA,
+        ),
+        (_veredito("otimo"), 502, "avaliacao_invalida", TIMEOUT_FOLGADO),
     ],
     ids=["provedor-fora", "tempo-esgotado", "saida-invalida"],
 )

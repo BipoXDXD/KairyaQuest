@@ -1,3 +1,5 @@
+import { LocaleSwitcher } from '../shared/i18n/LocaleSwitcher'
+import { useT } from '../shared/i18n/useT'
 import { AREAS, type Area } from './areas'
 
 const ITEM_CLASS =
@@ -25,9 +27,10 @@ interface SideNavProps {
  * Kairya, a semantica e a mesma nas duas larguras, entao media query basta.
  */
 export function SideNav({ active, onNavigate }: SideNavProps) {
+  const t = useT()
   return (
     <nav
-      aria-label="Áreas"
+      aria-label={t('shell.nav.label')}
       data-testid="side-nav"
       className="rpg-nav border-b border-slate-800 px-4 py-3 lg:sticky lg:top-0 lg:h-screen lg:w-56 lg:shrink-0 lg:border-r lg:border-b-0 lg:py-8"
     >
@@ -36,12 +39,13 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
           ✦
         </span>
         <div>
-          <p className="rpg-wordmark">KairyaQuest</p>
-          <p className="rpg-brand-note">Sua jornada de estudos</p>
+          <p className="rpg-wordmark">{t('shell.brand.name')}</p>
+          <p className="rpg-brand-note">{t('shell.brand.tagline')}</p>
         </div>
+        <LocaleSwitcher />
       </div>
       <p className="rpg-nav-caption" aria-hidden="true">
-        Explorar
+        {t('shell.nav.caption')}
       </p>
       <ul className="flex flex-wrap gap-2 lg:flex-col">
         {AREAS.map((area) => {
@@ -62,7 +66,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
                     ▸
                   </span>
                 )}
-                {area.label}
+                {t(area.label)}
               </button>
             </li>
           )

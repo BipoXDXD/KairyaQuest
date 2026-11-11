@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
+import { renderWithI18n } from '../../test/i18n'
 import type { RescheduleFailure } from './rescheduleFailure'
 import { RescheduleForm } from './RescheduleForm'
 import type { OpenReschedule, RescheduleDraft } from './types'
@@ -28,17 +29,19 @@ const missao: Mission = {
 }
 
 const falhaEdit: RescheduleFailure = {
-  message: 'O novo prazo precisa estar no futuro.',
-  recovery: 'edit',
+  message: 'missions.rescheduleFailure.deadlinePassed.message',
+  recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+  action: 'edit',
 }
 const falhaRetry: RescheduleFailure = {
-  message:
-    'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-  recovery: 'retry',
+  message: 'missions.rescheduleFailure.unconfirmed.message',
+  recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+  action: 'retry',
 }
 const falhaNovaChave: RescheduleFailure = {
-  message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-  recovery: 'retry-with-new-operation',
+  message: 'missions.failure.reusedOperation',
+  recovery: 'missions.failure.tryAgain',
+  action: 'retry-with-new-operation',
 }
 
 type Props = Parameters<typeof RescheduleForm>[0]
@@ -56,7 +59,7 @@ function renderForm(props: Partial<Props> = {}) {
     pendingRetry: null,
     ...props,
   }
-  const view = render(<RescheduleForm {...all} />)
+  const view = renderWithI18n(<RescheduleForm {...all} />)
   const rerender = (next: Partial<Props>) => {
     view.rerender(<RescheduleForm {...all} {...next} />)
   }
@@ -220,7 +223,9 @@ describe('RescheduleForm', () => {
 
     rerender({ failure: falhaRetry, pendingRetry: enviado() })
 
-    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(falhaRetry.message)
+    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(
+      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    )
     const aviso = screen.getByTestId('reschedule-retry-notice')
     expect(aviso).toHaveTextContent(
       'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.',
@@ -381,6 +386,38 @@ describe('RescheduleForm: o rascunho mora no registro (pendencia 112)', () => {
     expect(toggle()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByTestId('reschedule-submit')).not.toBeInTheDocument()
     expect(document.activeElement).toBe(document.body)
+  })
+
+  it('guardado com outro prazo, a montagem o descarta do registro, uma vez so', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(null)
+    rerender({ disabled: true })
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('o descarte da montagem nao apaga o reagendamento aberto depois dela', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+    abrir()
+    const novoOnSave = vi.fn<(open: OpenReschedule | null) => void>()
+    rerender({ onSave: novoOnSave })
+
+    expect(novoOnSave).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenCalledTimes(2)
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ openedFor: missao.deadline }))
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('guardado com o prazo atual, a montagem nao descarta nada', () => {
+    expect(renderForm({ saved: guardado }).onSave).not.toHaveBeenCalled()
+  })
+
+  it('sem nada guardado, a montagem nao descarta nada', () => {
+    expect(renderForm().onSave).not.toHaveBeenCalled()
   })
 
   it('abrir e cada mudanca guardam o reagendamento aberto; fechar o descarta', () => {

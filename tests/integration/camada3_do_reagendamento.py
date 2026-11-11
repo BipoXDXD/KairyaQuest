@@ -31,12 +31,13 @@ import anthropic
 from pydantic import ValidationError
 
 from focusquest.core.config import Settings
+from focusquest.core.idioma import Idioma
 from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import TipoDeAcao
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import (
     MensagemDoTurno,
     Proposta,
@@ -74,7 +75,7 @@ def _missao(agora: datetime) -> Mission:
 
 def turno(agora: datetime) -> Turno:
     base = montar_turno(
-        persona=PERSONA,
+        persona=persona_do_idioma(Idioma.PT_BR),
         agora=agora,
         pendentes=[_missao(agora)],
         progresso=camada3._SEM_PROGRESSO,

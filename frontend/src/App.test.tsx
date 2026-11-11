@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { Cycle } from './features/missions/types'
@@ -6,6 +6,7 @@ import type { Progress } from './features/progression/types'
 import type { Mission } from './shared/types/mission'
 import { controlledStream, sseFrame } from './test/sse'
 import { requestsTo, routeFetch } from './test/fetchRoutes'
+import { renderWithI18n } from './test/i18n'
 import { stubViewport } from './test/viewport'
 
 /**
@@ -59,7 +60,7 @@ describe('App', () => {
   it('monta o Quartel-General como tela inicial', async () => {
     stubPage()
 
-    render(<App />)
+    renderWithI18n(<App />)
 
     expect(screen.getByTestId('headquarters')).toBeVisible()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
@@ -69,7 +70,7 @@ describe('App', () => {
   it('so a raiz do App pinta o fundo e fixa a altura minima; a do Quartel-General so organiza o layout', async () => {
     stubPage()
 
-    const { container } = render(<App />)
+    const { container } = renderWithI18n(<App />)
 
     const raizDoApp = container.firstElementChild
     const raizDoQuartel = screen.getByTestId('headquarters').parentElement
@@ -85,7 +86,7 @@ describe('App', () => {
   it('abre no Quartel-General, marcado como area atual na navegacao', async () => {
     stubPage()
 
-    render(<App />)
+    renderWithI18n(<App />)
 
     expect(screen.getByRole('navigation', { name: 'Áreas' })).toBeInTheDocument()
     expect(screen.getByTestId('nav-headquarters')).toHaveAttribute('aria-current', 'page')
@@ -96,7 +97,7 @@ describe('App', () => {
 
   it('Campanhas abre pela navegacao: o titulo dela recebe o foco e o Quartel-General fica oculto', async () => {
     stubPage()
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
@@ -115,7 +116,7 @@ describe('App', () => {
 
   it('voltar ao Quartel-General devolve o foco ao titulo dele e desmonta Campanhas', async () => {
     stubPage()
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
@@ -133,7 +134,7 @@ describe('App', () => {
 
   it('so um main visivel; o do Quartel-General oculto tem o proprio hidden', async () => {
     stubPage()
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
@@ -148,7 +149,7 @@ describe('App', () => {
 
   it('o rascunho da Kairya sobrevive a ida e volta por Campanhas, sem remontar nada', async () => {
     const fetchMock = stubPage()
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
     fireEvent.change(screen.getByTestId('tutor-input'), {
       target: { value: 'Como estudo recursao?' },
@@ -170,7 +171,7 @@ describe('App', () => {
 
   it('cada abertura de Campanhas busca a trilha de novo', async () => {
     const fetchMock = stubPage()
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
 
     // ida
@@ -219,7 +220,7 @@ describe('App', () => {
       special: { availability: 'bloqueada', progress: 3, mission: null },
     }
     stubPage(planoComHojeDisponivel)
-    render(<App />)
+    renderWithI18n(<App />)
     await settleHeadquarters()
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
@@ -334,7 +335,7 @@ describe('App: retorno ao Quartel-General', () => {
       () => cycle,
       () => progress,
     )
-    render(<App />)
+    renderWithI18n(<App />)
     await initialDaily()
     const input = screen.getByTestId('tutor-input')
     const card = screen.getByTestId('cycle').querySelector('[data-mission-id="700"]')
@@ -373,7 +374,7 @@ describe('App: retorno ao Quartel-General', () => {
       () =>
         ++progressCalls === 1 ? Response.json({}, { status: 503 }) : Response.json(progressAt(60)),
     )
-    render(<App />)
+    renderWithI18n(<App />)
     await initialDaily()
     fireEvent.click(screen.getByTestId('nav-campaigns'))
     await screen.findByTestId('trail-mission')
@@ -410,7 +411,7 @@ describe('App: retorno ao Quartel-General', () => {
         init?.method === 'POST' ? Promise.resolve(stream.response) : fetchGet(url, init),
       ),
     )
-    render(<App />)
+    renderWithI18n(<App />)
     await initialDaily()
     fireEvent.change(screen.getByTestId('tutor-input'), { target: { value: 'Uma pista' } })
     fireEvent.click(screen.getByTestId('tutor-send'))
