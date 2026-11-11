@@ -529,7 +529,13 @@ def test_o_processo_sobe_na_porta_pedida_e_responde_o_controle() -> None:
             assert resposta.json() == {"requests": []}
         finally:
             processo.terminate()
-            processo.wait(timeout=10)
+            try:
+                processo.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Sem o kill, o `__exit__` do `Popen` chamaria `wait()` sem
+                # prazo e a suite travaria em vez de reprovar.
+                processo.kill()
+                raise
 
 
 def test_o_processo_exige_a_porta() -> None:

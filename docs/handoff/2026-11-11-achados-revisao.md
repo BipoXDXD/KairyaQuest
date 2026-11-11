@@ -97,6 +97,15 @@ antes no código da `origin/main`; os que não existem lá ficaram de fora.
   error::pytest.PytestUnraisableExceptionWarning` → 1 falha
   (`ResourceWarning: unclosed file <_io.TextIOWrapper name=11>`). Com a
   correção, o mesmo comando → 1 aprovado.
+- Correção da revisão do #92 (item 6): o `processo.wait(timeout=10)` do
+  `finally` podia estourar, e então o `__exit__` do `Popen` chamaria `wait()`
+  sem prazo e a suíte travaria. Agora o `TimeoutExpired` é capturado dentro do
+  `with`, o processo leva `kill()` e o erro é relançado: o teste reprova em vez
+  de travar. O caminho de estouro não tem teste próprio, porque exigiria um
+  processo que ignora o `terminate`.
+- Correção da revisão do #92 (item 3): a quebra de linha do docblock de
+  `RescheduleForm.tsx` cortava a frase "O sucesso muda o prazo (o"; as linhas
+  foram refeitas sem mudar o conteúdo.
 - Item 7: `pytest tests/integration/test_anthropic_provider.py -k fora_do_ar
   --durations=1` → 1 aprovado, 1,36 s na chamada.
 - `make check`: ver o corpo do PR.
