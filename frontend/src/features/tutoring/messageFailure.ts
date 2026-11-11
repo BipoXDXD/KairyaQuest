@@ -146,3 +146,14 @@ export function describePreStreamFailure(error: unknown): MessageFailure {
 export function describeStreamFailure(code: string): MessageFailure {
   return isStreamCode(code) ? STREAM_FAILURE_BY_CODE[code] : UNRECOGNIZED_FAILURE
 }
+
+/**
+ * O corpo do evento `error`, como veio. O backend sempre manda `code`, mas o
+ * cliente nao confia nisso: sem `code` em texto (corpo nulo, objeto vazio,
+ * `code` de outro tipo) vale o mesmo que um `code` desconhecido, e nunca
+ * derruba o stream numa excecao que viraria resultado desconhecido.
+ */
+export function describeStreamErrorEvent(data: unknown): MessageFailure {
+  const code = data === null ? null : (data as { code?: unknown }).code
+  return typeof code === 'string' ? describeStreamFailure(code) : UNRECOGNIZED_FAILURE
+}
