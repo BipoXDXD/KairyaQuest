@@ -8,6 +8,7 @@ import { useIsDesktop } from './useIsDesktop'
 import { useTutorConversation, type SendState } from './useTutorConversation'
 import { useTutorStatus } from './useTutorStatus'
 import type { MessageKey } from '../../shared/i18n/catalog'
+import { useAudio } from '../../shared/audio/useAudio'
 import { useT } from '../../shared/i18n/useT'
 import { KairyaFace, useKairya } from '../kairya'
 import { useTutorPresence } from './useTutorPresence'
@@ -101,6 +102,7 @@ export function TutorPanel({
   // no reenvio (pendencia 35).
   const keys = useActionKeys()
   const { dispatch } = useKairya()
+  const { playSfx, stopVoice } = useAudio()
   useTutorPresence({ send: conversation.send, draft: conversation.draft })
   // Toda confirmacao bem-sucedida chega aqui (R7): a pagina recarrega o quadro
   // e a Kairya confirma a missao na bolha.
@@ -186,8 +188,17 @@ export function TutorPanel({
 
   const toggleDesktop = () => {
     const next = !desktopOpen
+    if (next) playSfx('panel_open')
     setDesktopOpen(next)
     writePanelOpen(next)
+  }
+
+  // A folha cobre a bolha: a fala sem legenda visivel e proibida (D15), entao
+  // abrir corta a voz; so o clique que abre, nunca o desktop.
+  const openSheet = () => {
+    stopVoice()
+    playSfx('panel_open')
+    setSheetOpen(true)
   }
 
   const closeSheet = () => {
@@ -303,7 +314,7 @@ export function TutorPanel({
               data-testid="tutor-sheet-open"
               aria-expanded={false}
               aria-controls="tutor-sheet"
-              onClick={() => setSheetOpen(true)}
+              onClick={openSheet}
               className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
               <Portrait scene={false} />

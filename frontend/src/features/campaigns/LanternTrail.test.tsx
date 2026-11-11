@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
 import { routeFetch } from '../../test/fetchRoutes'
 import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import type { Availability, Mission } from '../../shared/types/mission'
@@ -623,5 +624,66 @@ describe('LanternTrail em ingles', () => {
     expect(screen.getByTestId('trail-go-headquarters')).toHaveTextContent(
       'Complete this mission at Headquarters.',
     )
+  })
+})
+
+describe('LanternTrail -- efeitos', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function mount(special: PlanSpecial, onOpenHeadquarters?: () => void) {
+    servir(plano(SEMANA_MISTA, 4, special))
+    const elements: FakeAudio[] = []
+    renderWithI18n(<LanternTrail onOpenHeadquarters={onOpenHeadquarters} />, {
+      audio: {
+        storage: memoryStorage({
+          'kairyaquest.sound': '{"voice":true,"sfx":true}',
+          'kairyaquest.soundInvite': '1',
+        }),
+        createElement: () => {
+          const element = fakeAudio()
+          elements.push(element)
+          return element
+        },
+      },
+    })
+    return {
+      elements,
+      played: () =>
+        elements.flatMap((element) =>
+          element.play.mock.calls.map(() => /\/audio\/sfx\/(\w+)\.mp3$/.exec(element.src)?.[1]),
+        ),
+    }
+  }
+
+  it('a especial disponivel toca weekly_trial_unlocked uma vez por montagem', async () => {
+    const { played } = mount(especial('disponivel'))
+    await screen.findByTestId('trail-special-art')
+
+    expect(played()).toEqual(['weekly_trial_unlocked'])
+  })
+
+  it('a especial bloqueada nao toca nada', async () => {
+    const { elements } = mount(especialBloqueada)
+    await screen.findByTestId('trail-special-art')
+
+    expect(elements).toHaveLength(0)
+  })
+
+  it('o clique em trail-go-headquarters toca trail_step antes de onOpenHeadquarters', async () => {
+    let playing: string | undefined
+    const holder: { elements: FakeAudio[] } = { elements: [] }
+    const onOpen = vi.fn(() => {
+      playing = holder.elements.at(-1)?.src
+    })
+    const rig = mount(especialBloqueada, onOpen)
+    holder.elements = rig.elements
+
+    fireEvent.click(await screen.findByTestId('trail-go-headquarters'))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(playing).toMatch(/\/audio\/sfx\/trail_step\.mp3$/)
+    expect(rig.played()).toEqual(['trail_step'])
   })
 })

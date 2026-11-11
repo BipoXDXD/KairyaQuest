@@ -52,3 +52,16 @@ function sendEvents(prev: SendState, next: SendState): KairyaEvent[] {
 export function presenceEvents(prev: PresenceInput, next: PresenceInput): KairyaEvent[] {
   return [...draftEvents(prev.draft, next.draft), ...sendEvents(prev.send, next.send)]
 }
+
+/**
+ * A resposta acabou de chegar com uma proposta pendente: o envio estava em
+ * andamento e voltou a `idle` com ao menos uma ação `proposta`. Histórico
+ * carregado (`idle` → `idle`) e falha não contam.
+ */
+export function arrivedProposal(prev: PresenceInput, next: PresenceInput): boolean {
+  return (
+    !isSettled(prev.send) &&
+    next.send.status === 'idle' &&
+    next.send.answer?.actions.some((action) => action.state === 'proposta') === true
+  )
+}

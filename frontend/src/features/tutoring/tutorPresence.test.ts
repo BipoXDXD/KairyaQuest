@@ -3,8 +3,8 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { KairyaPresenceProvider, useKairya, type KairyaEvent } from '../kairya'
 import { PRE_STREAM_FAILURE_BY_CODE, UNKNOWN_RESULT, type MessageFailure } from './messageFailure'
-import { presenceEvents, type PresenceInput } from './tutorPresence'
-import type { MessageRead } from './types'
+import { arrivedProposal, presenceEvents, type PresenceInput } from './tutorPresence'
+import type { ActionRead, MessageRead } from './types'
 import type { SendState } from './useTutorConversation'
 
 const PENDING = { clientMessageId: 'c1', content: 'Oi' }
@@ -234,5 +234,54 @@ describe('presenceEvents: ordem', () => {
       { type: 'draftCleared' },
       { type: 'questionSent' },
     ])
+  })
+})
+
+const PROPOSTA: ActionRead = {
+  id: 5,
+  kind: 'create_mission',
+  state: 'proposta',
+  payload: {
+    instructions: 'Estudar grafos',
+    completion_criterion: 'Resumo',
+    difficulty: 2,
+    estimated_minutes: 40,
+    deadline: '2027-02-15T21:00:00-03:00',
+  },
+  mission_id: null,
+  error_code: null,
+}
+const answeredWith = (action: ActionRead): SendState => ({
+  status: 'idle',
+  answer: { ...ANSWER, actions: [action] },
+})
+
+describe('arrivedProposal', () => {
+  it.each([
+    ['sending', SENDING],
+    ['writing', writing('Oi')],
+  ])('%s para idle com acao proposta: true', (_name, before) => {
+    expect(arrivedProposal(input(before), input(answeredWith(PROPOSTA)))).toBe(true)
+  })
+
+  it('writing para idle com acao executada: false', () => {
+    const executada: ActionRead = { ...PROPOSTA, state: 'executada', mission_id: 40 }
+    expect(arrivedProposal(input(writing('Oi')), input(answeredWith(executada)))).toBe(false)
+  })
+
+  it('writing para idle sem acao: false', () => {
+    expect(arrivedProposal(input(writing('Oi')), input(IDLE_ANSWERED))).toBe(false)
+  })
+
+  it('writing para idle sem resposta: false', () => {
+    expect(arrivedProposal(input(writing('Oi')), input(IDLE))).toBe(false)
+  })
+
+  it('idle para idle (historico carregado): false', () => {
+    expect(arrivedProposal(input(IDLE), input(answeredWith(PROPOSTA)))).toBe(false)
+  })
+
+  it('writing para failed: false', () => {
+    expect(arrivedProposal(input(writing('Oi')), input(failed(FAILURE_OF('retry'))))).toBe(false)
   })
 })
