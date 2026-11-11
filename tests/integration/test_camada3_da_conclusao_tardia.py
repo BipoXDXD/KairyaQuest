@@ -13,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from focusquest.core.idioma import Idioma
 from focusquest.modules.tutoring.domain import TipoDeAcao
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import Proposta
 from integration import camada3, camada3_da_conclusao_tardia
 from integration.conftest import TIMEOUT_DE_TESTE
@@ -56,7 +57,7 @@ def test_o_contexto_traz_a_diaria_de_ontem_tardia_e_a_avulsa_pelo_id(
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
     recebida = falso.recebidas[-1]
-    assert recebida.prefixo_cacheado == [PERSONA]
+    assert recebida.prefixo_cacheado == [persona_do_idioma(Idioma.PT_BR)]
     contexto = recebida.dados_do_contexto
     assert contexto["late_cycle_missions"] == [
         {

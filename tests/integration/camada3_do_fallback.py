@@ -36,12 +36,13 @@ from urllib.parse import urlsplit
 import anthropic
 
 from focusquest.core.config import Settings
+from focusquest.core.idioma import Idioma
 from focusquest.modules.tutoring.anthropic_provider import (
     BETA_DO_FALLBACK,
     ProvedorAnthropic,
 )
 from focusquest.modules.tutoring.context import montar_turno
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import (
     EventoDoProvedor,
     Fim,
@@ -81,7 +82,7 @@ class Captura:
 def turno(agora: datetime) -> Turno:
     """O turno da camada 3 da conversa: quadro vazio e o mesmo pedido."""
     base = montar_turno(
-        persona=PERSONA,
+        persona=persona_do_idioma(Idioma.PT_BR),
         agora=agora,
         pendentes=[],
         progresso=camada3._SEM_PROGRESSO,
