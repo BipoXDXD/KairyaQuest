@@ -1,9 +1,10 @@
 """O adaptador Anthropic: a unica peca da aplicacao que importa o SDK."""
 
 import logging
+import re
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
 import httpx2
@@ -14,6 +15,7 @@ from anthropic.types.beta import (
     BetaFallbackMessageIterationUsage,
     BetaMessage,
     BetaMessageParam,
+    BetaTextBlockParam,
     BetaToolParam,
     BetaToolUseBlock,
 )
@@ -44,6 +46,26 @@ from focusquest.modules.tutoring.tool_definitions import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+# Cabecalhos de limite da documentacao "Rate limits" da Anthropic; qualquer
+# outro (location, set-cookie, request-id...) fica fora do log.
+_CABECALHOS_DE_LIMITE = (
+    "retry-after",
+    "anthropic-ratelimit-requests-limit",
+    "anthropic-ratelimit-requests-remaining",
+    "anthropic-ratelimit-requests-reset",
+    "anthropic-ratelimit-tokens-limit",
+    "anthropic-ratelimit-tokens-remaining",
+    "anthropic-ratelimit-tokens-reset",
+    "anthropic-ratelimit-input-tokens-limit",
+    "anthropic-ratelimit-input-tokens-remaining",
+    "anthropic-ratelimit-input-tokens-reset",
+    "anthropic-ratelimit-output-tokens-limit",
+    "anthropic-ratelimit-output-tokens-remaining",
+    "anthropic-ratelimit-output-tokens-reset",
+)
+_TAMANHO_MAXIMO_DO_VALOR = 64
+# Espaco, "=", quebra de linha e controle forjariam campos ou linhas no log.
+_FORA_DO_SEGURO = re.compile(r"[^A-Za-z0-9._:,+-]")
 
 # Tentativas do proprio SDK, alem da primeira chamada. Elas so acontecem antes
 # do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
@@ -64,6 +86,12 @@ BETA_DO_FALLBACK = "server-side-fallback-2026-07-01"
 # `input` sairia parcial (ver o `stop_reason` em `avaliar`).
 MAX_TOKENS_DA_AVALIACAO = 2048
 
+# Os niveis de esforco que a configuracao aceita (`output_config.effort`). Os
+# modelos 5.x recusam com 400 `temperature`, `top_p`, `top_k` e
+# `budget_tokens`: a profundidade do raciocinio se controla SO pelo esforco, e
+# o `thinking` nao e enviado (adaptativo e o padrao desses modelos).
+Esforco = Literal["low", "medium", "high"]
+
 # O `stop_reason` que NAO e o fim normal, traduzido para o dominio
 # (pendencias 45 e 120). `end_turn` e `tool_use` sao o fim normal; `stop_sequence`
 # e `pause_turn` nao acontecem nesta conversa (ela nao manda `stop_sequences`
@@ -73,6 +101,18 @@ _PARADAS: dict[str | None, Parada] = {
     "model_context_window_exceeded": Parada.CORTADA,
     "refusal": Parada.RECUSADA,
 }
+
+
+def _valor_seguro(valor: str) -> str:
+    return _FORA_DO_SEGURO.sub("?", valor[:_TAMANHO_MAXIMO_DO_VALOR])
+
+
+def _descrever_limites(cabecalhos: httpx2.Headers) -> str:
+    return "".join(
+        f" {nome}={_valor_seguro(cabecalhos[nome])}"
+        for nome in _CABECALHOS_DE_LIMITE
+        if nome in cabecalhos
+    )
 
 
 @contextmanager
@@ -93,9 +133,10 @@ def _traduzir_erros() -> Iterator[None]:
     except (anthropic.APIError, httpx2.TransportError) as erro:
         if isinstance(erro, anthropic.APIStatusError):
             _LOGGER.warning(
-                "Falha HTTP do provedor: status=%d tipo=%s",
+                "Falha HTTP do provedor: status=%d tipo=%s%s",
                 erro.status_code,
                 type(erro).__name__,
+                _descrever_limites(erro.response.headers),
             )
         raise ProvedorIndisponivelError(
             f"o provedor falhou: {type(erro).__name__}"
@@ -117,6 +158,25 @@ def _mensagens_do_beta(turno: Turno) -> list[BetaMessageParam]:
         {"role": mensagem.papel, "content": mensagem.texto}
         for mensagem in turno.mensagens
     ]
+
+
+def _sistema_com_cache(turno: Turno) -> list[BetaTextBlockParam]:
+    """O sistema da conversa em blocos: a persona fecha o prefixo cacheado; o
+    contexto do turno, que muda a cada pergunta, vem num bloco depois dele.
+
+    O prefixo e `tools` -> `system` (ordem da API): as ferramentas e a persona
+    sao iguais em todo turno, e o `cache_control` na ultima ferramenta e na
+    persona marca onde ele termina. O contexto e o historico ficam fora.
+    """
+    persona: BetaTextBlockParam = {
+        "type": "text",
+        "text": turno.sistema,
+        "cache_control": {"type": "ephemeral"},
+    }
+    contexto: list[BetaTextBlockParam] = (
+        [{"type": "text", "text": turno.contexto}] if turno.contexto else []
+    )
+    return [persona, *contexto]
 
 
 def _substituto(mensagem: BetaMessage) -> str | None:
@@ -148,6 +208,8 @@ class ProvedorAnthropic:
         max_tokens: int,
         timeout_segundos: float,
         fallback: bool,
+        esforco: Esforco,
+        esforco_da_avaliacao: Esforco,
     ) -> None:
         # A chave e o endereco SEMPRE explicitos: sem eles o SDK procura
         # credencial e endereco no ambiente sozinho (medido).
@@ -162,6 +224,15 @@ class ProvedorAnthropic:
         # Sem valor padrao, como a chave: quem monta o adaptador decide
         # (`Settings.tutor_fallback`, pendencia 174).
         self._fallback = fallback
+        # Sem valor padrao tambem: `Settings.tutor_effort` e
+        # `Settings.evaluation_effort` decidem.
+        self._esforco = esforco
+        self._esforco_da_avaliacao = esforco_da_avaliacao
+
+    @property
+    def modelo(self) -> str:
+        """O modelo que este adaptador chama."""
+        return self._modelo
 
     def responder(self, turno: Turno) -> Generator[EventoDoProvedor]:
         """Os eventos da resposta, pelo endpoint BETA (pendencia 174).
@@ -186,15 +257,18 @@ class ProvedorAnthropic:
             "name": TipoDeAcao.REAGENDAR_MISSAO.value,
             "description": DESCRICAO_DO_REAGENDAMENTO,
             "input_schema": esquema_do_reagendamento(),
+            # A ULTIMA ferramenta fecha a parte das ferramentas no prefixo.
+            "cache_control": {"type": "ephemeral"},
         }
         with (
             _traduzir_erros(),
             self._cliente.beta.messages.stream(
                 model=self._modelo,
                 max_tokens=self._max_tokens,
-                system=turno.sistema,
+                system=_sistema_com_cache(turno),
                 messages=_mensagens_do_beta(turno),
                 tools=[criar, reagendar],
+                output_config={"effort": self._esforco},
                 # Uma proposta por resposta (README s14).
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                 fallbacks="default" if self._fallback else omit,
@@ -256,9 +330,11 @@ class ProvedorAnthropic:
             self._cliente.messages.stream(
                 model=self._modelo,
                 max_tokens=MAX_TOKENS_DA_AVALIACAO,
-                system=turno.sistema,
+                # A avaliacao nao tem contexto de turno; se tiver, ele vai junto.
+                system="\n\n".join(filter(None, (turno.sistema, turno.contexto))),
                 messages=_mensagens_da_api(turno),
                 tools=[definicao],
+                output_config={"effort": self._esforco_da_avaliacao},
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
         ):

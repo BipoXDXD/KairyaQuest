@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { StartErrorCode } from './types'
 
 /**
@@ -49,14 +50,19 @@ const FAILURE_BY_CODE: Record<StartErrorCode, StartFailure> = {
   },
 }
 
+const UNCONFIRMED_LEAD: FailureLead = {
+  action: 'iniciar a missão',
+  fallback: 'Não foi possível confirmar o início.',
+}
+const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será iniciada duas vezes.'
+
 /**
- * A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo.
- * A mensagem diz a unica coisa certa -- que repetir nao duplica.
+ * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
+ * novo. A abertura diz a causa quando ela e de transporte (`leadFor`); o fim
+ * diz a unica coisa certa -- que repetir nao duplica.
  */
-const UNCONFIRMED: StartFailure = {
-  message:
-    'Não foi possível confirmar o início. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
-  recovery: 'retry',
+function unconfirmed(error: unknown): StartFailure {
+  return { message: `${leadFor(error, UNCONFIRMED_LEAD)} ${RETRY_IS_SAFE}`, recovery: 'retry' }
 }
 
 /**
@@ -80,5 +86,5 @@ export function describeStartFailure(error: unknown): StartFailure {
   if (error instanceof ApiError && error.status === 404 && error.code === null) {
     return FAILURE_BY_CODE.missao_nao_encontrada
   }
-  return UNCONFIRMED
+  return unconfirmed(error)
 }

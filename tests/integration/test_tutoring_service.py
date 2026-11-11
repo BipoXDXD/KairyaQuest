@@ -5,7 +5,6 @@ bufferiza a resposta inteira, e so aqui da para olhar o banco NO
 INSTANTE de cada evento.
 """
 
-import json
 import threading
 from collections.abc import Callable, Generator
 from datetime import UTC, date, datetime, timedelta
@@ -25,7 +24,6 @@ from focusquest.modules.missions.domain import MissionType
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.missions.service import concluir_missao, iniciar_missao
 from focusquest.modules.progression.models import XpEntry
-from focusquest.modules.tutoring.context import CABECALHO_DO_CONTEXTO
 from focusquest.modules.tutoring.domain import (
     RESPOSTA_LONGA,
     CodigoDoStream,
@@ -56,6 +54,7 @@ from integration.provedor_falso import (
     ServidorAnthropicFalso,
     Substituicao,
     Texto,
+    dados_do_contexto,
 )
 
 ESTUDANTE = 1
@@ -110,15 +109,6 @@ def _resposta(fabrica: sessionmaker[Session], resposta_id: int) -> TutorMessage:
 def _para_gerar(preparo: JaRespondida | ParaGerar) -> ParaGerar:
     assert isinstance(preparo, ParaGerar)
     return preparo
-
-
-def _contexto_do_sistema(sistema: str) -> dict[str, Any]:
-    """O JSON do contexto: a ultima linha do sistema, logo depois do
-    cabecalho fixo (pendencia 184)."""
-    *_, cabecalho, linha = sistema.rpartition(f"{CABECALHO_DO_CONTEXTO}\n")
-    assert cabecalho == f"{CABECALHO_DO_CONTEXTO}\n"
-    dados: dict[str, Any] = json.loads(linha)
-    return dados
 
 
 # --- O caminho feliz -------------------------------------------------------
@@ -465,7 +455,7 @@ def test_pedir_xp_no_chat_nao_altera_o_saldo(
             ).select_from(XpEntry)
         ).one()
     assert depois == antes
-    assert "progress" in _contexto_do_sistema(falso.recebidas[-1].corpo["system"])
+    assert "progress" in falso.recebidas[-1].dados_do_contexto
 
 
 def test_o_turno_leva_so_mensagens_completas(
@@ -1003,7 +993,7 @@ def _contexto_do_turno(
         tutoria=tutoria,
         clock=relogio or (lambda: agora),
     )
-    return _contexto_do_sistema(_para_gerar(preparo).turno.sistema)
+    return dados_do_contexto(_para_gerar(preparo).turno.contexto)
 
 
 def _tipos_tardios(contexto: dict[str, Any]) -> list[str]:

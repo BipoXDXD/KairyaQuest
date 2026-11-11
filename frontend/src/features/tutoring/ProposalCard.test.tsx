@@ -200,7 +200,7 @@ describe('ProposalCard', () => {
     fireEvent.click(confirmButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
     )
     expect(screen.getByRole('alert')).toBe(screen.getByTestId('proposal-failure'))
     expect(screen.getByRole('button', { name: `Tentar de novo a proposta: ${INSTRUCTIONS}` })).toBe(
@@ -238,7 +238,7 @@ describe('ProposalCard', () => {
     fireEvent.click(rejectButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível recusar a proposta. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
     )
     expect(rejectButton()).toHaveAccessibleName(`Tentar de novo a proposta: ${INSTRUCTIONS}`)
     expect(rejectButton()).toBeEnabled()

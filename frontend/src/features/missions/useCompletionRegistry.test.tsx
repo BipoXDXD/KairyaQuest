@@ -466,3 +466,104 @@ it('a leitura terminal libera retry de concluir, preservando o rascunho e as cha
   expect(registry.actionKeyFor(7, 'reschedule')).toBe(K3)
   vi.restoreAllMocks()
 })
+
+describe('useCompletionRegistry -- o reagendar (pendencia 112)', () => {
+  const ENVIO = {
+    civil: '2026-10-05T18:00',
+    reason: 'falta_de_tempo' as const,
+    originalDeadline: '2026-10-02T21:00:00Z',
+  }
+  const ABERTO = { openedFor: '2026-10-02T21:00:00Z', openedAtMs: 1_000, draft: ENVIO }
+
+  beforeEach(() => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(K1)
+      .mockReturnValueOnce(K2)
+      .mockReturnValueOnce(K3)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('sem nada aberto, nao ha rascunho nem ultimo envio, e nenhuma chave nasce', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.rescheduleDraftFor(7)).toBeNull()
+    expect(registry.sentRescheduleFor(7)).toBeNull()
+    expect(crypto.randomUUID).not.toHaveBeenCalled()
+  })
+
+  it('guarda o reagendamento aberto por missao, sobrevive ao reload e sai no descarte', () => {
+    const { result } = renderRegistry()
+    result.current.registry.saveRescheduleDraft(7, ABERTO)
+
+    act(() => {
+      result.current.reload()
+    })
+
+    expect(result.current.registry.rescheduleDraftFor(7)).toEqual(ABERTO)
+    expect(result.current.registry.rescheduleDraftFor(8)).toBeNull()
+    result.current.registry.discardRescheduleDraft(7)
+    expect(result.current.registry.rescheduleDraftFor(7)).toBeNull()
+  })
+
+  it('o MESMO conteudo reaproveita a chave retida; o ultimo envio fica registrado', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+
+    expect(registry.rescheduleKeyFor(7, ENVIO)).toBe(K1)
+    expect(registry.rescheduleKeyFor(7, { ...ENVIO })).toBe(K1)
+    expect(registry.sentRescheduleFor(7)).toEqual(ENVIO)
+    expect(registry.hasActionKey(7, 'reschedule')).toBe(true)
+  })
+
+  it.each([
+    ['o motivo', { ...ENVIO, reason: 'dificuldade' as const }],
+    ['a hora civil', { ...ENVIO, civil: '2026-10-06T18:00' }],
+    [
+      'o prazo efetivo',
+      { ...ENVIO, civil: '2026-10-02T18:00', originalDeadline: '2026-10-02T21:00:31Z' },
+    ],
+  ])('conteudo com %s diferente troca a chave ANTES do envio (sem 409)', (_, outro) => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.rescheduleKeyFor(7, ENVIO)
+
+    expect(registry.rescheduleKeyFor(7, outro)).toBe(K2)
+    expect(registry.sentRescheduleFor(7)).toEqual(outro)
+  })
+
+  it('soltar a chave do reagendar apaga o ultimo envio junto, e o rascunho fica', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.saveRescheduleDraft(7, ABERTO)
+    registry.rescheduleKeyFor(7, ENVIO)
+
+    registry.releaseActionKey(7, 'reschedule')
+
+    expect(registry.sentRescheduleFor(7)).toBeNull()
+    expect(registry.rescheduleDraftFor(7)).toEqual(ABERTO)
+    expect(registry.rescheduleKeyFor(7, ENVIO)).toBe(K2)
+  })
+
+  it('uma chave de reagendar sem envio registrado nao e reaproveitada', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.actionKeyFor(7, 'reschedule')
+
+    expect(registry.rescheduleKeyFor(7, ENVIO)).toBe(K2)
+  })
+
+  it('se a chave nova nao pode nascer, nada muda: a retida e o ultimo envio ficam', () => {
+    const { result } = renderRegistry()
+    const { registry } = result.current
+    registry.rescheduleKeyFor(7, ENVIO)
+    vi.mocked(crypto.randomUUID).mockReset()
+    vi.mocked(crypto.randomUUID).mockImplementation(() => {
+      throw new DOMException('randomUUID requires a secure context', 'SecurityError')
+    })
+
+    expect(() => registry.rescheduleKeyFor(7, { ...ENVIO, reason: 'dificuldade' })).toThrow()
+    expect(registry.sentRescheduleFor(7)).toEqual(ENVIO)
+    expect(registry.rescheduleKeyFor(7, ENVIO)).toBe(K1)
+  })
+})
