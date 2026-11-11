@@ -45,7 +45,7 @@ from focusquest.modules.tutoring.service import (
     preparar_turno,
     transmitir,
 )
-from integration.conftest import Conversa
+from integration.conftest import TIMEOUT_DA_DEMORA, Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
@@ -237,6 +237,7 @@ def test_stream_cortado_sem_fim_vira_provedor_indisponivel(
     assert (vista.status, vista.content) == (StatusDaMensagem.FALHOU, "meio")
 
 
+@pytest.mark.parametrize("prazo_do_provedor", [TIMEOUT_DA_DEMORA])
 def test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
@@ -246,7 +247,7 @@ def test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial(
     # A demora cai antes do segundo pedaco: "meio" ja chegou.
     falso.roteiro = Roteiro(
         blocos=(Texto(("meio", "resto")),),
-        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, 1.2),
+        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, TIMEOUT_DA_DEMORA * 4),
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("demora")))
     *_, final = _transmitir(fabrica, tutoria, preparo)

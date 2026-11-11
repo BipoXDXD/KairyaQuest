@@ -12,7 +12,7 @@ from focusquest.modules.tutoring.provider import (
     Turno,
 )
 from focusquest.modules.tutoring.service import Tutoria
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_DA_DEMORA
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     EVENTOS_DO_PENSAMENTO,
@@ -140,9 +140,10 @@ def test_avaliar_com_erro_http_e_provedor_indisponivel(
         tutoria.provedor.avaliar(TURNO, FERRAMENTA)
 
 
+@pytest.mark.parametrize("prazo_do_provedor", [TIMEOUT_DA_DEMORA])
 def test_avaliar_com_demora_e_tempo_esgotado(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
-    falso.roteiro = Roteiro(atrasar_cabecalhos=TIMEOUT_DE_TESTE * 3)
+    falso.roteiro = Roteiro(atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 3)
     with pytest.raises(TempoEsgotadoError):
         tutoria.provedor.avaliar(TURNO, FERRAMENTA)

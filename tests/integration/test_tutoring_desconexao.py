@@ -115,6 +115,10 @@ def test_desconectar_no_meio_grava_interrompida(
 ) -> None:
     falso.roteiro = Roteiro(
         # Presa depois do primeiro pedaco: o cliente ve um `delta` e some.
+        # Segurar so e seguro com o prazo FOLGADO da `tutoria`: o prazo do
+        # SDK conta o silencio entre pedacos, e com 0,3 s a carga da maquina
+        # bastava para ele estourar antes de o cliente desconectar -- a
+        # resposta virava `falhou` e o `assert` de `gerando` reprovava.
         blocos=(Texto(("comecou", " e seguiu")),),
         segurar_apos_eventos=APOS_O_PRIMEIRO_PEDACO,
     )
