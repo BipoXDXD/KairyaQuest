@@ -14,6 +14,7 @@ from focusquest.modules.progression.domain import (
     faixa_do_nivel,
     maior_sequencia,
     nivel_do_saldo,
+    rank_do_nivel,
     xp_para_o_nivel,
 )
 
@@ -83,6 +84,49 @@ def test_nivel_zero_e_recusado() -> None:
 )
 def test_faixa_do_nivel(xp: int, faixa: FaixaDoNivel) -> None:
     assert faixa_do_nivel(xp) == faixa
+
+
+@pytest.mark.parametrize(
+    ("nivel", "rank"),
+    [
+        (1, "rank_seed"),
+        (4, "rank_seed"),
+        (5, "rank_sprout"),
+        (9, "rank_sprout"),
+        (10, "rank_blade"),
+        (19, "rank_blade"),
+        (20, "rank_flame"),
+        (34, "rank_flame"),
+        (35, "rank_star"),
+        (36, "rank_star"),
+        (10**9, "rank_star"),
+    ],
+)
+def test_rank_do_nivel_nas_bordas(nivel: int, rank: str) -> None:
+    assert rank_do_nivel(nivel) == rank
+
+
+@pytest.mark.parametrize("nivel", [0, -1])
+def test_rank_do_nivel_recusa_nivel_menor_que_1(nivel: int) -> None:
+    with pytest.raises(ValueError, match="nivel"):
+        rank_do_nivel(nivel)
+
+
+@pytest.mark.parametrize(
+    ("xp", "rank"),
+    [
+        (999, "rank_seed"),
+        (1000, "rank_sprout"),
+        (4499, "rank_sprout"),
+        (4500, "rank_blade"),
+        (18999, "rank_blade"),
+        (19000, "rank_flame"),
+        (59499, "rank_flame"),
+        (59500, "rank_star"),
+    ],
+)
+def test_rank_nos_pisos_de_xp(xp: int, rank: str) -> None:
+    assert rank_do_nivel(nivel_do_saldo(xp)) == rank
 
 
 def test_o_catalogo_tem_os_sete_codigos_na_ordem_do_painel() -> None:

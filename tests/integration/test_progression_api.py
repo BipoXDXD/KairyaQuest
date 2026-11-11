@@ -140,6 +140,7 @@ def test_progress_sem_conclusoes(client: TestClient) -> None:
         "level": 1,
         "level_floor_xp": 0,
         "next_level_xp": 100,
+        "rank": "rank_seed",
         "achievements": _ACHIEVEMENTS_TRAVADOS,
     }
 
@@ -158,6 +159,7 @@ def test_progress_depois_de_concluir(
     assert corpo["level"] == 2
     assert corpo["level_floor_xp"] == 100
     assert corpo["next_level_xp"] == 300
+    assert corpo["rank"] == "rank_seed"
     primeiro_passo = next(
         item for item in corpo["achievements"] if item["code"] == "first_steps"
     )
@@ -242,6 +244,16 @@ def test_openapi_publica_reward_e_progress(client: TestClient) -> None:
     schema_da_resposta = esquema["components"]["schemas"][nome_do_schema]
 
     assert "reward" in schema_da_resposta["required"]
+
+    progress = esquema["components"]["schemas"]["ProgressRead"]
+    assert "rank" in progress["required"]
+    assert progress["properties"]["rank"]["enum"] == [
+        "rank_seed",
+        "rank_sprout",
+        "rank_blade",
+        "rank_flame",
+        "rank_star",
+    ]
 
 
 def test_get_missions_e_ciclo_nao_mudam(

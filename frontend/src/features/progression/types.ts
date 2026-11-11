@@ -21,5 +21,10 @@ export interface Progress {
   level: number
   level_floor_xp: number
   next_level_xp: number
+  /**
+   * A faixa (`rank_seed` ... `rank_star`). Opcional de proposito: um back
+   * defasado nao a envia, e o painel simplesmente nao mostra a faixa.
+   */
+  rank?: string
   achievements: Achievement[]
 }

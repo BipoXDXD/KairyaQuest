@@ -47,6 +47,7 @@ from focusquest.modules.tutoring.persona import persona_do_idioma
 _SEM_PROGRESSO = Progresso(
     xp_total=0,
     faixa=FaixaDoNivel(1, 0, 100),
+    rank="rank_seed",
     conquistas=tuple(ConquistaNoPainel(c, None) for c in CATALOGO),
 )
 

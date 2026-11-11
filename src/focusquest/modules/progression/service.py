@@ -20,11 +20,13 @@ from focusquest.modules.progression.domain import (
     Conquista,
     FaixaDoNivel,
     FatosDoUsuario,
+    Rank,
     bonus_da_avaliacao,
     conquistas_satisfeitas,
     faixa_do_nivel,
     maior_sequencia,
     nivel_do_saldo,
+    rank_do_nivel,
 )
 from focusquest.modules.progression.models import (
     FONTE_BONUS,
@@ -55,6 +57,7 @@ class ConquistaNoPainel:
 class Progresso:
     xp_total: int
     faixa: FaixaDoNivel
+    rank: Rank
     conquistas: tuple[ConquistaNoPainel, ...]
 
 
@@ -244,10 +247,12 @@ def ler_progresso(session: Session, user_id: int) -> Progresso:
         .outerjoin(UserAchievement, UserAchievement.user_id == user_id)
     ).all()
     total = linhas[0].xp_total
+    faixa = faixa_do_nivel(total)
     datas = {codigo: quando for _, codigo, quando in linhas if codigo is not None}
     return Progresso(
         xp_total=total,
-        faixa=faixa_do_nivel(total),
+        faixa=faixa,
+        rank=rank_do_nivel(faixa.nivel),
         conquistas=tuple(
             ConquistaNoPainel(CONQUISTA_POR_CODIGO[c.codigo], datas.get(c.codigo))
             for c in CATALOGO
