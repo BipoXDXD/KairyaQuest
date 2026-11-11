@@ -92,8 +92,6 @@ esgotado: estouro sem nenhuma espera.
   (`evaluation/service.py`): uma parada no meio ainda sai em `t + 54 s`. Fechar
   exige o mesmo mecanismo numa chamada, não num gerador, e mexer no serviço de
   avaliação; fora do escopo deste item.
-- **P-teto-stream-2 — leitores vivos além do teto.** Com `ping` o leitor e a
-  conexão do provedor podem passar do teto e do limiter de 40 threads do anyio
-  (que atende a `transmitir` síncrona) até o próximo evento real ou o fim do
-  stream pelo servidor. Falta uma métrica ou log de leitores vivos
-  (`tutoria-leitor`) para medir; não implementada.
+- ~~**P-teto-stream-2 — leitores vivos além do teto.**~~ Resolvida por
+  `2026-11-11-leitores-vivos.md`: gauge de leitores vivos, teto de 40 e recusa
+  do stream novo acima dele.

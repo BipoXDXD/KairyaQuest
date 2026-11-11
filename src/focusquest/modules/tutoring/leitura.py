@@ -17,8 +17,13 @@ proximo evento REAL do provedor ou o fim do stream pelo servidor: o timeout por
 leitura do SDK NAO a limita, porque o SDK descarta os `ping` e eles reiniciam o
 timer de leitura do socket (um modelo lento que manda pings mantem a thread e a
 conexao vivas). O que o teto garante e o consumidor liberado no instante certo;
-o stream do provedor fecha por conta do leitor, sem prazo proprio (pendencia
-P-teto-stream-2, `docs/handoff/2026-11-11-teto-stream.md`).
+o stream do provedor fecha por conta do leitor, sem prazo proprio.
+
+Esses leitores que sobrevivem ao consumidor sao contados (`LeitoresVivos`) e
+limitados: acima de `TETO_DE_LEITORES_VIVOS` o stream NOVO e recusado antes de
+abrir a chamada ao provedor, com o erro de um provedor indisponivel. Recusar e
+a unica saida segura: nao ha como cancelar uma thread presa numa leitura de
+socket (`docs/handoff/2026-11-11-leitores-vivos.md`).
 """
 
 import logging
@@ -29,9 +34,62 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import cast
 
-from focusquest.modules.tutoring.provider import TempoEsgotadoError
+from focusquest.modules.tutoring.provider import (
+    ProvedorIndisponivelError,
+    TempoEsgotadoError,
+)
 
 _LOG = logging.getLogger(__name__)
+
+
+# O limiter padrao de threads do anyio, que atende a `transmitir` sincrona (cada
+# `next()` roda numa thread do threadpool do Starlette): 40 fichas. O teste
+# `test_o_teto_e_o_do_limiter_padrao_de_threads_do_anyio` amarra o numero a
+# premissa. Mais leitores presos que isso, e o servidor ja nao teria thread
+# para atender o proximo stream, quer o leitor seja daemon, quer nao.
+TETO_DE_LEITORES_VIVOS = 40
+
+
+class LeitoresVivos:
+    """O gauge de leitores vivos e o seu teto, thread-safe.
+
+    `reservar` confere e incrementa sob o MESMO lock (nada de checa-e-depois-
+    age): N threads disputando a ultima vaga, so uma vence. Quem reserva deve
+    `liberar` exatamente uma vez, aconteca o que acontecer.
+    """
+
+    def __init__(self, teto: int = TETO_DE_LEITORES_VIVOS) -> None:
+        if teto < 1:
+            raise ValueError(f"o teto de leitores precisa ser positivo: {teto}")
+        self.teto = teto
+        self._vivos = 0
+        self._trava = threading.Lock()
+
+    @property
+    def vivos(self) -> int:
+        """Quantos leitores estao vivos agora (para o codigo e para o log)."""
+        with self._trava:
+            return self._vivos
+
+    def reservar(self) -> bool:
+        """Toma uma vaga; `False`, sem tomar nada, se o teto ja esta cheio."""
+        with self._trava:
+            if self._vivos >= self.teto:
+                return False
+            self._vivos += 1
+            return True
+
+    def liberar(self) -> int:
+        """Devolve uma vaga e diz quantos leitores seguem vivos."""
+        with self._trava:
+            if self._vivos == 0:
+                # Um decremento a mais esconderia um vazamento noutro lugar.
+                raise RuntimeError("liberar um leitor sem reserva")
+            self._vivos -= 1
+            return self._vivos
+
+
+LEITORES_VIVOS = LeitoresVivos()
 
 
 def _esperar_na_fila(fila: queue.Queue[object], segundos: float) -> object:
@@ -72,20 +130,34 @@ def _ler(
     eventos: Generator[object],
     fila: queue.Queue[object],
     cancelado: threading.Event,
+    leitores: LeitoresVivos,
+    espera: Espera,
 ) -> None:
-    """A thread do leitor: dona da leitura e do fechamento do stream."""
+    """A thread do leitor: dona da leitura, do fechamento do stream e da vaga."""
+    inicio = espera.monotonic()
     try:
-        for evento in eventos:
-            if cancelado.is_set():
-                break
-            fila.put(evento)
-        else:
-            fila.put(_Fim())
-    except BaseException as erro:
-        # Repassada ao consumidor, que a relevanta: nada e engolido.
-        fila.put(_Falha(erro))
+        try:
+            for evento in eventos:
+                if cancelado.is_set():
+                    break
+                fila.put(evento)
+            else:
+                fila.put(_Fim())
+        except BaseException as erro:
+            # Repassada ao consumidor, que a relevanta: nada e engolido.
+            fila.put(_Falha(erro))
+        finally:
+            eventos.close()
     finally:
-        eventos.close()
+        vivos = leitores.liberar()
+        if cancelado.is_set():
+            # Sobreviveu ao consumidor: e o que o gauge existe para medir.
+            _LOG.info(
+                "leitor da tutoria encerrou depois do consumidor: "
+                "vida_ms=%d leitores_vivos=%d",
+                round((espera.monotonic() - inicio) * 1000),
+                vivos,
+            )
 
 
 def ler_com_prazo[E](
@@ -93,6 +165,7 @@ def ler_com_prazo[E](
     *,
     teto_segundos: float,
     espera: Espera = ESPERA_REAL,
+    leitores: LeitoresVivos | None = None,
 ) -> Generator[E]:
     """Os eventos de `eventos`, com `teto_segundos` de parede para o stream todo.
 
@@ -100,20 +173,39 @@ def ler_com_prazo[E](
     cabecalhos e cada silencio entre eventos. Estourou: levanta
     `TempoEsgotadoError` e registra o tempo usado (so numeros, nunca o texto).
     Fechar este gerador, ou ele terminar de qualquer forma, cancela o leitor.
+
+    Antes de abrir a chamada, reserva uma vaga no gauge de leitores vivos
+    (`leitores`, por padrao o do processo, resolvido a cada chamada). Sem vaga,
+    levanta `ProvedorIndisponivelError` sem ter iniciado `eventos` (a chamada
+    paga nunca abre); o leitor devolve a vaga ao terminar, de qualquer forma.
     """
+    leitores = LEITORES_VIVOS if leitores is None else leitores
+    if not leitores.reservar():
+        eventos.close()
+        _LOG.warning(
+            "stream da tutoria recusado: leitores_vivos=%d teto=%d",
+            leitores.vivos,
+            leitores.teto,
+        )
+        raise ProvedorIndisponivelError("leitores do provedor acima do teto")
     # Fila sem limite de proposito: o leitor so empilha o que o provedor emite, e
     # uma resposta tem o teto de `max_tokens` (centenas de eventos).
     fila: queue.Queue[object] = queue.Queue()
     cancelado = threading.Event()
     leitor = threading.Thread(
         target=_ler,
-        args=(eventos, fila, cancelado),
+        args=(eventos, fila, cancelado, leitores, espera),
         name="tutoria-leitor",
         daemon=True,
     )
     inicio = espera.monotonic()
     entregues = 0
-    leitor.start()
+    try:
+        leitor.start()
+    except BaseException:
+        # A thread nem nasceu: a vaga que o leitor devolveria volta daqui.
+        leitores.liberar()
+        raise
     try:
         while True:
             restante = teto_segundos - (espera.monotonic() - inicio)
