@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../shared/api/client'
+import { en } from '../../shared/i18n/messages/en'
 import { ptBR } from '../../shared/i18n/messages/pt-BR'
 import {
   describePreStreamFailure,
+  describeStreamErrorEvent,
   describeStreamFailure,
   PRE_STREAM_FAILURE_BY_CODE,
   STREAM_FAILURE_BY_CODE,
@@ -159,6 +161,38 @@ describe('describeStreamFailure', () => {
       recovery: 'tutoring.messageFailure.safeRetry',
       action: 'retry',
     })
-    expect(Object.hasOwn(ptBR, UNRECOGNIZED_FAILURE.message)).toBe(true)
+    // O que a pessoa le: o texto resolvido, nos dois idiomas, mais o recovery
+    // compartilhado que garante que reenviar nao duplica a pergunta.
+    expect(ptBR[UNRECOGNIZED_FAILURE.message as keyof typeof ptBR]).toBe(
+      'A Kairya não conseguiu responder a esta pergunta.',
+    )
+    expect(en[UNRECOGNIZED_FAILURE.message as keyof typeof en]).toBe(
+      "Kairya couldn't answer this question. The reply wasn't completed.",
+    )
+    expect(ptBR[UNRECOGNIZED_FAILURE.recovery as keyof typeof ptBR]).toBe(
+      'Tentar de novo é seguro: a pergunta não será duplicada.',
+    )
+    expect(en[UNRECOGNIZED_FAILURE.recovery as keyof typeof en]).toBe(
+      "Retrying is safe: your question won't repeat.",
+    )
+  })
+})
+
+describe('describeStreamErrorEvent', () => {
+  it('um code conhecido usa o mapa', () => {
+    expect(describeStreamErrorEvent({ code: 'tempo_esgotado' })).toBe(
+      STREAM_FAILURE_BY_CODE.tempo_esgotado,
+    )
+  })
+
+  it.each([
+    ['um code desconhecido', { code: 'code_novo' }],
+    ['um objeto sem code', {}],
+    ['um code nulo', { code: null }],
+    ['um code que nao e texto', { code: 5 }],
+    ['um corpo nulo', null],
+    ['um corpo que nao e objeto', 'tempo_esgotado'],
+  ])('%s cai na falha generica', (_caso, data) => {
+    expect(describeStreamErrorEvent(data)).toBe(UNRECOGNIZED_FAILURE)
   })
 })
