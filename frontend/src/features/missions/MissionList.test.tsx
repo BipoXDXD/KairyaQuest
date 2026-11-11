@@ -2661,6 +2661,115 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(crypto.randomUUID).toHaveBeenCalledTimes(3)
     })
 
+    /** Falha o Iniciar de B com `transicao_ilegal` e recarrega o quadro: os cartoes remontam. */
+    async function remontarPeloCartaoB(fetchMock: Mock) {
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      fireEvent.click(await within(card(8)).findByTestId('mission-start-reload'))
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+    }
+
+    const quadroQueRemonta = (_: unknown, call: number) =>
+      Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }])
+
+    it('o rascunho do reagendar sobrevive a remontagem: volta aberto, com prazo e motivo (pendencia 112)', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      const campoAntes = within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')
+
+      await remontarPeloCartaoB(fetchMock)
+
+      const alvo = within(card(7))
+      const campoDepois = alvo.getByLabelText('Novo prazo (horário de Brasília)')
+      expect(campoDepois).not.toBe(campoAntes)
+      expect(campoDepois).toHaveValue('2026-10-05T18:00')
+      expect(alvo.getByLabelText('Falta de tempo')).toBeChecked()
+      expect(alvo.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+      expect(alvo.getByTestId('reschedule-submit')).toHaveTextContent('Salvar novo prazo')
+    })
+
+    it('fechar o disclosure descarta o rascunho: depois da remontagem ele volta fechado', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByRole('button', { name: 'Reagendar prazo' }))
+
+      await remontarPeloCartaoB(fetchMock)
+
+      expect(within(card(7)).getByTestId('reschedule-toggle')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+    })
+
+    it('retry e remontagem: sem mudar nada, "Tentar de novo" reenvia com a MESMA chave', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      await remontarPeloCartaoB(fetchMock)
+
+      const salvar = within(card(7)).getByTestId('reschedule-submit')
+      expect(salvar).toHaveTextContent('Tentar de novo')
+      expect(within(card(7)).getByTestId('reschedule-retry-notice')).toBeInTheDocument()
+      fireEvent.click(salvar)
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(chaves(fetchMock, 'POST /api/missions/7/reschedule')).toEqual([K1, K1])
+    })
+
+    it('retry, remontagem e outro motivo: a chave troca ANTES do envio, sem tomar o 409', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/7/reschedule': (init, call) => {
+          if (call === 1) return Promise.reject(new TypeError('Failed to fetch'))
+          // O servidor real: a chave K1 ja foi usada com outro conteudo.
+          return String(init?.body).includes(K1)
+            ? conflito('operacao_reutilizada')
+            : Response.json(reagendada)
+        },
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      render(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      await remontarPeloCartaoB(fetchMock)
+      fireEvent.click(within(card(7)).getByLabelText('Dificuldade'))
+      expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent(
+        'Salvar novo prazo',
+      )
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
+        { operation_id: K3, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'dificuldade' },
+      ])
+    })
+
     it('uma chave retida do Reagendar não transforma Iniciar em retry depois da remontagem', async () => {
       const fetchMock = routeFetch({
         'GET /api/missions': (_, call) =>
