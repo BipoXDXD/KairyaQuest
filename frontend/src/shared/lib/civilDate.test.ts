@@ -9,11 +9,11 @@ describe('formatCivilDate', () => {
   // A armadilha que a spec do ciclo nomeia: `new Date('2026-09-21')` e a
   // meia-noite em UTC, e formatada em Sao Paulo vira domingo, 20/09.
   it('mostra o dia que a API mandou, sem conversao de fuso', () => {
-    expect(formatCivilDate('2026-09-21')).toBe('segunda-feira, 21/09')
+    expect(formatCivilDate('2026-09-21', 'pt-BR')).toBe('segunda-feira, 21/09')
   })
 
   it('atravessa a virada do ano sem escorregar para o dia anterior', () => {
-    expect(formatCivilDate('2027-01-01')).toBe('sexta-feira, 01/01')
+    expect(formatCivilDate('2027-01-01', 'pt-BR')).toBe('sexta-feira, 01/01')
   })
 
   it('nao escorrega de dia a LESTE de UTC a partir de +12h: o formatador fixa o fuso em UTC', async () => {
@@ -22,7 +22,7 @@ describe('formatCivilDate', () => {
     vi.resetModules()
     vi.stubEnv('TZ', 'Pacific/Kiritimati')
     const { formatCivilDate: formatEmKiritimati } = await import('./civilDate')
-    expect(formatEmKiritimati('2026-09-21')).toBe('segunda-feira, 21/09')
+    expect(formatEmKiritimati('2026-09-21', 'pt-BR')).toBe('segunda-feira, 21/09')
   })
 })
 
@@ -32,11 +32,11 @@ describe('civilWeekday', () => {
   })
 
   it('da so o dia da semana, sem conversao de fuso', () => {
-    expect(civilWeekday('2026-09-24')).toBe('quinta-feira')
+    expect(civilWeekday('2026-09-24', 'pt-BR')).toBe('quinta-feira')
   })
 
   it('o domingo que fecha a semana continua domingo', () => {
-    expect(civilWeekday('2026-09-27')).toBe('domingo')
+    expect(civilWeekday('2026-09-27', 'pt-BR')).toBe('domingo')
   })
 
   // `vi.resetModules()` + import() dinamico nos dois testes abaixo (mesmo
@@ -58,7 +58,7 @@ describe('civilWeekday', () => {
     vi.resetModules()
     vi.stubEnv('TZ', 'America/Sao_Paulo')
     const { civilWeekday: civilWeekdayEmSaoPaulo } = await import('./civilDate')
-    expect(civilWeekdayEmSaoPaulo('2026-09-21')).toBe('segunda-feira')
+    expect(civilWeekdayEmSaoPaulo('2026-09-21', 'pt-BR')).toBe('segunda-feira')
   })
 
   it('nao escorrega de dia a LESTE de UTC a partir de +12h: o formatador fixa o fuso em UTC', async () => {
@@ -71,6 +71,46 @@ describe('civilWeekday', () => {
     vi.resetModules()
     vi.stubEnv('TZ', 'Pacific/Kiritimati')
     const { civilWeekday: civilWeekdayEmKiritimati } = await import('./civilDate')
-    expect(civilWeekdayEmKiritimati('2026-09-21')).toBe('segunda-feira')
+    expect(civilWeekdayEmKiritimati('2026-09-21', 'pt-BR')).toBe('segunda-feira')
+  })
+})
+
+describe('formatadores da data civil em cada idioma', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  // Os textos esperados sao os que o `Intl` produz (conferidos na primeira
+  // execucao), fixados literais: o teste pega um idioma trocado ou ignorado.
+  it('a mesma data sai no idioma pedido', () => {
+    expect(formatCivilDate('2026-09-22', 'pt-BR')).toBe('terça-feira, 22/09')
+    expect(formatCivilDate('2026-09-22', 'en')).toBe('Tuesday, 09/22')
+    expect(civilWeekday('2026-09-22', 'pt-BR')).toBe('terça-feira')
+    expect(civilWeekday('2026-09-22', 'en')).toBe('Tuesday')
+  })
+
+  it('alternar os idiomas nao contamina o formatador em cache do outro', () => {
+    expect(formatCivilDate('2026-09-22', 'en')).toBe('Tuesday, 09/22')
+    expect(formatCivilDate('2026-09-22', 'pt-BR')).toBe('terça-feira, 22/09')
+    expect(formatCivilDate('2026-09-23', 'en')).toBe('Wednesday, 09/23')
+  })
+
+  it('com o processo em Asia/Tokyo (setup do Vitest), a data civil nao troca de dia em nenhum idioma', () => {
+    // O `TZ` do processo e `Asia/Tokyo` (vite.config.ts), a LESTE de UTC: um
+    // formatador que lesse a data no fuso do processo poderia escorregar.
+    expect(new Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('Asia/Tokyo')
+    expect(formatCivilDate('2026-09-21', 'pt-BR')).toBe('segunda-feira, 21/09')
+    expect(formatCivilDate('2026-09-21', 'en')).toBe('Monday, 09/21')
+    expect(civilWeekday('2026-09-27', 'pt-BR')).toBe('domingo')
+    expect(civilWeekday('2026-09-27', 'en')).toBe('Sunday')
+  })
+
+  it('em Kiritimati (UTC+14), o ingles tambem nao escorrega de dia', async () => {
+    vi.resetModules()
+    vi.stubEnv('TZ', 'Pacific/Kiritimati')
+    const { formatCivilDate: formatEmKiritimati, civilWeekday: weekdayEmKiritimati } =
+      await import('./civilDate')
+    expect(formatEmKiritimati('2026-09-21', 'en')).toBe('Monday, 09/21')
+    expect(weekdayEmKiritimati('2026-09-21', 'en')).toBe('Monday')
   })
 })

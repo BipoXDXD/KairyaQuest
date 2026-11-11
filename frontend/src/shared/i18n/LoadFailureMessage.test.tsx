@@ -10,7 +10,9 @@ const HTTP: LoadFailure = {
 
 describe('LoadFailureMessage', () => {
   it('a falha de API sai do catalogo em pt-BR', () => {
-    const { container } = renderWithI18n(<LoadFailureMessage failure={HTTP} />)
+    const { container } = renderWithI18n(
+      <LoadFailureMessage failure={HTTP} unexpected="progression.panel.unexpectedFailure" />,
+    )
 
     expect(container).toHaveTextContent(
       /^O servidor não conseguiu atender o pedido\. Tente de novo em instantes\.$/,
@@ -18,20 +20,28 @@ describe('LoadFailureMessage', () => {
   })
 
   it('a falha de API sai do catalogo em ingles', () => {
-    const { container } = renderWithI18n(<LoadFailureMessage failure={HTTP} />, { locale: 'en' })
+    const { container } = renderWithI18n(
+      <LoadFailureMessage failure={HTTP} unexpected="progression.panel.unexpectedFailure" />,
+      { locale: 'en' },
+    )
 
     expect(container).toHaveTextContent(
       /^The request didn't go through\. The server returned an error\. Try again in a moment\.$/,
     )
   })
 
-  it('a falha inesperada mostra a mensagem da area', () => {
+  it.each([
+    ['pt-BR', /^Falha inesperada ao carregar o progresso\.$/],
+    ['en', /^Couldn't load your progress\. Something unexpected went wrong\. Try again\.$/],
+  ] as const)('a falha inesperada mostra a chave da area, em %s', (locale, texto) => {
     const { container } = renderWithI18n(
       <LoadFailureMessage
-        failure={{ kind: 'unexpected', message: 'Falha inesperada ao carregar X.' }}
+        failure={{ kind: 'unexpected' }}
+        unexpected="progression.panel.unexpectedFailure"
       />,
+      { locale },
     )
 
-    expect(container).toHaveTextContent(/^Falha inesperada ao carregar X\.$/)
+    expect(container).toHaveTextContent(texto)
   })
 })

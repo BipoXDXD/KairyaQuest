@@ -1,3 +1,5 @@
+import type { MessageKey } from '../../shared/i18n/catalog'
+
 /**
  * O texto do botao de recarga enquanto um pedido esta em voo: uma conclusao,
  * um Iniciar ou um Reagendar. O texto diz "pedido", e nao "conclusao", porque
@@ -5,4 +7,4 @@
  * `MissionCard`, porque o botao do `EvaluationPanel` diz o MESMO texto e o
  * cartao importa o painel (importar de volta seria circular).
  */
-export const RELOAD_WAITING_LABEL = 'Aguardando o pedido em andamento…'
+export const RELOAD_WAITING_LABEL: MessageKey = 'missions.reload.waiting'
