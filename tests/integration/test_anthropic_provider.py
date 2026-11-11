@@ -34,8 +34,13 @@ from integration.provedor_falso import (
 
 TURNO = Turno(sistema="SISTEMA", mensagens=(MensagemDoTurno("user", "oi"),))
 ENTRADA: dict[str, Any] = {"instructions": "Ler", "difficulty": 2}
-# Pequeno o bastante para os testes de demora levarem menos de um segundo.
-TIMEOUT = 0.3
+# O prazo do SDK e o OBJETO so dos testes de demora: neles ele e curto, para
+# o estouro sair em menos de um segundo. Nos demais ele e so um teto contra
+# travamento, e um prazo curto ali reprovava o caminho feliz com a maquina
+# carregada (0,3 s estourou numa rodada de pytest de 20 min) sem nada estar
+# errado no adaptador.
+TIMEOUT_DA_DEMORA = 0.3
+TIMEOUT_FOLGADO = 30.0
 
 
 def _provedor(
@@ -43,14 +48,17 @@ def _provedor(
     chave: str = "sk-ant-teste",
     *,
     fallback: bool = True,
+    timeout: float = TIMEOUT_FOLGADO,
 ) -> ProvedorAnthropic:
     return ProvedorAnthropic(
         chave=chave,
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT,
+        timeout_segundos=timeout,
         fallback=fallback,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
 
 
@@ -131,7 +139,9 @@ def test_a_requisicao_leva_o_que_a_spec_manda(falso: ServidorAnthropicFalso) -> 
     corpo = falso.recebidas[0].corpo
     assert corpo["model"] == "claude-opus-5"
     assert corpo["max_tokens"] == 256
-    assert corpo["system"] == "SISTEMA"
+    assert corpo["system"] == [
+        {"type": "text", "text": "SISTEMA", "cache_control": {"type": "ephemeral"}}
+    ]
     assert corpo["messages"] == [{"role": "user", "content": "oi"}]
     assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
     criar, reagendar = corpo["tools"]
@@ -177,11 +187,11 @@ def test_demora_no_meio_vira_tempo_esgotado(falso: ServidorAnthropicFalso) -> No
     falso.roteiro = Roteiro(
         # A demora cai antes do segundo pedaco: "meio" ja chegou.
         blocos=(Texto(("meio", "resto")),),
-        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, TIMEOUT * 4),
+        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, TIMEOUT_DA_DEMORA * 4),
     )
     eventos: list[EventoDoProvedor] = []
     with pytest.raises(TempoEsgotadoError):
-        for evento in _provedor(falso).responder(TURNO):
+        for evento in _provedor(falso, timeout=TIMEOUT_DA_DEMORA).responder(TURNO):
             eventos.append(evento)
     assert eventos == [Delta("meio")]
 
@@ -189,9 +199,9 @@ def test_demora_no_meio_vira_tempo_esgotado(falso: ServidorAnthropicFalso) -> No
 def test_demora_antes_de_responder_vira_tempo_esgotado_depois_das_tentativas(
     falso: ServidorAnthropicFalso,
 ) -> None:
-    falso.roteiro = Roteiro(atrasar_cabecalhos=TIMEOUT * 4)
+    falso.roteiro = Roteiro(atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 4)
     with pytest.raises(TempoEsgotadoError):
-        _todos(falso)
+        list(_provedor(falso, timeout=TIMEOUT_DA_DEMORA).responder(TURNO))
     assert len(falso.recebidas) == 1 + TENTATIVAS
 
 
@@ -220,8 +230,10 @@ def test_provedor_fora_do_ar_vira_indisponivel() -> None:
         base_url="http://127.0.0.1:9",
         modelo="claude-opus-5",
         max_tokens=8,
-        timeout_segundos=TIMEOUT,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(TURNO))

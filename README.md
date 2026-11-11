@@ -125,12 +125,11 @@ Separe a IA da Kairya dos agentes de desenvolvimento. Assinaturas de Kimi, Codex
 
 Prepare um provedor configurável, com SDK oficial ou HTTPX. Sem credenciais, prepare o contrato e mostre indisponibilidade. Adaptador determinístico é para testes, não tutoria real.
 
-O provedor de produção é **Groq Free**, com `openai/gpt-oss-20b` e chave
-`FOCUSQUEST_GROQ_API_KEY` somente no backend. Não usar créditos da Anthropic,
-fallback pago, troca automática de modelo ou upgrade de plano. Sem chave ou
-com cota esgotada, mostrar indisponibilidade. A conta Groq deve permanecer
-no plano Free; a API de conversa não comprova o plano de cobrança.
-Configuração e limites em [docs/GROQ.md](docs/GROQ.md).
+O provedor de produção é a **API da Anthropic** (`claude-sonnet-5-5` por
+padrão), com a chave `FOCUSQUEST_ANTHROPIC_API_KEY` somente no backend. O
+esforço é configurável (`FOCUSQUEST_TUTOR_EFFORT`, `FOCUSQUEST_EVALUATION_EFFORT`),
+o prefixo estático (persona e ferramentas) vai em cache e um teto diário de
+turnos por usuário limita o gasto. Sem chave, mostrar indisponibilidade.
 
 Mantenha chamadas e credenciais no backend, com limites, timeouts e modelo configuráveis. Não envie chaves ao navegador nem repita chamadas indefinidamente. Falhas não podem duplicar missões ou recompensas.
 
@@ -258,7 +257,7 @@ Instruções aninhadas não enfraquecem qualidade. Justifique dependências, con
 
 Use um implementador por worktree. Separe branches, diretórios, portas e bancos; revisão não autoriza editar a árvore de outro agente.
 
-Mantenha `docs/HANDOFF.md` com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos.
+Registre o handoff de cada PR num arquivo próprio em `docs/handoff/` (regras em `docs/handoff/README.md`), com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos. Só o PR de consolidação edita o `docs/HANDOFF.md`.
 
 ## 14. Entrega verificável
 
