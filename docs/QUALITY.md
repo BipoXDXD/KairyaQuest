@@ -465,7 +465,11 @@ cálculo está em `shared/ui/tokens/gradientPanels.ts`. Limites declarados:
 mede os extremos, não os pontos intermediários nem imagens; o app só tem o
 tema escuro (um teste reprova se um tema claro aparecer, para forçar a
 revisão); bordas decorativas escapam por lista escrita no teste, e borda ou
-texto novo é medido.
+texto novo é medido. **Não medidos:** a cor herdada sem classe
+(`--color-text-primary` em `dd`, `p`, `h2` e `h3`, que tem folga grande) e as
+bordas translúcidas (`border-*/NN`, puladas de propósito); e o
+`gradientStops` lê só o primeiro `background:` da regra, então um override
+dentro de `@media` seria ignorado.
 
 **Limitação registrada do Incremento D: a mutação `xp_awarded` ↔ `xp_total`
 em `RewardAnnouncement` só é provada morta no teste de unidade, não no

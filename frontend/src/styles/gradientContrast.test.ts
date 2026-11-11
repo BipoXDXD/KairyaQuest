@@ -78,7 +78,10 @@ const PANELS: readonly Panel[] = [
 // precisa ser visto para achar ou operar o componente, e estas não são isso.
 // Escapar daqui é decisão escrita, por arquivo; borda nova é medida.
 const DECORATIVE_BORDERS: Readonly<Record<string, readonly string[]>> = {
-  // Divisória entre o quadro e a coluna da Kairya, só no desktop.
+  // `border-slate-800`: divisória entre o quadro e a coluna da Kairya, só no
+  // desktop. `border-slate-600`: borda do botão de recolher a conversa (2,1:1);
+  // o botão é identificado pelo rótulo e pelo glifo, então a borda não é o
+  // indicador essencial do componente.
   'src/features/tutoring/TutorPanel.tsx': ['border-slate-800', 'border-slate-600'],
   // Moldura do aviso de rank indisponível: o texto dentro é o que informa.
   'src/features/progression/ProgressPanel.tsx': ['border-slate-700'],
