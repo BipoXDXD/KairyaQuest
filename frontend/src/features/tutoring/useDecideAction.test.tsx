@@ -90,11 +90,8 @@ describe('useDecideAction', () => {
       result.current.decision.confirm()
     })
 
-    // Espera o ESTADO renderizado, e nao `changed`/`missionCreated`: o hook os
-    // chama no mesmo tick do `setState`, mas o React so renderiza numa tarefa
-    // posterior. Esperar pelo callback e afirmar o estado depois e uma corrida
-    // que, sob carga, le `confirming` (flaky no gate, 10/11). Os callbacks
-    // vem antes do render, entao afirma-los depois e seguro.
+    // O estado entra no `waitFor`: o `then` do hook chama os callbacks fora de
+    // `act`, e o render com `idle` pode chegar depois deles.
     await waitFor(() => {
       expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
@@ -117,7 +114,7 @@ describe('useDecideAction', () => {
       status: 'failed',
       failure: {
         message:
-          'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
+          'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
         recovery: 'retry',
       },
       attempted: 'confirm',
@@ -245,10 +242,10 @@ describe('useDecideAction', () => {
     act(() => {
       result.current.decision.reject()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
       expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
-
     expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
     expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual([{}])
     expect(missionCreated).not.toHaveBeenCalled()
@@ -270,7 +267,8 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível conectar. Tentar de novo é seguro.',
+        message:
+          'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
         recovery: 'retry',
       },
       attempted: 'reject',
@@ -474,6 +472,7 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
     act(() => {
       result.current.decision.confirm()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
       expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
@@ -513,6 +512,7 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
         result.current.decision[proxima]()
       })
       const acao = proxima === 'confirm' ? executada : recusada
+      // O estado entra no `waitFor` pelo mesmo motivo do D1.
       await waitFor(() => {
         expect(result.current.decision.state).toEqual({ status: 'idle' })
       })
