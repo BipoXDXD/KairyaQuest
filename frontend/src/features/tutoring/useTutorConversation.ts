@@ -9,7 +9,7 @@ import {
 } from './conversationHistory'
 import {
   describePreStreamFailure,
-  describeStreamFailure,
+  describeStreamErrorEvent,
   UNKNOWN_RESULT,
   type MessageFailure,
 } from './messageFailure'
@@ -119,7 +119,7 @@ async function runTurn(
       } else if (event === 'done') {
         return { kind: 'done', question, answer: data as MessageRead }
       } else if (event === 'error') {
-        const failure = describeStreamFailure((data as { code: string }).code)
+        const failure = describeStreamErrorEvent(data)
         return { kind: 'failed', question, partial, failure }
       }
     }

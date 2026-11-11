@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { controlledStream, sseFrame, streamResponse } from '../../test/sse'
 import { stubViewport } from '../../test/viewport'
+import { useKairya } from '../kairya'
 import { PANEL_OPEN_KEY } from './panelPreference'
 import { describeQuestionLength } from './questionLimit'
 import { TutorConversation } from './TutorConversation'
@@ -929,12 +930,44 @@ describe('TutorPanel: desktop', () => {
     expect(portrait).toHaveAttribute('data-size', 'scene')
     expect(portrait).not.toHaveAttribute('aria-hidden')
     const image = screen.getByRole('img', {
-      name: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
+      name: translate('pt-BR', 'kairya.face.neutral'),
     })
     expect(portrait).toContainElement(image)
-    expect(image).toHaveAttribute('src', '/art/kairya/portrait.webp')
+    expect(image).toHaveAttribute('src', '/art/kairya/neutral.webp')
     expect(image).toHaveAttribute('width', '864')
-    expect(image).toHaveAttribute('height', '1152')
+    expect(image).toHaveAttribute('height', '1184')
+    await ready()
+  })
+
+  it('P26a o retrato aberto segue o humor da presenca, na hora', async () => {
+    function Typist() {
+      const { dispatch } = useKairya()
+      return (
+        <button type="button" onClick={() => dispatch({ type: 'userTyped' })}>
+          digitar
+        </button>
+      )
+    }
+    routeFetch({
+      [STATUS]: () => Response.json({ available: true }),
+      [HISTORY]: () => Response.json([]),
+    })
+    stubViewport('desktop')
+    renderWithI18n(
+      <>
+        <TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />
+        <Typist />
+      </>,
+    )
+    const portrait = screen.getByTestId('tutor-portrait')
+    expect(portrait.querySelector('img')).toHaveAttribute('src', '/art/kairya/neutral.webp')
+
+    fireEvent.click(screen.getByRole('button', { name: 'digitar' }))
+
+    const image = within(portrait).getByRole('img', {
+      name: translate('pt-BR', 'kairya.face.listening'),
+    })
+    expect(image).toHaveAttribute('src', '/art/kairya/listening.webp')
     await ready()
   })
 
