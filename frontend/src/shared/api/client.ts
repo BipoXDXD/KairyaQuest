@@ -412,6 +412,8 @@ function unlinked(signal: AbortSignal): LinkedSignal {
  * vinculo e feito a mao: um controller proprio que aborta quando qualquer das
  * fontes aborta, com os listeners removidos em `release` para o signal do
  * chamador -- que vive mais que o pedido -- nao segurar este pedido encerrado.
+ * O sinal ligado aborta com o motivo da fonte que abortou primeiro, como o
+ * `AbortSignal.any` nativo: quem le `signal.reason` ve o mesmo nos dois casos.
  * Um polyfill de pacote faria o mesmo com uma dependencia a mais.
  */
 function linkSignals(caller: AbortSignal, deadline: AbortSignal): LinkedSignal {
@@ -420,7 +422,7 @@ function linkSignals(caller: AbortSignal, deadline: AbortSignal): LinkedSignal {
   }
   const linked = new AbortController()
   const abort = () => {
-    linked.abort()
+    linked.abort(caller.aborted ? caller.reason : deadline.reason)
   }
   if (caller.aborted) {
     abort()

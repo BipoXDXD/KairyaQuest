@@ -512,10 +512,11 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
         result.current.decision[proxima]()
       })
       const acao = proxima === 'confirm' ? executada : recusada
+      // O estado entra no `waitFor` pelo mesmo motivo do D1.
       await waitFor(() => {
-        expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+        expect(result.current.decision.state).toEqual({ status: 'idle' })
       })
-      expect(result.current.decision.state).toEqual({ status: 'idle' })
+      expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
       expect(fetchMock).toHaveBeenCalledTimes(2)
       expect(sentKeys(fetchMock)).toEqual(proxima === 'confirm' ? [{ operation_id: K1 }] : [])
       expect(missionCreated).toHaveBeenCalledTimes(proxima === 'confirm' ? 1 : 0)

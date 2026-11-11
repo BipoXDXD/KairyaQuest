@@ -72,7 +72,7 @@ erro escapava da classificação dos hooks e o timer do prazo ficava pendurado.
 - Trocar o `setTimeout` de lugar (de volta para antes do sinal combinado) não
   derruba nenhum teste: com o fallback, nada entre os dois lança. A ordem é
   defensiva e está documentada no comentário do `sendWithin`.
-- **Nova (backend, fora do escopo deste PR):**
+- **`P-abort-any-safari-1` — nova (backend, fora do escopo deste PR):**
   `test_desconectar_no_meio_grava_interrompida` falha de forma intermitente
   (1 em 4 execuções nesta máquina, com outros gates rodando em paralelo). A
   causa não foi investigada aqui. Precisa de pendência própria no

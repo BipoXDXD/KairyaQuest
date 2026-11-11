@@ -885,23 +885,34 @@ describe('TutorPanel: desktop', () => {
     expect(messageWith('Resposta pronta')).toBeInTheDocument()
   })
 
-  it('P26 o retrato local e decorativo e reserva dimensoes antes de carregar', async () => {
+  it('P26 o retrato aberto tem nome acessivel e reserva as dimensoes reais do arquivo', async () => {
     mountPanel({})
 
     const portrait = screen.getByTestId('tutor-portrait')
+    expect(portrait).toHaveAttribute('data-size', 'scene')
+    expect(portrait).not.toHaveAttribute('aria-hidden')
+    const image = screen.getByRole('img', {
+      name: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
+    })
+    expect(portrait).toContainElement(image)
+    expect(image).toHaveAttribute('src', '/art/kairya/portrait.webp')
+    expect(image).toHaveAttribute('width', '864')
+    expect(image).toHaveAttribute('height', '1152')
+    await ready()
+  })
+
+  it('P26b o avatar compacto e decorativo e reserva as dimensoes reais do arquivo', async () => {
+    mountPanel({})
+
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    const portrait = screen.getByTestId('tutor-portrait')
+    expect(portrait).toHaveAttribute('data-size', 'compact')
     expect(portrait).toHaveAttribute('aria-hidden', 'true')
     const image = portrait.querySelector('img')
-    expect(image).toHaveAttribute('src', '/art/kairya-mentor.webp')
+    expect(image).toHaveAttribute('src', '/art/kairya/avatar.webp')
     expect(image).toHaveAttribute('alt', '')
-    expect(image).toHaveAttribute('width', '1122')
-    expect(image).toHaveAttribute('height', '1402')
-    expect(portrait).toHaveAttribute('data-size', 'scene')
-    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
-    expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'compact')
-    expect(screen.getByTestId('tutor-portrait').querySelector('img')).toHaveAttribute(
-      'src',
-      '/art/kairya-avatar.webp',
-    )
+    expect(image).toHaveAttribute('width', '128')
+    expect(image).toHaveAttribute('height', '160')
     fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
     expect(screen.getByTestId('tutor-portrait')).toHaveAttribute('data-size', 'scene')
     expect(screen.getByRole('complementary', { name: 'Kairya' })).toBeInTheDocument()

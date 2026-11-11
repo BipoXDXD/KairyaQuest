@@ -62,7 +62,7 @@ from focusquest.modules.tutoring.provider import (
     Turno,
 )
 from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO, Tutoria
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_DA_DEMORA, TIMEOUT_FOLGADO
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     Roteiro,
@@ -392,12 +392,17 @@ def test_saida_fora_do_esquema_e_avaliacao_invalida_ja_gravada(
 
 
 @pytest.mark.parametrize(
-    ("roteiro", "falha"),
+    ("roteiro", "falha", "prazo_do_provedor"),
     [
-        (Roteiro(status_http=500), FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL),
         (
-            Roteiro(atrasar_cabecalhos=TIMEOUT_DE_TESTE * 3),
+            Roteiro(status_http=500),
+            FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
+            TIMEOUT_FOLGADO,
+        ),
+        (
+            Roteiro(atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 3),
             FalhaDaAvaliacao.TEMPO_ESGOTADO,
+            TIMEOUT_DA_DEMORA,
         ),
     ],
     ids=["provedor-fora", "tempo-esgotado"],

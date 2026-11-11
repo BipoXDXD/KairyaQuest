@@ -284,6 +284,33 @@ describe('client', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
+    it('o motivo do aborto do chamador chega ao signal do pedido', async () => {
+      const controller = new AbortController()
+      const motivo = new Error('a tela fechou')
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      controller.abort(motivo)
+      await pending
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.reason).toBe(motivo)
+    })
+
+    it('o motivo do signal que ja chega abortado chega ao signal do pedido', async () => {
+      const controller = new AbortController()
+      const motivo = new Error('a tela fechou')
+      controller.abort(motivo)
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { requestJson } = await loadClient()
+
+      await failureOf(requestJson('/cycle', controller.signal))
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.reason).toBe(motivo)
+    })
+
     it('o signal que ja chega abortado sai como falha de rede, nunca como prazo', async () => {
       const controller = new AbortController()
       controller.abort()

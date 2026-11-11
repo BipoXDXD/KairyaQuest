@@ -283,6 +283,8 @@ módulos**, nunca pelos modelos deles diretamente. As arestas, conferidas nos
 - `evaluation → tutoring`: `tutoring.provider` (o `Protocol`, `Ferramenta`,
   `Turno` e os erros do provedor), `tutoring.service` (`Tutoria`,
   `FOLGA_DO_ORFAO`) e `tutoring.dependencies` (`get_tutoria`);
+- `evaluation → users`: `users.service` (`ler_idioma`, só leitura), para
+  escolher a rubrica pelo idioma gravado (F3);
 - **ninguém importa `evaluation` além de `main.py`**, que registra o router e
   o handler de `AvaliacaoFalhouError`. Conferido: `grep -rn
   "modules.evaluation" src` fora do próprio módulo acha só `main.py:34` e
@@ -297,7 +299,11 @@ o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
 **O módulo `users` (F3).** Lê e grava o idioma do usuário (`GET`/`PATCH
 /api/me`). Arestas: `users → missions.models` (`User`, que continua lá; ver
 `docs/HANDOFF.md`) e `users → core` (`Idioma`, `CampoDesconhecidoError`,
-sessão e usuário único). Ninguém importa `users` além de `main.py`. O router
+sessão e usuário único). `users` é importado por `main.py` (o router) e,
+só pela função de leitura `ler_idioma`, por `tutoring.service` e
+`evaluation.service`, que escolhem a persona e a rubrica pelo idioma gravado
+(F3). Não forma par nos dois sentidos: `users` não importa `tutoring` nem
+`evaluation`. O router
 tem uma exceção à regra "não trata erro": a `RotaQueRecusaCampoExtra` troca o
 `RequestValidationError` com `extra_forbidden` por `CampoDesconhecidoError`,
 sem montar resposta; o 400 continua sendo traduzido em `main.py`.
@@ -1133,7 +1139,7 @@ pendente, o estado, o início e "reagendada N vez(es); último motivo", e as aç
 antigas entram como texto por tipo (F19).
 
 **A confirmação de um reagendamento** executa pelo **mesmo** `reagendar_missao`,
-com `origin = 'tifa'` e o `operation_id` da confirmação, e revalida tudo (F17):
+com `origin = 'kairya'` e o `operation_id` da confirmação, e revalida tudo (F17):
 prazo passado → ação `falhou`/`prazo_expirado` e `422`; missão que mudou (não
 existe mais, concluída, prazo já igual, tipo derivado) → ação
 `falhou`/`reagendamento_invalido` e `409`; chave reutilizada →
