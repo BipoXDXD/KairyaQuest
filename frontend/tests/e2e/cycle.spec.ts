@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
-import { segundaDaSemana } from './datas'
+import { diaEMes, diasEntre, segundaDaSemana, somarDias } from './datas'
 import { API_URL } from './servers'
 
 /**
@@ -26,18 +26,6 @@ interface CicloDaApi {
   today: string
 }
 
-/** "23/09", escrito por extenso: o E2E nao importa o formatador da aplicacao. */
-function diaMes(civil: string): string {
-  return `${civil.slice(8, 10)}/${civil.slice(5, 7)}`
-}
-
-/** Uma data civil deslocada `deslocamento` dias, em aritmetica UTC pura. */
-function diaCivil(civil: string, deslocamento: number): string {
-  const dia = new Date(`${civil}T12:00:00Z`)
-  dia.setUTCDate(dia.getUTCDate() + deslocamento)
-  return dia.toISOString().slice(0, 10)
-}
-
 /**
  * Se duas caixas de `boundingBox()` se sobrepoem. Uma caixa NULA reprova: e
  * o elemento sem caixa (oculto ou fora do layout), e tratar isso como "sem
@@ -53,6 +41,23 @@ function caixasSeSobrepoem(
   // tipo (e, por seguranca, responde "sobrepoe", nunca "passa").
   if (a === null || b === null) return true
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+/**
+ * Os dois botoes do seletor de idioma (PT/EN) tem alvo de toque de pelo menos
+ * 44x44 px (WCAG 2.5.5). O teste unitario so ve a classe `min-h-11 min-w-11`;
+ * a medida de verdade e esta. O grupo e achado pelo papel, sem o nome: o
+ * rotulo ("Idioma"/"Language") depende do idioma em que o navegador sobe.
+ */
+async function afirmarAlvosDoSeletorDeIdioma(page: Page): Promise<void> {
+  const botoes = await page.getByTestId('side-nav').getByRole('group').getByRole('button').all()
+  expect(botoes.length).toBe(2)
+  for (const botao of botoes) {
+    const caixa = await botao.boundingBox()
+    expect(caixa, 'boundingBox() nulo: o botao do idioma nao tem caixa').not.toBeNull()
+    expect(caixa?.width).toBeGreaterThanOrEqual(44)
+    expect(caixa?.height).toBeGreaterThanOrEqual(44)
+  }
 }
 
 /** Sem rolagem horizontal no documento inteiro (README §7: o celular nao ganha rolagem lateral). */
@@ -98,7 +103,7 @@ test.beforeAll(async ({ playwright }) => {
     },
   })
   expect(resposta.status()).toBe(201)
-  missaoDeHoje = DIAS[(new Date(`${hoje}T12:00:00Z`).getUTCDay() + 6) % 7]!.instructions
+  missaoDeHoje = DIAS[diasEntre(segundaDaSemana(hoje), hoje)]!.instructions
   await api.dispose()
 })
 
@@ -114,7 +119,7 @@ test('a missao de hoje do plano semeado aparece com a data civil da API, e passa
 }) => {
   const ciclo = await abrirCiclo(page)
 
-  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaMes(hoje))
+  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaEMes(hoje))
   // O plano foi criado hoje: os dias anteriores estao fora do plano, e a
   // sequencia comeca do zero.
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/0 de 7/)
@@ -205,7 +210,7 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
     'veteran_10',
     'veteran_50',
     'veteran_100',
-    'tifa_partnership',
+    'kairya_partnership',
   ])
 
   const primeirosPassos = painel.locator(
@@ -238,6 +243,8 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   page,
 }) => {
   await page.goto('/')
+  // Desktop (projeto chromium padrao): o seletor fica na coluna lateral.
+  await afirmarAlvosDoSeletorDeIdioma(page)
   await page.getByTestId('nav-campaigns').click()
 
   const campanhas = page.getByTestId('campaigns')
@@ -262,7 +269,7 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   // no dia" -- nunca a missao (B3/C11 da spec do ciclo).
   const segunda = segundaDaSemana(hoje)
   for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
-    const dia = diaCivil(segunda, deslocamento)
+    const dia = somarDias(segunda, deslocamento)
     if (dia > hoje) {
       const item = campanhas.locator(`[data-testid="trail-day"][data-day="${dia}"]`)
       await expect(item.getByTestId('trail-chest')).toContainText('revelada no dia')
@@ -296,11 +303,17 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   expect(resultadoQuartel.violations).toEqual([])
 })
 
-test('Campanhas abre pelo teclado: Tab ate a navegacao, Enter, e o foco vai para o titulo', async ({
+test('Campanhas abre pelo teclado: Tab pelo seletor de idioma ate a navegacao, Enter, e o foco vai para o titulo', async ({
   page,
 }) => {
   await page.goto('/')
 
+  // O seletor de idioma (PT, EN) fica no bloco da marca, antes das areas.
+  const idiomas = page.getByTestId('side-nav').getByRole('group').getByRole('button')
+  await page.keyboard.press('Tab')
+  await expect(idiomas.nth(0)).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(idiomas.nth(1)).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByTestId('nav-headquarters')).toBeFocused()
   await page.keyboard.press('Tab')
@@ -329,12 +342,15 @@ test.describe('celular', () => {
     const kairya = page.getByTestId('tutor-sheet-open')
     await expect(kairya).toBeVisible()
     const caixaKairya = await kairya.boundingBox()
+    // Os dois botoes das areas e os dois do seletor de idioma (PT/EN), que
+    // fica no bloco da marca, dentro da mesma nav: nenhum cobre a Kairya.
     const botoesNav = await nav.getByRole('button').all()
-    expect(botoesNav.length).toBe(2)
+    expect(botoesNav.length).toBe(4)
     for (const botao of botoesNav) {
       const caixaBotao = await botao.boundingBox()
       expect(caixasSeSobrepoem(caixaKairya, caixaBotao)).toBe(false)
     }
+    await afirmarAlvosDoSeletorDeIdioma(page)
 
     // A mesma checagem na area de Campanhas: sem rolagem horizontal la
     // tambem, e a navegacao continua visivel no topo.

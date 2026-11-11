@@ -117,3 +117,12 @@ describe('playwright.config.ts deriva TODAS as portas de servers.ts', () => {
     expect(servidores[2]?.env).toEqual({ API_PROXY_TARGET: 'http://127.0.0.1:8107' })
   })
 })
+
+describe('playwright.config.ts fixa o idioma do navegador', () => {
+  it('o use global leva locale pt-BR', async () => {
+    const { default: config } = await import('../../playwright.config')
+    // Sem locale fixo, o Chromium headless diz en-US e o boot gravaria `en` em
+    // `users.locale` no primeiro GET com `null`.
+    expect(config.use?.locale).toBe('pt-BR')
+  })
+})

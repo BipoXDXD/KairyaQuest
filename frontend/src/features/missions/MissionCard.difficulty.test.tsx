@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { routeFetch } from '../../test/fetchRoutes'
 import type { Mission } from '../../shared/types/mission'
@@ -40,7 +41,7 @@ afterEach(() => {
 describe('MissionCard -- o teto da dificuldade', () => {
   it('escreve o teto de MAX_DIFFICULTY, e nao um numero fixo', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([missao]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     expect(await screen.findByTestId('mission-difficulty')).toHaveTextContent('3 de 7')
   })

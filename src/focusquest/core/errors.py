@@ -163,3 +163,12 @@ class PrazoForaDoLimite(DomainError):
     Kairya e no reagendamento, so o longe demais (o passado e
     `PrazoExpiradoError`, F9).
     """
+
+
+class CampoDesconhecidoError(DomainError):
+    """O corpo trouxe um campo que o contrato nao tem.
+
+    Separado do 422 de valor invalido porque a correcao do cliente e outra:
+    tirar o campo, e nao mudar o valor. Hoje so `/api/me` o levanta, pela
+    `RotaQueRecusaCampoExtra` de `users/router.py`.
+    """

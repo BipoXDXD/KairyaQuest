@@ -62,8 +62,7 @@ class Codigo(StrEnum):
     VETERAN_10 = "veteran_10"
     VETERAN_50 = "veteran_50"
     VETERAN_100 = "veteran_100"
-    # Valor persistido legado: mantém conquistas já concedidas e clientes existentes.
-    KAIRYA_PARTNERSHIP = "tifa_partnership"
+    KAIRYA_PARTNERSHIP = "kairya_partnership"
 
 
 @dataclass(frozen=True)

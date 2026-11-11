@@ -334,7 +334,7 @@ test('(3) a Kairya propoe reagendar, a pessoa confirma e o quadro mostra o prazo
   const depois = await lerMissao(request, criada.id)
   expect(Date.parse(depois.deadline)).toBe(Date.parse(novoPrazo))
   expect(depois.reschedules).toHaveLength(1)
-  expect(depois.reschedules[0]?.origin).toBe('tifa')
+  expect(depois.reschedules[0]?.origin).toBe('kairya')
   expect(depois.reschedules[0]?.reason).toBe('mudanca_de_prioridade')
   const todas = (await (await request.get('/api/missions')).json()) as Missao[]
   expect(todas.filter((m) => m.instructions === criada.instructions)).toHaveLength(1)

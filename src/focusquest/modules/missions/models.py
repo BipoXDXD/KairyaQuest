@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from focusquest.core.base import Base
+from focusquest.core.idioma import Idioma
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
     FalhaDaAvaliacao,
@@ -41,6 +42,9 @@ from focusquest.modules.missions.domain import (
 # lugar certo, porque o modelo nao cria esquema nenhum.
 _ESTADOS_SQL = ", ".join(f"'{estado.value}'" for estado in MissionState)
 
+# Mesmo motivo de _ESTADOS_SQL, para o CHECK `ck_users_locale` (migracao 0009).
+_IDIOMAS_SQL = ", ".join(f"'{idioma.value}'" for idioma in Idioma)
+
 # Mesmo motivo de _ESTADOS_SQL: o modelo DESCREVE a tabela de hoje, e por isso
 # deriva do enum -- o CHECK que vive no banco so muda por migracao a mao.
 _TIPOS_SQL = ", ".join(f"'{tipo.value}'" for tipo in MissionType)
@@ -53,7 +57,14 @@ _FALHAS_SQL = ", ".join(f"'{f.value}'" for f in FalhaDaAvaliacao)
 
 # Mesmo motivo, para o historico de reagendamentos e o `kind` das operacoes.
 _MOTIVOS_SQL = ", ".join(f"'{m.value}'" for m in MotivoDoReagendamento)
-_ORIGENS_SQL = ", ".join(f"'{o.value}'" for o in OrigemDoReagendamento)
+
+# Tolerant reader da 0008 (expand): o valor antigo da origem ainda cabe no
+# CHECK e, lido, vira o membro novo. Sai na Tarefa 2.2, junto com o valor
+# antigo do CHECK. O dominio nunca escreve o valor antigo.
+_ORIGENS_ANTIGAS: dict[str, OrigemDoReagendamento] = {
+    "tifa": OrigemDoReagendamento.KAIRYA,
+}
+_ORIGENS_SQL = ", ".join(f"'{o}'" for o in (*OrigemDoReagendamento, *_ORIGENS_ANTIGAS))
 _TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
 
 
@@ -149,7 +160,9 @@ class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
     def process_result_value(
         self, value: Any, dialect: Dialect
     ) -> OrigemDoReagendamento:
-        return OrigemDoReagendamento(value)
+        # Sem tratar None, como MissionStateText: a coluna e NOT NULL e nenhuma
+        # leitura passa por outer join; um NULL aqui e divergencia de esquema.
+        return _ORIGENS_ANTIGAS.get(value) or OrigemDoReagendamento(value)
 
 
 class WeeklyPlan(Base):
@@ -196,6 +209,15 @@ class User(Base):
     garante que quem importa o mapeamento da missao sempre tenha o alvo dela
     resolvido. Quando houver autenticacao, esta classe se muda para o modulo
     de usuario e `missions/models.py` passa a importa-la.
+
+    O modulo `users` (F3) existe e mesmo assim NAO recebe a classe: as tabelas
+    de `missions` apontam para `users.id`, e com a classe em `users` o
+    `missions` passaria a importar `users` so para resolver a chave
+    estrangeira. `users.service` le `display_name` e `locale` e escreve so
+    `locale`.
+
+    `locale` e `NULL` enquanto o usuario nunca escolheu (migracao 0009). O
+    fallback para `pt-BR` mora em `users.service.ler_idioma`, e so la.
     """
 
     __tablename__ = "users"
@@ -204,6 +226,11 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    locale: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(f"locale IN ({_IDIOMAS_SQL})", name="ck_users_locale"),
     )
 
 
