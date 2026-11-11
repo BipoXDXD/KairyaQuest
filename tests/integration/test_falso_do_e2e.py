@@ -513,21 +513,29 @@ def _primeira_linha(processo: subprocess.Popen[str]) -> str:
 def test_o_processo_sobe_na_porta_pedida_e_responde_o_controle() -> None:
     """A MESMA linha de comando do `playwright.config.ts`, numa porta livre."""
     porta = _porta_livre()
-    processo = subprocess.Popen(
+    # O `with` fecha o pipe do stdout na saida; sem ele o descritor ficava
+    # aberto ate a coleta de lixo, que o acusava com `ResourceWarning`.
+    with subprocess.Popen(
         [sys.executable, "-m", "integration.falso_do_e2e", "--porta", str(porta)],
         cwd=RAIZ,
         env={"PYTHONPATH": str(RAIZ / "tests"), "PATH": ""},
         stdout=subprocess.PIPE,
         text=True,
-    )
-    try:
-        url = f"http://127.0.0.1:{porta}"
-        assert _primeira_linha(processo) == f"{LINHA_DE_PRONTO} {url}\n"
-        resposta = httpx.get(f"{url}/_control/requests")
-        assert resposta.json() == {"requests": []}
-    finally:
-        processo.terminate()
-        processo.wait(timeout=10)
+    ) as processo:
+        try:
+            url = f"http://127.0.0.1:{porta}"
+            assert _primeira_linha(processo) == f"{LINHA_DE_PRONTO} {url}\n"
+            resposta = httpx.get(f"{url}/_control/requests")
+            assert resposta.json() == {"requests": []}
+        finally:
+            processo.terminate()
+            try:
+                processo.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Sem o kill, o `__exit__` do `Popen` chamaria `wait()` sem
+                # prazo e a suite travaria em vez de reprovar.
+                processo.kill()
+                raise
 
 
 def test_o_processo_exige_a_porta() -> None:

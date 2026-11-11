@@ -230,6 +230,13 @@ def test_provedor_fora_do_ar_vira_indisponivel() -> None:
         base_url="http://127.0.0.1:9",
         modelo="claude-opus-5",
         max_tokens=8,
+        # Os 30 s nunca correm aqui: no loopback a porta fechada devolve
+        # "connection refused" na hora, e o teste so espera o backoff das
+        # tentativas (cerca de 1 s). O prazo so seria gasto se algo escutasse
+        # na porta 9 sem responder, e entao o erro viraria `TempoEsgotadoError`
+        # e reprovaria o teste de qualquer jeito. Encurtar nao muda o
+        # resultado; o teto folgado so evita que um `connect` lento sob carga
+        # troque o erro de conexao por estouro.
         timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
