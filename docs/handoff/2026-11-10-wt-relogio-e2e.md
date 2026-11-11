@@ -57,7 +57,7 @@ controle) e do navegador (`page.clock.setFixedTime`) no mesmo instante:
 |---|---|---|
 | Tampering/Elevation: um cliente move "agora" na produção (reabre diária perdida, conclui fora do prazo, zera o teto diário da tutoria) | A rota só existe em `tests/integration/`, que a imagem da API não copia (`docker/api.Dockerfile` copia só `src/`); o app de produção mantém `get_clock` real e não tem `/_e2e` | `test_relogio_sem_controle_em_producao.py::test_a_rota_do_relogio_responde_404_e_o_relogio_nao_muda` (PUT e DELETE: 404 e `today` = dia real), `::test_o_app_de_producao_nao_publica_a_rota_do_relogio`, `::test_o_app_de_producao_usa_o_relogio_real` |
 | Tampering por entrada: instante sem fuso, lixo ou campo extra move o relógio para um valor que ninguém pediu | DTO estrito (`AwareDatetime`, `extra="forbid"`) → 422 e relógio intacto; `fixar` recusa instante sem fuso | `test_relogio_do_e2e.py::test_put_recusa_corpo_invalido_e_nao_mexe_no_relogio`, `::test_fixar_recusa_instante_sem_fuso` |
-| Repudiation/integridade da suíte: relógio fixado vaza para os specs seguintes | `afterAll` do spec faz `DELETE` e exige 204, mesmo se um teste reprovar | `test_relogio_do_e2e.py::test_delete_devolve_o_relogio_real`; o próprio `afterAll` do spec |
+| Tampering do estado compartilhado da suíte: relógio fixado vaza para os specs seguintes | `afterAll` do spec faz `DELETE` e exige 204, mesmo se um teste reprovar | Cobertura indireta: `test_relogio_do_e2e.py::test_delete_devolve_o_relogio_real` prova que o `DELETE` devolve o relógio real, e o `afterAll` confere o 204 em tempo de execução. Nenhum teste prova que um spec seguinte encontra o relógio real (ver limitações) |
 | Spoofing pela página do E2E | Rota fora de `/api` (sem proxy no `vite preview`), API do E2E só em 127.0.0.1 | Sem teste próprio (ver limitações) |
 
 **Sabotagem.** Com a rota registrada no app de produção no mesmo processo do
@@ -81,3 +81,6 @@ gerado na hora.
   está no cenário, mas o avanço de timers não.
 - A recusa de alcançar `/_e2e` pela origem da tela não tem teste próprio: vale
   enquanto o proxy do `vite.config.ts` repassar só `/api`.
+- O não vazamento do relógio fixado para os specs seguintes não tem teste
+  direto: vale enquanto o `afterAll` do `cycle-midnight.spec.ts` rodar o
+  `DELETE` (correção de 2026-11-11, `docs/handoff/2026-11-11-achados-revisao.md`).
