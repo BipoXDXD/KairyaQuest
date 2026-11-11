@@ -69,18 +69,26 @@ describe('describeStartFailure', () => {
     },
   )
 
-  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
-    expect(describeStartFailure(new ApiError('x', null, null))).toEqual({
+  it('a rede fora nomeia a acao e diz que nao conectou, e repetir e seguro', () => {
+    const failure = describeStartFailure(new ApiError('x', null, null))
+    expect(failure).toEqual({
       ...UNCONFIRMED,
-      message: 'shared.transportFailure.network',
+      message: 'missions.startFailure.unconfirmed.network',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível iniciar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+    )
   })
 
-  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
-    expect(describeStartFailure(new ApiTimeoutError())).toEqual({
+  it('o prazo nomeia a acao e diz que a resposta demorou, e repetir e seguro', () => {
+    const failure = describeStartFailure(new ApiTimeoutError())
+    expect(failure).toEqual({
       ...UNCONFIRMED,
-      message: 'shared.transportFailure.timeout',
+      message: 'missions.startFailure.unconfirmed.timeout',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível iniciar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+    )
   })
 
   it('um 5xx sem code continua no texto generico', () => {

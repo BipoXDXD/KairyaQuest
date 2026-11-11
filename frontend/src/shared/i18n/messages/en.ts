@@ -35,8 +35,6 @@ export const en = {
   'shared.apiError.interrupted.message':
     "The response didn't arrive in full. The connection dropped midway.",
   'shared.apiError.interrupted.recovery': 'Try again.',
-  'shared.transportFailure.timeout': "The response didn't arrive. It took longer than expected.",
-  'shared.transportFailure.network': "Couldn't connect. The server couldn't be reached.",
 
   'missions.state.pending': 'Pending',
   'missions.state.inProgress': 'In progress',
@@ -65,6 +63,10 @@ export const en = {
     "Couldn't confirm the completion. The server's answer was lost.",
   'missions.completionFailure.unconfirmed.recovery':
     "Retrying is safe: the mission won't be completed twice.",
+  'missions.completionFailure.unconfirmed.timeout':
+    "Couldn't confirm the completion: the server timed out.",
+  'missions.completionFailure.unconfirmed.network':
+    "Couldn't confirm the completion: the server is unreachable.",
   'missions.completionFailure.evidenceRejected.message':
     "The evidence wasn't accepted. The text or link is invalid.",
   'missions.completionFailure.evidenceRejected.recovery': 'Check both and send again.',
@@ -76,6 +78,9 @@ export const en = {
   'missions.startFailure.unconfirmed.message':
     "Couldn't confirm the start. The server's answer was lost.",
   'missions.startFailure.unconfirmed.recovery': "Retrying is safe: the mission won't start twice.",
+  'missions.startFailure.unconfirmed.timeout': "Couldn't confirm the start: the server timed out.",
+  'missions.startFailure.unconfirmed.network':
+    "Couldn't confirm the start: the server is unreachable.",
 
   'missions.rescheduleFailure.deadlinePassed.message':
     "Couldn't reschedule. The new deadline is in the past.",
@@ -94,6 +99,10 @@ export const en = {
     "Couldn't confirm the new deadline. The server's answer was lost.",
   'missions.rescheduleFailure.unconfirmed.recovery':
     "Retrying is safe: the deadline won't change twice.",
+  'missions.rescheduleFailure.unconfirmed.timeout':
+    "Couldn't confirm the new deadline: the server timed out.",
+  'missions.rescheduleFailure.unconfirmed.network':
+    "Couldn't confirm the new deadline: the server is unreachable.",
   'missions.rescheduleFailure.notAccepted.message':
     "The new deadline wasn't accepted. The date or reason is invalid.",
   'missions.rescheduleFailure.notAccepted.recovery': 'Check both and try again.',
@@ -117,6 +126,10 @@ export const en = {
     "Couldn't request the evaluation. The server's answer was lost.",
   'missions.evaluationFailure.generic.recovery':
     'Retrying is safe: the bonus is never granted twice.',
+  'missions.evaluationFailure.generic.timeout':
+    "Couldn't request the evaluation: the server timed out.",
+  'missions.evaluationFailure.generic.network':
+    "Couldn't request the evaluation: the server is unreachable.",
 
   'tutoring.messageFailure.safeRetry': "Retrying is safe: your question won't repeat.",
   'tutoring.messageFailure.tryAgain': 'Try again.',
@@ -169,13 +182,25 @@ export const en = {
     "Couldn't confirm the mission. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedCreate.recovery':
     "Retrying is safe: the mission won't be created twice.",
+  'tutoring.actionFailure.unconfirmedCreate.timeout':
+    "Couldn't confirm the mission: the server timed out.",
+  'tutoring.actionFailure.unconfirmedCreate.network':
+    "Couldn't confirm the mission: the server is unreachable.",
   'tutoring.actionFailure.unconfirmedReschedule.message':
     "Couldn't confirm the new deadline. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedReschedule.recovery':
     "Retrying is safe: the deadline won't change twice.",
+  'tutoring.actionFailure.unconfirmedReschedule.timeout':
+    "Couldn't confirm the new deadline: the server timed out.",
+  'tutoring.actionFailure.unconfirmedReschedule.network':
+    "Couldn't confirm the new deadline: the server is unreachable.",
   'tutoring.actionFailure.unconfirmedReject.message':
     "Couldn't decline the proposal. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedReject.recovery': 'Retrying is safe: nothing changes twice.',
+  'tutoring.actionFailure.unconfirmedReject.timeout':
+    "Couldn't decline the proposal: the server timed out.",
+  'tutoring.actionFailure.unconfirmedReject.network':
+    "Couldn't decline the proposal: the server is unreachable.",
   'tutoring.actionFailure.failed.message':
     "This proposal couldn't be carried out. Something changed since it was made.",
 } as const satisfies Messages

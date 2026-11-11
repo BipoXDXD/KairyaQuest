@@ -9,13 +9,18 @@ import { ApiError } from './client'
 export type TransportFailure = 'timeout' | 'network'
 
 /**
- * A abertura do texto de cada falha de transporte, como chave do catalogo.
- * Diz o que aconteceu sem culpar a rede da pessoa: o servidor fora tambem da
- * "Não foi possível conectar".
+ * A abertura do texto de falha de um tradutor, como chaves do catalogo.
+ * `timeout` e `network` nomeiam a acao e a causa numa frase so ("Não foi
+ * possível concluir a missão: sem conexão com o servidor."): falam do servidor,
+ * e nao da rede da pessoa, porque o servidor fora tambem deixa o pedido sem
+ * conexao. `fallback` e a frase propria para o resto (5xx, `code` desconhecido).
+ * Uma chave por acao e por idioma, e nao uma frase montada aqui: a ordem das
+ * palavras muda de idioma para idioma.
  */
-const LEAD_BY_FAILURE: Readonly<Record<TransportFailure, MessageKey>> = {
-  timeout: 'shared.transportFailure.timeout',
-  network: 'shared.transportFailure.network',
+export interface FailureLead {
+  fallback: MessageKey
+  timeout: MessageKey
+  network: MessageKey
 }
 
 /**
@@ -37,11 +42,10 @@ export function transportFailureOf(error: unknown): TransportFailure | null {
 }
 
 /**
- * A chave da frase de abertura do texto de falha: a da falha de transporte, ou
- * `fallback`, a abertura propria do tradutor para o resto (5xx, `code`
- * desconhecido).
+ * A chave da frase de abertura do texto de falha: a da falha de transporte, que
+ * nomeia a acao e a causa, ou o `fallback` do tradutor para o resto.
  */
-export function leadFor(error: unknown, fallback: MessageKey): MessageKey {
+export function leadFor(error: unknown, lead: FailureLead): MessageKey {
   const failure = transportFailureOf(error)
-  return failure === null ? fallback : LEAD_BY_FAILURE[failure]
+  return failure === null ? lead.fallback : lead[failure]
 }

@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { EvaluationErrorCode } from './types'
@@ -64,7 +64,11 @@ export const EVALUATION_FAILURE_BY_CODE: Readonly<Record<EvaluationErrorCode, Ev
     },
   }
 
-const GENERIC_LEAD: MessageKey = 'missions.evaluationFailure.generic.message'
+const GENERIC_LEAD: FailureLead = {
+  fallback: 'missions.evaluationFailure.generic.message',
+  timeout: 'missions.evaluationFailure.generic.timeout',
+  network: 'missions.evaluationFailure.generic.network',
+}
 
 /**
  * Rede fora, prazo, 5xx, `code` de um backend mais novo: repetir e seguro. A
@@ -94,7 +98,7 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
   // O `code` gravado nao carrega falha de transporte: a abertura e a generica.
-  return knownFailure(code) ?? generic(GENERIC_LEAD)
+  return knownFailure(code) ?? generic(GENERIC_LEAD.fallback)
 }
 
 /** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
@@ -105,7 +109,7 @@ function knownFailure(code: string | null): EvaluationFailure | null {
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
-    return generic(GENERIC_LEAD)
+    return generic(GENERIC_LEAD.fallback)
   }
   const known = knownFailure(error.code)
   if (known !== null) {

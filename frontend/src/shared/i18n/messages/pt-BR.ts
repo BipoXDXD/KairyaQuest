@@ -36,8 +36,6 @@ export const ptBR = {
   'shared.apiError.format.recovery': 'Tente de novo.',
   'shared.apiError.interrupted.message': 'A resposta foi interrompida no caminho.',
   'shared.apiError.interrupted.recovery': 'Tente de novo.',
-  'shared.transportFailure.timeout': 'A resposta demorou mais que o esperado.',
-  'shared.transportFailure.network': 'Não foi possível conectar.',
 
   'missions.state.pending': 'Pendente',
   'missions.state.inProgress': 'Em andamento',
@@ -62,6 +60,10 @@ export const ptBR = {
   'missions.completionFailure.unconfirmed.message': 'Não foi possível confirmar a conclusão.',
   'missions.completionFailure.unconfirmed.recovery':
     'Tentar de novo é seguro: a missão não será concluída duas vezes.',
+  'missions.completionFailure.unconfirmed.timeout':
+    'Não foi possível concluir a missão: o servidor demorou demais para responder.',
+  'missions.completionFailure.unconfirmed.network':
+    'Não foi possível concluir a missão: sem conexão com o servidor.',
   'missions.completionFailure.evidenceRejected.message': 'A evidência não foi aceita.',
   'missions.completionFailure.evidenceRejected.recovery': 'Revise o texto e o link.',
 
@@ -71,6 +73,10 @@ export const ptBR = {
   'missions.startFailure.unconfirmed.message': 'Não foi possível confirmar o início.',
   'missions.startFailure.unconfirmed.recovery':
     'Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+  'missions.startFailure.unconfirmed.timeout':
+    'Não foi possível iniciar a missão: o servidor demorou demais para responder.',
+  'missions.startFailure.unconfirmed.network':
+    'Não foi possível iniciar a missão: sem conexão com o servidor.',
 
   'missions.rescheduleFailure.deadlinePassed.message': 'O novo prazo precisa estar no futuro.',
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Escolha uma data e um horário futuros.',
@@ -86,6 +92,10 @@ export const ptBR = {
   'missions.rescheduleFailure.unconfirmed.message': 'Não foi possível confirmar o reagendamento.',
   'missions.rescheduleFailure.unconfirmed.recovery':
     'Tentar de novo é seguro: o prazo não mudará duas vezes.',
+  'missions.rescheduleFailure.unconfirmed.timeout':
+    'Não foi possível reagendar a missão: o servidor demorou demais para responder.',
+  'missions.rescheduleFailure.unconfirmed.network':
+    'Não foi possível reagendar a missão: sem conexão com o servidor.',
   'missions.rescheduleFailure.notAccepted.message': 'O novo prazo não foi aceito.',
   'missions.rescheduleFailure.notAccepted.recovery': 'Revise a data e o motivo.',
 
@@ -103,6 +113,10 @@ export const ptBR = {
   'missions.evaluationFailure.generic.message': 'Não foi possível pedir a avaliação.',
   'missions.evaluationFailure.generic.recovery':
     'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+  'missions.evaluationFailure.generic.timeout':
+    'Não foi possível pedir a avaliação: o servidor demorou demais para responder.',
+  'missions.evaluationFailure.generic.network':
+    'Não foi possível pedir a avaliação: sem conexão com o servidor.',
 
   'tutoring.messageFailure.safeRetry': 'Tentar de novo é seguro: a pergunta não será duplicada.',
   'tutoring.messageFailure.tryAgain': 'Tente de novo.',
@@ -145,11 +159,23 @@ export const ptBR = {
   'tutoring.actionFailure.unconfirmedCreate.message': 'Não foi possível confirmar a missão.',
   'tutoring.actionFailure.unconfirmedCreate.recovery':
     'Tentar de novo é seguro: a missão não será criada duas vezes.',
+  'tutoring.actionFailure.unconfirmedCreate.timeout':
+    'Não foi possível confirmar a missão: o servidor demorou demais para responder.',
+  'tutoring.actionFailure.unconfirmedCreate.network':
+    'Não foi possível confirmar a missão: sem conexão com o servidor.',
   'tutoring.actionFailure.unconfirmedReschedule.message':
     'Não foi possível confirmar o reagendamento.',
   'tutoring.actionFailure.unconfirmedReschedule.recovery':
     'Tentar de novo é seguro: o prazo não mudará duas vezes.',
+  'tutoring.actionFailure.unconfirmedReschedule.timeout':
+    'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder.',
+  'tutoring.actionFailure.unconfirmedReschedule.network':
+    'Não foi possível confirmar o reagendamento: sem conexão com o servidor.',
   'tutoring.actionFailure.unconfirmedReject.message': 'Não foi possível recusar a proposta.',
   'tutoring.actionFailure.unconfirmedReject.recovery': 'Tentar de novo é seguro.',
+  'tutoring.actionFailure.unconfirmedReject.timeout':
+    'Não foi possível recusar a proposta: o servidor demorou demais para responder.',
+  'tutoring.actionFailure.unconfirmedReject.network':
+    'Não foi possível recusar a proposta: sem conexão com o servidor.',
   'tutoring.actionFailure.failed.message': 'Esta proposta não pôde ser executada.',
 } as const

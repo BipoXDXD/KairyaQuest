@@ -3,6 +3,10 @@
 Liga a tutoria ao servidor falso da Anthropic em loopback, com os roteiros
 deterministas. Nao e uma opcao da dependencia de producao: nao recebe chave
 real nem aceita host externo. O script e2e-env valida tambem o banco.
+
+E troca o relogio pelo controlavel de `relogio_do_e2e` (pendencia 116): real
+ate o cenario fixar um instante por `PUT /_e2e/clock`. A rota mora num app
+externo que monta o de producao, e nao no de producao.
 """
 
 from datetime import timedelta
@@ -10,10 +14,11 @@ from functools import cache
 from urllib.parse import urlsplit
 
 from focusquest.core.config import Settings
-from focusquest.main import app as app
+from focusquest.main import app as app_de_producao
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.service import Tutoria
+from integration.relogio_do_e2e import RelogioDoE2E, montar_app_do_e2e
 
 
 @cache
@@ -43,4 +48,5 @@ def tutoria_falsa() -> Tutoria:
     )
 
 
-app.dependency_overrides[get_tutoria] = tutoria_falsa
+app_de_producao.dependency_overrides[get_tutoria] = tutoria_falsa
+app = montar_app_do_e2e(app_de_producao, RelogioDoE2E())
