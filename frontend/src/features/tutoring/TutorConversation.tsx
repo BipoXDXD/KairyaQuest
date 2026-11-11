@@ -5,6 +5,7 @@ import { UNKNOWN_RESULT } from './messageFailure'
 import type { ActionRead, MessageRead, MessageStatus } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
 import type { TutorStatus } from './useTutorStatus'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
 
 /** O texto do estado indisponivel, literal da spec. */
 export const UNAVAILABLE_TEXT = 'A Kairya está fora do ar: falta configurar o provedor.'
@@ -194,10 +195,12 @@ function FailureNotice({
         Tentar de novo
       </button>
     )
-  if (send.status === 'failed' && send.failure.recovery !== 'unavailable') {
+  if (send.status === 'failed' && send.failure.action !== 'unavailable') {
     return (
       <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
-        <p>{send.failure.message}</p>
+        <p>
+          <FailureMessage failure={send.failure} />
+        </p>
         {retryButton}
       </div>
     )
@@ -205,7 +208,9 @@ function FailureNotice({
   if (send.status === 'unknown') {
     return (
       <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
-        <p>{UNKNOWN_RESULT.message}</p>
+        <p>
+          <FailureMessage failure={UNKNOWN_RESULT} />
+        </p>
         {retryButton}
       </div>
     )
@@ -248,8 +253,8 @@ export function TutorConversation({
   const { send, length } = conversation
   const unavailable =
     status.status === 'unavailable' ||
-    (send.status === 'failed' && send.failure.recovery === 'unavailable')
-  const dailyLimitReached = send.status === 'failed' && send.failure.recovery === 'daily-limit'
+    (send.status === 'failed' && send.failure.action === 'unavailable')
+  const dailyLimitReached = send.status === 'failed' && send.failure.action === 'daily-limit'
   const inputDisabled = unavailable || dailyLimitReached || status.status !== 'available'
   const busy = send.status === 'sending' || send.status === 'writing'
 

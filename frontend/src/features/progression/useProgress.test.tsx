@@ -5,6 +5,12 @@ import { routeFetch } from '../../test/fetchRoutes'
 import type { Progress } from './types'
 import { useProgress } from './useProgress'
 
+/** O 503 vira o texto do catalogo pelo `kind`; a `message` de depuracao nao sai do hook. */
+const HTTP_FAILURE = {
+  kind: 'api',
+  text: { message: 'shared.apiError.http.message', recovery: 'shared.apiError.http.recovery' },
+} as const
+
 const progressoInicial: Progress = {
   xp_total: 100,
   level: 2,
@@ -32,7 +38,7 @@ describe('useProgress', () => {
     })
   })
 
-  it('mostra o erro com a mensagem do cliente HTTP, e o reload tenta de novo', async () => {
+  it('mostra o erro com o texto do catalogo pelo kind, e o reload tenta de novo', async () => {
     routeFetch({
       'GET /api/progress': (_init, call) =>
         call === 1 ? new Response(null, { status: 503 }) : Response.json(progressoInicial),
@@ -41,7 +47,7 @@ describe('useProgress', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     act(() => {
@@ -59,7 +65,7 @@ describe('useProgress', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'Falha inesperada ao carregar o progresso.',
+        failure: { kind: 'unexpected', message: 'Falha inesperada ao carregar o progresso.' },
       })
     })
   })
@@ -434,7 +440,7 @@ describe('useProgress', () => {
       await waitFor(() => {
         expect(result.current.state).toEqual({
           status: 'error',
-          message: 'O servidor respondeu 503.',
+          failure: HTTP_FAILURE,
         })
       })
 
@@ -447,7 +453,7 @@ describe('useProgress', () => {
       })
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     },
   )
@@ -464,14 +470,14 @@ describe('useProgress', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     await act(async () => {
       result.current.refresh()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(result.current.state).toEqual({ status: 'error', message: 'O servidor respondeu 503.' })
+    expect(result.current.state).toEqual({ status: 'error', failure: HTTP_FAILURE })
   })
 
   it('a aba que volta a ficar visivel atualiza o progresso em silencio', async () => {

@@ -3,6 +3,7 @@ import { CycleSection, type CycleSectionHandle } from '../features/missions/Cycl
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
+import { useT } from '../shared/i18n/useT'
 import { HEADQUARTERS_HEADING_ID } from './headings'
 
 /**
@@ -34,6 +35,7 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  * `main`: o HTML proibe mais de um `main` sem `hidden` no documento.
  */
 export function Headquarters({ hidden = false }: { hidden?: boolean }) {
+  const t = useT()
   const board = useRef<MissionListHandle>(null)
   const progress = useRef<ProgressPanelHandle>(null)
   const cycle = useRef<CycleSectionHandle>(null)
@@ -68,17 +70,15 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
         className="rpg-main mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-24 lg:pb-8"
       >
         <header className="rpg-hero rpg-hero-library mb-6">
-          <p className="rpg-eyebrow">Biblioteca do aventureiro</p>
+          <p className="rpg-eyebrow">{t('headquarters.header.eyebrow')}</p>
           <h1
             id={HEADQUARTERS_HEADING_ID}
             tabIndex={-1}
             className="rounded text-2xl font-bold tracking-tight text-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
           >
-            Quartel-General — seu painel de estudos
+            {t('headquarters.header.title')}
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            O que está em aberto, com prazo e recompensa.
-          </p>
+          <p className="mt-1 text-sm text-slate-400">{t('headquarters.header.subtitle')}</p>
         </header>
         <ProgressPanel ref={progress} />
         <CycleSection ref={cycle} onMissionCompleted={refreshProgress} />

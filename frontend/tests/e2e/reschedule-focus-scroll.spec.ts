@@ -193,7 +193,7 @@ for (const scenario of [
       await reply(failed)
       if (failed) {
         await expect(card.getByTestId('reschedule-error')).toHaveText(
-          'O novo prazo precisa estar no futuro.',
+          'O novo prazo precisa estar no futuro. Escolha uma data e um horário futuros.',
         )
         await expect(card.getByTestId('reschedule-error')).toHaveAttribute('role', 'alert')
         await expect(toggle).toHaveAttribute('aria-expanded', 'true')

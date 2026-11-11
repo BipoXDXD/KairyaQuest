@@ -1,3 +1,5 @@
+import type { MessageKey } from '../i18n/catalog'
+
 /**
  * O contrato de missao (`MissionRead`, src/focusquest/modules/missions/schemas.py)
  * como a API o publica.
@@ -132,26 +134,27 @@ export interface Mission {
 }
 
 /**
- * Rotulo em pt-BR de cada estado, com acentuacao de gente.
+ * A chave do catalogo do rotulo de cada estado (o texto mora em
+ * `shared/i18n/messages`).
  *
- * O tipo `Record<MissionState, string>` e o que faz este mapa ser EXAUSTIVO: um
+ * O tipo `Record<MissionState, MessageKey>` e o que faz este mapa ser EXAUSTIVO: um
  * estado novo no backend entra no tipo `MissionState` e o `tsc` passa a exigir
  * o rotulo aqui. A alternativa -- um `Partial` com fallback, ou um `switch` com
  * `default` -- deixaria o estado novo aparecer na tela como `em_revisao`, e o
  * defeito so seria descoberto por quem o visse.
  */
-export const MISSION_STATE_LABELS: Record<MissionState, string> = {
-  pendente: 'Pendente',
-  em_andamento: 'Em andamento',
-  concluida: 'Concluída',
+export const MISSION_STATE_LABELS: Readonly<Record<MissionState, MessageKey>> = {
+  pendente: 'missions.state.pending',
+  em_andamento: 'missions.state.inProgress',
+  concluida: 'missions.state.completed',
 }
 
 /**
- * Rotulo em pt-BR de cada motivo de reagendamento. `Record` pelo mesmo motivo
+ * A chave do catalogo do rotulo de cada motivo de reagendamento. `Record` pelo mesmo motivo
  * de `MISSION_STATE_LABELS`: um motivo novo no tipo exige o rotulo aqui.
  */
-export const RESCHEDULE_REASON_LABELS: Record<RescheduleReason, string> = {
-  dificuldade: 'Dificuldade',
-  falta_de_tempo: 'Falta de tempo',
-  mudanca_de_prioridade: 'Mudança de prioridade',
+export const RESCHEDULE_REASON_LABELS: Readonly<Record<RescheduleReason, MessageKey>> = {
+  dificuldade: 'missions.rescheduleReason.difficulty',
+  falta_de_tempo: 'missions.rescheduleReason.lackOfTime',
+  mudanca_de_prioridade: 'missions.rescheduleReason.priorityChange',
 }
