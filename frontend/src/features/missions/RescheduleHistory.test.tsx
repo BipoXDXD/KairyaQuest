@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import { renderWithI18n } from '../../test/i18n'
 import { describe, expect, it } from 'vitest'
 import { formatDeadline } from '../../shared/lib/deadline'
 import type { Reschedule } from '../../shared/types/mission'
@@ -23,22 +24,22 @@ const segundo: Reschedule = {
 
 describe('RescheduleHistory', () => {
   it('sem reagendamento, nao mostra nada', () => {
-    const { container } = render(<RescheduleHistory reschedules={[]} />)
+    const { container } = renderWithI18n(<RescheduleHistory reschedules={[]} />)
     expect(container).toBeEmptyDOMElement()
   })
 
   it('sem a lista (API anterior ao incremento F), nao mostra nada e nao quebra', () => {
-    const { container } = render(<RescheduleHistory reschedules={undefined} />)
+    const { container } = renderWithI18n(<RescheduleHistory reschedules={undefined} />)
     expect(container).toBeEmptyDOMElement()
   })
 
   it('com um reagendamento, diz "Reagendada 1 vez", no singular', () => {
-    render(<RescheduleHistory reschedules={[primeiro]} />)
+    renderWithI18n(<RescheduleHistory reschedules={[primeiro]} />)
     expect(screen.getByTestId('mission-reschedule-count')).toHaveTextContent(/^Reagendada 1 vez$/)
   })
 
   it('com dois, diz "Reagendada 2 vezes" e lista cada elo, com os dois prazos, o motivo e quem', () => {
-    render(<RescheduleHistory reschedules={[primeiro, segundo]} />)
+    renderWithI18n(<RescheduleHistory reschedules={[primeiro, segundo]} />)
 
     expect(screen.getByTestId('mission-reschedule-count')).toHaveTextContent(/^Reagendada 2 vezes$/)
     const historico = screen.getByTestId('mission-reschedule-history')
@@ -56,7 +57,7 @@ describe('RescheduleHistory', () => {
   })
 
   it('cada prazo e um <time> com o instante original no dateTime', () => {
-    render(<RescheduleHistory reschedules={[primeiro]} />)
+    renderWithI18n(<RescheduleHistory reschedules={[primeiro]} />)
     const [antes, depois] = within(screen.getByTestId('mission-reschedule-entry')).getAllByText(
       (_, element) => element?.tagName === 'TIME',
     )
@@ -65,7 +66,7 @@ describe('RescheduleHistory', () => {
   })
 
   it('o motivo sai em texto, pelo rotulo, e nunca o valor cru', () => {
-    render(<RescheduleHistory reschedules={[{ ...primeiro, reason: 'dificuldade' }]} />)
+    renderWithI18n(<RescheduleHistory reschedules={[{ ...primeiro, reason: 'dificuldade' }]} />)
     const linha = screen.getByTestId('mission-reschedule-entry')
     expect(linha).toHaveTextContent('· Dificuldade ·')
     expect(linha).not.toHaveTextContent(/dificuldade|falta_de_tempo|usuario/)

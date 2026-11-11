@@ -1,4 +1,5 @@
-import { isInaccessible, render, screen, within } from '@testing-library/react'
+import { isInaccessible, screen, within } from '@testing-library/react'
+import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import { createRef } from 'react'
 import { act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -48,7 +49,7 @@ describe('ProgressPanel', () => {
 
   it('mostra o nivel, o saldo e a barra com texto e valores ARIA', async () => {
     serve(progress(1340, 5, 1000, 1500, ['first_steps']))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     expect(await screen.findByTestId('progress-level')).toHaveTextContent('Nível 5')
     expect(screen.getByTestId('progress-total')).toHaveTextContent('1.340 XP no total')
     const barra = screen.getByRole('progressbar')
@@ -61,7 +62,7 @@ describe('ProgressPanel', () => {
 
   it('a barra tem nome acessivel e o texto visivel nao e anunciado duas vezes', async () => {
     serve(progress(1340, 5, 1000, 1500))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const barra = await screen.findByRole('progressbar', { name: 'Progresso até o nível 6' })
     expect(barra).toHaveAttribute('aria-valuetext', '340 de 500 XP')
     const texto = screen.getByTestId('progress-bar-text')
@@ -71,7 +72,7 @@ describe('ProgressPanel', () => {
 
   it('o piso do nivel mostra a barra vazia do nivel novo', async () => {
     serve(progress(1000, 5, 1000, 1500))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const barra = await screen.findByRole('progressbar')
     expect(barra).toHaveAttribute('aria-valuenow', '0')
     expect(barra).toHaveAttribute('aria-valuetext', '0 de 500 XP')
@@ -79,14 +80,14 @@ describe('ProgressPanel', () => {
 
   it('saldo grande formatado em pt-BR', async () => {
     serve(progress(19000, 20, 19000, 21000))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     expect(await screen.findByTestId('progress-level')).toHaveTextContent('Nível 20')
     expect(screen.getByTestId('progress-total')).toHaveTextContent('19.000 XP no total')
   })
 
   it('conquista destravada tem titulo e data; bloqueada diz como destravar, em texto', async () => {
     serve(progress(20, 1, 0, 100, ['first_steps']))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const itens = await screen.findAllByTestId('progress-achievement')
     screen.getByText('Conquistas', { selector: 'h3' }).click()
     expect(itens[0]).toBeVisible()
@@ -103,7 +104,7 @@ describe('ProgressPanel', () => {
 
   it('conquistas recolhem sem esconder nivel ou XP e abrem as sete informacoes', async () => {
     serve(progress(260, 2, 100, 300, ['first_steps', 'kairya_partnership']))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const level = await screen.findByTestId('progress-level')
     const total = screen.getByTestId('progress-total')
     const summary = screen.getByText('Conquistas', { selector: 'h3' }).closest('summary')
@@ -131,9 +132,16 @@ describe('ProgressPanel', () => {
 
   it('carregando tem role status', () => {
     routeFetch({ 'GET /api/progress': () => new Promise<Response>(() => undefined) })
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const loading = screen.getByTestId('progress-loading')
     expect(loading).toHaveAttribute('role', 'status')
+  })
+
+  it('em ingles, o erro de carga sai do catalogo', async () => {
+    routeFetch({ 'GET /api/progress': () => new Response(null, { status: 500 }) })
+    renderWithI18n(<ProgressPanel />, { locale: 'en' })
+
+    expect(await screen.findByTestId('progress-error')).toHaveTextContent(HTTP_FAILURE_TEXT.en)
   })
 
   it('erro com Tentar novamente refaz o pedido', async () => {
@@ -141,9 +149,10 @@ describe('ProgressPanel', () => {
       'GET /api/progress': (_init, call) =>
         call === 1 ? new Response(null, { status: 500 }) : Response.json(progress(20, 1, 0, 100)),
     })
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const erro = await screen.findByTestId('progress-error')
     expect(erro).toHaveAttribute('role', 'alert')
+    expect(erro).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
     const retry = screen.getByTestId('progress-retry')
     await act(async () => {
       retry.click()
@@ -159,7 +168,7 @@ describe('ProgressPanel', () => {
       'GET /api/progress': (_init, call) =>
         call === 1 ? Response.json(progress(20, 1, 0, 100)) : new Response(null, { status: 500 }),
     })
-    render(<ProgressPanel ref={ref} />)
+    renderWithI18n(<ProgressPanel ref={ref} />)
     await screen.findByTestId('progress-level')
     await act(async () => {
       ref.current?.refresh()
@@ -174,7 +183,7 @@ describe('ProgressPanel', () => {
 
   it('a secao tem titulo de nivel 2 ligado por aria-labelledby', async () => {
     serve(progress(20, 1, 0, 100))
-    render(<ProgressPanel />)
+    renderWithI18n(<ProgressPanel />)
     const secao = screen.getByTestId('progress')
     const tituloId = secao.getAttribute('aria-labelledby')
     expect(tituloId).toBeTruthy()

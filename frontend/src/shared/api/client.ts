@@ -39,10 +39,41 @@ if (typeof configured !== 'string' || configured.length === 0) {
 const BASE_URL = configured
 
 /**
+ * Como a chamada falhou, do ponto de vista do cliente. E o que a tela usa para
+ * escolher o texto (`apiErrorText`); a `message` nao serve para isso.
+ *
+ * - `network`: nao houve resposta (rede fora, pedido abortado pelo chamador);
+ * - `timeout`: o prazo do `postJson` acabou, e o resultado e desconhecido;
+ * - `http`: o servidor respondeu com status de erro;
+ * - `format`: a resposta chegou, mas num formato que o cliente nao le;
+ * - `interrupted`: a leitura do corpo caiu no meio do stream.
+ */
+export type ApiErrorKind = 'network' | 'timeout' | 'http' | 'format' | 'interrupted'
+
+/**
+ * Os detalhes opcionais do `ApiError`, junto das `ErrorOptions`.
+ *
+ * Os padroes existem para os testes, que constroem `new ApiError(msg, status,
+ * code)` as dezenas e so precisam de um `kind` plausivel. Todo `throw` de
+ * producao, neste arquivo, passa `kind` explicito: o padrao nao distingue
+ * timeout, formato ou interrupcao, e um `throw` novo que o omitisse mostraria o
+ * texto de `network`/`http` sem aviso do `tsc`.
+ */
+export interface ApiErrorOptions extends ErrorOptions {
+  /** Padrao: `network` sem status, `http` com status. */
+  kind?: ApiErrorKind
+  /** Padrao: `null`. */
+  retryAfterSeconds?: number | null
+  /** Padrao: o instante da construcao. */
+  receivedAt?: Date
+}
+
+/**
  * Falha de uma chamada a API, com o status e o `code` quando houve resposta.
  *
- * A `message` e escrita por ESTE cliente, em pt-BR, e nunca vem do `detail` do
- * backend. O `detail` e prosa para quem depura: nao tem acento, e o da transicao
+ * A `message` e escrita por ESTE cliente, em pt-BR, so para depuracao: nenhuma
+ * tela a exibe (o texto da tela vem de `apiErrorText`, pelo `kind`). Ela nunca
+ * vem do `detail` do backend. O `detail` e prosa para quem depura: nao tem acento, e o da transicao
  * ilegal expoe o valor cru do estado. Quem precisa decidir -- que mensagem
  * mostrar, se da para tentar de novo -- decide pelo `code` (spec do ciclo
  * diario, secao Erros). O `detail` nem e lido, e e isso que garante que ele nao
@@ -68,24 +99,66 @@ export class ApiError extends Error {
    */
   readonly code: string | null
 
-  constructor(message: string, status: number | null, code: string | null, options?: ErrorOptions) {
-    super(message, options)
+  readonly kind: ApiErrorKind
+
+  /**
+   * Os segundos do cabecalho `Retry-After`, ou `null` quando ele faltou ou
+   * nao era um inteiro decimal (`parseRetryAfterSeconds`).
+   */
+  readonly retryAfterSeconds: number | null
+
+  /**
+   * O instante em que o cliente recebeu a resposta de erro (ou viu a falha,
+   * quando nao houve resposta). Quem precisa do instante de volta calcula
+   * `receivedAt + retryAfterSeconds` a partir daqui, e nunca do momento do
+   * render: um re-render minutos depois adiaria a volta.
+   */
+  readonly receivedAt: Date
+
+  constructor(
+    message: string,
+    status: number | null,
+    code: string | null,
+    options: ApiErrorOptions = {},
+  ) {
+    const { kind, retryAfterSeconds, receivedAt, ...errorOptions } = options
+    super(message, errorOptions)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.kind = kind ?? (status === null ? 'network' : 'http')
+    this.retryAfterSeconds = retryAfterSeconds ?? null
+    this.receivedAt = receivedAt ?? new Date()
   }
+}
+
+/** So digitos: sem sinal, sem ponto, sem espaco. */
+const DECIMAL_SECONDS = /^\d+$/
+
+/**
+ * Os segundos de um cabecalho `Retry-After`, ou `null`.
+ *
+ * E a UNICA leitura do cabecalho na aplicacao. Aceita so o inteiro decimal
+ * nao negativo, que e o que o backend escreve; a forma de data HTTP, o
+ * negativo e o fracionario viram `null` -- nunca `NaN`.
+ */
+export function parseRetryAfterSeconds(header: string | null): number | null {
+  return header !== null && DECIMAL_SECONDS.test(header) ? Number(header) : null
 }
 
 /**
  * O prazo do pedido acabou antes da resposta. No `postJson` o resultado e
  * DESCONHECIDO -- o servidor pode ter gravado; no `requestJson`, a leitura so
- * nao chegou. O tipo proprio e o que deixa a tela dizer "demorou" sem ler a
- * `message`; `status` e `code` seguem nulos, como na rede fora, porque nenhuma
- * resposta foi aproveitada.
+ * nao chegou. E o `ApiError` de `kind` `timeout`, que e o que a tela le para
+ * dizer "demorou" sem ler a `message`; `status` e `code` seguem nulos, como na
+ * rede fora, porque nenhuma resposta foi aproveitada.
  */
 export class ApiTimeoutError extends ApiError {
   constructor(options?: ErrorOptions) {
-    super('O servidor demorou demais para responder.', null, null, options)
+    super('O servidor demorou demais para responder.', null, null, {
+      ...options,
+      kind: 'timeout',
+    })
     this.name = 'ApiTimeoutError'
   }
 }
@@ -115,12 +188,21 @@ async function open(path: string, init: RequestInit): Promise<Response> {
   try {
     response = await fetch(`${BASE_URL}${path}`, init)
   } catch (cause) {
-    throw new ApiError('Não foi possível falar com o servidor.', null, null, { cause })
+    throw new ApiError('Não foi possível falar com o servidor.', null, null, {
+      cause,
+      kind: 'network',
+    })
   }
 
   if (!response.ok) {
+    // O instante e lido ANTES do corpo: e o da chegada da resposta.
+    const receivedAt = new Date()
     const code = await readCode(response)
-    throw new ApiError(`O servidor respondeu ${String(response.status)}.`, response.status, code)
+    throw new ApiError(`O servidor respondeu ${String(response.status)}.`, response.status, code, {
+      kind: 'http',
+      retryAfterSeconds: parseRetryAfterSeconds(response.headers.get('Retry-After')),
+      receivedAt,
+    })
   }
 
   return response
@@ -236,8 +318,32 @@ export async function postJson<T>(
   body: unknown,
   options: PostOptions = {},
 ): Promise<T> {
+  return sendWithBody<T>('POST', path, body, options)
+}
+
+/**
+ * Faz um PATCH em `path` com `body` serializado em JSON, e devolve a resposta.
+ *
+ * Mesmo tratamento de erro e de prazo do `postJson`, e pelo mesmo motivo nao
+ * recebe `AbortSignal` do chamador: cancelar nao desfaz a gravacao.
+ */
+export async function patchJson<T>(
+  path: string,
+  body: unknown,
+  options: PostOptions = {},
+): Promise<T> {
+  return sendWithBody<T>('PATCH', path, body, options)
+}
+
+/** O corpo comum de `postJson` e `patchJson`: JSON, cabecalhos e prazo. */
+async function sendWithBody<T>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  body: unknown,
+  options: PostOptions,
+): Promise<T> {
   const init: RequestInit = {
-    method: 'POST',
+    method,
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
@@ -410,7 +516,9 @@ export async function* postStream(
     signal,
   })
   if (response.body === null) {
-    throw new ApiError('A resposta chegou num formato inesperado.', response.status, null)
+    throw new ApiError('A resposta chegou num formato inesperado.', response.status, null, {
+      kind: 'format',
+    })
   }
 
   const reader = response.body.getReader()
@@ -424,6 +532,7 @@ export async function* postStream(
       } catch (cause) {
         throw new ApiError('A resposta foi interrompida no caminho.', response.status, null, {
           cause,
+          kind: 'interrupted',
         })
       }
       if (chunk.done) {
@@ -442,6 +551,7 @@ export async function* postStream(
         } catch (cause) {
           throw new ApiError('A resposta chegou num formato inesperado.', response.status, null, {
             cause,
+            kind: 'format',
           })
         }
         yield event

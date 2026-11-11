@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "lines": [
+    {
+      "id": "greet_morning_1",
+      "locale": "pt-BR",
+      "text": "Bom dia. Qual é o primeiro passo de hoje?",
+      "file": "frontend/public/audio/pt-BR/greet_morning_1.mp3"
+    },
+    {
+      "id": "greet_morning_2",
+      "locale": "pt-BR",
+      "text": "Bom dia. Começa pelo mais fácil e aquece.",
+      "file": "frontend/public/audio/pt-BR/greet_morning_2.mp3"
+    },
+    {
+      "id": "greet_afternoon_1",
+      "locale": "pt-BR",
+      "text": "Boa tarde. Bom te ver. O que cabe agora?",
+      "file": "frontend/public/audio/pt-BR/greet_afternoon_1.mp3"
+    },
+    {
+      "id": "greet_afternoon_2",
+      "locale": "pt-BR",
+      "text": "Boa tarde. Um bloco curto já conta como treino.",
+      "file": "frontend/public/audio/pt-BR/greet_afternoon_2.mp3"
+    },
+    {
+      "id": "greet_evening_1",
+      "locale": "pt-BR",
+      "text": "Boa noite. Bom te ver. Qual é o passo de hoje?",
+      "file": "frontend/public/audio/pt-BR/greet_evening_1.mp3"
+    },
+    {
+      "id": "greet_evening_2",
+      "locale": "pt-BR",
+      "text": "Boa noite. Pouco tempo? Escolhe uma coisa só.",
+      "file": "frontend/public/audio/pt-BR/greet_evening_2.mp3"
+    },
+    {
+      "id": "mission_done_1",
+      "locale": "pt-BR",
+      "text": "Feito. Isso é treino de verdade.",
+      "file": "frontend/public/audio/pt-BR/mission_done_1.mp3"
+    },
+    {
+      "id": "mission_done_2",
+      "locale": "pt-BR",
+      "text": "Mais um passo dado. Treino bem feito.",
+      "file": "frontend/public/audio/pt-BR/mission_done_2.mp3"
+    },
+    {
+      "id": "mission_done_3",
+      "locale": "pt-BR",
+      "text": "Concluído. Respira e escolhe o próximo.",
+      "file": "frontend/public/audio/pt-BR/mission_done_3.mp3"
+    },
+    {
+      "id": "mission_done_4",
+      "locale": "pt-BR",
+      "text": "Isso. Constância se constrói assim.",
+      "file": "frontend/public/audio/pt-BR/mission_done_4.mp3"
+    },
+    {
+      "id": "weekly_trial_done_1",
+      "locale": "pt-BR",
+      "text": "Prova da semana vencida. Você treinou para isso.",
+      "file": "frontend/public/audio/pt-BR/weekly_trial_done_1.mp3"
+    },
+    {
+      "id": "weekly_trial_done_2",
+      "locale": "pt-BR",
+      "text": "Desafio maior concluído. Foi a semana inteira de treino.",
+      "file": "frontend/public/audio/pt-BR/weekly_trial_done_2.mp3"
+    },
+    {
+      "id": "level_up_1",
+      "locale": "pt-BR",
+      "text": "Você construiu isso, dia após dia.",
+      "file": "frontend/public/audio/pt-BR/level_up_1.mp3"
+    },
+    {
+      "id": "level_up_2",
+      "locale": "pt-BR",
+      "text": "Subiu de nível. A base ficou mais forte.",
+      "file": "frontend/public/audio/pt-BR/level_up_2.mp3"
+    },
+    {
+      "id": "level_up_3",
+      "locale": "pt-BR",
+      "text": "Nível novo. Foi treino, não sorte.",
+      "file": "frontend/public/audio/pt-BR/level_up_3.mp3"
+    },
+    {
+      "id": "achievement_1",
+      "locale": "pt-BR",
+      "text": "Mais uma marca no caminho. Ela é sua.",
+      "file": "frontend/public/audio/pt-BR/achievement_1.mp3"
+    },
+    {
+      "id": "achievement_2",
+      "locale": "pt-BR",
+      "text": "Conquista nova. Ela conta o que você fez.",
+      "file": "frontend/public/audio/pt-BR/achievement_2.mp3"
+    },
+    {
+      "id": "achievement_3",
+      "locale": "pt-BR",
+      "text": "Isso merece registro. Você fez acontecer.",
+      "file": "frontend/public/audio/pt-BR/achievement_3.mp3"
+    },
+    {
+      "id": "eval_meets_1",
+      "locale": "pt-BR",
+      "text": "Atende. Pode seguir para o próximo passo.",
+      "file": "frontend/public/audio/pt-BR/eval_meets_1.mp3"
+    },
+    {
+      "id": "eval_meets_2",
+      "locale": "pt-BR",
+      "text": "Atende. A evidência mostra o que você aprendeu.",
+      "file": "frontend/public/audio/pt-BR/eval_meets_2.mp3"
+    },
+    {
+      "id": "eval_partial_1",
+      "locale": "pt-BR",
+      "text": "Quase lá. Veja o que falta e ajuste.",
+      "file": "frontend/public/audio/pt-BR/eval_partial_1.mp3"
+    },
+    {
+      "id": "eval_partial_2",
+      "locale": "pt-BR",
+      "text": "Tem base boa aqui. Falta um pedaço; vamos completar?",
+      "file": "frontend/public/audio/pt-BR/eval_partial_2.mp3"
+    },
+    {
+      "id": "eval_not_meets_1",
+      "locale": "pt-BR",
+      "text": "Ainda não atende. Vamos olhar juntos o que falta?",
+      "file": "frontend/public/audio/pt-BR/eval_not_meets_1.mp3"
+    },
+    {
+      "id": "eval_not_meets_2",
+      "locale": "pt-BR",
+      "text": "Ainda não. Começa pelo ponto que a avaliação apontou.",
+      "file": "frontend/public/audio/pt-BR/eval_not_meets_2.mp3"
+    },
+    {
+      "id": "streak_kept_1",
+      "locale": "pt-BR",
+      "text": "Mais um dia de treino. É assim que se constrói.",
+      "file": "frontend/public/audio/pt-BR/streak_kept_1.mp3"
+    },
+    {
+      "id": "streak_kept_2",
+      "locale": "pt-BR",
+      "text": "Treino do dia feito. O ritmo está aparecendo.",
+      "file": "frontend/public/audio/pt-BR/streak_kept_2.mp3"
+    },
+    {
+      "id": "comeback_1",
+      "locale": "pt-BR",
+      "text": "A sequência zerou. O que você aprendeu, não. Vamos de novo hoje?",
+      "file": "frontend/public/audio/pt-BR/comeback_1.mp3"
+    },
+    {
+      "id": "comeback_2",
+      "locale": "pt-BR",
+      "text": "Bom te ver de volta. Um passo pequeno hoje recomeça.",
+      "file": "frontend/public/audio/pt-BR/comeback_2.mp3"
+    },
+    {
+      "id": "week_plan_created_1",
+      "locale": "pt-BR",
+      "text": "Plano feito. Agora é um dia de cada vez.",
+      "file": "frontend/public/audio/pt-BR/week_plan_created_1.mp3"
+    },
+    {
+      "id": "week_plan_created_2",
+      "locale": "pt-BR",
+      "text": "Semana montada. Começa pelo treino de hoje.",
+      "file": "frontend/public/audio/pt-BR/week_plan_created_2.mp3"
+    },
+    {
+      "id": "proposal_accepted_1",
+      "locale": "pt-BR",
+      "text": "Combinado. Está na sua lista.",
+      "file": "frontend/public/audio/pt-BR/proposal_accepted_1.mp3"
+    },
+    {
+      "id": "proposal_accepted_2",
+      "locale": "pt-BR",
+      "text": "Acordo feito. Começa por ela quando quiser.",
+      "file": "frontend/public/audio/pt-BR/proposal_accepted_2.mp3"
+    },
+    {
+      "id": "tutor_offline_1",
+      "locale": "pt-BR",
+      "text": "Perdi a conexão. Vamos tentar de novo daqui a pouco?",
+      "file": "frontend/public/audio/pt-BR/tutor_offline_1.mp3"
+    },
+    {
+      "id": "tutor_offline_2",
+      "locale": "pt-BR",
+      "text": "Não consegui responder agora. Tenta de novo em instantes.",
+      "file": "frontend/public/audio/pt-BR/tutor_offline_2.mp3"
+    },
+    {
+      "id": "farewell_1",
+      "locale": "pt-BR",
+      "text": "Bom treino hoje. Descansar também é parte dele.",
+      "file": "frontend/public/audio/pt-BR/farewell_1.mp3"
+    },
+    {
+      "id": "farewell_2",
+      "locale": "pt-BR",
+      "text": "Por hoje está bom. Amanhã a gente continua.",
+      "file": "frontend/public/audio/pt-BR/farewell_2.mp3"
+    },
+    {
+      "id": "greet_morning_1",
+      "locale": "en",
+      "text": "Good morning. What's today's first step?",
+      "file": "frontend/public/audio/en/greet_morning_1.mp3"
+    },
+    {
+      "id": "greet_morning_2",
+      "locale": "en",
+      "text": "Good morning. Start with the easy part and warm up.",
+      "file": "frontend/public/audio/en/greet_morning_2.mp3"
+    },
+    {
+      "id": "greet_afternoon_1",
+      "locale": "en",
+      "text": "Good afternoon. Good to see you. What fits right now?",
+      "file": "frontend/public/audio/en/greet_afternoon_1.mp3"
+    },
+    {
+      "id": "greet_afternoon_2",
+      "locale": "en",
+      "text": "Good afternoon. A short block still counts as training.",
+      "file": "frontend/public/audio/en/greet_afternoon_2.mp3"
+    },
+    {
+      "id": "greet_evening_1",
+      "locale": "en",
+      "text": "Good evening. Good to see you. What's today's step?",
+      "file": "frontend/public/audio/en/greet_evening_1.mp3"
+    },
+    {
+      "id": "greet_evening_2",
+      "locale": "en",
+      "text": "Good evening. Short on time? Pick just one thing.",
+      "file": "frontend/public/audio/en/greet_evening_2.mp3"
+    },
+    {
+      "id": "mission_done_1",
+      "locale": "en",
+      "text": "Done. That's real training.",
+      "file": "frontend/public/audio/en/mission_done_1.mp3"
+    },
+    {
+      "id": "mission_done_2",
+      "locale": "en",
+      "text": "One more step taken. Training well done.",
+      "file": "frontend/public/audio/en/mission_done_2.mp3"
+    },
+    {
+      "id": "mission_done_3",
+      "locale": "en",
+      "text": "Finished. Take a breath and pick the next one.",
+      "file": "frontend/public/audio/en/mission_done_3.mp3"
+    },
+    {
+      "id": "mission_done_4",
+      "locale": "en",
+      "text": "That's it. This is how consistency is built.",
+      "file": "frontend/public/audio/en/mission_done_4.mp3"
+    },
+    {
+      "id": "weekly_trial_done_1",
+      "locale": "en",
+      "text": "Weekly trial cleared. You trained for this.",
+      "file": "frontend/public/audio/en/weekly_trial_done_1.mp3"
+    },
+    {
+      "id": "weekly_trial_done_2",
+      "locale": "en",
+      "text": "Bigger challenge done. That was a whole week of training.",
+      "file": "frontend/public/audio/en/weekly_trial_done_2.mp3"
+    },
+    {
+      "id": "level_up_1",
+      "locale": "en",
+      "text": "You built this, day by day.",
+      "file": "frontend/public/audio/en/level_up_1.mp3"
+    },
+    {
+      "id": "level_up_2",
+      "locale": "en",
+      "text": "Level up. Your foundation got stronger.",
+      "file": "frontend/public/audio/en/level_up_2.mp3"
+    },
+    {
+      "id": "level_up_3",
+      "locale": "en",
+      "text": "New level. That was training, not luck.",
+      "file": "frontend/public/audio/en/level_up_3.mp3"
+    },
+    {
+      "id": "achievement_1",
+      "locale": "en",
+      "text": "Another mark on the path. It's yours.",
+      "file": "frontend/public/audio/en/achievement_1.mp3"
+    },
+    {
+      "id": "achievement_2",
+      "locale": "en",
+      "text": "New achievement. It shows what you did.",
+      "file": "frontend/public/audio/en/achievement_2.mp3"
+    },
+    {
+      "id": "achievement_3",
+      "locale": "en",
+      "text": "That's worth marking. You made it happen.",
+      "file": "frontend/public/audio/en/achievement_3.mp3"
+    },
+    {
+      "id": "eval_meets_1",
+      "locale": "en",
+      "text": "That meets it. On to the next step.",
+      "file": "frontend/public/audio/en/eval_meets_1.mp3"
+    },
+    {
+      "id": "eval_meets_2",
+      "locale": "en",
+      "text": "That meets it. Your evidence shows what you learned.",
+      "file": "frontend/public/audio/en/eval_meets_2.mp3"
+    },
+    {
+      "id": "eval_partial_1",
+      "locale": "en",
+      "text": "Almost there. Check what's missing and adjust.",
+      "file": "frontend/public/audio/en/eval_partial_1.mp3"
+    },
+    {
+      "id": "eval_partial_2",
+      "locale": "en",
+      "text": "Good base here. One piece is missing; want to finish it?",
+      "file": "frontend/public/audio/en/eval_partial_2.mp3"
+    },
+    {
+      "id": "eval_not_meets_1",
+      "locale": "en",
+      "text": "Not there yet. Want to look at what's missing together?",
+      "file": "frontend/public/audio/en/eval_not_meets_1.mp3"
+    },
+    {
+      "id": "eval_not_meets_2",
+      "locale": "en",
+      "text": "Not yet. Start with the point the review flagged.",
+      "file": "frontend/public/audio/en/eval_not_meets_2.mp3"
+    },
+    {
+      "id": "streak_kept_1",
+      "locale": "en",
+      "text": "One more day of training. That's how it builds.",
+      "file": "frontend/public/audio/en/streak_kept_1.mp3"
+    },
+    {
+      "id": "streak_kept_2",
+      "locale": "en",
+      "text": "Daily drill done. Your rhythm is showing.",
+      "file": "frontend/public/audio/en/streak_kept_2.mp3"
+    },
+    {
+      "id": "comeback_1",
+      "locale": "en",
+      "text": "Your streak reset. What you learned didn't. Go again today?",
+      "file": "frontend/public/audio/en/comeback_1.mp3"
+    },
+    {
+      "id": "comeback_2",
+      "locale": "en",
+      "text": "Good to see you back. One small step restarts it.",
+      "file": "frontend/public/audio/en/comeback_2.mp3"
+    },
+    {
+      "id": "week_plan_created_1",
+      "locale": "en",
+      "text": "Plan set. Now it's one day at a time.",
+      "file": "frontend/public/audio/en/week_plan_created_1.mp3"
+    },
+    {
+      "id": "week_plan_created_2",
+      "locale": "en",
+      "text": "Week planned. Start with today's drill.",
+      "file": "frontend/public/audio/en/week_plan_created_2.mp3"
+    },
+    {
+      "id": "proposal_accepted_1",
+      "locale": "en",
+      "text": "Deal. It's on your list.",
+      "file": "frontend/public/audio/en/proposal_accepted_1.mp3"
+    },
+    {
+      "id": "proposal_accepted_2",
+      "locale": "en",
+      "text": "Agreed. Start on it whenever you're ready.",
+      "file": "frontend/public/audio/en/proposal_accepted_2.mp3"
+    },
+    {
+      "id": "tutor_offline_1",
+      "locale": "en",
+      "text": "I lost the connection. Let's try again in a moment.",
+      "file": "frontend/public/audio/en/tutor_offline_1.mp3"
+    },
+    {
+      "id": "tutor_offline_2",
+      "locale": "en",
+      "text": "I couldn't answer just now. Try again in a moment.",
+      "file": "frontend/public/audio/en/tutor_offline_2.mp3"
+    },
+    {
+      "id": "farewell_1",
+      "locale": "en",
+      "text": "Good training today. Rest is part of it too.",
+      "file": "frontend/public/audio/en/farewell_1.mp3"
+    },
+    {
+      "id": "farewell_2",
+      "locale": "en",
+      "text": "That's enough for today. We'll pick it up tomorrow.",
+      "file": "frontend/public/audio/en/farewell_2.mp3"
+    }
+  ],
+  "sfx": [
+    {
+      "name": "mission_done",
+      "prompt": "Soft wooden wind chime with a gentle bell, short warm resolve, quiet",
+      "seconds": 1,
+      "file": "frontend/public/audio/sfx/mission_done.mp3"
+    },
+    {
+      "name": "xp_tick",
+      "prompt": "Tiny soft wooden tick with a faint sparkle, very short quiet interface sound",
+      "seconds": 0.5,
+      "file": "frontend/public/audio/sfx/xp_tick.mp3"
+    },
+    {
+      "name": "level_up",
+      "prompt": "Warm rising three-note marimba phrase with a soft temple bell tail, gentle and uplifting",
+      "seconds": 2,
+      "file": "frontend/public/audio/sfx/level_up.mp3"
+    },
+    {
+      "name": "achievement",
+      "prompt": "Gentle bright chime with a soft paper rustle, a small proud moment, warm",
+      "seconds": 1.5,
+      "file": "frontend/public/audio/sfx/achievement.mp3"
+    },
+    {
+      "name": "weekly_trial_unlocked",
+      "prompt": "Soft low drum tap followed by a warm resonant bell, calm anticipation",
+      "seconds": 2,
+      "file": "frontend/public/audio/sfx/weekly_trial_unlocked.mp3"
+    },
+    {
+      "name": "lantern_lit",
+      "prompt": "Soft match strike and a warm gentle flame whoosh, cozy and quiet",
+      "seconds": 1,
+      "file": "frontend/public/audio/sfx/lantern_lit.mp3"
+    },
+    {
+      "name": "proposal_arrived",
+      "prompt": "Soft paper scroll unrolling with a light wooden knock, friendly notification",
+      "seconds": 0.8,
+      "file": "frontend/public/audio/sfx/proposal_arrived.mp3"
+    },
+    {
+      "name": "message_sent",
+      "prompt": "Short soft whoosh of paper, light and airy, quiet interface sound",
+      "seconds": 0.5,
+      "file": "frontend/public/audio/sfx/message_sent.mp3"
+    },
+    {
+      "name": "soft_error",
+      "prompt": "Two muted soft wooden taps, low and gentle, not alarming",
+      "seconds": 0.5,
+      "file": "frontend/public/audio/sfx/soft_error.mp3"
+    },
+    {
+      "name": "streak_kept",
+      "prompt": "Single soft wooden clapper tap with a short warm chime, steady",
+      "seconds": 0.8,
+      "file": "frontend/public/audio/sfx/streak_kept.mp3"
+    },
+    {
+      "name": "trail_step",
+      "prompt": "Single soft footstep on a stone path at night, quiet",
+      "seconds": 0.5,
+      "file": "frontend/public/audio/sfx/trail_step.mp3"
+    },
+    {
+      "name": "panel_open",
+      "prompt": "Soft sliding paper door opening, gentle wooden glide, quiet",
+      "seconds": 0.8,
+      "file": "frontend/public/audio/sfx/panel_open.mp3"
+    }
+  ]
+}

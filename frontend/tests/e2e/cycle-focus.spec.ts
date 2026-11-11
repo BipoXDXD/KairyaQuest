@@ -54,6 +54,8 @@ async function setup(page: Page) {
   let cycleCalls = 0
   const unexpected: string[] = []
   const bodies: Record<string, unknown> = {
+    // O boot do idioma (`ServerLocaleSync`): o mesmo idioma da tela, sem escrita.
+    '/api/me': { display_name: 'Aventureira', locale: 'pt-BR' },
     '/api/missions': [],
     '/api/progress': {
       xp_total: 20,

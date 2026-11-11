@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
 import { useMissions } from './useMissions'
 
+/** O 503 vira o texto do catalogo pelo `kind`; a `message` de depuracao nao sai do hook. */
+const HTTP_FAILURE = {
+  kind: 'api',
+  text: { message: 'shared.apiError.http.message', recovery: 'shared.apiError.http.recovery' },
+} as const
+
 const missao: Mission = {
   id: 1,
   instructions: 'Ler o capitulo 3 de algoritmos',
@@ -64,7 +70,7 @@ describe('useMissions', () => {
     })
   })
 
-  it('chega em error com a mensagem do ApiError -- e nunca com o detail do backend', async () => {
+  it('chega em error com o texto do catalogo pelo kind -- e nunca com o detail do backend', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(Response.json({ detail: 'Banco indisponivel.' }, { status: 503 })),
@@ -75,7 +81,7 @@ describe('useMissions', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
   })
@@ -92,7 +98,7 @@ describe('useMissions', () => {
     })
     expect(result.current.state).toEqual({
       status: 'error',
-      message: expect.stringMatching(/inesperad/i),
+      failure: { kind: 'unexpected', message: expect.stringMatching(/inesperad/i) },
     })
   })
 

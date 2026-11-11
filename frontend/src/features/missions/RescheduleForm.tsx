@@ -8,6 +8,8 @@ import {
 import { sameDraft } from './rescheduleDraft'
 import type { RescheduleFailure } from './rescheduleFailure'
 import type { OpenReschedule, RescheduleDraft } from './types'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import { useT } from '../../shared/i18n/useT'
 
 const TOGGLE_CLASS =
   'rounded text-sm font-medium text-emerald-200 underline-offset-2 hover:underline ' +
@@ -139,6 +141,7 @@ export function RescheduleForm({
   pendingRetry: RescheduleDraft | null
   describedBy?: string
 }) {
+  const t = useT()
   // `null` = fechado. O instante de abertura e lido no clique, nunca no render
   // (render puro); um `saved` de outro prazo nao reabre.
   const [open, setOpen] = useState<OpenReschedule | null>(() =>
@@ -180,7 +183,7 @@ export function RescheduleForm({
   const bounds = deadlineWindow(current?.openedAtMs ?? 0)
   const blocked = blockedReason(draft, bounds.maxMs)
   const retrySame = pendingRetry !== null && sameDraft(pendingRetry, draft)
-  const retryLabel = retrySame || failure?.recovery === 'retry-with-new-operation'
+  const retryLabel = retrySame || failure?.action === 'retry-with-new-operation'
 
   return (
     <div className="mt-3">
@@ -244,7 +247,7 @@ export function RescheduleForm({
                     }}
                     className="focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
                   />
-                  {RESCHEDULE_REASON_LABELS[reason]}
+                  {t(RESCHEDULE_REASON_LABELS[reason])}
                 </label>
               ))}
             </fieldset>
@@ -279,7 +282,7 @@ export function RescheduleForm({
             )}
             {failure !== null && (
               <p role="alert" data-testid="reschedule-error" className="text-sm text-red-300">
-                {failure.message}
+                <FailureMessage failure={failure} />
               </p>
             )}
           </>

@@ -11,6 +11,8 @@ const ONTEM = isoUtc(instanteRelativo(-1, 9))
 async function fixtures(page: Page, available = true, history: unknown[] = []) {
   const unexpected: string[] = []
   const responses: Record<string, unknown> = {
+    // O boot do idioma (`ServerLocaleSync`): o mesmo idioma da tela, sem escrita.
+    '/api/me': { display_name: 'Aventureira', locale: 'pt-BR' },
     '/api/missions': [
       {
         id: 901,

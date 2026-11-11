@@ -1,5 +1,6 @@
 import { failedActionText } from './actionFailure'
 import type { DecisionState } from './useDecideAction'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
 
 const BUTTON =
   'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
@@ -65,7 +66,7 @@ export function DecisionControls({
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
-      {failure?.recovery === 'refresh' ? (
+      {failure?.action === 'refresh' ? (
         <button
           type="button"
           data-testid="proposal-refresh"
@@ -98,7 +99,7 @@ export function DecisionControls({
       )}
       {failure !== null && (
         <p role="alert" data-testid="proposal-failure" className="w-full text-sm text-red-300">
-          {failure.message}
+          <FailureMessage failure={failure} />
         </p>
       )}
     </div>
@@ -133,7 +134,7 @@ export function RecordedFailure({
       role={announce ? 'alert' : undefined}
       className="mt-3 text-sm text-amber-200"
     >
-      {failedActionText(errorCode)}
+      <FailureMessage failure={failedActionText(errorCode)} />
     </p>
   )
 }
