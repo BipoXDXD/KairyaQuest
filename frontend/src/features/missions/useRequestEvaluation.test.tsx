@@ -362,8 +362,9 @@ describe('useRequestEvaluation', () => {
   })
 
   it('E7 o prazo e maior que o corte do orfao e que o proxy (90 s)', () => {
-    // Valor literal de proposito: espelho manual do backend (60 s + 30 s de
-    // folga = proxy_read_timeout do nginx). Mudar um lado exige mudar o outro.
+    // Valor literal de proposito: espelho manual da infraestrutura
+    // (proxy_read_timeout do nginx de 90 s mais 15 s de margem). Mudar um lado
+    // exige mudar o outro; tests/unit/test_prazos_coerentes.py confere a relacao.
     expect(EVALUATION_TIMEOUT_MS).toBe(105_000)
     expect(EVALUATION_TIMEOUT_MS).toBeGreaterThan(90_000)
   })
