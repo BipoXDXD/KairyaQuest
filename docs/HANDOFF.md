@@ -643,131 +643,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Idioma do usuário no back: `users.locale` e `/api/me` (F3, Task 3) — 2026-11-10
-
-Base: `c0a5eb4`. Migração `0009_user_locale` (`down_revision = "0008"`; o
-contract da Tarefa 2.2 passa a ser a `0010`). Acrescenta `users.locale`
-(`text`, CHECK `ck_users_locale`: `locale IN ('pt-BR', 'en')`). As linhas
-existentes ficam `NULL`. O downgrade remove o CHECK e a coluna, e perde só a
-preferência de idioma.
-
-**Endpoint novo: `GET` e `PATCH /api/me`.** O front precisa ler e gravar o
-idioma escolhido, e nenhum endpoint existente fala do usuário: `/api/progress`
-é saldo e conquistas, e pôr a preferência ali misturaria leitura agregada com
-escrita de configuração. `GET` devolve exatamente `{"display_name", "locale"}`,
-com `"locale": null` para quem nunca escolheu. `PATCH` aceita só
-`{"locale": "pt-BR" | "en"}` e devolve o mesmo corpo do `GET`. O `null` não é
-aceito no `PATCH`: não existe "desescolher". Campo extra (`display_name`,
-`id`, `role`...) → 400 `{"detail", "code": "campo_desconhecido"}`, com corpo
-fixo que não ecoa o campo. Valor fora da lista ou corpo que não é objeto →
-422 no formato nativo. Com extra e valor inválido juntos, vence o 400.
-
-**Como sai o 400.** O handler global de `RequestValidationError` segue em 422
-para toda a API. O router de `users` usa a `APIRoute` própria
-`RotaQueRecusaCampoExtra`, que captura o `RequestValidationError` e, se algum
-erro for `extra_forbidden`, levanta `CampoDesconhecidoError` (`core/errors.py`).
-`main.py` traduz em 400 (`CodigoDeErro.CAMPO_DESCONHECIDO`), e a tradução HTTP
-continua num arquivo só.
-
-**Sem `If-Match`.** O `PATCH` grava um único valor escolhido pela própria
-pessoa, num `UPDATE` atômico e idempotente: a última escolha vence, e não há
-leitura-modificação-escrita que um ETag protegeria. Com autenticação e mais
-campos editáveis, a decisão volta.
-
-**Por que `User` continua em `missions/models.py`.** As tabelas de `missions`
-apontam para `users.id`; com a classe em `users`, `missions` passaria a
-importar `users` só para resolver a chave estrangeira. `users/service.py` lê
-`display_name` e `locale` e escreve só `locale`.
-
-**Desvio da spec (3.3).** A spec pede `users.locale` "not null default".
-Aqui a coluna é anulável e sem default: com default, o servidor não distingue
-"escolheu `pt-BR`" de "nunca escolheu", e a detecção por `navigator.language`
-da §6 nunca valeria. O fallback do back para `pt-BR` mora só em
-`users.service.ler_idioma` (`IDIOMA_PADRAO`). `Idioma` (`core/idioma.py`) fica
-no `core` porque `tutoring`, `evaluation` e `users` o usam.
-
-**Implantação.** A 0009 só acrescenta: a API antiga ignora a coluna e o CHECK
-aceita `NULL`, então a ordem migrar → subir a API nova não tem janela de
-erro. Rollback de código não exige downgrade.
-
-**Desvio do plano: `RETURNING` em vez de `rowcount`.** `atualizar_idioma`
-confere a linha afetada por `UPDATE ... RETURNING display_name` (exatamente
-uma, senão `RuntimeError`), e não por `rowcount`. O motivo é o mypy estrito:
-`Session.execute(update(...))` é tipado como `Result`, que não tem `rowcount`.
-A semântica é a mesma e a resposta sai sem segunda consulta.
-
-Validação no worktree, sem banco, com `UV_PYTHON=3.14.10` (resultados lidos
-na saída de cada comando):
-
-- `uv run pytest tests/unit -q` → `475 passed, 32 subtests passed`
-  (inclui `test_idioma.py` e `test_me_validacao.py`);
-- `uv run ruff check .` → `All checks passed!`;
-- `uv run ruff format --check .` → `181 files already formatted`;
-- `uv run mypy src tests alembic` → `Success: no issues found in 174 source
-  files`;
-- `uv run alembic upgrade 0008:0009 --sql` e `downgrade 0009:0008 --sql`
-  (offline) → o `ADD COLUMN`/`ADD CONSTRAINT` e o `DROP CONSTRAINT`/`DROP
-  COLUMN` esperados; `alembic heads` → `0009 (head)`.
-
-Os testes de integração (`tests/integration/test_me_api.py`) e de migração
-(`tests/integration/test_user_locale_migration.py`), a suíte de integração
-inteira e a cobertura de 100% precisam de PostgreSQL e não rodaram no
-worktree. Eles rodam no `make check` completo do hook de commit, com um
-PostgreSQL efêmero: este registro só entra no histórico se esse gate passar.
-As contagens do gate ficam na descrição do PR.
-
-# Valores `kairya` no banco e no contrato (expand) — 2026-11-10
-
-Base: `e57fa2b`. A migração `0008_kairya_sem_tifa` troca os dois valores
-persistidos que ainda carregavam o nome antigo, em modelo expand/contract.
-Colunas afetadas: `mission_reschedules.origin` (`tifa` → `kairya`) e
-`user_achievements.code` (`tifa_partnership` → `kairya_partnership`). Nenhuma
-outra coluna, índice ou CHECK cita esses valores (0001–0007 conferidas).
-
-Decisão: expand + backfill numa revisão só. Os CHECKs
-`ck_mission_reschedules_origin` e `ck_user_achievements_code` passam a aceitar
-o valor novo **e** o antigo, e o `UPDATE` troca todas as linhas antigas: um
-backup anterior restaurado e migrado termina sem valor antigo e sem violar
-CHECK. O downgrade devolve os valores antigos e os CHECKs da 0007. O domínio
-escreve só os valores novos; a leitura (tolerant reader nos `TypeDecorator`
-`OrigemDoReagendamentoText` e `CodigoText`) normaliza o valor antigo antes do
-domínio e do contrato. `user_achievements.code` passou de `str` a `Codigo`
-no modelo, e os modelos descrevem o CHECK expandido.
-
-**Mudança incompatível de contrato JSON.** `origin` em `reschedules` passa a
-emitir `kairya` (antes `tifa`), e `code` das conquistas, em `GET /api/progress`
-e no `reward` da conclusão, passa a emitir `kairya_partnership` (antes
-`tifa_partnership`). O frontend muda no mesmo PR e precisa sair no mesmo
-deploy: um front antigo com a API nova mostraria a origem sem rótulo.
-
-**Ordem de implantação** (mesmo procedimento da 0006): parar a API, rodar
-`make migrate`, subir a API e o front novos juntos. A API antiga não lê os
-valores novos (`GET /api/progress` e `GET /api/missions` respondem 500) e,
-se ficar no ar depois da migração, grava `tifa_partnership` ao lado da
-`kairya_partnership` do mesmo usuário. **Rollback de código** exige antes o
-`downgrade` da 0008: a API nova contra o CHECK da 0007 tem a escrita de
-`kairya` recusada.
-
-**Par de conquistas.** Se o par `tifa_partnership` + `kairya_partnership` do
-mesmo usuário surgir (API antiga no ar entre a migração e o restart, ou
-restore só de dados sobre o banco migrado), a 0008 o desfaz antes de cada
-`UPDATE`, no upgrade e no downgrade: fica a linha de `unlocked_at` mais antigo
-(no empate, a de menor código) e o XP não muda. Sem o par, o `DELETE` não faz
-nada. Até a 2.2, `UserAchievement` não é alterado nem removido pelo ORM: o
-tolerant reader troca o código da chave primária na identity key.
-
-Pendência (Tarefa 2.2, outro PR, **só depois de um deploy estável desta**):
-contract — repetir o `DELETE` do par e o `UPDATE` (pode haver resíduo da
-janela ou de restore), depois fechar os CHECKs só com os valores novos e
-remover o tolerant reader (`_ORIGENS_ANTIGAS` e `_CODIGOS_ANTIGOS`).
-`docs/ARCHITECTURE.md` e specs antigas ainda citam o valor antigo; fora do
-escopo desta tarefa.
-
-Validação: o `make check` no commit desta etapa, que inclui os testes de
-integração de `tests/integration/test_kairya_migration.py` (backfill, CHECKs,
-ciclo downgrade/upgrade, par de conquistas nos dois sentidos e no empate,
-tolerant reader), além de E2E e cobertura de 100% do front. No worktree, sem
-banco, nada disso foi executado.
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
 **Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
@@ -943,8 +818,6 @@ conquistas) conservam seu contrato de armazenamento/API para que o histórico
 e os clientes existentes continuem legíveis. Os identificadores internos dos
 enums e todas as apresentações desses valores foram renomeados. Esta mudança
 não exige migração de banco nem altera XP, histórico ou credenciais.
-*(Superado pela seção de 2026-11-10 (0008): os dois valores persistidos
-passam a `kairya` e `kairya_partnership`, com migração.)*
 
 O usuário não autoriza consumir créditos da Anthropic neste projeto. Nenhuma
 chave foi instalada nem chamada paga foi efetuada. Alternativas sem consumir
@@ -1183,7 +1056,6 @@ Versões atuais: `pyproject.toml`/`uv.lock`, `frontend/package.json`/lock,
 | `/api/tutoring` | Conversa/SSE, histórico, disponibilidade, proposta e decisão persistida. Modelo propõe; pessoa confirma; backend executa. |
 | `/api/plans`, `/api/plans/current`, `/api/cycle` | Persistir semana e ler trilha/ciclo derivado; não representam formulário de criação implementado. |
 | `/api/progress`, `/api/missions/{id}/evaluation` | Saldo/conquistas agregados; avaliação separada evita que conclusão dependa da IA/custo. |
-| `/api/me` (GET/PATCH) | Ler e gravar o idioma escolhido (F3); `null` = nunca escolheu. Nenhum endpoint existente fala do usuário. |
 | `/api/missions/{id}/start` e reschedule | Transições claras, motivo/histórico e idempotência; ferramenta reschedule_mission usa o mesmo serviço após confirmação. |
 | PRs #29/#30 | Organização interna/ledger preservado e arte local; sem dependência, endpoint ou serviço adicional. |
 
@@ -1398,3 +1270,204 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
+
+# Pendência 211: textos de falha de transporte — 2026-11-10
+
+A linha 211 da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** A falha de transporte (rede fora ou prazo esgotado) trocava a
+abertura do texto pela causa ("Não foi possível conectar." / "A resposta
+demorou mais que o esperado.") e deixava de nomear a ação que falhou.
+
+**Decisão.** A abertura nomeia a ação, com objeto, e a causa numa frase só:
+"Não foi possível <ação>: <causa>.". As causas são "sem conexão com o
+servidor" (rede) e "o servidor demorou demais para responder" (prazo). O fim
+"Tentar de novo é seguro: …" fica como estava; o E2E do QG continua conferindo
+esse trecho. `leadFor` passa a receber `{ action, fallback }` (`FailureLead`):
+a frase do transporte é montada num lugar só, e o `fallback` continua sendo a
+abertura própria de cada tradutor para 5xx e `code` desconhecido, que não muda.
+
+**Alterações.** `frontend/src/shared/api/transportFailure.ts` (assinatura e
+causas), os tradutores `completion`, `start`, `reschedule` e
+`evaluationFailure.ts` em `features/missions`, `features/tutoring/actionFailure.ts`
+e os testes unitários que conferem esses textos. Ações usadas: concluir a
+missão, iniciar a missão, reagendar a missão, pedir a avaliação, confirmar a
+missão, confirmar o reagendamento e recusar a proposta.
+
+**Limitação nova.** Só o texto de recusar ficou na faixa de 12–18 palavras da
+revisão de ux-writing (16 por rede, 17 por prazo). As outras seis mensagens de
+transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
+a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
+ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
+
+**Teste instável corrigido.** O gate do pre-push reprovou uma vez no D1 de
+`useDecideAction.test.tsx` (`confirming` no lugar de `idle`), num teste que
+este PR não tinha tocado. A causa é uma race no teste: o `then` do hook faz
+`setState` e chama os callbacks fora de `act`, e o `waitFor` esperava o
+callback, de modo que o render com `idle` podia ainda não ter chegado. D1, D6
+e o caso da chave que falha ao ser gerada passam a esperar o estado dentro do
+`waitFor`; as expectativas não mudam.
+
+**Comandos e resultado.** `make check` completo; resultado no corpo do PR.
+
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.

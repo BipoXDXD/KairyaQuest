@@ -69,12 +69,12 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
-      'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
-      'A resposta demorou mais que o esperado. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será criada duas vezes.',
     ],
   ])(
     '%s: confirmar abre com a causa e diz que repetir nao cria duas missoes',
@@ -99,12 +99,12 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
-      'Não foi possível conectar. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
-      'A resposta demorou mais que o esperado. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: o servidor demorou demais para responder. Tentar de novo é seguro.',
     ],
   ])('%s: recusar abre com a causa', (_caso, error, message) => {
     for (const kind of ['create_mission', 'reschedule_mission'] as const) {
@@ -142,12 +142,12 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
-      'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
-      'A resposta demorou mais que o esperado. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
     ],
   ])('%s: confirmar um reagendamento abre com a causa', (_caso, error, message) => {
     expect(describeActionFailure(error, 'confirm', 'reschedule_mission')).toEqual({
