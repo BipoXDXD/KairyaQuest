@@ -30,6 +30,13 @@ import { HEADQUARTERS_HEADING_ID } from './headings'
  * sem passar por "carregando"). Estrutura vazia esperando conteudo seria
  * interface que promete o que nao existe.
  *
+ * A fala da Kairya (F6) entra como `KairyaBubble`, logo abaixo do cabecalho e
+ * dentro do `main`: a pagina so a compoe e nao conhece as regras dela (quando
+ * fala, em que tom, o que o leitor de tela anuncia). Fica em linha, sem
+ * posicao fixa, porque o botao "Falar com a Kairya" ja ocupa a base da tela no
+ * celular e a conversa nao cobre botoes (README §7); e nao depende do painel
+ * da tutora, que pode estar recolhido.
+ *
  * `hidden`: desde o C, o `App` OCULTA esta pagina quando Campanhas esta
  * aberta, em vez de desmonta-la -- desmontar levaria junto o painel da Kairya,
  * com o rascunho e o stream em andamento (decisao K2 do plano do C). O

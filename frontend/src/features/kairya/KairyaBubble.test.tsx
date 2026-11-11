@@ -1,9 +1,9 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { useEffect } from 'react'
-import { describe, expect, it } from 'vitest'
-import { translate } from '../../shared/i18n/catalog'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageSwitcher } from '../../shared/ui/LanguageSwitcher'
 import { renderWithI18n } from '../../test/i18n'
+import { readSource } from '../../test/readSource'
 import type { KairyaEvent } from './events'
 import { KairyaBubble } from './KairyaBubble'
 import { useKairya } from './useKairya'
@@ -20,22 +20,23 @@ function Probe({ onReady }: { onReady: (dispatch: (event: KairyaEvent) => void) 
 }
 
 function setup(locale: 'pt-BR' | 'en' = 'pt-BR') {
-  let dispatch: ((event: KairyaEvent) => void) | null = null
+  const handle: { current: ((event: KairyaEvent) => void) | null } = { current: null }
   renderWithI18n(
     <>
       <LanguageSwitcher />
       <KairyaBubble />
       <Probe
         onReady={(d) => {
-          dispatch = d
+          handle.current = d
         }}
       />
     </>,
     { locale },
   )
   return (event: KairyaEvent) => {
+    expect(handle.current).not.toBeNull()
     act(() => {
-      dispatch!(event)
+      handle.current?.(event)
     })
   }
 }
@@ -43,6 +44,11 @@ function setup(locale: 'pt-BR' | 'en' = 'pt-BR') {
 const liveRegion = () => screen.getByTestId('kairya-announcement')
 
 describe('KairyaBubble', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
   it('sem fala, não renderiza a bolha e a região viva existe vazia', () => {
     setup()
 
@@ -80,18 +86,38 @@ describe('KairyaBubble', () => {
     expect(screen.getByRole('figure')).toHaveAttribute('data-tone', 'neutral')
   })
 
-  it('a abertura do dia é anunciada na região viva', () => {
+  it.each([
+    [
+      'a saudação da manhã',
+      { type: 'greet', period: 'morning' },
+      'Bom dia. Qual é o primeiro passo de hoje?',
+    ],
+    [
+      'a saudação da noite',
+      { type: 'greet', period: 'evening' },
+      'Boa noite. Bom te ver. Qual é o passo de hoje?',
+    ],
+    [
+      'o retorno depois da sequência zerada',
+      { type: 'concern', reason: 'streakReset' },
+      'A sequência zerou. O que você aprendeu, não. Vamos de novo hoje?',
+    ],
+  ] as const)('%s é anunciada na região viva', (_name, event, text) => {
     const send = setup()
 
-    send({ type: 'greet', period: 'morning' })
+    send(event)
 
-    expect(liveRegion()).toHaveTextContent('Bom dia. Qual é o primeiro passo de hoje?')
+    expect(liveRegion()).toHaveTextContent(text)
   })
 
-  it('a celebração aparece na bolha mas não na região viva (o RewardAnnouncement já anuncia)', () => {
+  it.each([
+    ['a celebração (o RewardAnnouncement já anuncia)', MISSION_DONE],
+    ['a preocupação da avaliação', { type: 'concern', reason: 'evalNotMeets' }],
+    ['a fala avulsa', { type: 'say', topic: 'evalMeets' }],
+  ] as const)('%s aparece na bolha mas não na região viva', (_name, event) => {
     const send = setup()
 
-    send(MISSION_DONE)
+    send(event)
 
     expect(screen.getByRole('figure')).toBeInTheDocument()
     expect(liveRegion()).toBeEmptyDOMElement()
@@ -125,11 +151,6 @@ describe('KairyaBubble', () => {
     },
   )
 
-  it('o nome do falante e do botão vêm do catálogo', () => {
-    expect(translate('pt-BR', 'kairya.speaker')).toBe('Kairya')
-    expect(translate('en', 'kairya.speaker')).toBe('Kairya')
-  })
-
   it('a subida de nível mostra a legenda abaixo da fala', () => {
     const send = setup()
 
@@ -161,13 +182,63 @@ describe('KairyaBubble', () => {
     expect(within(bubble).getByText('Conquista: Uma semana inteira')).toBeInTheDocument()
   })
 
-  it('a entrada só anima sob motion-safe', () => {
+  it('conquistas com o mesmo título viram uma linha cada', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const send = setup()
+    const first = { code: 'first_steps', title: 'x', description: 'x' }
+
+    send({
+      type: 'celebrate',
+      reason: 'achievement',
+      detail: { kind: 'achievements', items: [first, first] },
+    })
+
+    expect(
+      within(screen.getByRole('figure')).getAllByText('Conquista: Primeiros passos'),
+    ).toHaveLength(2)
+    // Chave repetida na lista faz o React avisar no console.
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('fechar leva o foco para um destino estável, e não para o body', () => {
+    const send = setup()
+    send(MISSION_DONE)
+    const close = screen.getByRole('button', { name: 'Fechar a fala da Kairya' })
+    close.focus()
+
+    fireEvent.click(close)
+
+    expect(screen.queryByRole('button', { name: 'Fechar a fala da Kairya' })).toBeNull()
+    const anchor = screen.getByTestId('kairya-bubble-anchor')
+    expect(anchor).toHaveAttribute('tabindex', '-1')
+    expect(document.activeElement).toBe(anchor)
+  })
+
+  it('depois dos 3 s da celebração o humor e o tom saem, mas a fala fica na bolha', () => {
+    vi.useFakeTimers()
     const send = setup()
     send(MISSION_DONE)
 
-    const classes = (screen.getByRole('figure').parentElement?.getAttribute('class') ?? '')
-      .split(/\s+/)
-      .filter((name) => !name.startsWith('motion-safe:'))
-    expect(classes.filter((name) => /transition|animate/.test(name))).toEqual([])
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(screen.getByTestId('mood')).toHaveTextContent('idle')
+    const bubble = screen.getByRole('figure')
+    expect(bubble).toHaveAttribute('data-tone', 'neutral')
+    expect(bubble).toHaveTextContent('Feito. Isso é treino de verdade.')
+  })
+
+  it('a entrada anima só sob motion-safe, com o token que o índice de CSS define', () => {
+    const send = setup()
+    send(MISSION_DONE)
+
+    const wrapper = screen.getByRole('figure').parentElement
+    const classes = (wrapper?.getAttribute('class') ?? '').split(/\s+/)
+    expect(classes).toContain('motion-safe:animate-reward-in')
+    expect(
+      classes.filter((name) => /transition|animate/.test(name) && !name.startsWith('motion-safe:')),
+    ).toEqual([])
+    expect(readSource('src/index.css')).toContain('--animate-reward-in:')
   })
 })

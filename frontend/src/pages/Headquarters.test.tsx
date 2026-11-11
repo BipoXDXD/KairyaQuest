@@ -139,7 +139,7 @@ describe('Headquarters', () => {
     await screen.findByTestId('progress-level')
     const main = screen.getByTestId('headquarters')
     expect(main).toContainElement(bubble)
-    const hero = main.querySelector('header')!
+    const hero = screen.getByRole('heading', { level: 1 })
     const before = (a: Node, b: Node) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
     expect(before(hero, bubble)).not.toBe(0)
