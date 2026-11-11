@@ -17,7 +17,7 @@ const TOGGLE_CLASS =
   'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none'
 
 const FIELD_CLASS =
-  'rounded border border-slate-600 bg-slate-900 p-2 text-sm text-slate-100 ' +
+  'rounded border border-slate-500 bg-slate-900 p-2 text-sm text-slate-100 ' +
   'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ' +
   'disabled:opacity-60'
 

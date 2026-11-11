@@ -1,29 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPLETION_FAILURE_BY_CODE,
-  describeCompletionFailure,
-} from '../../features/missions/completionFailure'
-import {
   EVALUATION_FAILURE_BY_CODE,
-  describeEvaluationFailure,
-} from '../../features/missions/evaluationFailure'
-import {
   RESCHEDULE_FAILURE_BY_CODE,
+  START_FAILURE_BY_CODE,
+  describeCompletionFailure,
+  describeEvaluationFailure,
   describeRescheduleFailure,
-} from '../../features/missions/rescheduleFailure'
-import { START_FAILURE_BY_CODE, describeStartFailure } from '../../features/missions/startFailure'
+  describeStartFailure,
+} from '../../features/missions'
 import {
   ACTION_FAILURE_BY_CODE,
-  describeActionFailure,
-  failedActionText,
-} from '../../features/tutoring/actionFailure'
-import {
   PRE_STREAM_FAILURE_BY_CODE,
   STREAM_FAILURE_BY_CODE,
   UNKNOWN_RESULT,
+  describeActionFailure,
   describePreStreamFailure,
   describeStreamFailure,
-} from '../../features/tutoring/messageFailure'
+  failedActionText,
+} from '../../features/tutoring'
 import { ApiError, ApiTimeoutError, type ApiErrorKind } from '../api/client'
 import { translate } from './catalog'
 import { apiErrorText, dailyLimitText, type FailureText } from './failureText'

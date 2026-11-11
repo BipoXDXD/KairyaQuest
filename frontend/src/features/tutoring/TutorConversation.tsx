@@ -353,7 +353,7 @@ export function TutorConversation({
           onChange={(event) => {
             conversation.setDraft(event.target.value)
           }}
-          className="w-full resize-none rounded border border-slate-600 bg-slate-900 p-2 text-sm text-slate-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none disabled:opacity-60"
+          className="w-full resize-none rounded border border-slate-500 bg-slate-900 p-2 text-sm text-slate-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none disabled:opacity-60"
         />
         <div className="flex items-center justify-between gap-2">
           <p id={counterId} data-testid="tutor-counter" className="text-xs text-slate-400">
