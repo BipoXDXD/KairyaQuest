@@ -475,6 +475,14 @@ export const en = {
   'progression.achievement.veteran_100.description': 'Complete 100 missions.',
   'progression.achievement.kairya_partnership.title': 'Partnership with Kairya',
   'progression.achievement.kairya_partnership.description': 'Complete a mission Kairya proposed.',
+  'progression.achievement.first_pass.title': 'First Pass',
+  'progression.achievement.first_pass.description':
+    'Get a “meets” evaluation from Kairya on a delivery.',
+  'progression.achievement.weekly_trial.title': 'Weekly Trial Cleared',
+  'progression.achievement.weekly_trial.description': 'Complete your first special mission.',
+  'progression.achievement.comeback.title': 'Comeback',
+  'progression.achievement.comeback.description':
+    'Complete a daily after 3 or more days without completing one.',
 
   'campaigns.page.title': 'Campaigns — study plans',
   'campaigns.page.subtitle': 'The whole week, day by day, and the special mission.',

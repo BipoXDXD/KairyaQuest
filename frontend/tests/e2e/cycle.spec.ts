@@ -166,8 +166,8 @@ test('concluir a missao de hoje leva a sequencia a 1, no servidor, e a tela conc
 /**
  * D16: o painel de progresso do Quartel-General, depois de o cenario
  * anterior ter concluido a primeira missao da vida deste usuario -- a
- * conquista `first_steps` ja esta destravada, e as outras seis continuam
- * bloqueadas, com o texto que diz isso.
+ * conquista `first_steps` ja esta destravada, e as outras nove (seis
+ * persistidas e tres derivadas) continuam bloqueadas, com o texto que diz isso.
  */
 test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) => {
   await page.goto('/')
@@ -185,8 +185,8 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
   const codigos = await conquistas.evaluateAll((itens) =>
     itens.map((item) => item.getAttribute('data-code')),
   )
-  // A ordem do catalogo (Global Constraints), nao a ordem alfabetica nem a de
-  // desbloqueio.
+  // A ordem do painel (as sete persistidas e as tres derivadas), nao a
+  // alfabetica nem a de desbloqueio.
   expect(codigos).toEqual([
     'first_steps',
     'streak_7',
@@ -195,6 +195,9 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
     'veteran_50',
     'veteran_100',
     'kairya_partnership',
+    'first_pass',
+    'weekly_trial',
+    'comeback',
   ])
 
   const primeirosPassos = painel.locator(

@@ -6,8 +6,9 @@ reescreve o passado, e o teste de equivalencia da migracao so vale para a regra
 de hoje.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence, Set
 from dataclasses import dataclass
+from datetime import date, timedelta
 from enum import StrEnum
 from math import isqrt
 from typing import Literal
@@ -158,6 +159,76 @@ CONQUISTA_POR_CODIGO: Mapping[Codigo, Conquista] = {c.codigo: c for c in CATALOG
 def conquistas_satisfeitas(fatos: FatosDoUsuario) -> frozenset[Codigo]:
     """Os codigos cuja regra vale para estes fatos. A regra UNICA (D9)."""
     return frozenset(c.codigo for c in CATALOGO if c.regra(fatos))
+
+
+class CodigoDerivado(StrEnum):
+    """Conquista DERIVADA na leitura (F5, R2): nunca gravada em
+    `user_achievements`. Fica fora de `Codigo` de proposito -- o CHECK da tabela
+    e montado de `Codigo`, e mexer nele exigiria migracao e backfill."""
+
+    FIRST_PASS = "first_pass"
+    WEEKLY_TRIAL = "weekly_trial"
+    COMEBACK = "comeback"
+
+
+@dataclass(frozen=True)
+class ConquistaDerivada:
+    codigo: CodigoDerivado
+    titulo: str
+    descricao: str
+
+
+CATALOGO_DERIVADO: tuple[ConquistaDerivada, ...] = (
+    ConquistaDerivada(
+        CodigoDerivado.FIRST_PASS,
+        "Primeira aprovação",
+        "Receba da Kairya uma avaliação “atende” numa entrega.",
+    ),
+    ConquistaDerivada(
+        CodigoDerivado.WEEKLY_TRIAL,
+        "Prova da semana vencida",
+        "Conclua a sua primeira missão especial.",
+    ),
+    ConquistaDerivada(
+        CodigoDerivado.COMEBACK,
+        "A volta",
+        "Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.",
+    ),
+)
+
+ConquistaDoPainel = Conquista | ConquistaDerivada
+
+# A ordem do painel (R3): as sete persistidas e, depois, as tres derivadas.
+PAINEL: tuple[ConquistaDoPainel, ...] = (*CATALOGO, *CATALOGO_DERIVADO)
+
+DIAS_SEM_CONCLUSAO_DA_VOLTA = 3
+
+_UM_DIA = timedelta(days=1)
+
+
+def indice_da_volta(
+    dias_de_conclusao: Sequence[date], dias_planejados: Set[date]
+) -> int | None:
+    """O indice da primeira conclusao que e "a volta" (R4), ou None.
+
+    `dias_de_conclusao` e uma data por diaria concluida, em ordem nao
+    decrescente. A conclusao `i >= 1` e a volta quando ao menos
+    `DIAS_SEM_CONCLUSAO_DA_VOLTA` dias PLANEJADOS caem estritamente entre a
+    conclusao anterior e ela: dia sem plano nao e dia sem conclusao. Como a
+    lista so cresce no fim, a volta nunca muda de lugar nem some.
+    """
+    if any(
+        a > b for a, b in zip(dias_de_conclusao, dias_de_conclusao[1:], strict=False)
+    ):
+        raise ValueError("dias de conclusao fora de ordem")
+    for i in range(1, len(dias_de_conclusao)):
+        anterior, atual = dias_de_conclusao[i - 1], dias_de_conclusao[i]
+        entre = (anterior + _UM_DIA * k for k in range(1, (atual - anterior).days))
+        if sum(1 for dia in entre if dia in dias_planejados) >= (
+            DIAS_SEM_CONCLUSAO_DA_VOLTA
+        ):
+            return i
+    return None
 
 
 def maior_sequencia(historico: Historico) -> int:

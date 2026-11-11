@@ -7,11 +7,15 @@ import pytest
 from focusquest.modules.missions.cycle_domain import DiaDoPlano
 from focusquest.modules.progression.domain import (
     CATALOGO,
+    CATALOGO_DERIVADO,
+    PAINEL,
     Codigo,
+    CodigoDerivado,
     FaixaDoNivel,
     FatosDoUsuario,
     conquistas_satisfeitas,
     faixa_do_nivel,
+    indice_da_volta,
     maior_sequencia,
     nivel_do_saldo,
     rank_do_nivel,
@@ -193,3 +197,87 @@ def test_maior_sequencia_sem_historico_e_zero() -> None:
 def test_maior_sequencia_e_a_maior_ja_atingida_nao_a_atual() -> None:
     historico = _dias(SEGUNDA, [True] * 7 + [False] + [True] * 2)
     assert maior_sequencia(historico) == 7
+
+
+def test_o_painel_tem_dez_codigos_na_ordem() -> None:
+    assert [c.codigo.value for c in PAINEL] == [
+        *(c.codigo.value for c in CATALOGO),
+        "first_pass",
+        "weekly_trial",
+        "comeback",
+    ]
+    assert len(CATALOGO) == 7
+    assert [c.codigo for c in CATALOGO_DERIVADO] == list(CodigoDerivado)
+
+
+def test_os_textos_das_derivadas_em_pt() -> None:
+    assert [(c.titulo, c.descricao) for c in CATALOGO_DERIVADO] == [
+        (
+            "Primeira aprovação",
+            "Receba da Kairya uma avaliação “atende” numa entrega.",
+        ),
+        ("Prova da semana vencida", "Conclua a sua primeira missão especial."),
+        (
+            "A volta",
+            "Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.",
+        ),
+    ]
+
+
+def _d(n: int) -> date:
+    return SEGUNDA + timedelta(days=n)
+
+
+def _planejados(*dias: int) -> frozenset[date]:
+    return frozenset(_d(n) for n in dias)
+
+
+def _conclusoes(*dias: int) -> list[date]:
+    return [_d(n) for n in dias]
+
+
+_D0_A_D4 = _planejados(0, 1, 2, 3, 4)
+
+
+def test_volta_com_tres_dias_sem_conclusao_ganha() -> None:
+    assert indice_da_volta(_conclusoes(0, 4), _D0_A_D4) == 1
+
+
+def test_volta_com_dois_dias_sem_conclusao_nao_ganha() -> None:
+    assert indice_da_volta(_conclusoes(0, 3), _planejados(0, 1, 2, 3)) is None
+
+
+def test_volta_com_quatro_dias_ganha() -> None:
+    assert indice_da_volta(_conclusoes(0, 5), _planejados(0, 1, 2, 3, 4, 5)) == 1
+
+
+def test_dia_sem_plano_nao_conta_como_dia_sem_conclusao() -> None:
+    assert indice_da_volta(_conclusoes(0, 4), _planejados(0, 1, 3, 4)) is None
+    assert indice_da_volta(_conclusoes(0, 4), _planejados(0, 4)) is None
+
+
+def test_sem_conclusao_anterior_nao_ha_volta() -> None:
+    assert indice_da_volta(_conclusoes(4), _planejados(0, 1, 2, 3, 4)) is None
+    assert indice_da_volta([], _planejados(0, 1, 2, 3, 4)) is None
+
+
+def test_vale_a_primeira_volta() -> None:
+    planejados = _planejados(*range(9))
+    assert indice_da_volta(_conclusoes(0, 4, 8), planejados) == 1
+    assert indice_da_volta(_conclusoes(0, 1, 5), planejados) == 2
+
+
+def test_duas_conclusoes_no_mesmo_dia_nao_formam_volta() -> None:
+    assert indice_da_volta(_conclusoes(0, 0), _D0_A_D4) is None
+    assert indice_da_volta(_conclusoes(0, 4, 4), _D0_A_D4) == 1
+
+
+def test_conclusao_posterior_nao_muda_a_volta() -> None:
+    assert indice_da_volta(_conclusoes(0, 4), _D0_A_D4) == indice_da_volta(
+        _conclusoes(0, 4, 4), _D0_A_D4
+    )
+
+
+def test_conclusoes_fora_de_ordem_sao_recusadas() -> None:
+    with pytest.raises(ValueError, match="ordem"):
+        indice_da_volta(_conclusoes(4, 0), _D0_A_D4)

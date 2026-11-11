@@ -167,7 +167,16 @@ def test_atende_devolve_o_corpo_da_spec(
             "xp_total": saldo + BONUS,
             "level_before": nivel_do_saldo(saldo),
             "level_after": nivel_do_saldo(saldo + BONUS),
-            "achievements_unlocked": [],
+            # R7: a primeira avaliacao "atende" destrava a conquista derivada.
+            "achievements_unlocked": [
+                {
+                    "code": "first_pass",
+                    "title": "Primeira aprovação",
+                    "description": (
+                        "Receba da Kairya uma avaliação “atende” numa entrega."
+                    ),
+                }
+            ],
         },
     }
     (lida,) = [m for m in cliente.get("/api/missions").json() if m["id"] == mission_id]

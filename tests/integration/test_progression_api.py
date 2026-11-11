@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_session
 from focusquest.main import app
-from focusquest.modules.progression.domain import CATALOGO
+from focusquest.modules.progression.domain import PAINEL
 
 # O instante que o relogio injetado devolve nos testes que o substituem --
 # igual ao de `test_missions_api.py`, mas redeclarado aqui: os dois arquivos
@@ -118,8 +118,9 @@ def _plano(semana: date) -> dict[str, Any]:
     }
 
 
-# Os sete achievements do catalogo, todos travados: `code` na ordem do
-# catalogo, `title`/`description` da spec, `unlocked_at` nulo.
+# Os dez achievements do painel, todos travados: `code` na ordem do
+# painel (as sete persistidas e as tres derivadas), `title`/`description` da
+# spec, `unlocked_at` nulo.
 _ACHIEVEMENTS_TRAVADOS = [
     {
         "code": c.codigo.value,
@@ -127,7 +128,7 @@ _ACHIEVEMENTS_TRAVADOS = [
         "description": c.descricao,
         "unlocked_at": None,
     }
-    for c in CATALOGO
+    for c in PAINEL
 ]
 
 

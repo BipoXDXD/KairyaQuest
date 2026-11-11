@@ -443,6 +443,14 @@ export const ptBR = {
   'progression.achievement.kairya_partnership.title': 'Parceria com a Kairya',
   'progression.achievement.kairya_partnership.description':
     'Conclua uma missão proposta pela Kairya.',
+  'progression.achievement.first_pass.title': 'Primeira aprovação',
+  'progression.achievement.first_pass.description':
+    'Receba da Kairya uma avaliação “atende” numa entrega.',
+  'progression.achievement.weekly_trial.title': 'Prova da semana vencida',
+  'progression.achievement.weekly_trial.description': 'Conclua a sua primeira missão especial.',
+  'progression.achievement.comeback.title': 'A volta',
+  'progression.achievement.comeback.description':
+    'Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.',
 
   'campaigns.page.title': 'Campanhas — planos de estudo',
   'campaigns.page.subtitle': 'A semana inteira, dia a dia, e a missão especial.',
