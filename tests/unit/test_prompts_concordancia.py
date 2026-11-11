@@ -63,6 +63,42 @@ def test_regra_anti_injecao_e_o_ultimo_trecho(idioma: Idioma) -> None:
     assert texto.rstrip().endswith(ANTI_INJECAO[idioma])
 
 
+# As regras de forma do chat (secao 3), uma por linha, com o trecho literal de
+# cada idioma. O texto muda por lingua; a regra, nao: a Kairya responde curto,
+# com uma pergunta e um proximo passo, sem diagnostico nem promessa, na lingua
+# da pessoa.
+REGRAS_DE_FORMA: dict[str, dict[Idioma, str]] = {
+    "ate_120_palavras": {
+        Idioma.PT_BR: "Até cerca de 120 palavras por resposta",
+        Idioma.EN: "About 120 words per reply at most",
+    },
+    "uma_pergunta_por_vez": {
+        Idioma.PT_BR: "Uma pergunta por vez",
+        Idioma.EN: "One question at a time",
+    },
+    "proximo_passo_concreto": {
+        Idioma.PT_BR: "Sempre um próximo passo concreto",
+        Idioma.EN: "Always end with a concrete next step",
+    },
+    "sem_diagnostico_e_sem_promessa": {
+        Idioma.PT_BR: "Nunca dê diagnóstico de saúde, nunca prometa resultado",
+        Idioma.EN: "Never give a health diagnosis, never promise results",
+    },
+    "idioma_da_pessoa": {
+        Idioma.PT_BR: "Responda sempre em português do Brasil",
+        Idioma.EN: "Always reply in English",
+    },
+}
+
+
+@pytest.mark.parametrize("idioma", list(Idioma))
+@pytest.mark.parametrize("regra", list(REGRAS_DE_FORMA))
+def test_persona_fixa_as_regras_de_forma_do_chat(regra: str, idioma: Idioma) -> None:
+    forma = secoes(persona_do_idioma(idioma))["3"]
+
+    assert REGRAS_DE_FORMA[regra][idioma] in forma
+
+
 @pytest.mark.parametrize("idioma", list(Idioma))
 def test_ferramentas_ficam_nas_secoes_4_e_5(idioma: Idioma) -> None:
     s = secoes(persona_do_idioma(idioma))
