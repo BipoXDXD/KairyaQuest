@@ -18,6 +18,7 @@ quem o cria e o gate, no primeiro uso (`test_banco_de_teste.py`).
 import os
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -25,11 +26,12 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[2]
 SCRIPT = RAIZ / "scripts" / "novo-worktree.sh"
 BIBLIOTECA = RAIZ / "scripts" / "push-env.sh"
+EXEMPLO = RAIZ / ".env.example"
 
 PREFIXO = "postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/"
 ENV_PRINCIPAL = (
     "# comentario que atravessa\n"
-    f"FOCUSQUEST_DATABASE_URL={PREFIXO}focusquest\n"
+    f"FOCUSQUEST_DATABASE_URL={PREFIXO}focusquest_do_principal\n"
     f"FOCUSQUEST_TEST_DATABASE_URL={PREFIXO}focusquest_test?options=-c%20x\n"
     "FOCUSQUEST_TUTOR_MODEL=claude-opus-5\n"
 )
@@ -65,6 +67,7 @@ class Repositorio:
         self.git("init", "-q", "-b", "main")
         (self.principal / ".gitignore").write_text(".env\n.claude/\n.superpowers/\n")
         (self.principal / "README.md").write_text("principal\n")
+        shutil.copy2(EXEMPLO, self.principal / ".env.example")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "base")
         scripts = self.principal / "scripts"
@@ -131,9 +134,10 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
         f"{PREFIXO}focusquest_medida_test?options=-c%20x"
     )
+    # O resto vem do .env.example, nao do .env do principal.
     assert _valor(env, "FOCUSQUEST_DATABASE_URL") == f"{PREFIXO}focusquest"
-    assert _valor(env, "FOCUSQUEST_TUTOR_MODEL") == "claude-opus-5"
-    assert "# comentario que atravessa" in env
+    assert "claude-opus-5" not in env
+    assert "# comentario que atravessa" not in env
     # O principal nao declara deslocamento (0); o primeiro livre e 1.
     assert _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET") == "1"
 
@@ -143,6 +147,71 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     assert "make check" in resultado.stdout
     # O .env do principal nao muda.
     assert (repo.principal / ".env").read_text() == ENV_PRINCIPAL
+
+
+def _chaves_em_branco_do_exemplo() -> list[str]:
+    """As chaves que o `.env.example` deixa vazias: as de segredo."""
+    return [
+        linha.split("=", 1)[0]
+        for linha in EXEMPLO.read_text().splitlines()
+        if not linha.startswith("#") and linha.endswith("=")
+    ]
+
+
+def test_o_env_do_worktree_nao_herda_segredo_do_principal(
+    repo: Repositorio,
+) -> None:
+    """O `.env` do principal guarda chaves reais; o do worktree nao pode
+    carrega-las. Cada chave em branco no `.env.example`, e uma que o exemplo
+    nem conhece, recebe um canario no principal: nenhum aparece no worktree."""
+    chaves = _chaves_em_branco_do_exemplo()
+    assert "FOCUSQUEST_ANTHROPIC_API_KEY" in chaves
+    canarios = {
+        chave: f"CANARY-{uuid.uuid4()}"
+        for chave in [*chaves, "FOCUSQUEST_SEGREDO_FORA_DO_EXEMPLO"]
+    }
+    (repo.principal / ".env").write_text(
+        ENV_PRINCIPAL
+        + "".join(f"{chave}={canario}\n" for chave, canario in canarios.items())
+    )
+
+    resultado = repo.rodar("sem-segredo")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/sem-segredo/.env").read_text()
+    assert [c for c in canarios.values() if c in env] == []
+    assert "CANARY-" not in resultado.stdout + resultado.stderr
+    for chave in chaves:
+        assert _valor(env, chave) == ""
+
+
+def test_recusa_se_a_main_nao_tem_env_example(repo: Repositorio) -> None:
+    repo.git("rm", "-q", ".env.example")
+    repo.git("commit", "-q", "-m", "sem exemplo")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert ".env.example" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_exemplo_sem_banco_de_teste_ganha_a_linha_do_worktree(
+    repo: Repositorio,
+) -> None:
+    """Sem a linha, o worktree usaria o banco padrao -- o do principal."""
+    (repo.principal / ".env.example").write_text("FOCUSQUEST_ANTHROPIC_API_KEY=\n")
+    repo.git("commit", "-q", "-am", "exemplo curto")
+
+    resultado = repo.rodar("curto")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/curto/.env").read_text()
+    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_curto_test?options=-c%20x"
+    )
+    assert _valor(env, "FOCUSQUEST_ANTHROPIC_API_KEY") == ""
 
 
 def test_o_deslocamento_automatico_e_o_menor_livre(repo: Repositorio) -> None:
@@ -571,7 +640,7 @@ def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
     assert repo.rodar("primeiro").returncode == 0
     primeiro = repo.principal / ".claude/worktrees/primeiro"
     env = primeiro / ".env"
-    env.write_text(env.read_text().replace("claude-opus-5", "modelo-do-filho"))
+    env.write_text(env.read_text().replace("127.0.0.1", "filho.invalid"))
     resultado = subprocess.run(
         [str(primeiro / "scripts/novo-worktree.sh"), "segundo"],
         cwd=primeiro,
@@ -583,9 +652,9 @@ def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
     assert resultado.returncode == 0, resultado.stderr
     segundo = repo.principal / ".claude/worktrees/segundo"
     assert segundo.as_posix() in repo.worktrees()
-    assert (
-        _valor((segundo / ".env").read_text(), "FOCUSQUEST_TUTOR_MODEL")
-        == "claude-opus-5"
+    # O servidor do banco de teste e o do principal, nao o de quem chamou.
+    assert _valor((segundo / ".env").read_text(), "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_segundo_test?options=-c%20x"
     )
     assert _valor((segundo / ".env").read_text(), "FOCUSQUEST_E2E_PORT_OFFSET") == "2"
     assert (

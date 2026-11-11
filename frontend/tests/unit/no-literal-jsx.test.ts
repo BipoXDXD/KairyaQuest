@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { ESLint } from 'eslint'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 /**
  * A fitness function contra texto literal na interface ja traduzida: roda o
@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
  */
 const cwd = fileURLToPath(new URL('../..', import.meta.url))
 const eslint = new ESLint({ cwd })
+const COLD_START_TIMEOUT_MS = 60_000
 
 async function literalViolations(code: string, filePath = 'src/app/Fake.tsx'): Promise<number> {
   const [result] = await eslint.lintText(code, { filePath })
@@ -20,6 +21,13 @@ const component = (jsx: string) =>
   `const t = (key: string) => key\nexport function Fake() {\n  return ${jsx}\n}\n`
 
 describe('nenhum texto literal no JSX da interface', () => {
+  // A primeira chamada carrega a configuracao e o parser do TypeScript; com a
+  // maquina carregada ela passa dos 5 s do teste. Paga uma vez aqui, com
+  // folga propria, e os casos medem so a regra.
+  beforeAll(async () => {
+    await literalViolations(component('<p />'))
+  }, COLD_START_TIMEOUT_MS)
+
   it.each([
     ['texto solto', '<p>Olá</p>'],
     ['texto com acento', '<p>Ação</p>'],

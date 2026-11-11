@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { MissionErrorCode } from './types'
 
@@ -59,15 +60,18 @@ export const COMPLETION_FAILURE_BY_CODE: Readonly<Record<MissionErrorCode, Compl
 }
 
 /**
- * A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo
- * (o 404 sem `code` e o 422 tem mapeamento proprio, em
- * `describeCompletionFailure`). Nao se sabe se a conclusao aconteceu, e a
- * mensagem diz a unica coisa certa -- que repetir nao duplica.
+ * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
+ * novo (o 404 sem `code` e o 422 tem mapeamento proprio, em
+ * `describeCompletionFailure`). Nao se sabe se a conclusao aconteceu: a
+ * abertura diz a causa quando ela e de transporte (`leadFor`), e o fim diz a
+ * unica coisa certa -- que repetir nao duplica.
  */
-const UNCONFIRMED: CompletionFailure = {
-  message: 'missions.completionFailure.unconfirmed.message',
-  recovery: 'missions.completionFailure.unconfirmed.recovery',
-  action: 'retry',
+function unconfirmed(error: unknown): CompletionFailure {
+  return {
+    message: leadFor(error, 'missions.completionFailure.unconfirmed.message'),
+    recovery: 'missions.completionFailure.unconfirmed.recovery',
+    action: 'retry',
+  }
 }
 
 /**
@@ -118,5 +122,5 @@ export function describeCompletionFailure(error: unknown): CompletionFailure {
   if (error instanceof ApiError && error.status === 422) {
     return EVIDENCE_REJECTED
   }
-  return UNCONFIRMED
+  return unconfirmed(error)
 }

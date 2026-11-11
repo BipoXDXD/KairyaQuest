@@ -498,7 +498,7 @@ describe('MissionList -- concluir', () => {
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveAttribute('role', 'alert')
     expect(aviso).toHaveTextContent(
-      'Não foi possível confirmar a conclusão. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível conectar. Tentar de novo é seguro: a missão não será concluída duas vezes.',
     )
     // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
     // completed, nunca do texto da falha (que ja esta no alert). O `<p>` do
@@ -938,7 +938,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     await within(card(7)).findByText('Não foi possível registrar esta tentativa. Tente de novo.')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
-    await within(card(7)).findByText(/Não foi possível confirmar a conclusão/)
+    await within(card(7)).findByText(/Não foi possível conectar/)
     fireEvent.click(await bPedeAtualizar())
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -1935,7 +1935,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
 
       expect(await within(card(7)).findByTestId('mission-start-error')).toHaveTextContent(
-        'Não foi possível confirmar o início. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível conectar. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
       )
       const repetir = within(card(7)).getByTestId('mission-start')
       expect(repetir).toHaveTextContent('Tentar de novo')
@@ -2334,7 +2334,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
         await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
         expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
-          'Não foi possível confirmar o reagendamento.',
+          'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
         )
         continuaNoPrimeiro()
         expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { ptBR } from '../../shared/i18n/messages/pt-BR'
 import { describeRescheduleFailure, RESCHEDULE_FAILURE_BY_CODE } from './rescheduleFailure'
 
@@ -31,6 +31,15 @@ describe('describeRescheduleFailure', () => {
       {
         message: 'missions.rescheduleFailure.deadlinePassed.message',
         recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+        action: 'edit',
+      },
+    ],
+    [
+      'prazo_fora_do_limite',
+      422,
+      {
+        message: 'missions.rescheduleFailure.tooFar.message',
+        recovery: 'missions.rescheduleFailure.tooFar.recovery',
         action: 'edit',
       },
     ],
@@ -108,8 +117,21 @@ describe('describeRescheduleFailure', () => {
     },
   )
 
-  it('cai na falha generica quando nao ha code (rede, 5xx)', () => {
-    expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual(UNCONFIRMED)
+  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
+    expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual({
+      ...UNCONFIRMED,
+      message: 'shared.transportFailure.network',
+    })
+  })
+
+  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
+    expect(describeRescheduleFailure(new ApiTimeoutError())).toEqual({
+      ...UNCONFIRMED,
+      message: 'shared.transportFailure.timeout',
+    })
+  })
+
+  it('um 5xx sem code continua no texto generico', () => {
     expect(describeRescheduleFailure(new ApiError('x', 500, null))).toEqual(UNCONFIRMED)
   })
 

@@ -1,4 +1,6 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
+import type { MessageKey } from '../../shared/i18n/catalog'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { EvaluationErrorCode } from './types'
 
@@ -62,11 +64,18 @@ export const EVALUATION_FAILURE_BY_CODE: Readonly<Record<EvaluationErrorCode, Ev
     },
   }
 
-/** Rede fora, 5xx, `code` de um backend mais novo: repetir e seguro. */
-const GENERIC: EvaluationFailure = {
-  message: 'missions.evaluationFailure.generic.message',
-  recovery: 'missions.evaluationFailure.generic.recovery',
-  action: 'retry',
+const GENERIC_LEAD: MessageKey = 'missions.evaluationFailure.generic.message'
+
+/**
+ * Rede fora, prazo, 5xx, `code` de um backend mais novo: repetir e seguro. A
+ * abertura recebida diz a causa quando ela e conhecida.
+ */
+function generic(lead: MessageKey): EvaluationFailure {
+  return {
+    message: lead,
+    recovery: 'missions.evaluationFailure.generic.recovery',
+    action: 'retry',
+  }
 }
 
 /**
@@ -84,7 +93,8 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  * pessoa ter visto a falha ao vivo ou depois.
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
-  return knownFailure(code) ?? GENERIC
+  // O `code` gravado nao carrega falha de transporte: a abertura e a generica.
+  return knownFailure(code) ?? generic(GENERIC_LEAD)
 }
 
 /** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
@@ -95,7 +105,7 @@ function knownFailure(code: string | null): EvaluationFailure | null {
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
-    return GENERIC
+    return generic(GENERIC_LEAD)
   }
   const known = knownFailure(error.code)
   if (known !== null) {
@@ -110,5 +120,5 @@ export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if ((error.status === 404 && error.code === null) || error.status === 422) {
     return EVALUATION_FAILURE_BY_CODE.missao_nao_encontrada
   }
-  return GENERIC
+  return generic(leadFor(error, GENERIC_LEAD))
 }

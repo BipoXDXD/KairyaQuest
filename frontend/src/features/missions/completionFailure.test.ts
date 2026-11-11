@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { ptBR } from '../../shared/i18n/messages/pt-BR'
 import { COMPLETION_FAILURE_BY_CODE, describeCompletionFailure } from './completionFailure'
 
@@ -78,10 +78,20 @@ describe('describeCompletionFailure', () => {
     },
   )
 
-  it('cai na falha generica quando nao ha code (rede, 5xx)', () => {
+  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(
       describeCompletionFailure(new ApiError('Não foi possível falar com o servidor.', null, null)),
-    ).toEqual(UNCONFIRMED)
+    ).toEqual({ ...UNCONFIRMED, message: 'shared.transportFailure.network' })
+  })
+
+  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
+    expect(describeCompletionFailure(new ApiTimeoutError())).toEqual({
+      ...UNCONFIRMED,
+      message: 'shared.transportFailure.timeout',
+    })
+  })
+
+  it('um 5xx sem code continua no texto generico', () => {
     expect(describeCompletionFailure(new ApiError('O servidor respondeu 500.', 500, null))).toEqual(
       UNCONFIRMED,
     )
