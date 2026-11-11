@@ -393,6 +393,8 @@ export const en = {
   'tutoring.messageFailure.refused.message':
     "Kairya couldn't answer this question. Its content was declined.",
   'tutoring.messageFailure.refused.recovery': 'Ask it a different way.',
+  'tutoring.messageFailure.unrecognizedFailure.message':
+    "Kairya couldn't answer this question. The reply wasn't completed.",
   'tutoring.messageFailure.rejectedBody.message':
     "Your question wasn't accepted. The text is invalid.",
   'tutoring.messageFailure.rejectedBody.recovery': 'Check the text and send it again.',
@@ -449,6 +451,12 @@ export const en = {
   'progression.panel.refresh': 'Refresh',
   'progression.level': 'Level {level}',
   'progression.xpTotal': '{xp} XP total',
+  'progression.rank.label': 'Rank: {name}',
+  'progression.rank.rank_seed': 'Seed',
+  'progression.rank.rank_sprout': 'Sprout',
+  'progression.rank.rank_blade': 'Blade',
+  'progression.rank.rank_flame': 'Flame',
+  'progression.rank.rank_star': 'Star',
   'progression.bar.label': 'Progress to level {level}',
   'progression.bar.valueText': '{into} of {span} XP',
   'progression.bar.text': '{into} of {span} XP to level {level}',

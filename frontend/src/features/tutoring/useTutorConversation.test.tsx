@@ -453,6 +453,35 @@ describe('useTutorConversation: envio', () => {
     ])
   })
 
+  it('um error com code desconhecido e falha, nao resultado desconhecido (pendencia 49)', async () => {
+    const q10 = question(10, 'Me explica recursão', 'x')
+    const { result } = await mountWith(
+      () => Response.json([]),
+      () =>
+        streamResponse([sseFrame('user_message', q10), sseFrame('error', { code: 'code_novo' })]),
+    )
+
+    act(() => {
+      result.current.setDraft('Me explica recursão')
+    })
+    act(() => {
+      result.current.submit()
+    })
+    await waitFor(() => {
+      expect(result.current.send.status).toBe('failed')
+    })
+    expect(result.current.send).toMatchObject({
+      failure: {
+        message: 'tutoring.messageFailure.unrecognizedFailure.message',
+        action: 'retry',
+      },
+    })
+    expect(result.current.retryTarget).toEqual({
+      clientMessageId: ID_1,
+      content: 'Me explica recursão',
+    })
+  })
+
   it('a recusa descarta o parcial: a resposta provisoria entra vazia (pendencia 120)', async () => {
     const q10 = question(10, 'Pergunta recusada', 'x')
     const { result } = await mountWith(
