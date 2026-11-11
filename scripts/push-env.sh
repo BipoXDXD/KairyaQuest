@@ -126,6 +126,15 @@ banco_do_push() {
   printf '%s' "${1%_test}_push_test"
 }
 
+# branch_do_handoff REF -- imprime o nome da branch que o check-handoff deve
+# julgar a partir da ref do push ("refs/heads/x" vira "x"). O gate do push
+# roda num worktree DESTACADO, onde "git rev-parse --abbrev-ref HEAD" devolve
+# "HEAD": sem este nome, a excecao das branches de consolidacao nunca valeria
+# no push, so no CI.
+branch_do_handoff() {
+  printf '%s' "${1#refs/heads/}"
+}
+
 isolar_gate_do_push() {
   local url base consulta nome deslocamento banco_push
 

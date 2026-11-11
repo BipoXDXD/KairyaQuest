@@ -488,7 +488,7 @@ describe('MissionList -- concluir', () => {
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveAttribute('role', 'alert')
     expect(aviso).toHaveTextContent(
-      'Não foi possível conectar. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
     )
     // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
     // completed, nunca do texto da falha (que ja esta no alert). O `<p>` do
@@ -928,7 +928,9 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     await within(card(7)).findByText('Não foi possível registrar esta tentativa. Tente de novo.')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
-    await within(card(7)).findByText(/Não foi possível conectar/)
+    await within(card(7)).findByText(
+      /Não foi possível concluir a missão: sem conexão com o servidor\./,
+    )
     fireEvent.click(await bPedeAtualizar())
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -1924,7 +1926,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
 
       expect(await within(card(7)).findByTestId('mission-start-error')).toHaveTextContent(
-        'Não foi possível conectar. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível iniciar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
       )
       const repetir = within(card(7)).getByTestId('mission-start')
       expect(repetir).toHaveTextContent('Tentar de novo')
@@ -2323,7 +2325,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
         await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
         expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
-          'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+          'Não foi possível reagendar a missão: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
         )
         continuaNoPrimeiro()
         expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')
@@ -2963,5 +2965,116 @@ describe('quadro conserva chaves sem prova terminal', () => {
     expect(screen.getByTestId('mission-state')).toHaveTextContent('Pendente')
     expect(registry().operationIdFor(7)).toBe(key)
     expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('o reagendamento aberto sai do registro quando perde o sentido', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const outroPrazo = '2026-09-27T13:00:00Z'
+
+  function abrirReagendamento() {
+    fireEvent.click(screen.getByRole('button', { name: 'Reagendar prazo' }))
+    fireEvent.click(screen.getByLabelText('Falta de tempo'))
+  }
+
+  it('o prazo mudou fora do cartao: a remontagem descarta o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(call === 2 ? [{ ...pendente, deadline: outroPrazo }] : [pendente]),
+    })
+    const ref = createRef<MissionListHandle>()
+    render(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+    expect(registry().rescheduleDraftFor(7)?.openedFor).toBe(pendente.deadline)
+
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-deadline')).toHaveAttribute('datetime', outroPrazo)
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+
+    // O prazo volta ao de antes: o rascunho antigo nao ressuscita aberto.
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-deadline')).toHaveAttribute('datetime', pendente.deadline)
+    })
+    expect(screen.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'false')
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+  })
+
+  it('o mesmo prazo na remontagem conserva o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    const ref = createRef<MissionListHandle>()
+    render(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+    const aberto = registry().rescheduleDraftFor(7)
+
+    await act(async () => ref.current!.reload())
+    await screen.findByTestId('missions-list')
+
+    expect(registry().rescheduleDraftFor(7)).toEqual(aberto)
+    expect(screen.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('a missao foi concluida fora do cartao: a leitura terminal descarta o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 2
+            ? [
+                {
+                  ...pendente,
+                  state: 'concluida',
+                  availability: 'concluida',
+                  completed_at: '2026-09-19T13:10:00Z',
+                },
+              ]
+            : [pendente],
+        ),
+    })
+    const ref = createRef<MissionListHandle>()
+    render(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+  })
+
+  it('o Concluir com sucesso descarta o reagendamento aberto da missao', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () =>
+        Response.json(
+          comRecompensa({
+            ...pendente,
+            state: 'concluida',
+            availability: 'concluida',
+            completed_at: '2026-09-19T13:10:00Z',
+          }),
+        ),
+    })
+    render(<MissionList />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+
+    fireEvent.click(screen.getByTestId('mission-complete'))
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
   })
 })

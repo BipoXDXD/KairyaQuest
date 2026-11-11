@@ -226,6 +226,19 @@ jobs:
       - name: Varredura de segredos
         run: make check-secrets
 
+  check-handoff:
+    runs-on: ubuntu-24.04
+    # Um `git diff` contra a main. Segundos.
+    timeout-minutes: 5
+    steps:
+      # fetch-depth 0 traz a origin/main, base do `git diff` do alvo.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: HANDOFF so na consolidacao
+        run: make check-handoff
+
   quality-gate:
     runs-on: ubuntu-24.04
     # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
@@ -233,18 +246,19 @@ jobs:
     timeout-minutes: 5
     # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
     # o agregador aprovaria sem te-lo verificado (limitacao registrada em
-    # docs/QUALITY.md s5). Os quatro jobs de verificacao estao aqui, e o loop
-    # abaixo confere os quatro.
-    needs: [check-web, check-api, check-e2e, check-secrets]
+    # docs/QUALITY.md s5). Os cinco jobs de verificacao estao aqui, e o loop
+    # abaixo confere os cinco.
+    needs: [check-handoff, check-web, check-api, check-e2e, check-secrets]
     if: always()
     steps:
       - name: Exigir sucesso explicito de todos os jobs
         run: |
+          echo "check-handoff=${{ needs.check-handoff.result }}"
           echo "check-web=${{ needs.check-web.result }}"
           echo "check-api=${{ needs.check-api.result }}"
           echo "check-e2e=${{ needs.check-e2e.result }}"
           echo "check-secrets=${{ needs.check-secrets.result }}"
-          for r in "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}"; do
+          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}"; do
             if [ "$r" != "success" ]; then
               echo "quality-gate reprovado: um job nao terminou em success" >&2
               exit 1
