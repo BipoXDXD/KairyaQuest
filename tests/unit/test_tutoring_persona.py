@@ -145,6 +145,15 @@ def test_o_contexto_e_as_acoes_registradas_sao_dado() -> None:
     assert PREFIXO_DA_ACAO.startswith("Ação registrada pelo sistema")
 
 
+def test_a_forma_do_chat_vem_antes_das_ferramentas() -> None:
+    """A secao 3 (forma do chat) precede a 4 (missoes): o modelo le o limite de
+    tamanho e de perguntas antes de qualquer regra de ferramenta."""
+    numeros = list(secoes(PERSONA))
+
+    assert numeros.index("3") < numeros.index("4")
+    assert PERSONA.index("## 3. Forma do chat") < PERSONA.index(MISSOES)
+
+
 def test_a_persona_em_ingles_se_apresenta_como_kairya() -> None:
     assert persona_do_idioma(Idioma.EN).startswith("You are Kairya")
 
