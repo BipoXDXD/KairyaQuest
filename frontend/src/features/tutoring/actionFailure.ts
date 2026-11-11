@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { ActionErrorCode, ActionRead } from './types'
 
 /**
@@ -77,12 +77,12 @@ const RECORDS: Record<ActionRecovery, boolean> = {
 }
 
 /**
- * O texto de uma decisao sem resposta, em duas partes: a abertura propria
- * (`fallback`), trocada pela causa quando ela e de transporte (`leadFor`), e o
- * fim que diz que repetir e seguro.
+ * O texto de uma decisao sem resposta, em duas partes: a abertura (`lead`), que
+ * nomeia a acao e a causa quando ela e de transporte (`leadFor`), e o fim que
+ * diz que repetir e seguro.
  */
 interface UnconfirmedText {
-  fallback: string
+  lead: FailureLead
   tail: string
 }
 
@@ -93,17 +93,20 @@ interface UnconfirmedText {
  */
 const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], UnconfirmedText> = {
   create_mission: {
-    fallback: 'Não foi possível confirmar a missão.',
+    lead: { action: 'confirmar a missão', fallback: 'Não foi possível confirmar a missão.' },
     tail: 'Tentar de novo é seguro: a missão não será criada duas vezes.',
   },
   reschedule_mission: {
-    fallback: 'Não foi possível confirmar o reagendamento.',
+    lead: {
+      action: 'confirmar o reagendamento',
+      fallback: 'Não foi possível confirmar o reagendamento.',
+    },
     tail: 'Tentar de novo é seguro: o prazo não mudará duas vezes.',
   },
 }
 
 const UNCONFIRMED_REJECT: UnconfirmedText = {
-  fallback: 'Não foi possível recusar a proposta.',
+  lead: { action: 'recusar a proposta', fallback: 'Não foi possível recusar a proposta.' },
   tail: 'Tentar de novo é seguro.',
 }
 
@@ -138,7 +141,7 @@ export function describeActionFailure(
     return BY_CODE[error.code]
   }
   const text = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
-  return { message: `${leadFor(error, text.fallback)} ${text.tail}`, recovery: 'retry' }
+  return { message: `${leadFor(error, text.lead)} ${text.tail}`, recovery: 'retry' }
 }
 
 const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'

@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { EvaluationErrorCode } from './types'
 
 /**
@@ -57,7 +57,10 @@ const FAILURE_BY_CODE: Record<EvaluationErrorCode, EvaluationFailure> = {
   },
 }
 
-const GENERIC_LEAD = 'Não foi possível pedir a avaliação.'
+const GENERIC_LEAD: FailureLead = {
+  action: 'pedir a avaliação',
+  fallback: 'Não foi possível pedir a avaliação.',
+}
 const RETRY_IS_SAFE = 'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.'
 
 /**
@@ -84,7 +87,7 @@ function isEvaluationErrorCode(code: string): code is EvaluationErrorCode {
  */
 export function describeEvaluationErrorCode(code: string | null): EvaluationFailure {
   // O `code` gravado nao carrega falha de transporte: a abertura e a generica.
-  return knownFailure(code) ?? generic(GENERIC_LEAD)
+  return knownFailure(code) ?? generic(GENERIC_LEAD.fallback)
 }
 
 /** A traducao do `code`, ou `null` se ele e nulo ou desconhecido. */
@@ -95,7 +98,7 @@ function knownFailure(code: string | null): EvaluationFailure | null {
 /** A mensagem e a acao da tela para um pedido de avaliacao que falhou. */
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
-    return generic(GENERIC_LEAD)
+    return generic(GENERIC_LEAD.fallback)
   }
   const known = knownFailure(error.code)
   if (known !== null) {
