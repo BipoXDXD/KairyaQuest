@@ -412,63 +412,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Kairya: catálogo das 36 falas — 2026-11-10
-
-Tarefa 1 da Fase 6 (presença da Kairya). Cria `frontend/src/features/kairya/`
-com `events.ts` (os tipos `Mood`, `KairyaEvent`, `SpokenEvent` e afins) e
-`lines.ts`: `LINE_GROUPS` com 16 grupos e 36 ids, `linesFor` (evento → falas
-possíveis, vazio para evento sem fala), `pickLine` (escolha determinística
-pela semente, sem `Math.random`), `isOpeningLine` (só saudações e retorno são
-anunciadas, D11) e `sentenceCount`. Os textos entram no catálogo da F3 como
-`kairya.lines.<id>`, 36 em PT e 36 em EN. Zero dependências novas.
-
-Os testes reprovam qualquer fala com dígito, placeholder, mais de 12 palavras,
-mais de 3 frases ou frase de aversão à perda, nos dois idiomas, sem allowlist.
-
-As 36 falas do catálogo são a fonte do roteiro de gravação da F8: a gravação
-segue o texto de `kairya.lines.*`, e mudar uma fala depois de gravada exige
-regravar o áudio.
-
-Pendência (D6): `week_plan_created_*` e `farewell_*` estão no catálogo e em
-`linesFor`, mas nada os dispara ainda. Quem criar a tela de plano da semana
-ou o resumo do dia despacha `{ type: 'say', topic: 'weekPlanCreated' }` ou
-`{ type: 'say', topic: 'farewell' }`.
-
-# i18n: catálogo tipado e seletor de idioma — 2026-11-10
-
-Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
-`frontend/src/shared/i18n/`: catálogo próprio e tipado (`ptBR` define as chaves,
-`en` faz `satisfies Messages`), `translate` com interpolação `{nome}` que lança
-quando falta variável, `plural` sobre `Intl.PluralRules` com a forma opcional
-`zero`, e a detecção do idioma (cache `kairyaquest.locale` válido, senão
-`navigator.language`: `pt*` → `pt-BR`, o resto → `en`). O storage que lança
-(modo privado, cota) é tolerado: o cache só evita o "pisca" do idioma.
-
-O `I18nProvider` envolve o `<App/>` em `main.tsx`, guarda o idioma, espelha em
-`<html lang>` e no cache. O seletor PT/EN fica no bloco da marca da `SideNav`,
-dentro do landmark "Áreas" (`role="group"`, `aria-pressed`, `lang` e nome
-completo por botão). Neste PR a troca é só local: `users.locale` e
-`/api/me` entram nos PRs seguintes. Zero dependências novas.
-
-Convenções do catálogo, válidas para os PRs seguintes: chaves planas
-`<área>.<componente>.<papel>`; plural em chaves irmãs `.one`/`.other` (e
-`.zero` quando o texto do zero difere); números e datas formatados por
-`Intl.*` antes de entrar como variável. Testes de componente renderizam com
-`renderWithI18n` (`src/test/i18n.ts`); o setup do Vitest fixa
-`navigator.language` em `pt-BR` e limpa mocks e `localStorage` após cada teste.
-As strings da interface ainda estão fixas em PT; a migração é por área.
-
-O nome acessível de cada botão do seletor começa pelo texto visível ("PT,
-Português (Brasil)", "EN, English", WCAG 2.5.3), e o alvo de toque é de 44×44 px.
-O `vi.restoreAllMocks()` global do setup desfaz todo `vi.spyOn` após cada
-teste: spy criado em `beforeAll` vale só para o primeiro teste do arquivo,
-então spies nascem em `beforeEach` ou no próprio teste.
-
-Pendências deste PR: a conferência visual do seletor na coluna de 224px do
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
-
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
 CVE-2026-111497 afeta `brotli-libs` na imagem web. A tag `nginx:1.30.6-alpine`
