@@ -1,0 +1,272 @@
+import type { ReactElement } from 'react'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
+import { civilWeekday, formatCivilDate } from '../../shared/lib/civilDate'
+import { DAYS_PER_MILESTONE, type Availability } from '../../shared/types/mission'
+import { Badge, Button, Panel, Skeleton } from '../../shared/ui'
+import { LanternGlyph } from './LanternGlyph'
+import { lanternsOf, todayIndexOf, type Lantern, type LanternState } from './lanterns'
+import type { Plan } from './types'
+import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
+
+/** O texto de cada disponibilidade: acolhedor, e e ele (nao a cor) quem diz o estado. */
+const DAY_TEXT: Record<Availability, MessageKey> = {
+  concluida: 'campaigns.lantern.day.concluida',
+  perdida: 'campaigns.lantern.day.perdida',
+  expirada: 'campaigns.lantern.day.expirada',
+  disponivel: 'campaigns.lantern.day.disponivel',
+  bloqueada: 'campaigns.lantern.day.bloqueada',
+  fora_do_plano: 'campaigns.lantern.day.fora_do_plano',
+}
+
+const SPECIAL_TEXT: Record<Availability, MessageKey> = {
+  concluida: 'campaigns.lantern.special.concluida',
+  perdida: 'campaigns.lantern.special.perdida',
+  expirada: 'campaigns.lantern.special.expirada',
+  disponivel: 'campaigns.lantern.special.disponivel',
+  bloqueada: 'campaigns.lantern.special.bloqueada',
+  fora_do_plano: 'campaigns.lantern.special.fora_do_plano',
+}
+
+/**
+ * Acesa: borda e brilho da lanterna (o unico efeito do sistema). Apagada e
+ * futura: so a borda muda, a forma do glifo faz o resto.
+ */
+const ITEM_TONE: Record<LanternState, string> = {
+  lit: 'border-action-primary bg-bg-raised shadow-glow-lantern',
+  out: 'border-border-subtle bg-bg-surface',
+  future: 'border-border-subtle bg-bg-surface',
+}
+
+const STATUS_TONE: Record<LanternState, string> = {
+  lit: 'text-text-primary',
+  out: 'text-text-muted',
+  future: 'text-text-muted',
+}
+
+const ITEM_BASE = 'flex items-center gap-4 rounded-ui border p-3'
+
+function LanternStatus({ state, children }: { state: LanternState; children: string }) {
+  return (
+    <p data-testid="lantern-status" className={`text-base ${STATUS_TONE[state]}`}>
+      {children}
+    </p>
+  )
+}
+
+function DayLantern({ lantern, isToday }: { lantern: Lantern; isToday: boolean }) {
+  const t = useT()
+  const { locale } = useLocale()
+  // `day` so e nulo na especial, que nao passa por aqui.
+  const day = lantern.day as string
+  return (
+    <li
+      data-testid="trail-day"
+      data-day={day}
+      data-availability={lantern.availability}
+      data-state={lantern.state}
+      className={`${ITEM_BASE} ${ITEM_TONE[lantern.state]}`}
+    >
+      <span className="flex w-16 shrink-0 justify-center">
+        <LanternGlyph state={lantern.state} size="small" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <time dateTime={day} className="font-display text-lg font-bold">
+            {civilWeekday(day, locale)}
+          </time>
+          {isToday && (
+            <Badge tone="action" data-testid="trail-today">
+              {t('campaigns.trail.today')}
+            </Badge>
+          )}
+        </div>
+        <LanternStatus state={lantern.state}>{t(DAY_TEXT[lantern.availability])}</LanternStatus>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * A lanterna grande, a especial. Bloqueada, mostra o "N de 7" (o progresso
+ * ate o PROXIMO marco); em qualquer outro estado nao mostra, porque ao lado
+ * da especial deste marco a contagem do proximo pareceria contradizer a tela.
+ */
+function SpecialLantern({ lantern, progress }: { lantern: Lantern; progress: number }) {
+  const t = useT()
+  return (
+    <li
+      data-testid="trail-special"
+      data-availability={lantern.availability}
+      data-state={lantern.state}
+      className={`${ITEM_BASE} ${ITEM_TONE[lantern.state]}`}
+    >
+      <span className="flex w-16 shrink-0 justify-center">
+        <LanternGlyph state={lantern.state} size="grand" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="font-display text-lg font-bold">{t('campaigns.trail.special.title')}</p>
+        <LanternStatus state={lantern.state}>{t(SPECIAL_TEXT[lantern.availability])}</LanternStatus>
+        {lantern.availability === 'bloqueada' && (
+          <p data-testid="trail-special-progress" className="text-sm text-text-muted">
+            {t('campaigns.trail.special.progress', { progress, total: DAYS_PER_MILESTONE })}
+          </p>
+        )}
+      </div>
+    </li>
+  )
+}
+
+/**
+ * A trilha so mostra; quem conclui e o Quartel-General. Uma lanterna pronta
+ * (diaria ou especial) leva a UM caminho para la: botao com a navegacao, texto
+ * sem ela.
+ */
+function HeadquartersPath({ onOpenHeadquarters }: { onOpenHeadquarters?: () => void }) {
+  const t = useT()
+  if (onOpenHeadquarters === undefined) {
+    return (
+      <p data-testid="trail-go-headquarters" className="text-base text-text-muted">
+        {t('campaigns.headquarters.hint')}
+      </p>
+    )
+  }
+  return (
+    <div>
+      <Button data-testid="trail-go-headquarters" onClick={onOpenHeadquarters}>
+        {t('campaigns.headquarters.go')}
+      </Button>
+    </div>
+  )
+}
+
+function TrailLoaded({
+  plan,
+  refreshFailed,
+  reload,
+  onOpenHeadquarters,
+}: {
+  plan: Plan
+  refreshFailed: boolean
+  reload: () => void
+  onOpenHeadquarters?: () => void
+}) {
+  const t = useT()
+  const { locale } = useLocale()
+  const lanterns = lanternsOf(plan)
+  const days = lanterns.filter((lantern) => lantern.kind === 'day')
+  const special = lanterns[lanterns.length - 1]
+  const todayIndex = todayIndexOf(plan)
+  const lit = days.filter((lantern) => lantern.state === 'lit').length
+  const hasReadyLantern = lanterns.some((lantern) => lantern.availability === 'disponivel')
+  return (
+    <div className="flex flex-col gap-4">
+      <p data-testid="trail-week" className="text-base text-text-muted">
+        {t('campaigns.trail.week', { date: formatCivilDate(plan.week_start, locale) })}
+      </p>
+      <p data-testid="lantern-summary" className="font-display text-xl font-bold">
+        {t('campaigns.lantern.summary', { lit, total: days.length })}
+      </p>
+      <ol aria-label={t('campaigns.trail.days')} className="flex flex-col gap-3">
+        {days.map((lantern, index) => (
+          <DayLantern key={lantern.key} lantern={lantern} isToday={index === todayIndex} />
+        ))}
+        <SpecialLantern lantern={special} progress={plan.special.progress} />
+      </ol>
+      {hasReadyLantern && <HeadquartersPath onOpenHeadquarters={onOpenHeadquarters} />}
+      {refreshFailed && (
+        <div role="alert" data-testid="trail-stale" className="flex flex-col items-start gap-2">
+          <p className="text-base text-feedback-danger">{t('campaigns.trail.refreshFailed')}</p>
+          <Button data-testid="trail-refresh" onClick={reload}>
+            {t('campaigns.trail.refresh')}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Um estado por ramo; `ReactElement` faz um estado novo reprovar o `tsc`. */
+function TrailContent({
+  state,
+  reload,
+  onOpenHeadquarters,
+}: {
+  state: CurrentPlanState
+  reload: () => void
+  onOpenHeadquarters?: () => void
+}): ReactElement {
+  const t = useT()
+  switch (state.status) {
+    case 'loading':
+      return <Skeleton lines={2} label={t('campaigns.trail.loading')} data-testid="trail-loading" />
+    case 'error':
+      return (
+        <div
+          role="alert"
+          data-testid="trail-error"
+          className="flex flex-col items-start gap-2 text-feedback-danger"
+        >
+          <p className="font-bold">{t('campaigns.trail.loadFailed')}</p>
+          <p>
+            <LoadFailureMessage
+              failure={state.failure}
+              unexpected="campaigns.trail.unexpectedFailure"
+            />
+          </p>
+          <Button data-testid="trail-retry" onClick={reload}>
+            {t('campaigns.trail.retry')}
+          </Button>
+        </div>
+      )
+    case 'no-plan':
+      return (
+        <p data-testid="trail-no-plan" className="text-base text-text-muted">
+          {t('campaigns.trail.noPlan')}
+        </p>
+      )
+    case 'loaded':
+      return (
+        <TrailLoaded
+          plan={state.plan}
+          refreshFailed={state.refreshFailed}
+          reload={reload}
+          onOpenHeadquarters={onOpenHeadquarters}
+        />
+      )
+  }
+}
+
+/**
+ * Campanhas -- a trilha de lanternas da semana (F5, Tarefa 5.3). Troca direta
+ * do antigo `CampaignTrail`, sobre os mesmos dados: `GET /api/plans/current`
+ * (R9 do plano da F5 -- o `/api/cycle` nao traz o estado dos sete dias).
+ *
+ * Cada dia e uma lanterna: acesa (concluida), apagada (perdida ou expirada)
+ * ou futura (por vir, disponivel ou sem plano), e a especial e a lanterna
+ * grande. O estado e SEMPRE dito em texto e tem forma propria no glifo, nunca
+ * so cor. A trilha nao mostra o texto das missoes (R10): quem lista e conclui
+ * e o Quartel-General.
+ *
+ * Atualiza em silencio (`useRefreshOnReturn`, dentro de `useCurrentPlan`)
+ * quando a aba volta a ficar visivel; se falhar, o aviso `trail-stale` diz que
+ * a trilha pode estar desatualizada.
+ */
+export function LanternTrail({
+  onOpenHeadquarters,
+}: {
+  onOpenHeadquarters?: () => void
+} = {}) {
+  const t = useT()
+  const { state, reload } = useCurrentPlan()
+  return (
+    <Panel as="section" aria-labelledby="lantern-trail-heading" data-testid="campaign-trail">
+      <h2 id="lantern-trail-heading" className="mb-4 font-display text-xl font-bold">
+        {t('campaigns.lantern.title')}
+      </h2>
+      <TrailContent state={state} reload={reload} onOpenHeadquarters={onOpenHeadquarters} />
+    </Panel>
+  )
+}

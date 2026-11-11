@@ -288,7 +288,7 @@ for (const width of [320, 375]) {
       }
     })
 
-    test('a trilha mantém instruções e critério completos e a navegação operável', async ({
+    test('a trilha de lanternas cabe na largura, sem texto de missão, e a navegação é operável', async ({
       page,
     }, testInfo) => {
       const daily: Mission = {
@@ -312,12 +312,12 @@ for (const width of [320, 375]) {
       await layoutData(page, [], [], plan)
       await page.goto('/')
       await page.getByRole('button', { name: 'Campanhas', exact: true }).click()
-      const content = page.getByTestId('trail-mission')
-      await readableText(content.locator('p').nth(0), LONG_TEXT)
-      await readableText(content.locator('p').nth(1), LONG_TEXT)
+      await expect(page.getByTestId('trail-day')).toHaveCount(7)
+      // A trilha mostra o estado de cada lanterna, nunca o texto da missão (R10).
+      await expect(page.getByText(LONG_TEXT)).toHaveCount(0)
       await noHorizontalOverflow(page)
       await accessible(page)
-      await page.screenshot({ path: testInfo.outputPath('trail-long.png'), fullPage: true })
+      await page.screenshot({ path: testInfo.outputPath('trail-lanterns.png'), fullPage: true })
       await page.getByTestId('trail-go-headquarters').focus()
       await page.keyboard.press('Enter')
       await expect(
