@@ -1,9 +1,11 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Progress } from '../features/progression/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
 import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion, Reward } from '../shared/types/reward'
+import { useKairya } from '../features/kairya'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { renderWithI18n } from '../test/i18n'
 import { stubViewport } from '../test/viewport'
@@ -43,6 +45,15 @@ async function settle() {
   await screen.findByTestId('missions-empty')
   await screen.findByTestId('tutor-greeting')
   await screen.findByTestId('progress-level')
+}
+
+/** Despacha uma celebracao assim que monta, como farao as features que conhecem a Kairya. */
+function CelebrateOnMount() {
+  const { dispatch } = useKairya()
+  useEffect(() => {
+    dispatch({ type: 'celebrate', reason: 'missionDone', detail: null })
+  }, [dispatch])
+  return null
 }
 
 describe('Headquarters', () => {
@@ -112,6 +123,29 @@ describe('Headquarters', () => {
       screen.getByTestId('cycle').compareDocumentPosition(screen.getByTestId('missions')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0)
+  })
+
+  it('a bolha da Kairya fica no main, logo abaixo do cabeçalho e acima do progresso', async () => {
+    stubPage()
+
+    renderWithI18n(
+      <>
+        <Headquarters />
+        <CelebrateOnMount />
+      </>,
+    )
+
+    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    await screen.findByTestId('progress-level')
+    const main = screen.getByTestId('headquarters')
+    expect(main).toContainElement(bubble)
+    const hero = screen.getByRole('heading', { level: 1 })
+    const before = (a: Node, b: Node) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+    expect(before(hero, bubble)).not.toBe(0)
+    expect(before(bubble, screen.getByTestId('progress'))).not.toBe(0)
+    expect(bubble).toHaveTextContent('Feito. Isso é treino de verdade.')
+    await settle()
   })
 
   it('o painel de progresso fica acima da missão de hoje', async () => {
