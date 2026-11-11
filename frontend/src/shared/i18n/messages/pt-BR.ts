@@ -54,6 +54,11 @@ export const ptBR = {
   'kairya.lines.tutor_offline_2': 'Não consegui responder agora. Tenta de novo em instantes.',
   'kairya.lines.farewell_1': 'Bom treino hoje. Descansar também é parte dele.',
   'kairya.lines.farewell_2': 'Por hoje está bom. Amanhã a gente continua.',
+  'kairya.face.neutral': 'Kairya, serena, com as mãos juntas à frente',
+  'kairya.face.listening': 'Kairya ouve com a cabeça inclinada e a mão no queixo',
+  'kairya.face.thinking': 'Kairya pensa, com os olhos para o alto e os dedos no grampo de jade',
+  'kairya.face.celebrating': 'Kairya comemora, de punho erguido e sorriso aberto',
+  'kairya.face.concerned': 'Kairya, atenta e preocupada, olha com carinho',
 
   'shell.nav.label': 'Áreas',
   'shell.brand.name': 'KairyaQuest',

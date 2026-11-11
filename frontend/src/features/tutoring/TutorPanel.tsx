@@ -9,6 +9,7 @@ import { useTutorConversation, type SendState } from './useTutorConversation'
 import { useTutorStatus } from './useTutorStatus'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
+import { KairyaFace, useKairya } from '../kairya'
 
 /**
  * O que a regiao viva anuncia: o INICIO e o FIM da resposta, e nao cada
@@ -25,35 +26,35 @@ function liveText(send: SendState): MessageKey | null {
 }
 
 /**
- * As duas versões do retrato, com as dimensões reais de cada arquivo para
- * reservar o espaço antes do download (procedência em docs/ART.md).
- *
- * Só o retrato aberto tem nome acessível. O avatar compacto aparece no
- * painel recolhido (rotulado "Kairya"), ao lado do título da folha ou dentro
- * do botão "Falar com a Kairya": um texto alternativo ali repetiria o nome e
- * mudaria o nome acessível do botão.
+ * O avatar compacto, com as dimensões reais do arquivo para reservar o espaço
+ * antes do download (procedência em docs/ART.md). É decorativo (`alt=""`): ele
+ * aparece no painel recolhido (rotulado "Kairya"), ao lado do título da folha
+ * ou dentro do botão "Falar com a Kairya", e um texto alternativo ali repetiria
+ * o nome e mudaria o nome acessível do botão.
  */
-const PORTRAITS = {
-  scene: {
-    src: '/art/kairya/portrait.webp',
-    alt: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
-    width: 864,
-    height: 1152,
-  },
-  compact: { src: '/art/kairya/avatar.webp', alt: '', width: 128, height: 160 },
-} as const
+const COMPACT_AVATAR = { src: '/art/kairya/avatar.webp', width: 128, height: 160 } as const
 
+/** O retrato aberto é o rosto com a expressão do momento; o compacto fica fixo. */
 function Portrait({ scene }: { scene: boolean }) {
-  const size = scene ? 'scene' : 'compact'
-  const art = PORTRAITS[size]
+  const { state } = useKairya()
   return (
     <span
       data-testid="tutor-portrait"
       aria-hidden={scene ? undefined : true}
-      data-size={size}
+      data-size={scene ? 'scene' : 'compact'}
       className="tutor-portrait"
     >
-      <img src={art.src} alt={art.alt} width={art.width} height={art.height} decoding="async" />
+      {scene ? (
+        <KairyaFace mood={state.mood} size="scene" />
+      ) : (
+        <img
+          src={COMPACT_AVATAR.src}
+          alt=""
+          width={COMPACT_AVATAR.width}
+          height={COMPACT_AVATAR.height}
+          decoding="async"
+        />
+      )}
     </span>
   )
 }

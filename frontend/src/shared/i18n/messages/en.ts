@@ -51,6 +51,11 @@ export const en = {
   'kairya.lines.tutor_offline_2': "I couldn't answer just now. Try again in a moment.",
   'kairya.lines.farewell_1': 'Good training today. Rest is part of it too.',
   'kairya.lines.farewell_2': "That's enough for today. We'll pick it up tomorrow.",
+  'kairya.face.neutral': 'Kairya, calm, hands joined in front',
+  'kairya.face.listening': 'Kairya listens, head tilted, hand on her chin',
+  'kairya.face.thinking': 'Kairya thinks, eyes up, fingers on her jade clip',
+  'kairya.face.celebrating': 'Kairya celebrates, fist raised, wide smile',
+  'kairya.face.concerned': 'Kairya looks on, attentive and concerned, with care',
 
   'shell.nav.label': 'Areas',
   'shell.brand.name': 'KairyaQuest',
