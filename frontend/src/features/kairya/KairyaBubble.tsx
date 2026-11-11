@@ -54,8 +54,8 @@ export function KairyaBubble(): ReactElement {
   const t = useT()
   const { state, dispatch } = useKairya()
   const { cue, mood } = state
-  useSpokenCue(cue)
   const anchor = useRef<HTMLDivElement>(null)
+  useSpokenCue(cue, anchor)
   const announced = cue !== null && isOpeningLine(cue.line) ? t(lineKey(cue.line)) : ''
   return (
     <div

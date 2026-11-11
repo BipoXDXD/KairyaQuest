@@ -1,4 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react'
+import { useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AUTOPLAY_BLOCKED_WARNING } from '../../shared/audio/audioPlayer'
 import { useAudio } from '../../shared/audio/useAudio'
@@ -38,9 +39,23 @@ function audioRig(entries: Record<string, string> = SOUND_ON) {
   }
 }
 
-function Speaker({ cue }: { cue: SpeechCue | null }) {
-  useSpokenCue(cue)
-  return null
+/** A região da legenda: `hidden` ou `inert` (ancestral) a deixa invisível. */
+function Speaker({
+  cue,
+  hidden = false,
+  inert = false,
+}: {
+  cue: SpeechCue | null
+  hidden?: boolean
+  inert?: boolean
+}) {
+  const anchor = useRef<HTMLDivElement>(null)
+  useSpokenCue(cue, anchor)
+  return (
+    <div hidden={hidden} inert={inert}>
+      <div ref={anchor} />
+    </div>
+  )
 }
 
 function VoiceOn() {
@@ -60,8 +75,9 @@ function VoiceOn() {
 /** Fala a `cue` da presença, como a bolha faz. */
 function PresenceSpeaker() {
   const { state } = useKairya()
-  useSpokenCue(state.cue)
-  return null
+  const anchor = useRef<HTMLDivElement>(null)
+  useSpokenCue(state.cue, anchor)
+  return <div ref={anchor} />
 }
 
 function Controls({ onReady }: { onReady: (api: ReturnType<typeof useKairya>) => void }) {
@@ -255,5 +271,27 @@ describe('useSpokenCue: streak_kept', () => {
     })
     expect(ctx.rig.sfx()?.src).toBe('/audio/sfx/streak_kept.mp3')
     expect(ctx.rig.sfx()?.play).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['hidden', { hidden: true }],
+    ['inert', { inert: true }],
+  ])('legenda %s: não toca a voz, e a fala fica marcada para não tocar depois', (_name, flags) => {
+    const rig = audioRig()
+    const view = renderWithI18n(<Speaker cue={null} {...flags} />, { audio: rig.audio })
+    view.rerender(<Speaker cue={CUE_A} {...flags} />)
+    expect(rig.voice()).toBeUndefined()
+
+    view.rerender(<Speaker cue={null} />)
+    view.rerender(<Speaker cue={CUE_A} />)
+    expect(rig.voice()).toBeUndefined()
+  })
+
+  it('legenda visível continua tocando a voz', () => {
+    const rig = audioRig()
+    const view = renderWithI18n(<Speaker cue={null} />, { audio: rig.audio })
+    view.rerender(<Speaker cue={CUE_B} />)
+    expect(rig.voice()?.src).toBe('/audio/pt-BR/mission_done_1.mp3')
+    expect(rig.voice()?.play).toHaveBeenCalledTimes(1)
   })
 })

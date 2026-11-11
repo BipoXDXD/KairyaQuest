@@ -29,7 +29,8 @@ describe('SoundInvite', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(card).not.toHaveAttribute('aria-modal')
     expect(document.activeElement).toBe(document.body)
-    expect(screen.getByRole('heading', { name: 'Quer ouvir a Kairya?' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Quer ouvir a Kairya?' })).toBe(card)
+    expect(screen.queryByRole('heading')).toBeNull()
   })
 
   it('Ligar voz e efeitos liga os dois canais, grava e some', () => {
@@ -90,7 +91,7 @@ describe('SoundInvite', () => {
       audio: { storage: memoryStorage({}), createElement: fakeAudio },
     })
 
-    expect(screen.getByRole('heading', { name: 'Want to hear Kairya?' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Want to hear Kairya?' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Turn on voice and effects' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument()
   })

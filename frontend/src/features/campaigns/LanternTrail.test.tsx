@@ -664,6 +664,22 @@ describe('LanternTrail -- efeitos', () => {
     expect(played()).toEqual(['weekly_trial_unlocked'])
   })
 
+  it('a especial que fica disponivel depois da montagem toca weekly_trial_unlocked uma vez', async () => {
+    const { played } = mount(especialBloqueada)
+    await screen.findByTestId('trail-special-art')
+    expect(played()).toEqual([])
+
+    servir(plano(SEMANA_MISTA, 4, especial('disponivel')))
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('trail-special')).toHaveAttribute('data-availability', 'disponivel')
+    })
+    expect(played()).toEqual(['weekly_trial_unlocked'])
+  })
+
   it('a especial bloqueada nao toca nada', async () => {
     const { elements } = mount(especialBloqueada)
     await screen.findByTestId('trail-special-art')
