@@ -949,10 +949,12 @@ O caminho, em três passos (`evaluation/service.py`, E9):
    `avaliando` pedida **antes** de `agora − (tutor_timeout_seconds +
    FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento. **O corte não é uma
    fronteira segura:** o SDK não repete a chamada (`TENTATIVAS = 0`, ver
-   "Retentativas HTTP"), mas o timeout dele é por leitura e o total só é
-   conferido quando um evento chega; uma parada no meio do stream deixa a
-   tentativa viva além do corte, e um novo pedido a retoma como órfã, com uma
-   segunda chamada paga e sem corromper nada (pendência 106).
+   "Retentativas HTTP"), mas o timeout dele é por leitura e, na avaliação, o
+   total só é conferido quando a resposta chega (o chat da tutoria ganhou um
+   teto de parede independente de evento, ver "Retentativas HTTP"); uma parada
+   no meio do stream da avaliação deixa a tentativa viva além do corte, e um
+   novo pedido a retoma como órfã, com uma segunda chamada paga e sem
+   corromper nada (pendência 106).
 3. **Fora de transação**, `tutoria.provedor.avaliar(turno, ferramenta)`; o
    turno é uma mensagem única, sem histórico da conversa. Depois, **transação 2**
    (`registrar_resultado`/`registrar_falha`): trava a missão de novo e confere
@@ -1807,6 +1809,24 @@ junto com a retentativa: não há mais esse caminho a provar.
 
 O header é observabilidade do SDK instalado, confirmado no seu código e no
 HTTP real dos testes, não um contrato público do KairyaQuest.
+
+**Teto de parede do stream da tutoria.** O timeout do SDK é por leitura (54 s
+desde o último chunk), então sozinho ele deixava uma parada no meio do stream
+sair depois dos 90 s do nginx. `transmitir` lê o stream do provedor por
+`tutoring/leitura.py`: a leitura bloqueante roda numa thread própria e o
+consumidor espera pela fila só até `Tutoria.limite` (`tutor_timeout_seconds`,
+54 s) contado do início da chamada, **sem depender de evento**. Estourou: o
+consumidor sai com `TempoEsgotadoError`, o mesmo caminho de sempre
+(`RespostaFalhou(tempo_esgotado)`, a resposta `falhou` com o texto parcial), e o
+log registra `decorrido_ms`, `teto_ms` e `eventos`, nunca o texto. Quem fecha o
+stream do provedor é a thread leitora, ao ver o cancelamento na próxima volta
+da leitura: no próximo evento real ou no fim do stream pelo servidor (o SDK
+descarta os `ping`, que reiniciam o timer de leitura, então o timeout por
+leitura não limita essa volta; P-teto-stream-2). O
+teto, somado às fases que não são leitura, cabe em `proxy_read_timeout` menos
+`FOLGA_DO_ORFAO`, conferido por `tests/unit/test_prazos_coerentes.py`. A
+avaliação (`avaliar`) não tem esse teto: ver
+`docs/handoff/2026-11-11-teto-stream.md`.
 
 ## Prova sequencial de reuso com evidência — 2026-10-05
 
