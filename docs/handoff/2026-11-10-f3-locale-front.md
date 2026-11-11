@@ -219,6 +219,29 @@ integração de `tests/integration/test_kairya_migration.py` (backfill, CHECKs,
 ciclo downgrade/upgrade, par de conquistas nos dois sentidos e no empate,
 tolerant reader), além de E2E e cobertura de 100% do front. No worktree, sem
 banco, nada disso foi executado.
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
+desktop (e em 390px) fica para o gate E2E e para a F4 4.6. ~~O texto EN de
+`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5~~:
+resolvido na Tarefa 5 (entrada acima).
+
+# Trechos de `docs/HANDOFF.md` retirados pelo commit 62e1ec1 — 2026-11-11
+
+O commit 62e1ec1 devolveu o `docs/HANDOFF.md` à versão da base e deixou de
+levar para cá três trechos que este branch havia editado. O terceiro foi
+restaurado acima (pendências da Tarefa 3); os outros dois seguem com o texto
+original.
+
+**Anotação na seção da arte e dos valores persistidos (renomeação de
+personagem).** Ficava ao fim do parágrafo que diz que os dois valores
+persistidos conservam seu contrato de armazenamento/API, logo antes do
+parágrafo sobre créditos da Anthropic:
+
+*(Superado pela seção de 2026-11-10 (0008): os dois valores persistidos
+passam a `kairya` e `kairya_partnership`, com migração.)*
+
+**Linha da tabela de endpoints (seção "Dependências, endpoints e
+infraestrutura: motivos").** Ficava entre `/api/progress`,
+`/api/missions/{id}/evaluation` e `/api/missions/{id}/start`:
+
+| Peças | Motivo |
+|---|---|
+| `/api/me` (GET/PATCH) | Ler e gravar o idioma escolhido (F3); `null` = nunca escolheu. Nenhum endpoint existente fala do usuário. |
