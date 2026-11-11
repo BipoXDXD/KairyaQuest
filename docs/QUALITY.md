@@ -547,7 +547,7 @@ verificação executa **um** alvo, e nada além dele:
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
-| `check-wheel` | `make check-wheel` | checkout, `setup-python`, `setup-uv`, `uv sync --locked` | 10 |
+| `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
 | `quality-gate` | nenhum alvo: agrega os seis acima | — | 5 |
 
 Depois do gate, somente em push da `main`, `publish-api` e `publish-web`
