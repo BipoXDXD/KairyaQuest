@@ -87,6 +87,22 @@ describe('RewardAnnouncement', () => {
     expect(classes.some((classe) => /^animate-/.test(classe))).toBe(false)
   })
 
+  it.each([
+    ['pt-BR', 'Conquista: A volta'],
+    ['en', 'Achievement: Comeback'],
+  ] as const)('a conquista derivada comeback, em %s: o texto do catalogo', (locale, texto) => {
+    renderWithI18n(
+      <RewardAnnouncement
+        reward={reward({
+          achievements_unlocked: [{ code: 'comeback', title: 'x', description: 'y' }],
+        })}
+      />,
+      { locale },
+    )
+
+    expect(screen.getByTestId('reward-achievement')).toHaveTextContent(texto)
+  })
+
   it('em en, XP, bonus, nivel e conquista saem do catalogo ingles', () => {
     const { rerender } = renderWithI18n(
       <RewardAnnouncement
