@@ -1,3 +1,4 @@
+import { SoundControls } from '../shared/audio/SoundControls'
 import { useT } from '../shared/i18n/useT'
 import { LanguageSwitcher, NavTabs } from '../shared/ui'
 import { AREAS, type Area } from './areas'
@@ -34,6 +35,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
           <p className="text-sm text-text-muted">{t('shell.brand.tagline')}</p>
         </div>
         <LanguageSwitcher />
+        <SoundControls />
       </div>
       <NavTabs items={items} active={active} onSelect={onNavigate} />
     </nav>

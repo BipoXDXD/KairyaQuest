@@ -57,6 +57,17 @@ export default defineConfig({
     // specs seguintes. O E2E de idioma sobrescreve por spec com
     // `test.use({ locale })`.
     locale: 'pt-BR',
+    // O convite de som ja dispensado: os E2E existentes rodam sem o cartao
+    // (que mudaria layout e foco) e sem edicao. Um spec do convite sobrescreve.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(WEB_URL).origin,
+          localStorage: [{ name: 'kairyaquest.soundInvite', value: '1' }],
+        },
+      ],
+    },
   },
 
   projects: [

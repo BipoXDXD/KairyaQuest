@@ -6,6 +6,7 @@ import type { Progress } from './features/progression/types'
 import type { Mission } from './shared/types/mission'
 import { controlledStream, sseFrame } from './test/sse'
 import { requestsTo, routeFetch } from './test/fetchRoutes'
+import { memoryStorage } from './test/audioDoubles'
 import { renderWithI18n } from './test/i18n'
 import { stubViewport } from './test/viewport'
 
@@ -64,6 +65,28 @@ describe('App', () => {
 
     expect(screen.getByTestId('headquarters')).toBeVisible()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
+    await settleHeadquarters()
+  })
+
+  it('sem opções de áudio, o convite de som não aparece', async () => {
+    stubPage()
+
+    renderWithI18n(<App />)
+
+    expect(screen.queryByTestId('sound-invite')).toBeNull()
+    await settleHeadquarters()
+  })
+
+  it('com o convite pendente, o cartão fica acima do Quartel-General', async () => {
+    stubPage()
+
+    renderWithI18n(<App />, { audio: { storage: memoryStorage({}) } })
+
+    const invite = screen.getByTestId('sound-invite')
+    const headquarters = screen.getByTestId('headquarters')
+    expect(
+      invite.compareDocumentPosition(headquarters) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     await settleHeadquarters()
   })
 

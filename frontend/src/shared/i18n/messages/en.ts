@@ -75,6 +75,13 @@ export const en = {
   'ui.sound.voice': "Kairya's voice",
   'ui.sound.sfx': 'Sound effects',
 
+  'audio.controls.label': 'Sound',
+  'audio.invite.title': 'Want to hear Kairya?',
+  'audio.invite.body':
+    'Voice and sound effects are optional, and captions always show. You can change this in the menu anytime.',
+  'audio.invite.accept': 'Turn on voice and effects',
+  'audio.invite.decline': 'Not now',
+
   'shared.apiError.network.message': "Couldn't reach the server. The connection failed.",
   'shared.apiError.network.recovery': 'Check your connection and try again.',
   'shared.apiError.timeout.message': "The server didn't respond. It took too long to answer.",

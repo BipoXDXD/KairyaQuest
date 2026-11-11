@@ -42,6 +42,9 @@ describe('main', () => {
     })
 
     expect(document.querySelector('#root h1')).toHaveTextContent('Quartel-General')
+    // O AudioProvider está montado: os controles de som do menu o consomem
+    // via `useAudio`, que lança fora dele.
+    expect(document.querySelector('[data-testid="sound-controls"]')).not.toBeNull()
   })
 
   it('confronta o idioma com o servidor no boot', async () => {

@@ -93,4 +93,14 @@ describe('SideNav', () => {
     expect(within(switcher).getAllByRole('button')).toHaveLength(2)
     expect(within(nav).getByRole('list')).not.toContainElement(switcher)
   })
+
+  it('os controles de som ficam logo depois do seletor de idioma', () => {
+    renderWithI18n(<SideNav active="headquarters" onNavigate={vi.fn()} />)
+
+    const controls = screen.getByTestId('sound-controls')
+    const language = screen.getByRole('group', { name: 'Idioma' })
+    expect(
+      language.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
 })

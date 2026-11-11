@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { Area } from './app/areas'
 import { SideNav } from './app/SideNav'
+import { SoundInvite } from './shared/audio/SoundInvite'
 import { Campaigns } from './pages/Campaigns'
 import { Headquarters } from './pages/Headquarters'
 import { CAMPAIGNS_HEADING_ID, HEADQUARTERS_HEADING_ID } from './pages/headings'
@@ -43,6 +44,7 @@ function App() {
     <div className="min-h-screen bg-bg-canvas text-text-primary lg:flex">
       <SideNav active={area} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
+        <SoundInvite />
         <Headquarters hidden={area !== 'headquarters'} />
         {area === 'campaigns' && (
           <Campaigns
