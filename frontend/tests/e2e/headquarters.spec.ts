@@ -6,11 +6,11 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import {
   expect,
-  test,
   type APIRequestContext,
   type Page,
   type PlaywrightWorkerArgs,
 } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
 import { instanteRelativo, isoSaoPaulo, isoUtc, prazoNaTela } from './datas'
 import { API_URL } from './servers'

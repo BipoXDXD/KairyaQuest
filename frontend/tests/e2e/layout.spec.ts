@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import type { CurrentPlan } from '../../src/features/campaigns/types'
 import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
 import type { Mission } from '../../src/shared/types/mission'
