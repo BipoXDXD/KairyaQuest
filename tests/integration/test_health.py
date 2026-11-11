@@ -266,7 +266,7 @@ def test_ready_nao_oculta_erro_inesperado_na_conexao(
         c.get("/ready")
 
 
-def test_ready_resolve_engine_real_sem_override_e_reaproveita(
+def test_ready_resolve_engine_real_sem_override_reaproveita_e_descarta_no_fim(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     settings: Settings,
@@ -284,13 +284,17 @@ def test_ready_resolve_engine_real_sem_override_e_reaproveita(
             primeira_resposta = c.get("/ready")
             primeira_engine = database._engine
             segunda_resposta = c.get("/ready")
+            # Reaproveita: a segunda requisicao nao criou outra engine.
+            assert database._engine is primeira_engine
         assert primeira_resposta.status_code == 200
         assert primeira_resposta.json() == {"status": "ok", "database": "ok"}
         assert segunda_resposta.status_code == 200
         assert segunda_resposta.json() == {"status": "ok", "database": "ok"}
         assert primeira_engine is not None
-        assert database._engine is primeira_engine
         assert primeira_engine.url == engine.url
+        # O desligamento do app descarta a engine (pendencia 14): a
+        # referencia global volta a None, e a proxima chamada cria outra.
+        assert database._engine is None
     finally:
         if database._engine is not None:
             descartar_engines.append(database._engine)
