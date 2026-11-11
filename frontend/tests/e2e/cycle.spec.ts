@@ -224,8 +224,8 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
 /**
  * Campanhas pela navegacao lateral, com a trilha do plano semeado no
  * `beforeAll` (o cenario anterior ja concluiu a missao de hoje). Testids
- * REAIS de `CampaignTrail.tsx`: `trail-availability`, nao
- * `trail-day-availability`.
+ * REAIS de `LanternTrail.tsx`: `lantern-status` (o texto visivel do estado de
+ * cada lanterna) e `trail-special`.
  */
 test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no axe', async ({
   page,
@@ -251,24 +251,25 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   // a disponibilidade a partir do `today`).
   const diaDeHoje = campanhas.locator(`[data-testid="trail-day"][data-day="${hoje}"]`)
   await expect(diaDeHoje.getByTestId('trail-today')).toHaveText('Hoje')
-  await expect(diaDeHoje.getByTestId('trail-availability')).toContainText('Concluída')
+  await expect(diaDeHoje).toHaveAttribute('data-state', 'lit')
+  await expect(diaDeHoje.getByTestId('lantern-status')).toContainText('Acesa')
 
-  // Os dias depois de hoje, dentro da mesma semana: bau fechado, "revelada
-  // no dia" -- nunca a missao (B3/C11 da spec do ciclo).
+  // Os dias depois de hoje, dentro da mesma semana: lanterna futura, "Ainda
+  // por vir" -- o estado e dito em texto, nunca so pela forma ou pela cor.
   const segunda = segundaDaSemana(hoje)
   for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
     const dia = somarDias(segunda, deslocamento)
     if (dia > hoje) {
       const item = campanhas.locator(`[data-testid="trail-day"][data-day="${dia}"]`)
-      await expect(item.getByTestId('trail-chest')).toContainText('revelada no dia')
+      await expect(item).toHaveAttribute('data-state', 'future')
+      await expect(item.getByTestId('lantern-status')).toContainText('Ainda por vir')
     }
   }
 
-  // A especial: bloqueada, com o progresso ate o proximo marco -- 1 dia
-  // seguido (so hoje foi concluido) de 7.
+  // A lanterna grande (a especial): bloqueada, com o progresso ate o proximo
+  // marco -- 1 dia seguido (so hoje foi concluido) de 7.
   const especial = campanhas.getByTestId('trail-special')
-  await expect(especial.getByTestId('trail-availability')).toContainText('Bloqueada')
-  await expect(especial.getByTestId('trail-chest')).toBeVisible()
+  await expect(especial.getByTestId('lantern-status')).toContainText('acende com 7 dias seguidos')
   await expect(especial.getByTestId('trail-special-progress')).toContainText('1 de 7')
 
   const resultadoCampanhas = await new AxeBuilder({ page }).analyze()
