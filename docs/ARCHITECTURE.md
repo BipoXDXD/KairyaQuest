@@ -1434,14 +1434,18 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   de `features/missions/types.ts` **sem reexport** — "um lugar só para o
   contrato". `features/missions/types.ts` ficou só com `Cycle` (que importa
   `Mission` de `shared/`) e `MissionErrorCode`.
-- **`src/shared/ui/`** *(existe, desde a F4 4.1)* — o design system. Por ora
-  só `tokens/` (`contrast.ts`, `contrastPairs.ts`) e o `tokens.test.ts`, que
-  mede o contraste WCAG de cada par de cor sobre o CSS real; os componentes
-  chegam nas tarefas seguintes da Fase 4.
+- **`src/shared/ui/`** *(existe, desde a F4 4.1)* — o design system:
+  `tokens/` (`contrast.ts`, `contrastPairs.ts`) com o `tokens.test.ts`, que
+  mede o contraste WCAG de cada par de cor sobre o CSS real, e os componentes
+  das Tarefas 4.3–4.5. Desde a 4.6, quem usa o design system importa pelo
+  barrel `shared/ui/index.ts`, nunca pelo arquivo do componente.
 - **`src/styles/`** *(existe, desde a F4 4.1)* — `tokens.css` é a fonte
   única dos tokens (primitivos em `:root`, semânticos e de componente no
   `@theme` do Tailwind). O `src/index.css` importa o Tailwind e o
-  `tokens.css` e mantém as regras `.rpg-*` legadas até a Tarefa 4.9.
+  `tokens.css` e mantém as regras `.rpg-*` legadas das features até a
+  Tarefa 4.9. O `base.css` guarda a base tipográfica, os cabeçalhos das
+  áreas (`.area-hero--*`, desde a 4.6) e a regra global de movimento
+  reduzido.
 - **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
   oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
   hoje: os arquivos do scaffold foram removidos por órfãos (§1).
@@ -1455,7 +1459,8 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
 - **`tests/e2e/`** *(existe)* — os cenários do Playwright, fora de `src/` e
   fora da coleta do Vitest. Desde o 1b-2, `servers.ts` também nomeia a porta
   do servidor falso (8150), e `falso.ts` é o cliente do controle HTTP dele.
-  **Desde a Frente 0**, `servers.ts` é a fonte única das três portas (o
+  **Desde a Frente 0**, `servers.ts` é a fonte única das portas (três até a
+  F4; desde a 4.3, quatro, com a da galeria de estados da UI; o
   `playwright.config.ts` deriva todas dele) e as desloca por
   `FOCUSQUEST_E2E_PORT_OFFSET`; a validação da variável tem teste Vitest em
   `tests/unit/servers.test.ts`, fora de `tests/e2e/` para o Playwright não o

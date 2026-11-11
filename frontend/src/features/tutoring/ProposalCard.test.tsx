@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { translate } from '../../shared/i18n/catalog'
 import { en } from '../../shared/i18n/messages/en'
+import { formatDeadline } from '../../shared/lib/deadline'
 import { renderWithI18n } from '../../test/i18n'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -205,7 +206,7 @@ describe('ProposalCard', () => {
     fireEvent.click(confirmButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
     expect(screen.getByRole('alert')).toBe(screen.getByTestId('proposal-failure'))
     expect(screen.getByRole('button', { name: `Tentar de novo a proposta: ${INSTRUCTIONS}` })).toBe(
@@ -243,7 +244,7 @@ describe('ProposalCard', () => {
     fireEvent.click(rejectButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: sem conexão. Tentar de novo é seguro.',
     )
     expect(rejectButton()).toHaveAccessibleName(`Tentar de novo a proposta: ${INSTRUCTIONS}`)
     expect(rejectButton()).toBeEnabled()
@@ -309,6 +310,9 @@ describe('ProposalCard em ingles', () => {
     expect(card()).toHaveTextContent(en['tutoring.proposal.difficulty'])
     expect(card()).toHaveTextContent(en['tutoring.proposal.estimate'])
     expect(card()).toHaveTextContent(en['tutoring.proposal.deadline'])
+    expect(screen.getByTestId('proposal-deadline')).toHaveTextContent(
+      formatDeadline(proposta.payload.deadline, 'en'),
+    )
     expect(screen.getByTestId('proposal-difficulty')).toHaveTextContent(
       translate('en', 'tutoring.proposal.difficultyValue', { value: 2, max: 5 }),
     )

@@ -33,6 +33,11 @@ export function sourceExists(pathFromFrontend: string): boolean {
   return existsSync(resolve(FRONTEND_ROOT, pathFromFrontend))
 }
 
+/** Tamanho em bytes de um arquivo relativo a `frontend/`; ausente é erro (ENOENT). */
+export function sourceSize(pathFromFrontend: string): number {
+  return statSync(resolve(FRONTEND_ROOT, pathFromFrontend)).size
+}
+
 /** Bytes de um arquivo relativo a `frontend/`, sem decodificar; vazio é erro. */
 export function readSourceBytes(pathFromFrontend: string): Uint8Array {
   const bytes = new Uint8Array(readFileSync(sourcePath(pathFromFrontend)))

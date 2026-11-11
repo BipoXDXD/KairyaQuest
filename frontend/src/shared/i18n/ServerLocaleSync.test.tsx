@@ -10,7 +10,7 @@ import {
 } from '../../test/fetchRoutes'
 import { I18nProvider } from './I18nProvider'
 import { LOCALE_STORAGE_KEY } from './locale'
-import { LocaleSwitcher } from './LocaleSwitcher'
+import { LanguageSwitcher } from '../ui/LanguageSwitcher'
 import { ServerLocaleSync } from './ServerLocaleSync'
 
 /**
@@ -54,7 +54,7 @@ function renderApp() {
   return render(
     <I18nProvider>
       <ServerLocaleSync />
-      <LocaleSwitcher />
+      <LanguageSwitcher />
     </I18nProvider>,
   )
 }
@@ -96,7 +96,7 @@ describe('ServerLocaleSync', () => {
     await settle()
 
     expect(document.documentElement.lang).toBe('pt-BR')
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByRole('status').textContent).toBe('')
     expect(requestsTo(mock, PATCH_ME)).toHaveLength(0)
   })
 
@@ -178,7 +178,7 @@ describe('ServerLocaleSync', () => {
     await settle()
 
     expect(document.documentElement.lang).toBe('en')
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByRole('status').textContent).toBe('')
   })
 
   it('GET lento não desfaz a escolha do usuário', async () => {

@@ -38,8 +38,8 @@ Datas em UTC, no envio da tarefa. Bytes medidos com `ls -l` no repositório.
 | `kairya/thinking.webp` | 864×1184 | 53.424 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `e6e16af0-b5d4-4c5a-858c-e706ffe6f898` | 2026-11-10T09:37:33Z | seedream_v5, image-to-image | 5 |
 | `kairya/celebrating.webp` | 864×1152 | 73.988 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `2407c88d-d5ea-4800-a381-0b1461ca83b5` | 2026-11-10T09:29:45Z | seedream_v5, image-to-image | 5 |
 | `kairya/concerned.webp` | 864×1184 | 51.638 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `88cae423-6aee-435d-b2be-332aac7c8e90` | 2026-11-10T09:41:47Z | seedream_v5, image-to-image | 5 |
-| `scenes/hq.webp` | 1600×900 | 196.442 | Hero do Quartel-General | `d56e28be-0e14-47b7-98b7-4fd1bf873532` | 2026-11-10T09:45:18Z | seedream_v5, text-to-image | 5 |
-| `scenes/campaigns.webp` | 1600×900 | 131.476 | Hero de Campanhas | `143b2921-e32a-41e2-8dfb-e40093efbfa7` | 2026-11-10T09:47:45Z | seedream_v5, text-to-image | 5 |
+| `scenes/hq.webp` | 1600×900 | 196.442 | Hero do Quartel-General (`.area-hero--hq`, em `styles/base.css`) | `d56e28be-0e14-47b7-98b7-4fd1bf873532` | 2026-11-10T09:45:18Z | seedream_v5, text-to-image | 5 |
+| `scenes/campaigns.webp` | 1600×900 | 131.476 | Hero de Campanhas (`.area-hero--campaigns`, em `styles/base.css`) | `143b2921-e32a-41e2-8dfb-e40093efbfa7` | 2026-11-10T09:47:45Z | seedream_v5, text-to-image | 5 |
 | `empty/missions.webp` | 1600×1600 | 47.662 | Ainda sem uso no front; será ligado na Fase 5 (estados vazios, prova da semana) | `c218f28f-bbda-4f03-9bba-5480622a29bf` | 2026-11-10T09:56:03Z | seedream_v5, text-to-image | 5 |
 | `empty/plan.webp` | 1600×1600 | 29.710 | Ainda sem uso no front; será ligado na Fase 5 (estados vazios, prova da semana) | `2c52d2a7-f981-4cdb-9bff-45f534658e7f` | 2026-11-10T09:52:23Z | seedream_v5, text-to-image | 5 |
 | `empty/campaign-new.webp` | 1600×1600 | 55.600 | Ainda sem uso no front; será ligado na Fase 5 (estados vazios, prova da semana) | `57e6a21e-c788-4ec3-a065-b5cb7cc82942` | 2026-11-10T09:53:00Z | seedream_v5, text-to-image | 5 |

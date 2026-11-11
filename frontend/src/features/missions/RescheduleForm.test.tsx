@@ -1,6 +1,8 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
+import type { Locale } from '../../shared/i18n/locale'
+import { en } from '../../shared/i18n/messages/en'
 import type { Mission } from '../../shared/types/mission'
 import { renderWithI18n } from '../../test/i18n'
 import type { RescheduleFailure } from './rescheduleFailure'
@@ -46,7 +48,7 @@ const falhaNovaChave: RescheduleFailure = {
 
 type Props = Parameters<typeof RescheduleForm>[0]
 
-function renderForm(props: Partial<Props> = {}) {
+function renderForm(props: Partial<Props> = {}, locale: Locale = 'pt-BR') {
   const onSubmit = vi.fn<(draft: RescheduleDraft) => void>()
   const onSave = vi.fn<(open: OpenReschedule | null) => void>()
   const all: Props = {
@@ -59,7 +61,7 @@ function renderForm(props: Partial<Props> = {}) {
     pendingRetry: null,
     ...props,
   }
-  const view = renderWithI18n(<RescheduleForm {...all} />)
+  const view = renderWithI18n(<RescheduleForm {...all} />, { locale })
   const rerender = (next: Partial<Props>) => {
     view.rerender(<RescheduleForm {...all} {...next} />)
   }
@@ -224,7 +226,7 @@ describe('RescheduleForm', () => {
     rerender({ failure: falhaRetry, pendingRetry: enviado() })
 
     expect(screen.getByTestId('reschedule-error')).toHaveTextContent(
-      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: nada será duplicado.',
     )
     const aviso = screen.getByTestId('reschedule-retry-notice')
     expect(aviso).toHaveTextContent(
@@ -360,6 +362,34 @@ describe('RescheduleForm', () => {
     abrir()
 
     expect(campo()).toHaveValue('2026-10-02T18:00')
+  })
+
+  it('em en, rotulos, bloqueios, aviso e botoes saem do catalogo ingles', () => {
+    const { rerender, enviado } = renderForm({}, 'en')
+    fireEvent.click(screen.getByRole('button', { name: en['missions.reschedule.toggle'] }))
+    const prazo = screen.getByLabelText(en['missions.reschedule.deadlineLabel'])
+    expect(
+      screen.getByRole('group', { name: en['missions.reschedule.reasonLegend'] }),
+    ).toBeVisible()
+    expect(screen.getByTestId('reschedule-blocked')).toHaveTextContent(
+      en['missions.reschedule.blocked.missingReason'],
+    )
+
+    fireEvent.change(prazo, { target: { value: '' } })
+    expect(screen.getByTestId('reschedule-blocked')).toHaveTextContent(
+      en['missions.reschedule.blocked.missingDeadline'],
+    )
+
+    fireEvent.change(prazo, { target: { value: '2026-10-05T18:00' } })
+    fireEvent.click(screen.getByTestId('reschedule-reason-falta_de_tempo'))
+    expect(salvar()).toHaveTextContent(en['missions.reschedule.submit'])
+    fireEvent.click(salvar())
+    rerender({ failure: falhaRetry, pendingRetry: enviado() })
+
+    expect(screen.getByTestId('reschedule-retry-notice')).toHaveTextContent(
+      en['missions.reschedule.retryNotice'],
+    )
+    expect(salvar()).toHaveTextContent(en['missions.action.retry'])
   })
 })
 

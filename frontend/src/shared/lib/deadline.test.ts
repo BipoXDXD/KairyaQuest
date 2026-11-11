@@ -20,11 +20,29 @@ describe('formatDeadline', () => {
     //
     // Regex e nao texto exato: o separador entre data e hora (virgula,
     // espaco) muda entre versoes do ICU, e o que importa aqui e dia e hora.
-    expect(formatDeadline('2026-09-20T02:30:00Z')).toMatch(/19\/09\/2026.*23:30/)
+    expect(formatDeadline('2026-09-20T02:30:00Z', 'pt-BR')).toMatch(/19\/09\/2026.*23:30/)
   })
 
   it('le o instante com qualquer offset', () => {
-    expect(formatDeadline('2027-02-15T21:00:00-03:00')).toMatch(/15\/02\/2027.*21:00/)
+    expect(formatDeadline('2027-02-15T21:00:00-03:00', 'pt-BR')).toMatch(/15\/02\/2027.*21:00/)
+  })
+
+  it('em ingles, o mesmo instante sai no formato do idioma, ainda em America/Sao_Paulo', () => {
+    // Mes antes do dia e relogio de 12 horas: 23:30 de 19/09 em SP.
+    expect(formatDeadline('2026-09-20T02:30:00Z', 'en')).toMatch(/09\/19\/2026.*11:30\sPM/)
+  })
+
+  it('em ingles, nenhuma palavra do portugues aparece', () => {
+    const texto = formatDeadline('2026-09-20T02:30:00Z', 'en')
+    expect(texto).not.toMatch(/\b(de|às)\b/u)
+    expect(texto).not.toMatch(/às/u)
+  })
+
+  it('alternar os idiomas devolve cada um no proprio formato', () => {
+    const instante = '2026-09-20T02:30:00Z'
+    expect(formatDeadline(instante, 'en')).toMatch(/^09\/19\/2026/)
+    expect(formatDeadline(instante, 'pt-BR')).toMatch(/^19\/09\/2026/)
+    expect(formatDeadline(instante, 'en')).toMatch(/^09\/19\/2026/)
   })
 })
 

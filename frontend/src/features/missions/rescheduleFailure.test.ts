@@ -124,7 +124,7 @@ describe('describeRescheduleFailure', () => {
       message: 'missions.rescheduleFailure.unconfirmed.network',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível reagendar a missão: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível reagendar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 
@@ -135,7 +135,7 @@ describe('describeRescheduleFailure', () => {
       message: 'missions.rescheduleFailure.unconfirmed.timeout',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível reagendar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível reagendar a missão: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 

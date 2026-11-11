@@ -85,7 +85,7 @@ describe('describeCompletionFailure', () => {
       message: 'missions.completionFailure.unconfirmed.network',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível concluir a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 
@@ -96,7 +96,7 @@ describe('describeCompletionFailure', () => {
       message: 'missions.completionFailure.unconfirmed.timeout',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível concluir a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível concluir a missão: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 

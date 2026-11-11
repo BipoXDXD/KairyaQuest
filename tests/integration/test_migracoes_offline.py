@@ -4,9 +4,10 @@ Escopo declarado, nao geral. `op.get_bind()` e None no modo offline, entao
 nenhuma migracao que LE dados roda aqui:
 - upgrade da 0004: o backfill le missoes e grava XP/conquistas;
 - downgrade de 0003, 0005 e 0006: as guardas contam linhas antes de destruir.
-Tudo o mais e coberto: upgrades 0001-0003 e 0005-0007, downgrades 0007,
-0004, 0002 e 0001. Uma migracao nova que passe a ler dados quebra a faixa
-dela aqui -- e a decisao de tira-la do escopo fica escrita, nao implicita.
+Tudo o mais e coberto: upgrades 0001-0003 e 0005-0010, downgrades 0010, 0007,
+0004, 0002 e 0001. A 0010 le dados so online (a guarda e pulada offline).
+Uma migracao nova que passe a ler dados quebra a faixa dela aqui -- e a
+decisao de tira-la do escopo fica escrita, nao implicita.
 """
 
 from argparse import Namespace
@@ -48,6 +49,16 @@ def _config_offline(saida: StringIO) -> Config:
             ("CREATE TABLE xp_entries",),
             id="0004-ate-head",
         ),
+        pytest.param(
+            "0009:head",
+            (
+                "ADD COLUMN operation_kind",
+                "uq_mission_operations_vinculo",
+                "fk_mission_reschedules_operacao",
+            ),
+            (),
+            id="0009-ate-head",
+        ),
     ],
 )
 def test_upgrade_offline_gera_o_ddl_da_faixa(
@@ -65,6 +76,11 @@ def test_upgrade_offline_gera_o_ddl_da_faixa(
 @pytest.mark.parametrize(
     ("faixa", "ddl_esperado"),
     [
+        pytest.param(
+            "0010:0009",
+            ("DROP COLUMN operation_kind", "mission_reschedules_operation_id_fkey"),
+            id="0010",
+        ),
         pytest.param("0007:0006", ("DROP COLUMN fallback_model",), id="0007"),
         pytest.param("0004:0003", ("DROP TABLE xp_entries",), id="0004"),
         pytest.param(
