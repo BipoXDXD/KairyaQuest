@@ -2,7 +2,7 @@ import { test as base } from '@playwright/test'
 import { diaCivil } from './datas'
 
 /** A chave que a Kairya grava ao saudar (`GREETING_STORAGE_KEY`, em `dailyOpening.ts`). */
-const CHAVE_DA_SAUDACAO = 'kairyaquest.lastGreeting'
+export const CHAVE_DA_SAUDACAO = 'kairyaquest.lastGreeting'
 
 /**
  * O `test` dos specs: o mesmo do Playwright, com a saudacao do dia ja dada.
@@ -27,7 +27,7 @@ export const test = base.extend({
             window.localStorage.setItem(chave, dia)
           }
         } catch {
-          // Sem localStorage nao ha o que pre-gravar; a saudacao sai e o spec que se vire.
+          // Sem localStorage nao ha o que pre-gravar: a saudacao aparece e o spec falha com mensagem clara.
         }
       },
       { chave: CHAVE_DA_SAUDACAO, dia: diaCivil(new Date()) },

@@ -570,7 +570,7 @@ describe('Headquarters: a celebracao da Kairya', () => {
 
     const bubble = await screen.findByRole('figure', { name: 'Kairya' })
     expect(bubble).toHaveTextContent('Feito. Isso é treino de verdade.')
-    expect(bubble.querySelectorAll('p.text-sm')).toHaveLength(0)
+    expect(bubble).not.toHaveTextContent(/Subiu para o nível|Conquista:/)
     expect(erro).not.toHaveBeenCalled()
   })
 
