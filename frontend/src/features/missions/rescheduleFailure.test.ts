@@ -102,7 +102,8 @@ describe('describeRescheduleFailure', () => {
 
   it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual({
-      message: 'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      message:
+        'Não foi possível reagendar a missão: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
       recovery: 'retry',
     })
   })
@@ -110,7 +111,7 @@ describe('describeRescheduleFailure', () => {
   it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
     expect(describeRescheduleFailure(new ApiTimeoutError())).toEqual({
       message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+        'Não foi possível reagendar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
       recovery: 'retry',
     })
   })

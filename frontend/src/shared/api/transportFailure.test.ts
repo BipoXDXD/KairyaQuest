@@ -3,9 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { ApiError, ApiTimeoutError } from './client'
 import { leadFor, transportFailureOf } from './transportFailure'
 
-const DEMORA = 'A resposta demorou mais que o esperado.'
-const REDE = 'Não foi possível conectar.'
-
 describe('transportFailureOf', () => {
   it.each([
     ['o prazo', new ApiTimeoutError(), 'timeout'],
@@ -22,15 +19,21 @@ describe('transportFailureOf', () => {
 })
 
 describe('leadFor', () => {
-  it('o prazo abre com a demora', () => {
-    expect(leadFor(new ApiTimeoutError(), 'Outro.')).toBe(DEMORA)
+  const lead = { action: 'concluir a missão', fallback: 'Outro.' }
+
+  it('o prazo nomeia a acao e a demora do servidor', () => {
+    expect(leadFor(new ApiTimeoutError(), lead)).toBe(
+      'Não foi possível concluir a missão: o servidor demorou demais para responder.',
+    )
   })
 
-  it('a rede fora abre com a conexao', () => {
-    expect(leadFor(new ApiError('x', null, null), 'Outro.')).toBe(REDE)
+  it('a rede fora nomeia a acao e a falta de conexao', () => {
+    expect(leadFor(new ApiError('x', null, null), lead)).toBe(
+      'Não foi possível concluir a missão: sem conexão com o servidor.',
+    )
   })
 
   it('o resto usa a abertura do chamador', () => {
-    expect(leadFor(new ApiError('x', 500, null), 'Outro.')).toBe('Outro.')
+    expect(leadFor(new ApiError('x', 500, null), lead)).toBe('Outro.')
   })
 })
