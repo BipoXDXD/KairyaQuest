@@ -185,8 +185,27 @@ jobs:
       # servico de rede, e o baixador do Playwright ja repete sozinho (5
       # tentativas, alternando espelhos). O ganho de estabilidade seria
       # parcial e o custo, uma chave a manter.
+      #
+      # Espelho do apt (revisao da decisao "sem ajuste", 11/11): o runner
+      # passou horas sem resolver os hosts *.ubuntu.com, com o resto da rede
+      # respondendo; o `apt-get update` so avisa e o install sai 100. Da 2a
+      # tentativa em diante, o apt usa mirrors.edge.kernel.org, fora desse
+      # dominio (medido no runner em 11/11, 16:12Z). A troca vem ANTES do
+      # `--with-deps`, que e quem chama o apt. A lista de arquivos e filtrada
+      # pelos que existem, para o sed nao falhar por arquivo ausente.
       - name: Instalar o Chromium do Playwright
-        run: npx playwright install --with-deps chromium
+        run: |
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries >/dev/null
+          for tentativa in 1 2 3; do
+            npx playwright install --with-deps chromium && break
+            [ "$tentativa" = 3 ] && exit 1
+            fontes=()
+            for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
+              [ -f "$f" ] && fontes+=("$f")
+            done
+            sudo sed -i -E 's#https?://[a-z.]*ubuntu\.com/ubuntu/?#http://mirrors.edge.kernel.org/ubuntu/#g' "${fontes[@]}"
+            sleep $((30 * tentativa))
+          done
         working-directory: frontend
       - name: Gate ponta a ponta
         run: make check-e2e
