@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
 import { diaEMes, somarDias } from './datas'
 import { API_URL } from './servers'

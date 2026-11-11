@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createRef } from 'react'
+import { memoryStorage } from '../../test/audioDoubles'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { Mission } from '../../shared/types/mission'
 import * as completionRegistryHook from './useCompletionRegistry'
@@ -1337,4 +1338,61 @@ it('a leitura terminal da diária tardia libera sua chave, sem inventar recompen
   expect(registry().operationIdFor(30)).toBe(k2)
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('CycleSection: a sequência lida alimenta a saudação do dia', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const clock = () => new Date('2026-11-10T12:00:00Z')
+  const GREETED = { 'kairyaquest.lastGreeting': '2026-11-10' }
+
+  function montar(storage: Storage) {
+    const ref = createRef<CycleSectionHandle>()
+    renderWithI18n(<CycleSection ref={ref} />, {
+      presence: { greeting: true, clock, storage, random: () => 0 },
+    })
+    return ref
+  }
+
+  it('informa a sequência de uma leitura bem-sucedida', async () => {
+    routeFetch({ 'GET /api/cycle': () => Response.json(ciclo({ streak: 5 })) })
+    const storage = memoryStorage(GREETED)
+
+    montar(storage)
+
+    await waitFor(() => {
+      expect(storage.getItem('kairyaquest.lastStreak')).toBe('5')
+    })
+  })
+
+  it('não informa nada enquanto carrega nem quando a carga falha', async () => {
+    routeFetch({ 'GET /api/cycle': () => new Response(null, { status: 503 }) })
+    const storage = memoryStorage(GREETED)
+    const setItem = vi.spyOn(storage, 'setItem')
+
+    montar(storage)
+
+    await screen.findByTestId('cycle-error')
+    expect(setItem).not.toHaveBeenCalled()
+  })
+
+  it('uma releitura que falha não reinforma a sequência velha', async () => {
+    routeFetch({
+      'GET /api/cycle': (_init, call) =>
+        call === 1 ? Response.json(ciclo({ streak: 3 })) : new Response(null, { status: 503 }),
+    })
+    const storage = memoryStorage(GREETED)
+    const setItem = vi.spyOn(storage, 'setItem')
+
+    const ref = montar(storage)
+    await waitFor(() => {
+      expect(setItem).toHaveBeenCalledTimes(1)
+    })
+    act(() => ref.current!.refresh())
+
+    await screen.findByTestId('cycle-stale')
+    expect(setItem).toHaveBeenCalledTimes(1)
+  })
 })
