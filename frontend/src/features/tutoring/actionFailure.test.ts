@@ -97,16 +97,28 @@ describe('describeActionFailure', () => {
   })
 
   it.each([
-    ['rede fora', new ApiError('x', null, null), 'shared.transportFailure.network'],
-    ['prazo', new ApiTimeoutError(), 'shared.transportFailure.timeout'],
+    [
+      'rede fora',
+      new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedCreate.network',
+      'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
+    ],
+    [
+      'prazo',
+      new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedCreate.timeout',
+      'Não foi possível confirmar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será criada duas vezes.',
+    ],
   ])(
-    '%s: confirmar abre com a causa e diz que repetir nao cria duas missoes',
-    (_caso, error, message) => {
-      expect(describeActionFailure(error, 'confirm', 'create_mission')).toEqual({
+    '%s: confirmar abre com a acao e a causa e diz que repetir nao cria duas missoes',
+    (_caso, error, message, textoPt) => {
+      const failure = describeActionFailure(error, 'confirm', 'create_mission')
+      expect(failure).toEqual({
         message,
         recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
         action: 'retry',
       })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
     },
   )
 
@@ -117,14 +129,26 @@ describe('describeActionFailure', () => {
   })
 
   it.each([
-    ['rede fora', new ApiError('x', null, null), 'shared.transportFailure.network'],
-    ['prazo', new ApiTimeoutError(), 'shared.transportFailure.timeout'],
-  ])('%s: recusar abre com a causa', (_caso, error, message) => {
+    [
+      'rede fora',
+      new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedReject.network',
+      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
+    ],
+    [
+      'prazo',
+      new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedReject.timeout',
+      'Não foi possível recusar a proposta: o servidor demorou demais para responder. Tentar de novo é seguro.',
+    ],
+  ])('%s: recusar abre com a acao e a causa', (_caso, error, message, textoPt) => {
     for (const kind of ['create_mission', 'reschedule_mission'] as const) {
-      expect(describeActionFailure(error, 'reject', kind)).toEqual({
+      const failure = describeActionFailure(error, 'reject', kind)
+      expect(failure).toEqual({
         ...UNCONFIRMED_REJECT,
         message,
       })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
     }
   })
 
@@ -151,15 +175,30 @@ describe('describeActionFailure', () => {
   })
 
   it.each([
-    ['rede fora', new ApiError('x', null, null), 'shared.transportFailure.network'],
-    ['prazo', new ApiTimeoutError(), 'shared.transportFailure.timeout'],
-  ])('%s: confirmar um reagendamento abre com a causa', (_caso, error, message) => {
-    expect(describeActionFailure(error, 'confirm', 'reschedule_mission')).toEqual({
-      message,
-      recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
-      action: 'retry',
-    })
-  })
+    [
+      'rede fora',
+      new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedReschedule.network',
+      'Não foi possível confirmar o reagendamento: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    ],
+    [
+      'prazo',
+      new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedReschedule.timeout',
+      'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    ],
+  ])(
+    '%s: confirmar um reagendamento abre com a acao e a causa',
+    (_caso, error, message, textoPt) => {
+      const failure = describeActionFailure(error, 'confirm', 'reschedule_mission')
+      expect(failure).toEqual({
+        message,
+        recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
+        action: 'retry',
+      })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
+    },
+  )
 
   it('recusar um reagendamento tem o mesmo texto generico da criacao', () => {
     expect(

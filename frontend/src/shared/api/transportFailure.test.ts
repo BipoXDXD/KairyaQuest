@@ -25,29 +25,35 @@ describe('transportFailureOf', () => {
 })
 
 describe('leadFor', () => {
-  it('o prazo abre com a demora', () => {
-    expect(leadFor(new ApiTimeoutError(), 'shared.apiError.http.message')).toBe(
-      'shared.transportFailure.timeout',
-    )
+  const lead = {
+    fallback: 'shared.apiError.http.message',
+    timeout: 'missions.completionFailure.unconfirmed.timeout',
+    network: 'missions.completionFailure.unconfirmed.network',
+  } as const
+
+  it('o prazo abre com a acao e a demora do servidor', () => {
+    expect(leadFor(new ApiTimeoutError(), lead)).toBe(lead.timeout)
   })
 
-  it('a rede fora abre com a conexao', () => {
-    expect(leadFor(new ApiError('x', null, null), 'shared.apiError.http.message')).toBe(
-      'shared.transportFailure.network',
-    )
+  it('a rede fora abre com a acao e a falta de conexao', () => {
+    expect(leadFor(new ApiError('x', null, null), lead)).toBe(lead.network)
   })
 
   it('o resto usa a abertura do chamador', () => {
-    expect(leadFor(new ApiError('x', 500, null), 'shared.apiError.http.message')).toBe(
-      'shared.apiError.http.message',
-    )
+    expect(leadFor(new ApiError('x', 500, null), lead)).toBe(lead.fallback)
   })
 })
 
-describe('o texto das aberturas', () => {
+describe('o texto das aberturas de transporte', () => {
   it.each([
-    ['shared.transportFailure.timeout', 'A resposta demorou mais que o esperado.'],
-    ['shared.transportFailure.network', 'Não foi possível conectar.'],
+    [
+      'missions.completionFailure.unconfirmed.timeout',
+      'Não foi possível concluir a missão: o servidor demorou demais para responder.',
+    ],
+    [
+      'missions.completionFailure.unconfirmed.network',
+      'Não foi possível concluir a missão: sem conexão com o servidor.',
+    ],
   ] as const)('%s em pt-BR', (key, esperado) => {
     expect(translate('pt-BR', key)).toBe(esperado)
   })

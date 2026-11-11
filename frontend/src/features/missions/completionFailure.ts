@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { MissionErrorCode } from './types'
 
@@ -59,6 +59,12 @@ export const COMPLETION_FAILURE_BY_CODE: Readonly<Record<MissionErrorCode, Compl
   },
 }
 
+const UNCONFIRMED_LEAD: FailureLead = {
+  fallback: 'missions.completionFailure.unconfirmed.message',
+  timeout: 'missions.completionFailure.unconfirmed.timeout',
+  network: 'missions.completionFailure.unconfirmed.network',
+}
+
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
  * novo (o 404 sem `code` e o 422 tem mapeamento proprio, em
@@ -68,7 +74,7 @@ export const COMPLETION_FAILURE_BY_CODE: Readonly<Record<MissionErrorCode, Compl
  */
 function unconfirmed(error: unknown): CompletionFailure {
   return {
-    message: leadFor(error, 'missions.completionFailure.unconfirmed.message'),
+    message: leadFor(error, UNCONFIRMED_LEAD),
     recovery: 'missions.completionFailure.unconfirmed.recovery',
     action: 'retry',
   }

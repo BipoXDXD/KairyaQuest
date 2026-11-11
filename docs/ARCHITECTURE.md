@@ -61,8 +61,9 @@ KairyaQuest/
 │       ├── missions/          # ciclo, planos, missões, entregas e prazos
 │       ├── tutoring/          # conversa, provedor e propostas confirmáveis
 │       ├── progression/       # XP, níveis e conquistas
-│       └── evaluation/        # avaliação das evidências pela tutora
-├── alembic/                   # migrações; versões 0001 a 0007
+│       ├── evaluation/        # avaliação das evidências pela tutora
+│       └── users/             # idioma do usuário e /api/me
+├── alembic/                   # migrações; versões 0001 a 0009
 ├── tests/                     # testes Python unitários e de integração
 ├── frontend/
 │   ├── public/art/            # cenários e retratos locais; docs/ART.md
@@ -103,11 +104,13 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
-- **Não existe o módulo `progress`, nem módulo `users`.** O modelo `User`
-  mora em `modules/missions/models.py` como dívida consciente (ver
-  `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) e
-  ganhou o lado do frontend (`frontend/src/features/tutoring/`) **no
-  1b-2** — a feature existe hoje, não é mais contrato.
+- **Não existe o módulo `progress`.** O módulo `users` nasceu na F3 (idioma
+  e `/api/me`), mas o modelo `User` continua em `modules/missions/models.py`:
+  as tabelas de `missions` apontam para `users.id`, e mudar a classe faria
+  `missions` importar `users` (ver `docs/HANDOFF.md`). O módulo `tutoring`
+  **nasceu no 1b-1** (backend) e ganhou o lado do frontend
+  (`frontend/src/features/tutoring/`) **no 1b-2** — a feature existe hoje,
+  não é mais contrato.
 - **No frontend, `styles/` e `shared/ui/` nasceram na Fase 4, Tarefa 4.1.**
   `styles/tokens.css` é a fonte única dos tokens visuais; `shared/ui/` tem,
   por ora, só `tokens/` (contraste WCAG e pares) e o `tokens.test.ts`.
@@ -218,16 +221,16 @@ consumido por `missions`).
 
 ## 3. Responsabilidades por camada
 
-### Backend — `missions`, `tutoring`, `progression` e `evaluation` existem; o resto é contrato
+### Backend — `missions`, `tutoring`, `progression`, `evaluation` e `users` existem; o resto é contrato
 
 Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
 real, e em qual módulo.
 
 | Camada | Responsabilidade | O que **não** faz | Estado |
 |---|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
@@ -280,6 +283,8 @@ módulos**, nunca pelos modelos deles diretamente. As arestas, conferidas nos
 - `evaluation → tutoring`: `tutoring.provider` (o `Protocol`, `Ferramenta`,
   `Turno` e os erros do provedor), `tutoring.service` (`Tutoria`,
   `FOLGA_DO_ORFAO`) e `tutoring.dependencies` (`get_tutoria`);
+- `evaluation → users`: `users.service` (`ler_idioma`, só leitura), para
+  escolher a rubrica pelo idioma gravado (F3);
 - **ninguém importa `evaluation` além de `main.py`**, que registra o router e
   o handler de `AvaliacaoFalhouError`. Conferido: `grep -rn
   "modules.evaluation" src` fora do próprio módulo acha só `main.py:34` e
@@ -290,6 +295,18 @@ importa `missions`, o `MissionRead` (que mostra a evidência e a avaliação na
 listagem, no ciclo e na trilha) teria de importar esse módulo de volta, e
 seria um terceiro par nos dois sentidos (pendência 88). Até esta integração
 o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
+
+**O módulo `users` (F3).** Lê e grava o idioma do usuário (`GET`/`PATCH
+/api/me`). Arestas: `users → missions.models` (`User`, que continua lá; ver
+`docs/HANDOFF.md`) e `users → core` (`Idioma`, `CampoDesconhecidoError`,
+sessão e usuário único). `users` é importado por `main.py` (o router) e,
+só pela função de leitura `ler_idioma`, por `tutoring.service` e
+`evaluation.service`, que escolhem a persona e a rubrica pelo idioma gravado
+(F3). Não forma par nos dois sentidos: `users` não importa `tutoring` nem
+`evaluation`. O router
+tem uma exceção à regra "não trata erro": a `RotaQueRecusaCampoExtra` troca o
+`RequestValidationError` com `extra_forbidden` por `CampoDesconhecidoError`,
+sem montar resposta; o 400 continua sendo traduzido em `main.py`.
 
 **`evaluation/errors.py`, e por que `core/` não tem módulos.**
 `AvaliacaoFalhouError(falha)` é o erro da falha **já gravada** (E13). Nasceu em
@@ -1122,7 +1139,7 @@ pendente, o estado, o início e "reagendada N vez(es); último motivo", e as aç
 antigas entram como texto por tipo (F19).
 
 **A confirmação de um reagendamento** executa pelo **mesmo** `reagendar_missao`,
-com `origin = 'tifa'` e o `operation_id` da confirmação, e revalida tudo (F17):
+com `origin = 'kairya'` e o `operation_id` da confirmação, e revalida tudo (F17):
 prazo passado → ação `falhou`/`prazo_expirado` e `422`; missão que mudou (não
 existe mais, concluída, prazo já igual, tipo derivado) → ação
 `falhou`/`reagendamento_invalido` e `409`; chave reutilizada →
@@ -1647,7 +1664,7 @@ IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
 | O que o produto deve ser? Qual a regra da spec sobre isto? | `README.md` — autoridade final |
 | Onde vai este arquivo? De que este diretório é responsável? Qual é o contrato HTTP? | **este documento** |
 | Como rodo o gate? O que ele mede, o que não mede, e o que ele **não** protege? | `docs/QUALITY.md` |
-| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` |
+| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` e os arquivos por PR de `docs/handoff/` |
 | Como trabalho aqui sem quebrar nada? | `AGENTS.md` (e `CLAUDE.md`, que o importa) |
 
 A fronteira entre este documento e os outros dois de `docs/`: **arquitetura**

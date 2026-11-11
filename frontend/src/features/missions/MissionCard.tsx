@@ -5,11 +5,10 @@ import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
-import { sameDraft } from './rescheduleDraft'
 import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
-import type { EvidenceDraft, RescheduleDraft } from './types'
+import type { EvidenceDraft, OpenReschedule } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
@@ -409,25 +408,18 @@ export function MissionCard({
     reschedule: rescheduleMission,
     lastRescheduled,
   } = useRescheduleMission(listed.id, registry)
-  // O ultimo rascunho de reagendamento enviado. Ref, e nao estado: so e lido no
-  // clique, e mudar nao deve renderizar nada.
-  const lastSentReschedule = useRef<RescheduleDraft | null>(null)
-  const submitReschedule = (draft: RescheduleDraft) => {
-    // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
-    // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
-    // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
-    // evitavel. Sem mudanca, a mesma chave reenvia.
-    const previous = lastSentReschedule.current
-    if (
-      reschedule.status === 'failed' &&
-      reschedule.failure.action === 'retry' &&
-      previous !== null &&
-      !sameDraft(previous, draft)
-    ) {
-      registry.releaseActionKey(listed.id, 'reschedule')
+  // O rascunho do Reagendar e o conteudo do ultimo envio moram no REGISTRO,
+  // com a chave (pendencia 112): sobrevivem a remontagem, e o hook troca a chave
+  // antes do envio quando o conteudo mudou. Com o envio em voo nao ha retry a
+  // oferecer; fora dele, o ultimo envio so existe enquanto a chave esta retida.
+  const pendingRetry =
+    reschedule.status === 'submitting' ? null : registry.sentRescheduleFor(listed.id)
+  const saveReschedule = (open: OpenReschedule | null) => {
+    if (open === null) {
+      registry.discardRescheduleDraft(listed.id)
+      return
     }
-    lastSentReschedule.current = draft
-    rescheduleMission(draft)
+    registry.saveRescheduleDraft(listed.id, open)
   }
   // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
   // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
@@ -609,7 +601,10 @@ export function MissionCard({
           mission={mission}
           disabled={completing || starting || rescheduling}
           failure={rescheduleFailure}
-          onSubmit={submitReschedule}
+          onSubmit={rescheduleMission}
+          saved={registry.rescheduleDraftFor(listed.id)}
+          onSave={saveReschedule}
+          pendingRetry={pendingRetry}
           describedBy={titleId}
         />
       )}

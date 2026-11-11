@@ -1,5 +1,6 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
+import type { MessageKey } from '../../shared/i18n/catalog'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { ActionErrorCode, ActionRead } from './types'
 
@@ -81,27 +82,46 @@ const RECORDS: Record<DecisionAction, boolean> = {
 }
 
 /**
+ * O texto de uma decisao sem resposta, em duas partes: a abertura (`lead`), que
+ * nomeia a acao e a causa quando ela e de transporte (`leadFor`), e o `recovery`
+ * que diz que repetir e seguro.
+ */
+interface UnconfirmedText {
+  lead: FailureLead
+  recovery: MessageKey
+}
+
+/**
  * O aviso de confirmar sem resposta, por `kind`: o que "nao acontece duas
  * vezes" depende do que a proposta faz. Exaustivo: um `kind` novo reprova o
  * `tsc` ate ganhar texto.
  */
-const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], ActionFailure> = {
+const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], UnconfirmedText> = {
   create_mission: {
-    message: 'tutoring.actionFailure.unconfirmedCreate.message',
+    lead: {
+      fallback: 'tutoring.actionFailure.unconfirmedCreate.message',
+      timeout: 'tutoring.actionFailure.unconfirmedCreate.timeout',
+      network: 'tutoring.actionFailure.unconfirmedCreate.network',
+    },
     recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
-    action: 'retry',
   },
   reschedule_mission: {
-    message: 'tutoring.actionFailure.unconfirmedReschedule.message',
+    lead: {
+      fallback: 'tutoring.actionFailure.unconfirmedReschedule.message',
+      timeout: 'tutoring.actionFailure.unconfirmedReschedule.timeout',
+      network: 'tutoring.actionFailure.unconfirmedReschedule.network',
+    },
     recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
-    action: 'retry',
   },
 }
 
-const UNCONFIRMED_REJECT: ActionFailure = {
-  message: 'tutoring.actionFailure.unconfirmedReject.message',
+const UNCONFIRMED_REJECT: UnconfirmedText = {
+  lead: {
+    fallback: 'tutoring.actionFailure.unconfirmedReject.message',
+    timeout: 'tutoring.actionFailure.unconfirmedReject.timeout',
+    network: 'tutoring.actionFailure.unconfirmedReject.network',
+  },
   recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
-  action: 'retry',
 }
 
 function isActionErrorCode(code: string): code is ActionErrorCode {
@@ -134,10 +154,10 @@ export function describeActionFailure(
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return ACTION_FAILURE_BY_CODE[error.code]
   }
-  // A abertura propria e trocada pela causa quando ela e de transporte
-  // (`leadFor`); o `recovery` segue dizendo que repetir e seguro.
-  const unconfirmed = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
-  return { ...unconfirmed, message: leadFor(error, unconfirmed.message) }
+  // A abertura nomeia a acao e a causa quando ela e de transporte (`leadFor`); o
+  // `recovery` segue dizendo que repetir e seguro.
+  const text = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  return { message: leadFor(error, text.lead), recovery: text.recovery, action: 'retry' }
 }
 
 const FAILED_TEXT: FailureText = {

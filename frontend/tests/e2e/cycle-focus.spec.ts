@@ -2,16 +2,21 @@ import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 import type { Cycle } from '../../src/features/missions/types'
 import type { Mission } from '../../src/shared/types/mission'
+import { diaEMes, diaRelativo } from './datas'
+
+// O dia antes do refresh e o dia depois dele, relativos a hoje (pendencia 207).
+const DIA_ANTERIOR = diaRelativo(-1)
+const DIA_ATUAL = diaRelativo(0)
 
 const daily: Mission = {
   id: 16001,
-  day: '2026-10-04',
+  day: DIA_ANTERIOR,
   instructions: 'Diária anterior ao refresh de foco',
   completion_criterion: 'Entregar resumo',
   difficulty: 2,
   estimated_minutes: 30,
   mission_type: 'diaria',
-  deadline: '2026-10-04T23:59:59-03:00',
+  deadline: `${DIA_ANTERIOR}T23:59:59-03:00`,
   state: 'pendente',
   availability: 'disponivel',
   started_at: null,
@@ -26,11 +31,11 @@ const daily: Mission = {
 const nextDaily: Mission = {
   ...daily,
   id: 16002,
-  day: '2026-10-05',
-  deadline: '2026-10-05T23:59:59-03:00',
+  day: DIA_ATUAL,
+  deadline: `${DIA_ATUAL}T23:59:59-03:00`,
   instructions: 'Diária atual depois do refresh de foco',
 }
-const cycle = (mission: Mission | null, today = '2026-10-04'): Cycle => ({
+const cycle = (mission: Mission | null, today = DIA_ANTERIOR): Cycle => ({
   today,
   mission,
   streak: 3,
@@ -49,6 +54,8 @@ async function setup(page: Page) {
   let cycleCalls = 0
   const unexpected: string[] = []
   const bodies: Record<string, unknown> = {
+    // O boot do idioma (`ServerLocaleSync`): o mesmo idioma da tela, sem escrita.
+    '/api/me': { display_name: 'Aventureira', locale: 'pt-BR' },
     '/api/missions': [],
     '/api/progress': {
       xp_total: 20,
@@ -104,8 +111,8 @@ for (const noPlan of [false, true]) {
   }) => {
     const { heading, refresh, unexpected, calls } = await setup(page)
     const route = await refresh()
-    await route.fulfill({ json: cycle(noPlan ? null : nextDaily, '2026-10-05') })
-    await expect(page.getByTestId('cycle-today')).toContainText('05/10')
+    await route.fulfill({ json: cycle(noPlan ? null : nextDaily, DIA_ATUAL) })
+    await expect(page.getByTestId('cycle-today')).toContainText(diaEMes(DIA_ATUAL))
     await expect(page.getByText(daily.instructions, { exact: true })).toHaveCount(0)
     if (noPlan) await expect(page.getByTestId('cycle-no-plan')).toBeVisible()
     else await expect(page.getByText(nextDaily.instructions, { exact: true })).toBeVisible()
@@ -135,8 +142,8 @@ for (const noPlan of [false, true]) {
 test('refresh da mesma ID conserva Concluir focado', async ({ page }) => {
   const { button, heading, refresh, unexpected } = await setup(page)
   const route = await refresh()
-  await route.fulfill({ json: cycle({ ...daily, estimated_minutes: 35 }, '2026-10-05') })
-  await expect(page.getByTestId('cycle-today')).toContainText('05/10')
+  await route.fulfill({ json: cycle({ ...daily, estimated_minutes: 35 }, DIA_ATUAL) })
+  await expect(page.getByTestId('cycle-today')).toContainText(diaEMes(DIA_ATUAL))
   await expect(page.getByTestId('mission-estimated-minutes')).toHaveText('35 min')
   await expect(button).toBeFocused()
   await expect(heading).not.toBeFocused()
@@ -159,7 +166,7 @@ test('resposta não toma foco e rascunho da Kairya', async ({ page }) => {
   const field = page.getByLabel('Sua mensagem para a Kairya')
   await field.fill('Rascunho durante refresh da diária')
   await expect(field).toBeFocused()
-  await route.fulfill({ json: cycle(nextDaily, '2026-10-05') })
+  await route.fulfill({ json: cycle(nextDaily, DIA_ATUAL) })
   await expect(page.getByText(nextDaily.instructions, { exact: true })).toBeVisible()
   await expect(field).toBeFocused()
   await expect(field).toHaveValue('Rascunho durante refresh da diária')
@@ -175,7 +182,7 @@ test('GET pendente aplicado com QG oculto não toma foco de Campanhas nem do ret
   await page.getByTestId('nav-campaigns').click()
   const campaigns = page.getByRole('heading', { level: 1, name: 'Campanhas — planos de estudo' })
   await expect(campaigns).toBeFocused()
-  await route.fulfill({ json: cycle(nextDaily, '2026-10-05') })
+  await route.fulfill({ json: cycle(nextDaily, DIA_ATUAL) })
   await expect(page.locator('[data-mission-id="16002"]')).toHaveCount(1)
   await expect(page.getByTestId('cycle')).toBeHidden()
   await expect(campaigns).toBeFocused()
@@ -198,7 +205,7 @@ test('GET pendente não atravessa folha modal móvel nem altera retorno do foco'
   const field = dialog.getByLabel('Sua mensagem para a Kairya')
   await expect(field).toBeFocused()
   await expect(page.getByTestId('headquarters')).toHaveAttribute('inert', '')
-  await route.fulfill({ json: cycle(nextDaily, '2026-10-05') })
+  await route.fulfill({ json: cycle(nextDaily, DIA_ATUAL) })
   await expect(page.locator('[data-mission-id="16002"]')).toHaveCount(1)
   await expect(field).toBeFocused()
   await expect(heading).not.toBeFocused()

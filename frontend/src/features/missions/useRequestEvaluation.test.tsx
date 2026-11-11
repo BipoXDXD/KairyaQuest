@@ -269,7 +269,7 @@ describe('useRequestEvaluation', () => {
     })
     expect(result.current.state).toMatchObject({
       status: 'failed',
-      failure: { message: 'shared.transportFailure.timeout', action: 'retry' },
+      failure: { message: 'missions.evaluationFailure.generic.timeout', action: 'retry' },
     })
   })
 

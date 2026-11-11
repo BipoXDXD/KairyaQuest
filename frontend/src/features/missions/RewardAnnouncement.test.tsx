@@ -48,7 +48,7 @@ describe('RewardAnnouncement', () => {
           achievements_unlocked: [
             { code: 'veteran_10', title: 'Veterano I', description: '10 missões concluídas.' },
             {
-              code: 'tifa_partnership',
+              code: 'kairya_partnership',
               title: 'Parceria com a Kairya',
               description: 'Primeira conversa com a Kairya.',
             },

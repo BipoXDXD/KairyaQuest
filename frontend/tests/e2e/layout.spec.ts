@@ -3,6 +3,22 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import type { CurrentPlan } from '../../src/features/campaigns/types'
 import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
 import type { Mission } from '../../src/shared/types/mission'
+import {
+  diaRelativo,
+  diasEntre,
+  instanteRelativo,
+  isoUtc,
+  segundaDaSemana,
+  somarDias,
+} from './datas'
+
+// Datas relativas a hoje (pendencia 207): o dia do ciclo, a semana do plano
+// que o contem (comecando na segunda-feira, como o backend gera), um instante
+// ja passado e os prazos futuros.
+const HOJE = diaRelativo(0)
+const INICIO_DA_SEMANA = segundaDaSemana(HOJE)
+const INDICE_DE_HOJE = diasEntre(INICIO_DA_SEMANA, HOJE)
+const ONTEM = isoUtc(instanteRelativo(-1, 9))
 
 // Estes cenários isolam a apresentação com respostas GET determinísticas.
 // Persistência/ações reais são verificadas nas outras specs; aqui o tamanho
@@ -16,7 +32,7 @@ const mission: Mission = {
   estimated_minutes: 45,
   mission_type: 'avulsa',
   day: null,
-  deadline: '2027-04-01T12:00:00Z',
+  deadline: isoUtc(instanteRelativo(142, 9)),
   state: 'pendente',
   availability: 'disponivel',
   started_at: null,
@@ -51,7 +67,7 @@ const message: MessageRead = {
   reply_to_id: 9299,
   error_code: null,
   fallback_model: null,
-  created_at: '2026-10-04T12:00:00Z',
+  created_at: ONTEM,
   actions: [],
 }
 
@@ -67,7 +83,7 @@ async function layoutData(
     '/api/tutoring/messages': history,
     '/api/plans/current': plan,
     '/api/cycle': {
-      today: '2026-10-04',
+      today: HOJE,
       mission: null,
       streak: 0,
       days_to_milestone: 7,
@@ -184,7 +200,7 @@ for (const viewport of [
             ['veteran_10', 'Veterano I'],
             ['veteran_50', 'Veterano II'],
             ['veteran_100', 'Veterano III'],
-            ['tifa_partnership', 'Parceria com a Kairya'],
+            ['kairya_partnership', 'Parceria com a Kairya'],
           ].map(([code, title]) => ({
             code,
             title,
@@ -197,8 +213,8 @@ for (const viewport of [
     await page.route('**/api/cycle', (route) =>
       route.fulfill({
         json: {
-          today: '2026-10-04',
-          mission: { ...mission, id: 9600, mission_type: 'diaria', day: '2026-10-04' },
+          today: HOJE,
+          mission: { ...mission, id: 9600, mission_type: 'diaria', day: HOJE },
           streak: 3,
           days_to_milestone: 4,
           special: null,
@@ -287,17 +303,17 @@ for (const width of [320, 375]) {
       const daily: Mission = {
         ...mission,
         mission_type: 'diaria',
-        day: '2026-10-04',
+        day: HOJE,
         instructions: LONG_TEXT,
         completion_criterion: LONG_TEXT,
       }
       const plan: CurrentPlan = {
         plan: {
-          week_start: '2026-09-28',
+          week_start: INICIO_DA_SEMANA,
           days: Array.from({ length: 7 }, (_, index) => ({
-            day: index < 3 ? `2026-09-${String(28 + index)}` : `2026-10-0${String(index - 2)}`,
-            availability: index === 6 ? 'disponivel' : 'fora_do_plano',
-            mission: index === 6 ? daily : null,
+            day: somarDias(INICIO_DA_SEMANA, index),
+            availability: index === INDICE_DE_HOJE ? 'disponivel' : 'fora_do_plano',
+            mission: index === INDICE_DE_HOJE ? daily : null,
           })),
           special: { availability: 'bloqueada', progress: 0, mission: null },
         },
@@ -344,7 +360,7 @@ for (const width of [320, 375]) {
           id: 9101,
           state: 'concluida',
           availability: 'concluida',
-          completed_at: '2026-10-04T12:00:00Z',
+          completed_at: ONTEM,
           verification: 'com_evidencia',
           evidence: { text: LONG_TEXT, link: LONG_TEXT },
           evaluation: {
@@ -353,7 +369,7 @@ for (const width of [320, 375]) {
             feedback: LONG_TEXT,
             error_code: null,
             model: 'modelo-teste',
-            finished_at: '2026-10-04T12:00:00Z',
+            finished_at: ONTEM,
           },
         },
       ])
@@ -376,7 +392,7 @@ for (const width of [320, 375]) {
           mission_id: mission.id,
           instructions: LONG_TEXT,
           previous_deadline: mission.deadline,
-          new_deadline: '2027-04-02T12:00:00Z',
+          new_deadline: isoUtc(instanteRelativo(143, 9)),
           reason: 'falta_de_tempo',
         },
         mission_id: null,

@@ -83,7 +83,7 @@ export interface EvaluationSummary {
 export type RescheduleReason = 'dificuldade' | 'falta_de_tempo' | 'mudanca_de_prioridade'
 
 /** Quem reagendou: a pessoa pela tela (`usuario`) ou a Kairya, por proposta confirmada. */
-export type RescheduleOrigin = 'usuario' | 'tifa'
+export type RescheduleOrigin = 'usuario' | 'kairya'
 
 /**
  * Um elo do historico de prazos (`RescheduleRead`, spec do incremento F). O

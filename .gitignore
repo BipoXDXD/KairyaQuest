@@ -56,3 +56,7 @@ npm-debug.log*
 
 # Artefatos OCI de publicação; não são imagens locais nem código-fonte.
 .docker-artifacts/
+
+# Brutos de áudio (128-192 kbps) da geração: só servem para regravar e ficam
+# com o dono. O repositório guarda só o mp3 final em frontend/public/audio/.
+assets-src/audio/raw/
