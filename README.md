@@ -257,7 +257,7 @@ Instruções aninhadas não enfraquecem qualidade. Justifique dependências, con
 
 Use um implementador por worktree. Separe branches, diretórios, portas e bancos; revisão não autoriza editar a árvore de outro agente.
 
-Mantenha `docs/HANDOFF.md` com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos.
+Registre o handoff de cada PR num arquivo próprio em `docs/handoff/` (regras em `docs/handoff/README.md`), com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos. Só o PR de consolidação edita o `docs/HANDOFF.md`.
 
 ## 14. Entrega verificável
 

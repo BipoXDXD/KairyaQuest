@@ -1658,7 +1658,7 @@ IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
 | O que o produto deve ser? Qual a regra da spec sobre isto? | `README.md` — autoridade final |
 | Onde vai este arquivo? De que este diretório é responsável? Qual é o contrato HTTP? | **este documento** |
 | Como rodo o gate? O que ele mede, o que não mede, e o que ele **não** protege? | `docs/QUALITY.md` |
-| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` |
+| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` e os arquivos por PR de `docs/handoff/` |
 | Como trabalho aqui sem quebrar nada? | `AGENTS.md` (e `CLAUDE.md`, que o importa) |
 
 A fronteira entre este documento e os outros dois de `docs/`: **arquitetura**
