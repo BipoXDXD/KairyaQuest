@@ -104,11 +104,11 @@ export const ptBR = {
     'O prazo desta missão já terminou e ela não pode mais ser concluída.',
   'missions.completionFailure.unconfirmed.message': 'Não foi possível confirmar a conclusão.',
   'missions.completionFailure.unconfirmed.recovery':
-    'Tentar de novo é seguro: a missão não será concluída duas vezes.',
+    'Tentar de novo é seguro: nada será duplicado.',
   'missions.completionFailure.unconfirmed.timeout':
-    'Não foi possível concluir a missão: o servidor demorou demais para responder.',
+    'Não foi possível concluir a missão: o servidor demorou demais.',
   'missions.completionFailure.unconfirmed.network':
-    'Não foi possível concluir a missão: sem conexão com o servidor.',
+    'Não foi possível concluir a missão: sem conexão.',
   'missions.completionFailure.evidenceRejected.message': 'A evidência não foi aceita.',
   'missions.completionFailure.evidenceRejected.recovery': 'Revise o texto e o link.',
 
@@ -116,12 +116,10 @@ export const ptBR = {
   'missions.startFailure.expired.message':
     'O prazo desta missão já terminou e ela não pode mais ser iniciada.',
   'missions.startFailure.unconfirmed.message': 'Não foi possível confirmar o início.',
-  'missions.startFailure.unconfirmed.recovery':
-    'Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+  'missions.startFailure.unconfirmed.recovery': 'Tentar de novo é seguro: nada será duplicado.',
   'missions.startFailure.unconfirmed.timeout':
-    'Não foi possível iniciar a missão: o servidor demorou demais para responder.',
-  'missions.startFailure.unconfirmed.network':
-    'Não foi possível iniciar a missão: sem conexão com o servidor.',
+    'Não foi possível iniciar a missão: o servidor demorou demais.',
+  'missions.startFailure.unconfirmed.network': 'Não foi possível iniciar a missão: sem conexão.',
 
   'missions.rescheduleFailure.deadlinePassed.message': 'O novo prazo precisa estar no futuro.',
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Escolha uma data e um horário futuros.',
@@ -136,11 +134,11 @@ export const ptBR = {
     'O prazo desta missão vem do plano da semana e não pode ser reagendado.',
   'missions.rescheduleFailure.unconfirmed.message': 'Não foi possível confirmar o reagendamento.',
   'missions.rescheduleFailure.unconfirmed.recovery':
-    'Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    'Tentar de novo é seguro: nada será duplicado.',
   'missions.rescheduleFailure.unconfirmed.timeout':
-    'Não foi possível reagendar a missão: o servidor demorou demais para responder.',
+    'Não foi possível reagendar a missão: o servidor demorou demais.',
   'missions.rescheduleFailure.unconfirmed.network':
-    'Não foi possível reagendar a missão: sem conexão com o servidor.',
+    'Não foi possível reagendar a missão: sem conexão.',
   'missions.rescheduleFailure.notAccepted.message': 'O novo prazo não foi aceito.',
   'missions.rescheduleFailure.notAccepted.recovery': 'Revise a data e o motivo.',
 
@@ -156,12 +154,10 @@ export const ptBR = {
   'missions.evaluationFailure.timeout.message': 'A avaliação demorou demais.',
   'missions.evaluationFailure.invalidEvaluation.message': 'A Kairya respondeu fora da rubrica.',
   'missions.evaluationFailure.generic.message': 'Não foi possível pedir a avaliação.',
-  'missions.evaluationFailure.generic.recovery':
-    'Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+  'missions.evaluationFailure.generic.recovery': 'Tentar de novo é seguro: nada será duplicado.',
   'missions.evaluationFailure.generic.timeout':
-    'Não foi possível pedir a avaliação: o servidor demorou demais para responder.',
-  'missions.evaluationFailure.generic.network':
-    'Não foi possível pedir a avaliação: sem conexão com o servidor.',
+    'Não foi possível pedir a avaliação: o servidor demorou demais.',
+  'missions.evaluationFailure.generic.network': 'Não foi possível pedir a avaliação: sem conexão.',
 
   'tutoring.name': 'Kairya',
   'tutoring.panel.subtitle': 'sua tutora',
@@ -391,25 +387,25 @@ export const ptBR = {
     'O prazo desta proposta passa de 365 dias a partir de agora.',
   'tutoring.actionFailure.unconfirmedCreate.message': 'Não foi possível confirmar a missão.',
   'tutoring.actionFailure.unconfirmedCreate.recovery':
-    'Tentar de novo é seguro: a missão não será criada duas vezes.',
+    'Tentar de novo é seguro: nada será duplicado.',
   'tutoring.actionFailure.unconfirmedCreate.timeout':
-    'Não foi possível confirmar a missão: o servidor demorou demais para responder.',
+    'Não foi possível confirmar a missão: o servidor demorou demais.',
   'tutoring.actionFailure.unconfirmedCreate.network':
-    'Não foi possível confirmar a missão: sem conexão com o servidor.',
+    'Não foi possível confirmar a missão: sem conexão.',
   'tutoring.actionFailure.unconfirmedReschedule.message':
     'Não foi possível confirmar o reagendamento.',
   'tutoring.actionFailure.unconfirmedReschedule.recovery':
-    'Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    'Tentar de novo é seguro: nada será duplicado.',
   'tutoring.actionFailure.unconfirmedReschedule.timeout':
-    'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder.',
+    'Não foi possível confirmar o reagendamento: o servidor demorou demais.',
   'tutoring.actionFailure.unconfirmedReschedule.network':
-    'Não foi possível confirmar o reagendamento: sem conexão com o servidor.',
+    'Não foi possível confirmar o reagendamento: sem conexão.',
   'tutoring.actionFailure.unconfirmedReject.message': 'Não foi possível recusar a proposta.',
   'tutoring.actionFailure.unconfirmedReject.recovery': 'Tentar de novo é seguro.',
   'tutoring.actionFailure.unconfirmedReject.timeout':
-    'Não foi possível recusar a proposta: o servidor demorou demais para responder.',
+    'Não foi possível recusar a proposta: o servidor demorou demais.',
   'tutoring.actionFailure.unconfirmedReject.network':
-    'Não foi possível recusar a proposta: sem conexão com o servidor.',
+    'Não foi possível recusar a proposta: sem conexão.',
   'tutoring.actionFailure.failed.message': 'Esta proposta não pôde ser executada.',
 
   'progression.panel.title': 'Seu progresso — nível e conquistas',
