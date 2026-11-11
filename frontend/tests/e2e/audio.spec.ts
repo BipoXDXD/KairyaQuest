@@ -38,6 +38,7 @@ const DIA_CONVITE = 1
 const DIA_404 = 2
 const DIA_CORROMPIDO = 3
 const DIA_MOVIMENTO_REDUZIDO = 4
+const DIA_AUTOPLAY = 5
 
 const diaria = (numero: number) => ({
   instructions: `Diaria ${String(numero)} do audio (e2e ${EXECUCAO})`,
@@ -57,12 +58,54 @@ const FALA_PELO_TEXTO = new Map<string, LineId>(
   LINE_IDS.map((id) => [CATALOGS['pt-BR'][lineKey(id)], id]),
 )
 
+declare global {
+  interface Window {
+    /** Os `play`/`pause` dos elementos de audio (`<acao> <caminho>`), gravados pelos espioes. */
+    __audioLog: string[]
+  }
+}
+
+/**
+ * Espia `play` e `pause` de todo elemento de audio (roda no navegador, por
+ * `addInitScript`: nao pode usar nada deste modulo). Com `bloquear`, o `play`
+ * rejeita como o autoplay bloqueado do navegador. O caminho vem de `src` (o
+ * que o app atribuiu: o `currentSrc` so se atualiza depois da selecao do
+ * recurso e fica velho num `play` rejeitado); sem nenhum dos dois fica vazio.
+ */
+function espiarAudio(bloquear: boolean): void {
+  const registro: string[] = []
+  window.__audioLog = registro
+  const caminho = (elemento: HTMLMediaElement): string => {
+    const origem = elemento.src || elemento.currentSrc
+    return origem === '' ? '' : new URL(origem).pathname
+  }
+  const proto = HTMLMediaElement.prototype
+  const tocar = proto.play
+  proto.play = function (this: HTMLMediaElement) {
+    registro.push(`play ${caminho(this)}`)
+    return bloquear
+      ? Promise.reject(new DOMException('blocked', 'NotAllowedError'))
+      : tocar.call(this)
+  }
+  const pausar = proto.pause
+  proto.pause = function (this: HTMLMediaElement) {
+    registro.push(`pause ${caminho(this)}`)
+    pausar.call(this)
+  }
+}
+
+test('o catalogo pt-BR nao repete texto de fala (a legenda identifica a fala pelo texto)', () => {
+  const textos = LINE_IDS.map((id) => CATALOGS['pt-BR'][lineKey(id)])
+  expect(new Set(textos).size).toBe(textos.length)
+})
+
 let api: APIRequestContext
 
 test.use({
   storageState: { cookies: [], origins: [] },
   timezoneId: 'America/Sao_Paulo',
 })
+// Serial: os testes compartilham o banco (o plano semeado e as diarias concluidas, uma por dia) e o relogio da API.
 test.describe.configure({ mode: 'serial' })
 
 async function fixarRelogioDaApi(instante: string): Promise<void> {
@@ -266,9 +309,14 @@ for (const falha of FALHAS) {
     // `Math.random` (como o `vi.spyOn` que o `noMathRandom.test.ts` permite):
     // o sorteio deixa de variar entre execucoes, que e o que a regra protege.
     await page.addInitScript(() => {
+      // Chamadas: 0 saudacao, 1 diaria, 2 a 4 avulsas A, B, A, 5 avulsa D com
+      // uma fala nova (semente 2), o ponto de sincronia depois da repeticao.
       let chamadas = 0
       Object.defineProperty(Math, 'random', {
-        value: () => (chamadas++ % 2 === 0 ? 0 : 2 ** -31),
+        value: () => {
+          const indice = chamadas++
+          return (indice === 5 ? 2 : indice % 2) * 2 ** -31
+        },
       })
     })
     // Nivel novo e conquista tomam a fala por prioridade e somam eventos (cada
@@ -286,6 +334,7 @@ for (const falha of FALHAS) {
       await semearAvulsa(`Avulsa A de ${falha.nome}`),
       await semearAvulsa(`Avulsa B de ${falha.nome}`),
       await semearAvulsa(`Avulsa C de ${falha.nome}`),
+      await semearAvulsa(`Avulsa D de ${falha.nome}`),
     ] as const
     await page.goto('/')
 
@@ -301,7 +350,7 @@ for (const falha of FALHAS) {
     // anda os 3 s do rosto antes de cada conclusao, sem espera real.
     await page.clock.runFor(CELEBRACAO_MS)
 
-    // Evento repetido, sem recarregar: A, B, A.
+    // Evento repetido, sem recarregar: A, B, A e depois uma fala nova (D).
     const falas: LineId[] = []
     for (const [indice, instrucao] of avulsas.entries()) {
       await concluirAvulsa(page, instrucao)
@@ -328,17 +377,19 @@ for (const falha of FALHAS) {
       if (fala === null) throw new Error('a legenda da conclusao saiu do catalogo')
       falas.push(fala)
       await page.clock.runFor(CELEBRACAO_MS)
-      if (indice < 2) {
+      if (indice !== 2) {
         await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${fala}.mp3`)).toBe(1)
       }
     }
-    const [primeira, segunda, terceira] = falas
+    const [primeira, segunda, terceira, quarta] = falas
     expect(terceira, 'a 3a conclusao devia repetir a fala da 1a').toBe(primeira)
     expect(segunda).not.toBe(primeira)
+    expect([primeira, segunda]).not.toContain(quarta)
     assertSameLineIsNotRetried(
       observacao,
       `${PASTA_DAS_FALAS}${primeira ?? ''}.mp3`,
       `${PASTA_DAS_FALAS}${segunda ?? ''}.mp3`,
+      `${PASTA_DAS_FALAS}${quarta ?? ''}.mp3`,
     )
 
     // Cada fala que falhou avisou uma unica vez na sessao.
@@ -351,11 +402,25 @@ for (const falha of FALHAS) {
 }
 
 /**
- * A repeticao da fala (`primeiro`) nao gera pedido novo. Ela so vale como prova
- * se um pedido de OUTRO caminho de voz (`outro`) veio depois do primeiro: sem
- * isso, o canal de voz nunca trocou de arquivo e nada foi testado.
+ * A repeticao da fala (`primeiro`) nao gera pedido novo. So vale como prova se
+ * um pedido de OUTRO caminho de voz (`outro`) veio depois do primeiro (o canal
+ * trocou de arquivo) e se a contagem foi lida DEPOIS de um evento posterior
+ * observado (a fala `posterior`, ja pedida e avisada): um retry assincrono da
+ * primeira teria chegado antes dela.
  */
-function assertSameLineIsNotRetried(observacao: Observacao, primeiro: string, outro: string): void {
+function assertSameLineIsNotRetried(
+  observacao: Observacao,
+  primeiro: string,
+  outro: string,
+  posterior: string,
+): void {
+  expect(
+    pedidosDe(observacao, posterior),
+    'a fala posterior nao foi pedida',
+  ).toBeGreaterThanOrEqual(1)
+  expect(observacao.audio.lastIndexOf(posterior)).toBeGreaterThan(
+    observacao.audio.lastIndexOf(primeiro),
+  )
   const ultimoDoPrimeiro = observacao.audio.lastIndexOf(primeiro)
   const primeiroDoOutro = observacao.audio.indexOf(outro)
   expect(ultimoDoPrimeiro, 'a primeira fala nao foi pedida').toBeGreaterThanOrEqual(0)
@@ -366,17 +431,40 @@ function assertSameLineIsNotRetried(observacao: Observacao, primeiro: string, ou
   expect(pedidosDe(observacao, primeiro)).toBe(1)
 }
 
-test('autoplay bloqueado: um unico aviso e nenhum erro', async ({ page }) => {
+test('autoplay bloqueado: um unico aviso, uma tentativa por fala e nenhum erro', async ({
+  page,
+}) => {
   const observacao = observar(page)
   await ligarSom(page)
-  await page.addInitScript(() => {
-    HTMLMediaElement.prototype.play = () =>
-      Promise.reject(new DOMException('blocked', 'NotAllowedError'))
-  })
+  await page.addInitScript(espiarAudio, true)
+  await instalarRelogio(page, manhaDoDia(DIA_AUTOPLAY))
   await page.goto('/')
 
   await expect(bolha(page)).toBeVisible()
+  const saudacao = await falaDaLegenda(page)
+  expect(saudacao, 'a legenda da saudacao nao e uma fala do catalogo').not.toBeNull()
+  const jogadasDe = async (caminho: string) =>
+    (await page.evaluate(() => window.__audioLog)).filter(
+      (entrada) => entrada === `play ${caminho}`,
+    ).length
+  const caminhoDaSaudacao = `${PASTA_DAS_FALAS}${saudacao ?? ''}.mp3`
   await expect.poll(() => observacao.avisos).toEqual([AUTOPLAY_BLOCKED_WARNING])
+  await expect.poll(() => jogadasDe(caminhoDaSaudacao)).toBe(1)
+
+  // Um evento posterior: a conclusao da diaria fala outra fala, tambem bloqueada.
+  await concluirADiaria(page, DIA_AUTOPLAY)
+  await expect
+    .poll(async () => {
+      const atual = await falaDaLegenda(page)
+      return atual !== null && atual !== saudacao
+    })
+    .toBe(true)
+  const posterior = `${PASTA_DAS_FALAS}${(await falaDaLegenda(page)) ?? ''}.mp3`
+  await expect.poll(() => jogadasDe(posterior)).toBe(1)
+
+  // Sem laco: cada fala tentou uma vez e o aviso continua um so.
+  expect(await jogadasDe(caminhoDaSaudacao)).toBe(1)
+  expect(observacao.avisos).toEqual([AUTOPLAY_BLOCKED_WARNING])
   expect(observacao.erros).toEqual([])
 })
 
@@ -402,22 +490,12 @@ test.describe('no celular', () => {
   test('a folha da tutora corta a voz e fechar nao a retoma', async ({ page }) => {
     const observacao = observar(page)
     await ligarSom(page)
-    await page.addInitScript(() => {
-      const registro: string[] = []
-      Object.defineProperty(window, '__audioLog', { value: registro })
-      for (const nome of ['play', 'pause'] as const) {
-        const original = HTMLMediaElement.prototype[nome]
-        HTMLMediaElement.prototype[nome] = function (this: HTMLMediaElement) {
-          registro.push(`${nome} ${new URL(this.src).pathname}`)
-          return original.call(this) as never
-        }
-      }
-    })
+    await page.addInitScript(espiarAudio, false)
     // So o canal da voz: o efeito `panel_open` toca no canal dele, ao abrir a folha.
     const registroDaVoz = async () =>
-      (
-        await page.evaluate(() => (window as unknown as { __audioLog: string[] }).__audioLog)
-      ).filter((entrada) => entrada.includes(PASTA_DAS_FALAS))
+      (await page.evaluate(() => window.__audioLog)).filter((entrada) =>
+        entrada.includes(PASTA_DAS_FALAS),
+      )
     const jogadas = async () =>
       (await registroDaVoz()).filter((entrada) => entrada.startsWith('play ')).length
     await page.goto('/')
