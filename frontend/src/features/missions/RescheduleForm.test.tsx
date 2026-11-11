@@ -224,7 +224,7 @@ describe('RescheduleForm', () => {
     rerender({ failure: falhaRetry, pendingRetry: enviado() })
 
     expect(screen.getByTestId('reschedule-error')).toHaveTextContent(
-      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: nada será duplicado.',
     )
     const aviso = screen.getByTestId('reschedule-retry-notice')
     expect(aviso).toHaveTextContent(

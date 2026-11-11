@@ -98,7 +98,7 @@ describe('describeEvaluationFailure', () => {
       message: 'missions.evaluationFailure.generic.network',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível pedir a avaliação: sem conexão com o servidor. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+      'Não foi possível pedir a avaliação: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 
@@ -109,7 +109,7 @@ describe('describeEvaluationFailure', () => {
       message: 'missions.evaluationFailure.generic.timeout',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível pedir a avaliação: o servidor demorou demais para responder. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+      'Não foi possível pedir a avaliação: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 
