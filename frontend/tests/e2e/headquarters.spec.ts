@@ -425,7 +425,11 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
 
   // A tela nao sabe se concluiu, e diz isso -- num alerta que o axe audita.
-  await expect(item.getByRole('alert')).toContainText('Tentar de novo é seguro')
+  // O texto inteiro: a acao que falhou, a causa (o `route.abort()` e falha de
+  // rede) e o porque de repetir ser seguro.
+  await expect(item.getByRole('alert')).toHaveText(
+    'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+  )
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])
 
