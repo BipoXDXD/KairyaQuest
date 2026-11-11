@@ -1,4 +1,4 @@
-import { LanternTrail } from '../features/campaigns/LanternTrail'
+import { LanternTrail } from '../features/campaigns'
 import { useT } from '../shared/i18n/useT'
 import { AreaHero } from './AreaHero'
 import { CAMPAIGNS_HEADING_ID } from './headings'
