@@ -2,60 +2,69 @@ import { useImperativeHandle, type ReactElement, type Ref } from 'react'
 import { formatUnlockedAt } from './unlockedDate'
 import type { Achievement, Progress } from './types'
 import { useProgress, type ProgressState } from './useProgress'
+import { formatXp } from './xpFormat'
+import { achievementText } from '../../shared/i18n/achievementText'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 
 export interface ProgressPanelHandle {
   refresh: () => void
 }
 
-const xpFormat = new Intl.NumberFormat('pt-BR')
-
 function AchievementItem({ achievement }: { achievement: Achievement }): ReactElement {
-  const unlocked = achievement.unlocked_at !== null
+  const t = useT()
+  const { locale } = useLocale()
+  const { title, description } = achievementText(achievement, t)
+  const unlockedAt = achievement.unlocked_at
   return (
     <li
       data-testid="progress-achievement"
       data-code={achievement.code}
-      data-unlocked={String(unlocked)}
+      data-unlocked={String(unlockedAt !== null)}
       className={
-        unlocked
+        unlockedAt !== null
           ? 'rounded border border-emerald-400/60 p-2 text-sm text-slate-100'
           : 'rounded border border-slate-700 p-2 text-sm text-slate-400'
       }
     >
-      <span aria-hidden="true">{unlocked ? '★' : '🔒'}</span>{' '}
-      <span className="font-medium">{achievement.title}</span>
+      <span aria-hidden="true">{unlockedAt !== null ? '★' : '🔒'}</span>{' '}
+      <span className="font-medium">{title}</span>
       <p className="mt-1">
-        {unlocked
-          ? `Conquistada em ${formatUnlockedAt(achievement.unlocked_at!)}`
-          : `Bloqueada: ${achievement.description}`}
+        {unlockedAt !== null
+          ? t('progression.achievement.unlockedOn', {
+              date: formatUnlockedAt(unlockedAt, locale),
+            })
+          : t('progression.achievement.locked', { description })}
       </p>
     </li>
   )
 }
 
 function Loaded({ progress }: { progress: Progress }): ReactElement {
+  const t = useT()
+  const { locale } = useLocale()
   const span = progress.next_level_xp - progress.level_floor_xp
   const into = progress.xp_total - progress.level_floor_xp
-  const nextLevel = `até o nível ${String(progress.level + 1)}`
+  const nextLevel = progress.level + 1
+  const amounts = { into: formatXp(into, locale), span: formatXp(span, locale) }
   // o aria-label da barra ja diz o nivel; o valor anunciado fica so com o XP, sem repetir o sufixo
-  const valueText = `${xpFormat.format(into)} de ${xpFormat.format(span)} XP`
-  const text = `${valueText} ${nextLevel}`
+  const valueText = t('progression.bar.valueText', amounts)
   return (
     <div className="rpg-progress-content">
       <p
         data-testid="progress-level"
         className="progress-level-value text-xl font-bold text-slate-50"
       >
-        Nível {progress.level}
+        {t('progression.level', { level: progress.level })}
       </p>
       <p data-testid="progress-total" className="progress-total-value text-sm text-slate-300">
-        {xpFormat.format(progress.xp_total)} XP no total
+        {t('progression.xpTotal', { xp: formatXp(progress.xp_total, locale) })}
       </p>
       <div
         role="progressbar"
         data-testid="progress-bar"
-        aria-label={`Progresso ${nextLevel}`}
+        aria-label={t('progression.bar.label', { level: nextLevel })}
         aria-valuemin={0}
         aria-valuemax={span}
         aria-valuenow={into}
@@ -69,11 +78,13 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       </div>
       {/* nome e valor da barra ja dizem este texto: fora da arvore, para nao ser lido duas vezes */}
       <p data-testid="progress-bar-text" aria-hidden="true" className="mt-1 text-sm text-slate-300">
-        {text}
+        {t('progression.bar.text', { ...amounts, level: nextLevel })}
       </p>
       <details className="progress-achievements">
         <summary>
-          <h3 className="inline text-sm font-semibold text-slate-200">Conquistas</h3>
+          <h3 className="inline text-sm font-semibold text-slate-200">
+            {t('progression.achievements.title')}
+          </h3>
         </summary>
         <ul role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
           {progress.achievements.map((a) => (
@@ -92,18 +103,22 @@ function ProgressContent({
   state: ProgressState
   onReload: () => void
 }): ReactElement {
+  const t = useT()
   switch (state.status) {
     case 'loading':
       return (
         <p role="status" data-testid="progress-loading" className="text-sm text-slate-400">
-          Consultando o seu progresso…
+          {t('progression.panel.loading')}
         </p>
       )
     case 'error':
       return (
         <div role="alert" data-testid="progress-error" className="text-sm text-red-300">
           <p>
-            <LoadFailureMessage failure={state.failure} />
+            <LoadFailureMessage
+              failure={state.failure}
+              unexpected="progression.panel.unexpectedFailure"
+            />
           </p>
           <button
             type="button"
@@ -111,7 +126,7 @@ function ProgressContent({
             onClick={onReload}
             className="mt-2 rounded border border-red-300/60 px-3 py-1 font-medium"
           >
-            Tentar novamente
+            {t('progression.panel.retry')}
           </button>
         </div>
       )
@@ -121,14 +136,14 @@ function ProgressContent({
           <Loaded progress={state.progress} />
           {state.refreshFailed && (
             <div role="alert" data-testid="progress-stale" className="mt-2 text-sm text-amber-200">
-              <p>Não foi possível atualizar o progresso.</p>
+              <p>{t('progression.panel.refreshFailed')}</p>
               <button
                 type="button"
                 data-testid="progress-refresh"
                 onClick={onReload}
                 className="mt-2 rounded border border-amber-300/60 px-3 py-1 font-medium text-amber-100"
               >
-                Atualizar
+                {t('progression.panel.refresh')}
               </button>
             </div>
           )}
@@ -143,6 +158,7 @@ function ProgressContent({
  * (decisao P3: `refresh`, silencioso), como ja faz com o quadro.
  */
 export function ProgressPanel({ ref }: { ref?: Ref<ProgressPanelHandle> }) {
+  const t = useT()
   const { state, reload, refresh } = useProgress()
   useImperativeHandle(ref, () => ({ refresh }), [refresh])
   return (
@@ -152,7 +168,7 @@ export function ProgressPanel({ ref }: { ref?: Ref<ProgressPanelHandle> }) {
       className="rpg-progress mb-8"
     >
       <h2 id="progress-heading" className="mb-3 text-lg font-semibold text-slate-200">
-        Seu progresso — nível e conquistas
+        {t('progression.panel.title')}
       </h2>
       <ProgressContent state={state} onReload={reload} />
     </section>

@@ -1,5 +1,8 @@
+import type { Locale } from '../i18n/locale'
+import { formatterPerLocale } from './formatterPerLocale'
+
 /**
- * Formatador do prazo, criado UMA vez fora de qualquer componente.
+ * As opcoes do formatador do prazo.
  *
  * O prazo chega como string ISO com fuso, entao `new Date(...)` produz o
  * instante certo -- nunca se deve cortar a string na mao para formatar.
@@ -8,31 +11,37 @@
  * o README §8 manda ("apresente em America/Sao_Paulo") e o que a decisao A3 da
  * spec repete. Sem o `timeZone`, o `Intl` usaria o fuso do navegador, e a
  * mesma missao mostraria dias diferentes para quem estivesse fora de SP. O
- * instante original continua exposto no atributo `dateTime` do `<time>`.
+ * instante original continua exposto no atributo `dateTime` do `<time>`. O
+ * idioma muda so a ordem e o relogio (24 h em `pt-BR`, 12 h em `en`), nunca o
+ * fuso.
  *
  * Quem guarda esta escolha e o teste de unidade com um instante em que SP e
  * UTC caem em dias diferentes, rodando com o processo fixado em `Asia/Tokyo`
  * (ver `vite.config.ts`) -- sem a fixacao, numa maquina em SP, o teste passaria
  * sem o `timeZone`.
  */
-const deadlineFormatter = new Intl.DateTimeFormat('pt-BR', {
+const DEADLINE_OPTIONS: Intl.DateTimeFormatOptions = {
   timeZone: 'America/Sao_Paulo',
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-})
+}
+
+const deadlineFormatter = formatterPerLocale(DEADLINE_OPTIONS)
 
 /**
- * O prazo como a pessoa le: em `America/Sao_Paulo` (README §8, decisao A3).
+ * O prazo como a pessoa le: em `America/Sao_Paulo` (README §8, decisao A3), no
+ * idioma pedido.
  *
  * Mora em `shared/lib/` porque tem dois usuarios reais -- o cartao da missao e
  * o cartao da proposta da Kairya -- e a regra do fuso e UMA (`docs/ARCHITECTURE.md`
- * §5, regra 3). Uma copia por feature seria a segunda regra para divergir.
+ * §5, regra 3). Uma copia por feature seria a segunda regra para divergir. O
+ * idioma chega por parametro: quem chama o obtem de `useLocale()`.
  */
-export function formatDeadline(iso: string): string {
-  return deadlineFormatter.format(new Date(iso))
+export function formatDeadline(iso: string, locale: Locale): string {
+  return deadlineFormatter(locale).format(new Date(iso))
 }
 
 const SAO_PAULO = 'America/Sao_Paulo'

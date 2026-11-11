@@ -1,4 +1,5 @@
 import { CampaignTrail } from '../features/campaigns/CampaignTrail'
+import { useT } from '../shared/i18n/useT'
 import { CAMPAIGNS_HEADING_ID } from './headings'
 
 /**
@@ -19,23 +20,22 @@ export function Campaigns({
 }: {
   onOpenHeadquarters?: () => void
 } = {}) {
+  const t = useT()
   return (
     <main
       data-testid="campaigns"
       className="rpg-main campaigns-main mx-auto w-full max-w-3xl px-4 py-8"
     >
       <header className="rpg-hero rpg-hero-citadel mb-6">
-        <p className="rpg-eyebrow">O próximo capítulo</p>
+        <p className="rpg-eyebrow">{t('campaigns.page.eyebrow')}</p>
         <h1
           id={CAMPAIGNS_HEADING_ID}
           tabIndex={-1}
           className="rounded text-2xl font-bold tracking-tight text-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
         >
-          Campanhas — planos de estudo
+          {t('campaigns.page.title')}
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          A semana inteira, dia a dia, e a missão especial.
-        </p>
+        <p className="mt-1 text-sm text-slate-400">{t('campaigns.page.subtitle')}</p>
       </header>
       <CampaignTrail onOpenHeadquarters={onOpenHeadquarters} />
     </main>

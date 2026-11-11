@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, MAX_LINK_LENGTH } from './evidenceLimit'
 
-const LINK_ERROR = 'O link precisa começar com http:// ou https:// e não ter espaços.'
+const LINK_ERROR = 'format'
 
 describe('describeEvidence -- o texto', () => {
   it.each([
@@ -20,21 +20,21 @@ describe('describeEvidence -- o texto', () => {
     const result = describeEvidence({ text: '🔥'.repeat(MAX_EVIDENCE_LENGTH), link: '' })
 
     expect(result.sendable).toBe(true)
-    expect(result.counter).toBe('Restam 0 caracteres.')
+    expect(result.counter).toEqual({ kind: 'remaining', n: 0 })
   })
 
   it('recusa um ponto de codigo acima do limite e diz quanto passou', () => {
     const result = describeEvidence({ text: '🔥'.repeat(MAX_EVIDENCE_LENGTH + 1), link: '' })
 
     expect(result.sendable).toBe(false)
-    expect(result.counter).toBe('Passou 1 caractere do limite de 4000.')
+    expect(result.counter).toEqual({ kind: 'over', n: 1 })
     expect(result.body).toBeNull()
   })
 
   it('pluraliza o quanto passou', () => {
     const result = describeEvidence({ text: 'a'.repeat(MAX_EVIDENCE_LENGTH + 2), link: '' })
 
-    expect(result.counter).toBe('Passou 2 caracteres do limite de 4000.')
+    expect(result.counter).toEqual({ kind: 'over', n: 2 })
   })
 
   it('mede o texto sem os espacos das pontas', () => {
@@ -77,7 +77,7 @@ describe('describeEvidence -- o texto', () => {
 
     const acima = describeEvidence({ text: `\u0085${corpo}a\u0085`, link: '' })
     expect(acima.sendable).toBe(false)
-    expect(acima.counter).toBe('Passou 1 caractere do limite de 4000.')
+    expect(acima.counter).toEqual({ kind: 'over', n: 1 })
   })
 
   it('conta pontos de codigo, e nao grafemas: marca combinante e ZWJ', () => {
@@ -91,15 +91,16 @@ describe('describeEvidence -- o texto', () => {
 
   it('nao mostra contador abaixo de 90% do limite, e mostra a partir dele', () => {
     expect(describeEvidence({ text: 'a'.repeat(3599), link: '' }).counter).toBeNull()
-    expect(describeEvidence({ text: 'a'.repeat(3600), link: '' }).counter).toBe(
-      'Restam 400 caracteres.',
-    )
+    expect(describeEvidence({ text: 'a'.repeat(3600), link: '' }).counter).toEqual({
+      kind: 'remaining',
+      n: 400,
+    })
   })
 
   it('singulariza o que resta', () => {
     const result = describeEvidence({ text: 'a'.repeat(MAX_EVIDENCE_LENGTH - 1), link: '' })
 
-    expect(result.counter).toBe('Resta 1 caractere.')
+    expect(result.counter).toEqual({ kind: 'remaining', n: 1 })
   })
 
   it('o corpo leva o texto sem as pontas', () => {
@@ -145,7 +146,7 @@ describe('describeEvidence -- o link', () => {
 
     const acima = describeEvidence({ text: 'Feito', link: `${noLimite}a` })
     expect(acima.sendable).toBe(false)
-    expect(acima.linkError).toBe('O link passa de 2000 caracteres.')
+    expect(acima.linkError).toBe('tooLong')
   })
 
   it.each([

@@ -1825,11 +1825,12 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       )
       expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
       const linha = within(card(7)).getByTestId('mission-started-at')
-      expect(linha).toHaveTextContent(`Iniciada em ${formatDeadline(iniciada.started_at ?? '')}`)
-      expect(within(linha).getByText(formatDeadline(iniciada.started_at ?? ''))).toHaveAttribute(
-        'dateTime',
-        iniciada.started_at,
+      expect(linha).toHaveTextContent(
+        `Iniciada em ${formatDeadline(iniciada.started_at ?? '', 'pt-BR')}`,
       )
+      expect(
+        within(linha).getByText(formatDeadline(iniciada.started_at ?? '', 'pt-BR')),
+      ).toHaveAttribute('dateTime', iniciada.started_at)
       expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
       // O Concluir continua ali, em andamento.
       expect(within(card(7)).getByTestId('mission-complete')).toBeEnabled()
@@ -2055,7 +2056,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       })
 
       const prazo = within(card(7)).getByTestId('mission-deadline')
-      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline))
+      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline, 'pt-BR'))
       expect(prazo).toHaveAttribute('dateTime', reagendada.deadline)
       const toggle = within(card(7)).getByRole('button', { name: 'Reagendar prazo' })
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -2065,7 +2066,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'Reagendada 1 vez',
       )
       expect(within(card(7)).getByTestId('mission-reschedule-entry')).toHaveTextContent(
-        `${formatDeadline(pendente.deadline)} → ${formatDeadline(reagendada.deadline)} · Falta de tempo · por você`,
+        `${formatDeadline(pendente.deadline, 'pt-BR')} → ${formatDeadline(reagendada.deadline, 'pt-BR')} · Falta de tempo · por você`,
       )
     })
 
