@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { jsonBody, pendingUntilAborted, requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { ApiError } from './client'
 import { fetchMe, saveLocale } from './me'
 
@@ -51,15 +51,22 @@ describe('me', () => {
       expect(erro).toMatchObject({ message: 'A resposta chegou num formato inesperado.' })
     })
 
-    it('repassa o signal ao pedido', async () => {
-      const mock = routeFetch({
-        'GET /api/me': () => Response.json({ display_name: 'A', locale: 'en' }),
-      })
+    it('o abort do signal recebido chega ao pedido', async () => {
+      // O cliente pode combinar o signal de quem chama com o prazo do GET, entao
+      // o `fetch` nao recebe o mesmo objeto: o que se confere e o efeito.
+      const mock = routeFetch({ 'GET /api/me': pendingUntilAborted })
       const controller = new AbortController()
 
-      await fetchMe(controller.signal)
+      const pending = fetchMe(controller.signal).then(
+        () => null,
+        (error: unknown) => error,
+      )
+      const pedido = requestsTo(mock, 'GET /api/me')[0]
+      expect(pedido?.signal?.aborted).toBe(false)
+      controller.abort()
 
-      expect(requestsTo(mock, 'GET /api/me')[0]?.signal).toBe(controller.signal)
+      expect(await pending).toBeInstanceOf(ApiError)
+      expect(pedido?.signal?.aborted).toBe(true)
     })
   })
 
