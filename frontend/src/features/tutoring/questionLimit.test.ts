@@ -29,7 +29,7 @@ describe('describeQuestionLength', () => {
   })
 
   it('no limiar, o contador aparece com os restantes', () => {
-    expect(describeQuestionLength('a'.repeat(3600)).counter).toBe('Restam 400 caracteres.')
+    expect(describeQuestionLength('a'.repeat(3600)).counter).toEqual({ kind: 'remaining', n: 400 })
   })
 
   it('no limite exato ainda e enviavel', () => {
@@ -37,12 +37,12 @@ describe('describeQuestionLength', () => {
       length: 4000,
       remaining: 0,
       sendable: true,
-      counter: 'Restam 0 caracteres.',
+      counter: { kind: 'remaining', n: 0 },
     })
   })
 
   it('um caractere restante no singular', () => {
-    expect(describeQuestionLength('a'.repeat(3999)).counter).toBe('Resta 1 caractere.')
+    expect(describeQuestionLength('a'.repeat(3999)).counter).toEqual({ kind: 'remaining', n: 1 })
   })
 
   it('acima do limite: nao enviavel, e o contador diz quanto passou', () => {
@@ -50,11 +50,17 @@ describe('describeQuestionLength', () => {
       length: 4012,
       remaining: -12,
       sendable: false,
-      counter: 'Passou 12 caracteres do limite de 4000.',
+      counter: { kind: 'over', n: 12 },
     })
-    expect(describeQuestionLength('a'.repeat(4001)).counter).toBe(
-      'Passou 1 caractere do limite de 4000.',
-    )
+  })
+
+  it('um caractere acima do limite: o off point entre restantes e excesso', () => {
+    expect(describeQuestionLength('a'.repeat(4001))).toEqual({
+      length: 4001,
+      remaining: -1,
+      sendable: false,
+      counter: { kind: 'over', n: 1 },
+    })
   })
 
   it('conta pontos de codigo, como o len() do Python', () => {

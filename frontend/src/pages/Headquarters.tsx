@@ -74,8 +74,8 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
         <AreaHero
           scene="hq"
           headingId={HEADQUARTERS_HEADING_ID}
-          title={t('headquarters.hero.title')}
-          note={t('headquarters.hero.note')}
+          title={t('headquarters.header.title')}
+          note={t('headquarters.header.subtitle')}
         />
         <ProgressPanel ref={progress} />
         <CycleSection ref={cycle} onMissionCompleted={refreshProgress} />

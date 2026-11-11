@@ -90,12 +90,14 @@ describe('useDecideAction', () => {
       result.current.decision.confirm()
     })
 
+    // O estado entra no `waitFor`: o `then` do hook chama os callbacks fora de
+    // `act`, e o render com `idle` pode chegar depois deles.
     await waitFor(() => {
-      expect(missionCreated).toHaveBeenCalledTimes(1)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(missionCreated).toHaveBeenCalledTimes(1)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it('D2 a falha de rede mantem a chave para o reenvio', async () => {
@@ -111,9 +113,9 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message:
-          'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
-        recovery: 'retry',
+        message: 'tutoring.actionFailure.unconfirmedCreate.network',
+        recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+        action: 'retry',
       },
       attempted: 'confirm',
     })
@@ -144,7 +146,7 @@ describe('useDecideAction', () => {
       expect(result.current.decision.state.status).toBe('failed')
     })
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'retry-with-new-operation' },
+      failure: { action: 'retry-with-new-operation' },
       attempted: 'confirm',
     })
 
@@ -175,7 +177,7 @@ describe('useDecideAction', () => {
     })
     expect(missionCreated).not.toHaveBeenCalled()
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'expired' },
+      failure: { action: 'expired' },
       attempted: 'confirm',
     })
     // Sem outra ida a rede: o 422 ja diz o que o servidor gravou.
@@ -202,7 +204,7 @@ describe('useDecideAction', () => {
       })
       expect(missionCreated).not.toHaveBeenCalled()
       expect(result.current.decision.state).toMatchObject({
-        failure: { recovery: 'out-of-bounds' },
+        failure: { action: 'out-of-bounds' },
         attempted: 'confirm',
       })
       expect(result.current.keys.operationIdFor(5)).toBe(K2)
@@ -224,7 +226,7 @@ describe('useDecideAction', () => {
       })
 
       expect(result.current.decision.state).toMatchObject({
-        failure: { recovery: 'refresh' },
+        failure: { action: 'refresh' },
         attempted: 'confirm',
       })
       expect(result.current.keys.operationIdFor(5)).toBe(K2)
@@ -240,13 +242,13 @@ describe('useDecideAction', () => {
     act(() => {
       result.current.decision.reject()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
-
+    expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
     expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual([{}])
     expect(missionCreated).not.toHaveBeenCalled()
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
     // Recusar nao gasta chave nenhuma.
     expect(crypto.randomUUID).not.toHaveBeenCalled()
   })
@@ -265,8 +267,9 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível conectar. Tentar de novo é seguro.',
-        recovery: 'retry',
+        message: 'tutoring.actionFailure.unconfirmedReject.network',
+        recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
+        action: 'retry',
       },
       attempted: 'reject',
     })
@@ -328,7 +331,7 @@ describe('useDecideAction', () => {
     })
     expect(missionCreated).not.toHaveBeenCalled()
     expect(result.current.decision.state).toMatchObject({
-      failure: { recovery: 'invalidated' },
+      failure: { action: 'invalidated' },
       attempted: 'confirm',
     })
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
@@ -357,7 +360,7 @@ describe('useDecideAction', () => {
     })
     expect(result.current.decision.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
       attempted: 'confirm',
     })
     expect(missionCreated).not.toHaveBeenCalled()
@@ -393,7 +396,7 @@ describe('useDecideAction', () => {
 
     expect(result.current.decision.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
       attempted: 'reject',
     })
     expect(changed).not.toHaveBeenCalled()
@@ -469,12 +472,13 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
     act(() => {
       result.current.decision.confirm()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(missionCreated).toHaveBeenCalledTimes(1)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it.each(['confirm', 'reject'] as const)(
@@ -501,17 +505,18 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
       expect(result.current.decision.state).toMatchObject({
         status: 'failed',
         attempted: 'reject',
-        failure: { recovery: 'retry' },
+        failure: { action: 'retry' },
       })
       expect(changed).not.toHaveBeenCalled()
       act(() => {
         result.current.decision[proxima]()
       })
       const acao = proxima === 'confirm' ? executada : recusada
+      // O estado entra no `waitFor` pelo mesmo motivo do D1.
       await waitFor(() => {
-        expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+        expect(result.current.decision.state).toEqual({ status: 'idle' })
       })
-      expect(result.current.decision.state).toEqual({ status: 'idle' })
+      expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
       expect(fetchMock).toHaveBeenCalledTimes(2)
       expect(sentKeys(fetchMock)).toEqual(proxima === 'confirm' ? [{ operation_id: K1 }] : [])
       expect(missionCreated).toHaveBeenCalledTimes(proxima === 'confirm' ? 1 : 0)

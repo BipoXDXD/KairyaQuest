@@ -1,13 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, ApiTimeoutError } from '../../shared/api/client'
-import { describeEvaluationErrorCode, describeEvaluationFailure } from './evaluationFailure'
+import { ptBR } from '../../shared/i18n/messages/pt-BR'
+import {
+  describeEvaluationErrorCode,
+  describeEvaluationFailure,
+  EVALUATION_FAILURE_BY_CODE,
+} from './evaluationFailure'
 
-// Escrita por extenso, e nao importada do modulo: se a mensagem generica
+// Escrita por extenso, e nao importada do modulo: se a falha generica
 // mudasse por engano, um teste que a importasse concordaria com ela.
 const GENERIC = {
-  message:
-    'Não foi possível pedir a avaliação. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
-  recovery: 'retry',
+  message: 'missions.evaluationFailure.generic.message',
+  recovery: 'missions.evaluationFailure.generic.recovery',
+  action: 'retry',
+}
+
+const NOT_FOUND = {
+  message: 'missions.failure.notAvailable',
+  recovery: 'missions.failure.refresh',
+  action: 'refresh',
+}
+
+const TIMEOUT = {
+  message: 'missions.evaluationFailure.timeout.message',
+  recovery: 'missions.failure.tryAgain',
+  action: 'retry',
 }
 
 describe('describeEvaluationFailure', () => {
@@ -15,47 +32,56 @@ describe('describeEvaluationFailure', () => {
     [
       'sem_evidencia',
       {
-        message:
-          'Esta missão não tem evidência para a Kairya avaliar. Atualize para ver o estado atual.',
-        recovery: 'refresh',
+        message: 'missions.evaluationFailure.noEvidence.message',
+        recovery: 'missions.failure.refresh',
+        action: 'refresh',
       },
     ],
     [
       'avaliacao_em_andamento',
       {
-        message: 'A Kairya já está avaliando esta entrega. Tente de novo em instantes.',
-        recovery: 'retry',
+        message: 'missions.evaluationFailure.inProgress.message',
+        recovery: 'missions.evaluationFailure.inProgress.recovery',
+        action: 'retry',
       },
     ],
     [
       'provedor_nao_configurado',
       {
-        message: 'A Kairya está fora do ar: falta configurar o provedor.',
-        recovery: 'unavailable',
+        message: 'missions.evaluationFailure.providerNotConfigured.message',
+        recovery: 'missions.evaluationFailure.providerNotConfigured.recovery',
+        action: 'unavailable',
       },
     ],
     [
       'provedor_indisponivel',
-      { message: 'A Kairya não conseguiu avaliar agora. Tente de novo.', recovery: 'retry' },
-    ],
-    [
-      'tempo_esgotado',
-      { message: 'A avaliação demorou demais. Tente de novo.', recovery: 'retry' },
-    ],
-    [
-      'avaliacao_invalida',
-      { message: 'A Kairya respondeu fora da rubrica. Tente de novo.', recovery: 'retry' },
-    ],
-    [
-      'missao_nao_encontrada',
       {
-        message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
-        recovery: 'refresh',
+        message: 'missions.evaluationFailure.providerUnavailable.message',
+        recovery: 'missions.failure.tryAgain',
+        action: 'retry',
       },
     ],
+    ['tempo_esgotado', TIMEOUT],
+    [
+      'avaliacao_invalida',
+      {
+        message: 'missions.evaluationFailure.invalidEvaluation.message',
+        recovery: 'missions.failure.tryAgain',
+        action: 'retry',
+      },
+    ],
+    ['missao_nao_encontrada', NOT_FOUND],
   ])('traduz %s', (code, esperado) => {
     expect(describeEvaluationFailure(new ApiError('x', 409, code))).toEqual(esperado)
   })
+
+  it.each(Object.entries(EVALUATION_FAILURE_BY_CODE))(
+    'as chaves de %s existem no catalogo',
+    (_code, failure) => {
+      expect(Object.hasOwn(ptBR, failure.message)).toBe(true)
+      expect(Object.hasOwn(ptBR, failure.recovery)).toBe(true)
+    },
+  )
 
   it('code desconhecido cai no generico', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, 'novo_code'))).toEqual(GENERIC)
@@ -65,27 +91,30 @@ describe('describeEvaluationFailure', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, null))).toEqual(GENERIC)
   })
 
-  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
-    expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual({
-      message:
-        'Não foi possível conectar. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
-      recovery: 'retry',
+  it('a rede fora nomeia a acao e diz que nao conectou, e repetir e seguro', () => {
+    const failure = describeEvaluationFailure(new ApiError('x', null, null))
+    expect(failure).toEqual({
+      ...GENERIC,
+      message: 'missions.evaluationFailure.generic.network',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível pedir a avaliação: sem conexão com o servidor. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+    )
   })
 
-  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
-    expect(describeEvaluationFailure(new ApiTimeoutError())).toEqual({
-      message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
-      recovery: 'retry',
+  it('o prazo nomeia a acao e diz que a resposta demorou, e repetir e seguro', () => {
+    const failure = describeEvaluationFailure(new ApiTimeoutError())
+    expect(failure).toEqual({
+      ...GENERIC,
+      message: 'missions.evaluationFailure.generic.timeout',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível pedir a avaliação: o servidor demorou demais para responder. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+    )
   })
 
   it('um 404 SEM code (rota ausente, deploy desencontrado) manda atualizar, nao "tente de novo"', () => {
-    expect(describeEvaluationFailure(new ApiError('x', 404, null))).toEqual({
-      message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
-      recovery: 'refresh',
-    })
+    expect(describeEvaluationFailure(new ApiError('x', 404, null))).toEqual(NOT_FOUND)
   })
 
   it('um 404 com code DESCONHECIDO nao e tratado como 404 sem code', () => {
@@ -94,20 +123,17 @@ describe('describeEvaluationFailure', () => {
 
   it('um 422 e o id do caminho fora da faixa: missao que nao existe, entao manda atualizar', () => {
     // `POST /evaluation` nao tem corpo: o unico 422 possivel e o do id.
-    expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual({
-      message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
-      recovery: 'refresh',
-    })
+    expect(describeEvaluationFailure(new ApiError('x', 422, null))).toEqual(NOT_FOUND)
   })
 
   it('um 422 com code DESCONHECIDO tambem manda atualizar (nao "tente de novo")', () => {
-    expect(describeEvaluationFailure(new ApiError('x', 422, 'codigo_futuro')).recovery).toBe(
+    expect(describeEvaluationFailure(new ApiError('x', 422, 'codigo_futuro')).action).toBe(
       'refresh',
     )
   })
 
   it('um code conhecido vence o status 422', () => {
-    expect(describeEvaluationFailure(new ApiError('x', 422, 'sem_evidencia')).recovery).toBe(
+    expect(describeEvaluationFailure(new ApiError('x', 422, 'sem_evidencia')).action).toBe(
       'refresh',
     )
   })
@@ -123,13 +149,10 @@ describe('describeEvaluationFailure', () => {
 
 describe('describeEvaluationErrorCode', () => {
   // O `error_code` de uma avaliacao `falhou` vinda da API (a pagina recarregou)
-  // passa pelo MESMO mapa do erro HTTP: a mensagem nao pode depender de a
+  // passa pelo MESMO mapa do erro HTTP: o texto nao pode depender de a
   // pessoa ter visto a falha ao vivo ou depois.
   it('traduz o code gravado pelo mesmo mapa do erro HTTP', () => {
-    expect(describeEvaluationErrorCode('tempo_esgotado')).toEqual({
-      message: 'A avaliação demorou demais. Tente de novo.',
-      recovery: 'retry',
-    })
+    expect(describeEvaluationErrorCode('tempo_esgotado')).toEqual(TIMEOUT)
   })
 
   it('code desconhecido, nulo ou do prototipo cai no generico', () => {

@@ -30,8 +30,8 @@ export function Campaigns({
       <AreaHero
         scene="campaigns"
         headingId={CAMPAIGNS_HEADING_ID}
-        title={t('campaigns.hero.title')}
-        note={t('campaigns.hero.note')}
+        title={t('campaigns.header.title')}
+        note={t('campaigns.header.subtitle')}
       />
       <CampaignTrail onOpenHeadquarters={onOpenHeadquarters} />
     </main>

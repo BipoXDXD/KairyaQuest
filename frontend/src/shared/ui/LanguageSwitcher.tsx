@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import type { MessageKey } from '../i18n/catalog'
+import { Fragment, useRef, useState } from 'react'
+import { translateParts, type MessageKey } from '../i18n/catalog'
 import type { Locale } from '../i18n/locale'
 import { useLocale } from '../i18n/useLocale'
 import { useT } from '../i18n/useT'
@@ -17,11 +17,27 @@ interface LocaleOption {
    * (WCAG 2.5.3); o teste confere que um começa pelo outro.
    */
   nameKey: MessageKey
+  /**
+   * O nome do idioma na própria língua, igual nos dois catálogos. Entra na
+   * mensagem de falha ao salvar ("Não foi possível salvar o idioma English"),
+   * com o `lang` do próprio idioma.
+   */
+  endonymKey: MessageKey
 }
 
 const OPTIONS: readonly LocaleOption[] = [
-  { locale: 'pt-BR', shortKey: 'ui.language.short.ptBR', nameKey: 'shell.locale.ptBR' },
-  { locale: 'en', shortKey: 'ui.language.short.en', nameKey: 'shell.locale.en' },
+  {
+    locale: 'pt-BR',
+    shortKey: 'ui.language.short.ptBR',
+    nameKey: 'shell.locale.ptBR',
+    endonymKey: 'shell.locale.ptBR.endonym',
+  },
+  {
+    locale: 'en',
+    shortKey: 'ui.language.short.en',
+    nameKey: 'shell.locale.en',
+    endonymKey: 'shell.locale.en.endonym',
+  },
 ]
 
 /**
@@ -32,14 +48,15 @@ const OPTIONS: readonly LocaleOption[] = [
  * pronunciar o nome na língua certa.
  * Clicar no idioma ativo não faz nada.
  *
- * A falha ao salvar aparece numa `StatusLine` montada desde o início (uma
+ * A troca aplica na hora; se o servidor recusar, o provider volta ao idioma
+ * anterior e o seletor avisa. A falha ao salvar aparece numa `StatusLine` montada desde o início (uma
  * live region que nasce com conteúdo pode ficar muda) e escondida só da vista
  * (`sr-only`) enquanto vazia, para o ícone do tom não aparecer sozinho.
  */
 export function LanguageSwitcher() {
   const { locale, setLocale } = useLocale()
   const t = useT()
-  const [failedName, setFailedName] = useState<MessageKey | null>(null)
+  const [failed, setFailed] = useState<LocaleOption | null>(null)
   // Só a tentativa mais recente fala: a rejeição atrasada de uma anterior não
   // pode anunciar falha depois que a nova já trocou o idioma.
   const latestAttempt = useRef(0)
@@ -47,10 +64,10 @@ export function LanguageSwitcher() {
   function choose(option: LocaleOption) {
     latestAttempt.current += 1
     const attempt = latestAttempt.current
-    setFailedName(null)
+    setFailed(null)
     setLocale(option.locale).catch(() => {
       if (attempt === latestAttempt.current) {
-        setFailedName(option.nameKey)
+        setFailed(option)
       }
     })
   }
@@ -91,9 +108,13 @@ export function LanguageSwitcher() {
           )
         })}
       </div>
-      <div className={failedName === null ? 'sr-only' : undefined}>
+      <div className={failed === null ? 'sr-only' : undefined}>
         <StatusLine tone="danger">
-          {failedName === null ? '' : t('shell.locale.saveFailed', { language: t(failedName) })}
+          {failed === null
+            ? ''
+            : translateParts(locale, 'shell.locale.saveFailed', {
+                language: <span lang={failed.locale}>{t(failed.endonymKey)}</span>,
+              }).map((part, index) => <Fragment key={index}>{part}</Fragment>)}
         </StatusLine>
       </div>
     </div>

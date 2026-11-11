@@ -51,9 +51,11 @@ export default defineConfig({
     // maquina -- que, na do dono, E Sao Paulo --, a asseveracao do texto do
     // prazo passaria mesmo se a aplicacao usasse o fuso de quem le.
     timezoneId: 'Asia/Tokyo',
-    // O idioma inicial vem de `navigator.language`, e o Chromium do Playwright
-    // diz `en-US`. Os E2E procuram os textos do produto em PT; quem testa o EN
-    // troca pelo seletor de idioma (`ui-states.spec.ts`).
+    // O idioma do navegador fixado. Quando o servidor devolve `locale: null`,
+    // o boot grava o idioma detectado em `users.locale`; sem locale fixo, o
+    // Chromium headless diz `en-US` e a tutora passaria a responder em EN nos
+    // specs seguintes. O E2E de idioma sobrescreve por spec com
+    // `test.use({ locale })`.
     locale: 'pt-BR',
   },
 

@@ -50,6 +50,21 @@ describe('Headquarters', () => {
     vi.unstubAllGlobals()
   })
 
+  it('em ingles, o cabecalho vem do catalogo', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />, { locale: 'en' })
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(/^Headquarters — your study dashboard$/)
+    // Cada texto preso ao seu lugar no cabecalho: trocar duas chaves irmas reprova.
+    expect(heading.nextElementSibling).toHaveTextContent(
+      /^What's open, with its deadline and reward\.$/,
+    )
+    await screen.findByTestId('missions-empty')
+    await screen.findByTestId('tutor-greeting')
+  })
+
   it('anuncia a tela no titulo de nivel 1, em portugues', async () => {
     stubPage()
 
@@ -168,7 +183,7 @@ describe('Headquarters', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       'Headquarters — your study dashboard',
     )
-    expect(screen.getByText("What's open, with due dates and rewards.")).toBeInTheDocument()
+    expect(screen.getByText("What's open, with its deadline and reward.")).toBeInTheDocument()
     await settle()
   })
 

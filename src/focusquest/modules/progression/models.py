@@ -1,6 +1,7 @@
 """Mapeamento SQLAlchemy da progressao: o livro-razao e as conquistas (D2, D5)."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -10,8 +11,10 @@ from sqlalchemy import (
     Integer,
     PrimaryKeyConstraint,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import Mapped, mapped_column
 
 from focusquest.core.base import Base
@@ -22,7 +25,32 @@ from focusquest.modules.progression.domain import Codigo
 FONTE_CONCLUSAO = "mission_completed"
 FONTE_BONUS = "evaluation_bonus"
 
-_CODIGOS_SQL = ", ".join(f"'{codigo.value}'" for codigo in Codigo)
+# Tolerant reader da 0008 (expand): o codigo antigo ainda cabe no CHECK e,
+# lido, vira o membro novo. Sai na Tarefa 2.2, junto com o valor antigo do
+# CHECK. O dominio nunca escreve o codigo antigo.
+_CODIGOS_ANTIGOS: dict[str, Codigo] = {"tifa_partnership": Codigo.KAIRYA_PARTNERSHIP}
+_CODIGOS_SQL = ", ".join(f"'{codigo}'" for codigo in (*Codigo, *_CODIGOS_ANTIGOS))
+
+
+class CodigoText(TypeDecorator[Codigo]):
+    """TEXT no banco, Codigo no Python, com o codigo antigo ja normalizado.
+
+    Restricao ate a Tarefa 2.2: `code` e coluna da PK, e uma linha antiga
+    carregada como entidade ganha a identidade do codigo NOVO. Um UPDATE ou
+    DELETE dela pelo ORM filtraria pelo codigo novo, afetaria 0 linhas e daria
+    `StaleDataError`. Nao altere nem remova `UserAchievement` pelo ORM: hoje o
+    servico so seleciona colunas, e a remocao vem por cascata no banco.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> Codigo | None:
+        # A PK nunca e NULL, mas o LEFT JOIN de `ler_progresso` traz NULL
+        # na linha de quem ainda nao tem conquista.
+        if value is None:
+            return None
+        return _CODIGOS_ANTIGOS.get(value) or Codigo(value)
 
 
 class XpEntry(Base):
@@ -58,7 +86,7 @@ class UserAchievement(Base):
     __tablename__ = "user_achievements"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    code: Mapped[str] = mapped_column(Text)
+    code: Mapped[Codigo] = mapped_column(CodigoText)
     unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     xp_entry_id: Mapped[int] = mapped_column(
         ForeignKey("xp_entries.id", ondelete="CASCADE")

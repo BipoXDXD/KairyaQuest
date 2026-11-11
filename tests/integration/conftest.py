@@ -19,9 +19,15 @@ from integration.provedor_falso import ServidorAnthropicFalso, iniciar
 
 from .banco_de_teste import criar_banco_se_ausente, recriar_esquema
 
-# O limite da resposta nos testes: curto o bastante para a demora do falso
-# esgota-lo em menos de um segundo.
-TIMEOUT_DE_TESTE = 0.3
+# O prazo do SDK so e o OBJETO nos testes de demora: neles ele e curto, para o
+# estouro sair em menos de um segundo. Nos demais ele e so um teto contra
+# travamento -- e um prazo curto ali reprova o caminho feliz com a maquina
+# carregada sem nada estar errado: o prazo do SDK conta o silencio ENTRE dois
+# pedacos, e um teste que segura o falso enquanto ele mesmo faz outra coisa
+# (consultar o banco, desconectar) via os 0,3 s estourarem e a resposta virar
+# `falhou` antes da hora.
+TIMEOUT_DA_DEMORA = 0.3
+TIMEOUT_FOLGADO = 30.0
 
 
 @pytest.fixture(scope="session")
@@ -148,7 +154,20 @@ def fabrica(banco_migrado: Engine) -> sessionmaker[Session]:
 
 
 @pytest.fixture
-def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
+def prazo_do_provedor() -> float:
+    """O prazo do SDK da `tutoria`, em segundos: o teto folgado por padrao.
+
+    Teste de demora troca pelo curto parametrizando este nome
+    (`@pytest.mark.parametrize("prazo_do_provedor", [TIMEOUT_DA_DEMORA])`):
+    o pytest deixa a parametrizacao direta substituir a fixture, inclusive
+    quando quem a pede e outra fixture (a `tutoria`, ou o `cliente` que a
+    recebe).
+    """
+    return TIMEOUT_FOLGADO
+
+
+@pytest.fixture
+def tutoria(falso: ServidorAnthropicFalso, prazo_do_provedor: float) -> Tutoria:
     """A tutoria de producao inteira, com o SDK real apontado para o falso."""
     return Tutoria(
         provedor=ProvedorAnthropic(
@@ -156,7 +175,7 @@ def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
             base_url=falso.url,
             modelo="claude-opus-5",
             max_tokens=256,
-            timeout_segundos=TIMEOUT_DE_TESTE,
+            timeout_segundos=prazo_do_provedor,
             # O padrao de producao (`Settings.tutor_fallback`, pendencia 174).
             fallback=True,
             esforco="low",

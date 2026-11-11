@@ -14,16 +14,21 @@ import { fileURLToPath } from 'node:url'
 const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const TEST_FILE = /\.test\.[jt]sx?$/
 
+/** Caminho absoluto de um arquivo relativo a `frontend/`; aceita `../` para sair dela. */
+export function sourcePath(pathFromFrontend: string): string {
+  return resolve(FRONTEND_ROOT, pathFromFrontend)
+}
+
 /** Lê um arquivo relativo a `frontend/`; arquivo vazio é erro, nunca "". */
 export function readSource(pathFromFrontend: string): string {
-  const text = readFileSync(resolve(FRONTEND_ROOT, pathFromFrontend), 'utf8')
+  const text = readFileSync(sourcePath(pathFromFrontend), 'utf8')
   if (text.trim() === '') {
     throw new Error(`arquivo vazio: ${pathFromFrontend}`)
   }
   return text
 }
 
-/** Diz se um arquivo relativo a `frontend/` existe; serve a binários (woff2). */
+/** Diz se um caminho relativo a `frontend/` existe (arquivo ou pasta); serve a binários (woff2). */
 export function sourceExists(pathFromFrontend: string): boolean {
   return existsSync(resolve(FRONTEND_ROOT, pathFromFrontend))
 }
@@ -31,6 +36,23 @@ export function sourceExists(pathFromFrontend: string): boolean {
 /** Tamanho em bytes de um arquivo relativo a `frontend/`; ausente é erro (ENOENT). */
 export function sourceSize(pathFromFrontend: string): number {
   return statSync(resolve(FRONTEND_ROOT, pathFromFrontend)).size
+}
+
+/** Bytes de um arquivo relativo a `frontend/`, sem decodificar; vazio é erro. */
+export function readSourceBytes(pathFromFrontend: string): Uint8Array {
+  const bytes = new Uint8Array(readFileSync(sourcePath(pathFromFrontend)))
+  if (bytes.length === 0) {
+    throw new Error(`arquivo vazio: ${pathFromFrontend}`)
+  }
+  return bytes
+}
+
+/**
+ * `true` só para arquivo regular: o `globSync` do `listSources` também devolve
+ * pastas, e um caminho ausente responde `false` em vez de lançar.
+ */
+export function isSourceFile(pathFromFrontend: string): boolean {
+  return statSync(sourcePath(pathFromFrontend), { throwIfNoEntry: false })?.isFile() ?? false
 }
 
 /** Caminhos relativos a `frontend/` que casam com o glob, em ordem estável. */

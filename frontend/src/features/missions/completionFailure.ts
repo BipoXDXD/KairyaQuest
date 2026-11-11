@@ -1,5 +1,6 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
+import type { FailureText } from '../../shared/i18n/failureText'
 import type { MissionErrorCode } from './types'
 
 /**
@@ -16,46 +17,53 @@ import type { MissionErrorCode } from './types'
  * - `refresh`: nao ha o que repetir. A missao ja estava concluida ou nao existe
  *   mais, e a acao util e recarregar o quadro para ver o estado de verdade.
  */
-export type CompletionRecovery = 'retry' | 'retry-with-new-operation' | 'refresh'
-
-export interface CompletionFailure {
-  /** Texto para a pessoa, em pt-BR. Nunca e o `detail` do backend. */
-  message: string
-  recovery: CompletionRecovery
-}
+export type CompletionAction = 'retry' | 'retry-with-new-operation' | 'refresh'
 
 /**
- * A traducao de cada `code` conhecido, EXAUSTIVA sobre o tipo.
+ * O texto (chaves do catalogo; nunca o `detail` do backend) e a acao: o texto
+ * diz o que fazer, a `action` decide o botao.
+ */
+export type CompletionFailure = FailureText & { action: CompletionAction }
+
+/**
+ * A traducao de cada `code` conhecido, EXAUSTIVA sobre o tipo. Exportada so
+ * para o teste conferir as chaves de todos os codes no catalogo.
  *
  * `Record<MissionErrorCode, ...>` e o que faz um code novo em
  * `MissionErrorCode` reprovar o `tsc` ate ganhar mensagem e acao aqui. A
  * alternativa -- `Partial` com fallback -- deixaria o code novo cair na
  * mensagem generica sem que ninguem decidisse se era isso mesmo.
  */
-const FAILURE_BY_CODE: Record<MissionErrorCode, CompletionFailure> = {
+export const COMPLETION_FAILURE_BY_CODE: Readonly<Record<MissionErrorCode, CompletionFailure>> = {
   missao_nao_encontrada: {
-    message: 'Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais.',
-    recovery: 'refresh',
+    message: 'missions.completionFailure.notFound.message',
+    recovery: 'missions.completionFailure.notFound.recovery',
+    action: 'refresh',
   },
   transicao_ilegal: {
-    message: 'Esta missão já estava concluída. Atualize o quadro para ver o estado atual.',
-    recovery: 'refresh',
+    message: 'missions.completionFailure.alreadyCompleted.message',
+    recovery: 'missions.completionFailure.alreadyCompleted.recovery',
+    action: 'refresh',
   },
   operacao_reutilizada: {
-    message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-    recovery: 'retry-with-new-operation',
+    message: 'missions.failure.reusedOperation',
+    recovery: 'missions.failure.tryAgain',
+    action: 'retry-with-new-operation',
   },
   // "prazo", e nao "dia" -- a janela da especial e de DOIS dias (README),
   // entao "o dia desta missão" seria falso para ela.
   missao_expirada: {
-    message:
-      'O prazo desta missão já terminou e ela não pode mais ser concluída. Atualize para ver o estado atual.',
-    recovery: 'refresh',
+    message: 'missions.completionFailure.expired.message',
+    recovery: 'missions.failure.refresh',
+    action: 'refresh',
   },
 }
 
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar a conclusão.'
-const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será concluída duas vezes.'
+const UNCONFIRMED_LEAD: FailureLead = {
+  fallback: 'missions.completionFailure.unconfirmed.message',
+  timeout: 'missions.completionFailure.unconfirmed.timeout',
+  network: 'missions.completionFailure.unconfirmed.network',
+}
 
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
@@ -65,7 +73,11 @@ const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será concluída
  * unica coisa certa -- que repetir nao duplica.
  */
 function unconfirmed(error: unknown): CompletionFailure {
-  return { message: `${leadFor(error, UNCONFIRMED_LEAD)} ${RETRY_IS_SAFE}`, recovery: 'retry' }
+  return {
+    message: leadFor(error, UNCONFIRMED_LEAD),
+    recovery: 'missions.completionFailure.unconfirmed.recovery',
+    action: 'retry',
+  }
 }
 
 /**
@@ -80,23 +92,24 @@ function unconfirmed(error: unknown): CompletionFailure {
  * servidor pode recusar com 422 e a evidencia.
  */
 const EVIDENCE_REJECTED: CompletionFailure = {
-  message: 'A evidência não foi aceita. Revise o texto e o link.',
-  recovery: 'retry-with-new-operation',
+  message: 'missions.completionFailure.evidenceRejected.message',
+  recovery: 'missions.completionFailure.evidenceRejected.recovery',
+  action: 'retry-with-new-operation',
 }
 
 /**
  * Se `code` e um dos codes que este mapa traduz.
  *
- * `Object.hasOwn`, e nao `code in FAILURE_BY_CODE`: o operador `in` percorre o
+ * `Object.hasOwn`, e nao `code in COMPLETION_FAILURE_BY_CODE`: o operador `in` percorre o
  * prototipo, e diria sim para `toString` ou `constructor` -- a tela leria uma
  * funcao herdada como se fosse a traducao.
  */
 function isMissionErrorCode(code: string): code is MissionErrorCode {
-  return Object.hasOwn(FAILURE_BY_CODE, code)
+  return Object.hasOwn(COMPLETION_FAILURE_BY_CODE, code)
 }
 
 /**
- * A mensagem e a acao da tela para uma conclusao que falhou.
+ * O texto e a acao da tela para uma conclusao que falhou.
  *
  * Decide pelo `code`, e so por ele. A `message` do `ApiError` e tecnica ("O
  * servidor respondeu 409.") e nao entra aqui; o `detail` do backend nem chega
@@ -104,13 +117,13 @@ function isMissionErrorCode(code: string): code is MissionErrorCode {
  */
 export function describeCompletionFailure(error: unknown): CompletionFailure {
   if (error instanceof ApiError && error.code !== null && isMissionErrorCode(error.code)) {
-    return FAILURE_BY_CODE[error.code]
+    return COMPLETION_FAILURE_BY_CODE[error.code]
   }
   // Um 404 SEM `code` nao e o da missao (esse traz `missao_nao_encontrada`):
   // e rota ausente ou deploy desencontrado. Repetir nao adianta e a mensagem de
   // "tentar de novo e seguro" seria promessa vazia; recarregar mostra a verdade.
   if (error instanceof ApiError && error.status === 404 && error.code === null) {
-    return FAILURE_BY_CODE.missao_nao_encontrada
+    return COMPLETION_FAILURE_BY_CODE.missao_nao_encontrada
   }
   if (error instanceof ApiError && error.status === 422) {
     return EVIDENCE_REJECTED

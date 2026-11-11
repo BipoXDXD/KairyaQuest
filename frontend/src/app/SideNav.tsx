@@ -31,7 +31,7 @@ export function SideNav({ active, onNavigate }: SideNavProps) {
       <div className="mb-4 flex flex-wrap items-center gap-3 lg:mb-8">
         <div>
           <p className="font-display text-xl text-text-primary">{t('shell.brand.name')}</p>
-          <p className="text-sm text-text-muted">{t('shell.brand.note')}</p>
+          <p className="text-sm text-text-muted">{t('shell.brand.tagline')}</p>
         </div>
         <LanguageSwitcher />
       </div>

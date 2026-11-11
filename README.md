@@ -4,7 +4,7 @@
 
 Prepare o KairyaQuest no macOS com PyCharm. **Node.js, React, TypeScript, Vite e Tailwind CSS já estão preparados.** Reaproveite o frontend existente; não reinicie o projeto. Complete apenas as ferramentas e integrações necessárias e entregue uma base executável, organizada e testada.
 
-KairyaQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Kairya será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
+KairyaQuest é uma plataforma de estudos gamificada com interface inspirada em RPGs de fantasia. Kairya será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
 
 Sou estudante de engenharia de software; usarei Kimi, Codex e Claude. Entregue incrementos, não o produto inteiro. Commit, push, merge, publicação e contratação exigem autorização.
 
@@ -145,7 +145,7 @@ Envie apenas contexto relevante: objetivos, tarefas, progresso e preferências. 
 
 Avalie entregas por evidências. Não execute código do estudante na API; futura execução exige isolamento e limites. Teste a integração sem chamadas pagas ou segredos reais.
 
-## 7. Interface inspirada em Final Fantasy
+## 7. Interface inspirada em RPGs de fantasia
 
 Crie uma ferramenta de estudos com identidade de RPG, não uma landing page. Use azul-marinho profundo, superfícies escuras, prata, verde-mako e vermelho discreto. Defina tokens de cores, espaçamento, tipografia, bordas, foco e movimento; priorize contraste e hierarquia.
 
@@ -160,7 +160,7 @@ Planeje estas áreas; implemente só o recorte inicial:
 - **Diário:** sessões, decisões, conquistas e evolução.
 - **Tutoria:** conversa, propostas, explicações e avaliações.
 
-Combine termos temáticos e comuns, como “Campanhas — planos de estudo”. Não exija conhecer Final Fantasy.
+Combine termos temáticos e comuns, como “Campanhas — planos de estudo”. Não exija conhecer nenhum jogo específico.
 
 Crie componentes de missão, progresso, recompensa, mensagem e confirmação. Cubra carregamento, vazio, erro, proposta e conclusão. Preserve texto digitado após falhas e permita reenvio sem duplicação.
 
@@ -257,7 +257,7 @@ Instruções aninhadas não enfraquecem qualidade. Justifique dependências, con
 
 Use um implementador por worktree. Separe branches, diretórios, portas e bancos; revisão não autoriza editar a árvore de outro agente.
 
-Mantenha `docs/HANDOFF.md` com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos.
+Registre o handoff de cada PR num arquivo próprio em `docs/handoff/` (regras em `docs/handoff/README.md`), com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos. Só o PR de consolidação edita o `docs/HANDOFF.md`.
 
 ## 14. Entrega verificável
 

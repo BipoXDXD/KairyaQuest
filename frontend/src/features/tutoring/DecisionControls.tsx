@@ -1,5 +1,8 @@
 import { failedActionText } from './actionFailure'
 import type { DecisionState } from './useDecideAction'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { useT } from '../../shared/i18n/useT'
 
 const BUTTON =
   'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
@@ -11,22 +14,22 @@ const SECONDARY_BUTTON =
   'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 ' +
   'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
-function confirmLabel(decision: DecisionState): string {
+function confirmLabel(decision: DecisionState): MessageKey {
   if (decision.status === 'confirming') {
-    return 'Confirmando…'
+    return 'tutoring.decision.confirming'
   }
   return decision.status === 'failed' && decision.attempted === 'confirm'
-    ? 'Tentar de novo'
-    : 'Confirmar'
+    ? 'tutoring.retry'
+    : 'tutoring.decision.confirm'
 }
 
-function rejectLabel(decision: DecisionState): string {
+function rejectLabel(decision: DecisionState): MessageKey {
   if (decision.status === 'rejecting') {
-    return 'Recusando…'
+    return 'tutoring.decision.rejecting'
   }
   return decision.status === 'failed' && decision.attempted === 'reject'
-    ? 'Tentar de novo'
-    : 'Recusar'
+    ? 'tutoring.retry'
+    : 'tutoring.decision.reject'
 }
 
 /**
@@ -60,19 +63,20 @@ export function DecisionControls({
   onReject: () => void
   onRefresh: () => void
 }) {
+  const t = useT()
   const failure = decision.status === 'failed' ? decision.failure : null
   const busy = decision.status === 'confirming' || decision.status === 'rejecting'
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
-      {failure?.recovery === 'refresh' ? (
+      {failure?.action === 'refresh' ? (
         <button
           type="button"
           data-testid="proposal-refresh"
           onClick={onRefresh}
           className={SECONDARY_BUTTON}
         >
-          Atualizar a conversa
+          {t('tutoring.decision.refresh')}
         </button>
       ) : (
         <>
@@ -83,7 +87,7 @@ export function DecisionControls({
             onClick={onConfirm}
             className={BUTTON}
           >
-            {confirmLabel(decision)} <span className="sr-only">{target}</span>
+            {t(confirmLabel(decision))} <span className="sr-only">{target}</span>
           </button>
           <button
             type="button"
@@ -92,13 +96,13 @@ export function DecisionControls({
             onClick={onReject}
             className={SECONDARY_BUTTON}
           >
-            {rejectLabel(decision)} <span className="sr-only">{target}</span>
+            {t(rejectLabel(decision))} <span className="sr-only">{target}</span>
           </button>
         </>
       )}
       {failure !== null && (
         <p role="alert" data-testid="proposal-failure" className="w-full text-sm text-red-300">
-          {failure.message}
+          <FailureMessage failure={failure} />
         </p>
       )}
     </div>
@@ -133,7 +137,7 @@ export function RecordedFailure({
       role={announce ? 'alert' : undefined}
       className="mt-3 text-sm text-amber-200"
     >
-      {failedActionText(errorCode)}
+      <FailureMessage failure={failedActionText(errorCode)} />
     </p>
   )
 }
@@ -145,6 +149,7 @@ export function RecordedFailure({
  * fecha-la. No desktop o painel fica ao lado, e o link so segue o endereco.
  */
 export function BoardLink({ href, onGoToBoard }: { href: string; onGoToBoard?: () => void }) {
+  const t = useT()
   return (
     <a
       href={href}
@@ -152,7 +157,7 @@ export function BoardLink({ href, onGoToBoard }: { href: string; onGoToBoard?: (
       onClick={onGoToBoard}
       className="text-emerald-200 underline hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
     >
-      Ver no Quartel-General
+      {t('tutoring.proposal.boardLink')}
     </a>
   )
 }

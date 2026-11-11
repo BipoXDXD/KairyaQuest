@@ -11,6 +11,6 @@ import type { MessageKey } from '../shared/i18n/catalog'
 export type Area = 'headquarters' | 'campaigns'
 
 export const AREAS: readonly { id: Area; labelKey: MessageKey }[] = [
-  { id: 'headquarters', labelKey: 'shell.nav.headquarters' },
-  { id: 'campaigns', labelKey: 'shell.nav.campaigns' },
+  { id: 'headquarters', labelKey: 'shell.area.headquarters' },
+  { id: 'campaigns', labelKey: 'shell.area.campaigns' },
 ]

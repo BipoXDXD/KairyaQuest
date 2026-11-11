@@ -11,7 +11,7 @@ import httpx2
 import pytest
 
 from focusquest.modules.tutoring.provider import ProvedorIndisponivelError, Turno
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_FOLGADO
 from integration.espiao import Espiao, provedor_espionado
 from integration.provedor_falso import Roteiro, ServidorAnthropicFalso
 
@@ -71,7 +71,7 @@ def test_o_provedor_espionado_nao_tenta_de_novo(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=16,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",

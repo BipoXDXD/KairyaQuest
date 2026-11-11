@@ -63,7 +63,10 @@ export interface CompletionRegistry {
   rescheduleDraftFor: (missionId: number) => OpenReschedule | null
   /** Guarda o reagendamento aberto da missao. */
   saveRescheduleDraft: (missionId: number, open: OpenReschedule) => void
-  /** Apaga o reagendamento aberto: fechar o disclosure ou o sucesso. */
+  /**
+   * Apaga o reagendamento aberto: fechar o disclosure, o sucesso, a montagem
+   * do formulario com outro prazo e o sucesso do Concluir.
+   */
   discardRescheduleDraft: (missionId: number) => void
   /**
    * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
@@ -92,7 +95,11 @@ export interface CompletionRegistry {
   isRetryPending: (missionId: number) => boolean
   /** Marca a missao como em retry pendente. `release` desmarca. */
   markRetryPending: (missionId: number) => void
-  /** IDs explicitamente concluidas numa leitura atual bem-sucedida. */
+  /**
+   * IDs explicitamente concluidas numa leitura atual bem-sucedida. O
+   * reagendamento aberto delas sai na hora; a chave do Concluir, quando nao
+   * houver mais POST em voo.
+   */
   reconcileCompleted: (missionIds: readonly number[]) => void
   /** Um POST de conclusao saiu. Chamado ANTES do pedido, no mesmo tick. */
   started: () => void
@@ -223,6 +230,9 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       },
       reconcileCompleted: (missionIds) => {
         for (const missionId of missionIds) {
+          // Missao concluida nao se reagenda, e o formulario dela nao monta
+          // mais para descartar o reagendamento aberto: sai aqui, na hora.
+          openReschedules.current.delete(missionId)
           if (operationIds.current.has(missionId)) {
             completedPending.current.add(missionId)
           }

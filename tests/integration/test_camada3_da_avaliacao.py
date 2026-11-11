@@ -12,12 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from focusquest.core.idioma import Idioma
 from focusquest.modules.evaluation.rubric import (
     FERRAMENTA_DA_AVALIACAO,
     NOME_DA_FERRAMENTA,
+    rubrica_do_idioma,
 )
 from integration import camada3, camada3_da_avaliacao
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_FOLGADO
 from integration.espiao import provedor_espionado
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -51,7 +53,7 @@ def test_o_falso_emite_a_sequencia_da_avaliacao_real(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",
@@ -77,7 +79,7 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",
@@ -88,6 +90,8 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
     assert corpo["tools"][0]["strict"] is True
     assert corpo["tools"][0]["input_schema"] == FERRAMENTA_DA_AVALIACAO.esquema
     assert corpo["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
+    # A captura mede o prompt de producao em pt-BR, o idioma padrao.
+    assert corpo["system"] == rubrica_do_idioma(Idioma.PT_BR)
     dados = json.loads(corpo["messages"][0]["content"])
     assert dados["mission"]["completion_criterion"] == (
         camada3_da_avaliacao.TENTATIVA.completion_criterion

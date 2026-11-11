@@ -1,4 +1,5 @@
-import { ApiError, ApiTimeoutError } from './client'
+import type { MessageKey } from '../i18n/catalog'
+import { ApiError } from './client'
 
 /**
  * Por que um pedido ficou sem resposta aproveitavel: o prazo acabou, ou a
@@ -8,39 +9,43 @@ import { ApiError, ApiTimeoutError } from './client'
 export type TransportFailure = 'timeout' | 'network'
 
 /**
- * A abertura do texto de cada falha de transporte. Diz o que aconteceu sem
- * culpar a rede da pessoa: o servidor fora tambem da "Não foi possível
- * conectar".
+ * A abertura do texto de falha de um tradutor, como chaves do catalogo.
+ * `timeout` e `network` nomeiam a acao e a causa numa frase so ("Não foi
+ * possível concluir a missão: sem conexão com o servidor."): falam do servidor,
+ * e nao da rede da pessoa, porque o servidor fora tambem deixa o pedido sem
+ * conexao. `fallback` e a frase propria para o resto (5xx, `code` desconhecido).
+ * Uma chave por acao e por idioma, e nao uma frase montada aqui: a ordem das
+ * palavras muda de idioma para idioma.
  */
-const LEAD_BY_FAILURE: Record<TransportFailure, string> = {
-  timeout: 'A resposta demorou mais que o esperado.',
-  network: 'Não foi possível conectar.',
+export interface FailureLead {
+  fallback: MessageKey
+  timeout: MessageKey
+  network: MessageKey
 }
 
 /**
- * Classifica a falha pelo tipo e pelo status, nunca pela `message`.
+ * Classifica a falha pelo `kind` e pelo status, nunca pela `message`.
  *
  * So `ApiError` entra: e o cliente quem sabe que nao houve resposta, e ele o
  * diz com `status` nulo. Um erro de outro tipo (um `TypeError` de
- * `JSON.parse`, por exemplo) nao e falha de transporte. A ordem importa:
- * `ApiTimeoutError` tambem e `ApiError` com `status` nulo.
+ * `JSON.parse`, por exemplo) nao e falha de transporte. A ordem importa: o
+ * prazo (`kind` `timeout`) tambem e `ApiError` com `status` nulo.
  */
 export function transportFailureOf(error: unknown): TransportFailure | null {
-  if (error instanceof ApiTimeoutError) {
+  if (!(error instanceof ApiError)) {
+    return null
+  }
+  if (error.kind === 'timeout') {
     return 'timeout'
   }
-  if (error instanceof ApiError && error.status === null) {
-    return 'network'
-  }
-  return null
+  return error.status === null ? 'network' : null
 }
 
 /**
- * A frase de abertura do texto de falha: a da falha de transporte, ou
- * `fallback`, a abertura propria do tradutor para o resto (5xx, `code`
- * desconhecido).
+ * A chave da frase de abertura do texto de falha: a da falha de transporte, que
+ * nomeia a acao e a causa, ou o `fallback` do tradutor para o resto.
  */
-export function leadFor(error: unknown, fallback: string): string {
+export function leadFor(error: unknown, lead: FailureLead): MessageKey {
   const failure = transportFailureOf(error)
-  return failure === null ? fallback : LEAD_BY_FAILURE[failure]
+  return failure === null ? lead.fallback : lead[failure]
 }

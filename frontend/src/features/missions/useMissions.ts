@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import type { Mission } from '../../shared/types/mission'
 
 /**
@@ -15,7 +16,7 @@ import type { Mission } from '../../shared/types/mission'
 export type MissionsState =
   | { status: 'loading' }
   | { status: 'empty' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'loaded'; missions: Mission[] }
 
 export interface UseMissionsResult {
@@ -25,17 +26,13 @@ export interface UseMissionsResult {
 }
 
 /**
- * Mensagem para a pessoa a partir do erro.
- *
- * O `ApiError` ja carrega prosa em pt-BR, escrita pelo cliente HTTP -- nunca o
- * `detail` do backend, que o cliente nem le --, entao ela vai direto. A leitura
- * da lista nao tem erro de dominio com `code`: o que chega aqui e rede fora ou
- * servidor falhando, e o status basta. Qualquer outra coisa e um
- * defeito nosso, e nao tem mensagem propria que ajude alguem: falar
- * "SyntaxError: Unexpected token" para quem quer estudar nao informa nada.
+ * A falha da carga, para a tela. O `ApiError` vira o texto do catalogo pelo
+ * `kind`; sua `message` e de depuracao e nunca chega a tela. A leitura nao tem
+ * erro de dominio com `code`: o que chega e rede ou servidor, e qualquer outra
+ * coisa e defeito nosso, sem mensagem propria que ajude alguem.
  */
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar as missões.'
+function failureFor(error: unknown): LoadFailure {
+  return loadFailureFor(error, 'Falha inesperada ao carregar as missões.')
 }
 
 /**
@@ -83,7 +80,7 @@ export function useMissions(): UseMissionsResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: failureFor(error) })
       })
 
     return () => {
