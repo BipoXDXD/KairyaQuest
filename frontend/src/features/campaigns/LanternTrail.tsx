@@ -7,7 +7,13 @@ import { civilWeekday, formatCivilDate } from '../../shared/lib/civilDate'
 import { DAYS_PER_MILESTONE, type Availability } from '../../shared/types/mission'
 import { Badge, Button, Panel, Skeleton } from '../../shared/ui'
 import { LanternGlyph } from './LanternGlyph'
-import { lanternsOf, todayIndexOf, type Lantern, type LanternState } from './lanterns'
+import {
+  lanternsOf,
+  todayIndexOf,
+  type DayLantern,
+  type LanternState,
+  type SpecialLantern,
+} from './lanterns'
 import type { Plan } from './types'
 import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
 
@@ -56,15 +62,13 @@ function LanternStatus({ state, children }: { state: LanternState; children: str
   )
 }
 
-function DayLantern({ lantern, isToday }: { lantern: Lantern; isToday: boolean }) {
+function DayItem({ lantern, isToday }: { lantern: DayLantern; isToday: boolean }) {
   const t = useT()
   const { locale } = useLocale()
-  // `day` so e nulo na especial, que nao passa por aqui.
-  const day = lantern.day as string
   return (
     <li
       data-testid="trail-day"
-      data-day={day}
+      data-day={lantern.day}
       data-availability={lantern.availability}
       data-state={lantern.state}
       className={`${ITEM_BASE} ${ITEM_TONE[lantern.state]}`}
@@ -74,8 +78,8 @@ function DayLantern({ lantern, isToday }: { lantern: Lantern; isToday: boolean }
       </span>
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <time dateTime={day} className="font-display text-lg font-bold">
-            {civilWeekday(day, locale)}
+          <time dateTime={lantern.day} className="font-display text-lg font-bold">
+            {civilWeekday(lantern.day, locale)}
           </time>
           {isToday && (
             <Badge tone="action" data-testid="trail-today">
@@ -94,7 +98,7 @@ function DayLantern({ lantern, isToday }: { lantern: Lantern; isToday: boolean }
  * ate o PROXIMO marco); em qualquer outro estado nao mostra, porque ao lado
  * da especial deste marco a contagem do proximo pareceria contradizer a tela.
  */
-function SpecialLantern({ lantern, progress }: { lantern: Lantern; progress: number }) {
+function SpecialItem({ lantern, progress }: { lantern: SpecialLantern; progress: number }) {
   const t = useT()
   return (
     <li
@@ -155,12 +159,12 @@ function TrailLoaded({
 }) {
   const t = useT()
   const { locale } = useLocale()
-  const lanterns = lanternsOf(plan)
-  const days = lanterns.filter((lantern) => lantern.kind === 'day')
-  const special = lanterns[lanterns.length - 1]
+  const { days, special } = lanternsOf(plan)
   const todayIndex = todayIndexOf(plan)
   const lit = days.filter((lantern) => lantern.state === 'lit').length
-  const hasReadyLantern = lanterns.some((lantern) => lantern.availability === 'disponivel')
+  const hasReadyLantern = [...days, special].some(
+    (lantern) => lantern.availability === 'disponivel',
+  )
   return (
     <div className="flex flex-col gap-4">
       <p data-testid="trail-week" className="text-base text-text-muted">
@@ -169,11 +173,11 @@ function TrailLoaded({
       <p data-testid="lantern-summary" className="font-display text-xl font-bold">
         {t('campaigns.lantern.summary', { lit, total: days.length })}
       </p>
-      <ol aria-label={t('campaigns.trail.days')} className="flex flex-col gap-3">
+      <ol aria-label={t('campaigns.lantern.list')} className="flex flex-col gap-3">
         {days.map((lantern, index) => (
-          <DayLantern key={lantern.key} lantern={lantern} isToday={index === todayIndex} />
+          <DayItem key={lantern.day} lantern={lantern} isToday={index === todayIndex} />
         ))}
-        <SpecialLantern lantern={special} progress={plan.special.progress} />
+        <SpecialItem lantern={special} progress={plan.special.progress} />
       </ol>
       {hasReadyLantern && <HeadquartersPath onOpenHeadquarters={onOpenHeadquarters} />}
       {refreshFailed && (

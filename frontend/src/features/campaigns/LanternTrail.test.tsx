@@ -190,7 +190,7 @@ describe('LanternTrail', () => {
     const fetchMock = servir(plano())
     renderWithI18n(<LanternTrail />)
 
-    const lista = await screen.findByRole('list', { name: 'Dias da semana' })
+    const lista = await screen.findByRole('list', { name: 'Lanternas da semana' })
     const itens = within(lista).getAllByTestId('trail-day')
     // O processo de teste roda em Asia/Tokyo (vite.config.ts): a data civil
     // nao pode passar por fuso -- quem guarda a regra e `shared/lib/civilDate`.
@@ -304,6 +304,25 @@ describe('LanternTrail', () => {
     expect(statusDe(grande)).toHaveTextContent(
       'Lanterna grande apagada: a especial desta semana passou',
     )
+  })
+
+  it('a especial perdida apaga; sem plano, fica por vir com o texto de acender em 7 dias', async () => {
+    servir(plano(SEMANA_MISTA, 4, especial('perdida')))
+    const { unmount } = renderWithI18n(<LanternTrail />)
+    let grande = await screen.findByTestId('trail-special')
+    expect(grande).toHaveAttribute('data-state', 'out')
+    expect(statusDe(grande)).toHaveTextContent(
+      'Lanterna grande apagada: a especial desta semana passou',
+    )
+    unmount()
+
+    servir(plano(SEMANA_MISTA, 4, especial('fora_do_plano')))
+    renderWithI18n(<LanternTrail />)
+    grande = await screen.findByTestId('trail-special')
+    // O glifo e o texto concordam: futura, nunca "apagada".
+    expect(grande).toHaveAttribute('data-state', 'future')
+    expect(statusDe(grande)).toHaveTextContent('Lanterna grande: acende com 7 dias seguidos')
+    expect(within(grande).queryByTestId('trail-special-progress')).not.toBeInTheDocument()
   })
 
   it('a especial aberta fica pronta, e a grande usa o glifo grande', async () => {
@@ -526,7 +545,7 @@ describe('LanternTrail em ingles', () => {
     servir(plano())
     renderWithI18n(<LanternTrail />, { locale: 'en' })
 
-    expect(await screen.findByRole('list', { name: 'Days of the week' })).toBeInTheDocument()
+    expect(await screen.findByRole('list', { name: 'This week’s lanterns' })).toBeInTheDocument()
     expect(screen.getByTestId('trail-week')).toHaveTextContent('Week of Monday, 09/21.')
     expect(screen.getByTestId('trail-today')).toHaveTextContent('Today')
     const itens = await diasDaTrilha()

@@ -88,13 +88,22 @@ começou no meio da semana não vê falha. O marcador "Hoje" segue a regra K9 (o
 `LanternTrail.test.tsx`; os de conteúdo de missão e de baú não têm mais o que
 testar (R10).
 
+## Correção da revisão (rodada 1)
+
+- `Lantern` virou união discriminada (`DayLantern | SpecialLantern`); a
+  `lanternsOf` devolve `{ days, special }` e o `as string` saiu do componente.
+- A lista agora se chama "Lanternas da semana" (`campaigns.lantern.list`), pois
+  tem 8 itens e o oitavo não é um dia; `campaigns.trail.days` saiu.
+- O texto da lanterna grande para `fora_do_plano` passou a ser o de
+  `bloqueada` ("acende com 7 dias seguidos"), coerente com o glifo futuro. Isso
+  resolve a `P-f5-lanternas-1` desta entrega; `perdida` e `expirada` seguem
+  como "apagada".
+- O E2E de layout passou a usar acesas, apagadas, hoje pronta, por vir e a
+  especial expirada (o texto mais longo).
+- O nome deste arquivo segue o `docs/handoff/README.md`
+  (`AAAA-MM-DD-<branch-sem-wt>`).
+
 ## Pendências e riscos
 
-- `P-f5-lanternas-1`: o texto da lanterna grande para `perdida` e
-  `fora_do_plano` é o mesmo de `expirada` ("apagada: a especial desta semana
-  passou"), como manda a tabela do plano. A API não devolve esses dois valores
-  para a especial hoje, mas se devolvesse `fora_do_plano`, o glifo seria o
-  futuro (tracejado) com texto de "apagada". Ajustar o texto se esse valor
-  passar a existir.
 - Sem screenshot nem verificação visual no navegador (o plano não pede, e o
   gate cobre o layout pelo E2E e pelo axe).

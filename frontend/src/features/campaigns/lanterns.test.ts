@@ -14,7 +14,26 @@ const DAYS = [
 ]
 
 /** So a presenca da missao importa para `todayIndexOf`; o conteudo nao. */
-const MISSION = { id: 1 } as Mission
+const MISSION: Mission = {
+  id: 1,
+  instructions: 'Revisar',
+  completion_criterion: 'Resumo',
+  difficulty: 2,
+  estimated_minutes: 30,
+  mission_type: 'diaria',
+  day: DAYS[0],
+  deadline: '2026-09-22T00:00:00-03:00',
+  state: 'pendente',
+  availability: 'disponivel',
+  started_at: null,
+  completed_at: null,
+  xp: 40,
+  actual_duration_minutes: null,
+  verification: null,
+  evidence: null,
+  evaluation: null,
+  reschedules: [],
+}
 
 function day(date: string, availability: Availability, revealed: boolean): PlanDay {
   return { day: date, availability, mission: revealed ? MISSION : null }
@@ -58,17 +77,18 @@ describe('lanternsOf', () => {
     4,
   )
 
-  it('devolve oito lanternas: sete diarias na ordem da API e a especial por ultimo', () => {
-    const lanterns = lanternsOf(semana)
-    expect(lanterns).toHaveLength(8)
-    expect(lanterns.slice(0, 7).map((l) => [l.kind, l.day])).toEqual(
+  it('separa as sete diarias, na ordem da API, da especial', () => {
+    const { days, special } = lanternsOf(semana)
+    expect(days.map((lantern) => [lantern.kind, lantern.day])).toEqual(
       DAYS.map((date) => ['day', date]),
     )
-    expect(lanterns[7]).toMatchObject({ kind: 'special', day: null })
+    expect(special.kind).toBe('special')
+    expect('day' in special).toBe(false)
   })
 
   it('o estado de cada lanterna sai da tabela de disponibilidade', () => {
-    expect(lanternsOf(semana).map((l) => l.state)).toEqual([
+    const { days, special } = lanternsOf(semana)
+    expect(days.map((lantern) => lantern.state)).toEqual([
       'lit',
       'lit',
       'out',
@@ -76,13 +96,13 @@ describe('lanternsOf', () => {
       'future',
       'future',
       'future',
-      'future',
     ])
+    expect(special.state).toBe('future')
   })
 
-  it('guarda a disponibilidade original e uma chave unica por lanterna', () => {
-    const lanterns = lanternsOf(semana)
-    expect(lanterns.map((l) => l.availability)).toEqual([
+  it('guarda a disponibilidade original de cada lanterna', () => {
+    const { days, special } = lanternsOf(semana)
+    expect(days.map((lantern) => lantern.availability)).toEqual([
       'concluida',
       'concluida',
       'perdida',
@@ -90,9 +110,8 @@ describe('lanternsOf', () => {
       'disponivel',
       'bloqueada',
       'bloqueada',
-      'bloqueada',
     ])
-    expect(new Set(lanterns.map((l) => l.key)).size).toBe(8)
+    expect(special.availability).toBe('bloqueada')
   })
 
   it('a especial concluida acende e a expirada apaga', () => {
@@ -104,8 +123,8 @@ describe('lanternsOf', () => {
       ...semana,
       special: { availability: 'expirada', progress: 0, mission: MISSION },
     }
-    expect(lanternsOf(concluida)[7].state).toBe('lit')
-    expect(lanternsOf(expirada)[7].state).toBe('out')
+    expect(lanternsOf(concluida).special.state).toBe('lit')
+    expect(lanternsOf(expirada).special.state).toBe('out')
   })
 })
 

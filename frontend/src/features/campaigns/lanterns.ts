@@ -20,34 +20,44 @@ export const LANTERN_STATE: Record<Availability, LanternState> = {
   fora_do_plano: 'future',
 }
 
-export interface Lantern {
-  key: string
-  kind: 'day' | 'special'
+interface LanternBase {
   state: LanternState
   availability: Availability
-  /** A data civil do dia; `null` na lanterna grande, que e a especial. */
-  day: string | null
 }
 
-const SPECIAL_KEY = 'special'
+/** Uma diaria: sempre tem a data civil. */
+export interface DayLantern extends LanternBase {
+  kind: 'day'
+  day: string
+}
 
-/** As sete diarias na ordem da API e, por ultimo, a especial. */
-export function lanternsOf(plan: Plan): Lantern[] {
-  const days: Lantern[] = plan.days.map((day) => ({
-    key: day.day,
-    kind: 'day',
-    state: LANTERN_STATE[day.availability],
-    availability: day.availability,
-    day: day.day,
-  }))
-  const special: Lantern = {
-    key: SPECIAL_KEY,
-    kind: 'special',
-    state: LANTERN_STATE[plan.special.availability],
-    availability: plan.special.availability,
-    day: null,
+/** A lanterna grande, a especial: nao tem data. */
+export interface SpecialLantern extends LanternBase {
+  kind: 'special'
+}
+
+export type Lantern = DayLantern | SpecialLantern
+
+export interface Trail {
+  /** As sete diarias, na ordem da API. */
+  days: DayLantern[]
+  special: SpecialLantern
+}
+
+export function lanternsOf(plan: Plan): Trail {
+  return {
+    days: plan.days.map((day) => ({
+      kind: 'day',
+      state: LANTERN_STATE[day.availability],
+      availability: day.availability,
+      day: day.day,
+    })),
+    special: {
+      kind: 'special',
+      state: LANTERN_STATE[plan.special.availability],
+      availability: plan.special.availability,
+    },
   }
-  return [...days, special]
 }
 
 /**

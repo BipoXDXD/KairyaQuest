@@ -463,13 +463,13 @@ export const ptBR = {
   'campaigns.trail.noPlan':
     'Sem plano nesta semana. Um dia sem plano não quebra a sequência, e a trilha volta a mostrar os dias assim que houver um plano para a semana atual.',
   'campaigns.trail.week': 'Semana de {date}.',
-  'campaigns.trail.days': 'Dias da semana',
   'campaigns.trail.today': 'Hoje',
   'campaigns.trail.refreshFailed': 'Não foi possível atualizar a trilha.',
   'campaigns.trail.refresh': 'Atualizar',
   'campaigns.trail.special.title': 'Missão especial — bônus da sequência',
   'campaigns.trail.special.progress': 'Progresso até a especial: {progress} de {total}',
   'campaigns.lantern.title': 'Trilha de lanternas da semana',
+  'campaigns.lantern.list': 'Lanternas da semana',
   'campaigns.lantern.summary': '{lit} de {total} lanternas acesas nesta semana',
   'campaigns.lantern.day.concluida': 'Acesa: diária concluída',
   'campaigns.lantern.day.perdida': 'Apagada: sem diária neste dia',
@@ -482,8 +482,7 @@ export const ptBR = {
   'campaigns.lantern.special.bloqueada': 'Lanterna grande: acende com 7 dias seguidos',
   'campaigns.lantern.special.expirada': 'Lanterna grande apagada: a especial desta semana passou',
   'campaigns.lantern.special.perdida': 'Lanterna grande apagada: a especial desta semana passou',
-  'campaigns.lantern.special.fora_do_plano':
-    'Lanterna grande apagada: a especial desta semana passou',
+  'campaigns.lantern.special.fora_do_plano': 'Lanterna grande: acende com 7 dias seguidos',
   'campaigns.headquarters.hint': 'Conclua esta missão no Quartel-General.',
   'campaigns.headquarters.go': 'Ir ao Quartel-General',
 } as const

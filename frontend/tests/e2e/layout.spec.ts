@@ -298,21 +298,38 @@ for (const width of [320, 375]) {
         instructions: LONG_TEXT,
         completion_criterion: LONG_TEXT,
       }
+      // O pior caso de largura: uma semana com acesas, apagadas, a de hoje
+      // pronta e as por vir, e a especial expirada (o texto mais longo).
       const plan: CurrentPlan = {
         plan: {
           week_start: INICIO_DA_SEMANA,
-          days: Array.from({ length: 7 }, (_, index) => ({
-            day: somarDias(INICIO_DA_SEMANA, index),
-            availability: index === INDICE_DE_HOJE ? 'disponivel' : 'fora_do_plano',
-            mission: index === INDICE_DE_HOJE ? daily : null,
-          })),
-          special: { availability: 'bloqueada', progress: 0, mission: null },
+          days: Array.from({ length: 7 }, (_, index) => {
+            const day = somarDias(INICIO_DA_SEMANA, index)
+            if (index > INDICE_DE_HOJE) return { day, availability: 'bloqueada', mission: null }
+            if (index === INDICE_DE_HOJE) return { day, availability: 'disponivel', mission: daily }
+            const concluida = index % 2 === 0
+            return {
+              day,
+              availability: concluida ? 'concluida' : 'perdida',
+              mission: { ...daily, day },
+            }
+          }),
+          special: {
+            availability: 'expirada',
+            progress: 0,
+            mission: { ...daily, mission_type: 'especial', day: null },
+          },
         },
       }
       await layoutData(page, [], [], plan)
       await page.goto('/')
       await page.getByRole('button', { name: 'Campanhas', exact: true }).click()
       await expect(page.getByTestId('trail-day')).toHaveCount(7)
+      // Cada lanterna, a grande incluída, tem o estado em texto visível.
+      await expect(page.getByTestId('lantern-status')).toHaveCount(8)
+      await expect(page.getByTestId('trail-special').getByTestId('lantern-status')).toContainText(
+        'a especial desta semana passou',
+      )
       // A trilha mostra o estado de cada lanterna, nunca o texto da missão (R10).
       await expect(page.getByText(LONG_TEXT)).toHaveCount(0)
       await noHorizontalOverflow(page)

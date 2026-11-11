@@ -495,13 +495,13 @@ export const en = {
   'campaigns.trail.noPlan':
     "No plan this week. A day without a plan doesn't break your streak, and the trail shows the days again once this week has a plan.",
   'campaigns.trail.week': 'Week of {date}.',
-  'campaigns.trail.days': 'Days of the week',
   'campaigns.trail.today': 'Today',
   'campaigns.trail.refreshFailed': "Couldn't update your trail. It may be out of date.",
   'campaigns.trail.refresh': 'Refresh',
   'campaigns.trail.special.title': 'Special mission — streak bonus',
   'campaigns.trail.special.progress': 'Progress to the special: {progress} of {total}',
   'campaigns.lantern.title': 'This week’s lantern trail',
+  'campaigns.lantern.list': 'This week’s lanterns',
   'campaigns.lantern.summary': '{lit} of {total} lanterns lit this week',
   'campaigns.lantern.day.concluida': 'Lit: daily completed',
   'campaigns.lantern.day.perdida': 'Unlit: no daily this day',
@@ -514,7 +514,7 @@ export const en = {
   'campaigns.lantern.special.bloqueada': 'Great lantern: lights after 7 days in a row',
   'campaigns.lantern.special.expirada': 'Great lantern unlit: this week’s special has passed',
   'campaigns.lantern.special.perdida': 'Great lantern unlit: this week’s special has passed',
-  'campaigns.lantern.special.fora_do_plano': 'Great lantern unlit: this week’s special has passed',
+  'campaigns.lantern.special.fora_do_plano': 'Great lantern: lights after 7 days in a row',
   'campaigns.headquarters.hint': 'Complete this mission at Headquarters.',
   'campaigns.headquarters.go': 'Go to Headquarters',
 } as const satisfies Messages
