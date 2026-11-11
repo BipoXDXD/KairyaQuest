@@ -84,9 +84,7 @@ export function KairyaBubble(): ReactElement {
                 icon={<CloseIcon />}
                 onClick={() => {
                   dispatch({ type: 'dismissed' })
-                  // O `!`: o clique só existe com o contêiner montado; um `?.` criaria
-                  // um ramo que nenhum uso real alcança.
-                  anchor.current!.focus()
+                  anchor.current?.focus()
                 }}
               />
             </div>
