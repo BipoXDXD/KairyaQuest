@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from focusquest.modules.progression.domain import Conquista
+from focusquest.modules.progression.domain import Conquista, Rank
 from focusquest.modules.progression.service import Progresso, Recompensa
 
 
@@ -22,6 +22,7 @@ class ProgressRead(BaseModel):
     level: int
     level_floor_xp: int
     next_level_xp: int
+    rank: Rank
     achievements: list[AchievementRead]
 
     @classmethod
@@ -31,6 +32,7 @@ class ProgressRead(BaseModel):
             level=progresso.faixa.nivel,
             level_floor_xp=progresso.faixa.piso,
             next_level_xp=progresso.faixa.proximo,
+            rank=progresso.rank,
             achievements=[
                 AchievementRead(
                     code=item.conquista.codigo.value,

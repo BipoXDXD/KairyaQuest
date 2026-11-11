@@ -23,8 +23,10 @@ function progress(
   floor: number,
   next: number,
   unlocked: string[] = [],
+  rank?: string,
 ): Progress {
   return {
+    ...(rank === undefined ? {} : { rank }),
     xp_total: xp,
     level,
     level_floor_xp: floor,
@@ -207,6 +209,26 @@ describe('ProgressPanel', () => {
     expect(segunda).toHaveTextContent('A Whole Week')
     expect(segunda).toHaveTextContent('Locked: Complete your daily 7 days in a row.')
     expect(segunda).not.toHaveTextContent('Uma semana inteira')
+  })
+
+  it('mostra a faixa ao lado do nivel, nos dois idiomas', async () => {
+    serve(progress(1340, 5, 1000, 1500, [], 'rank_sprout'))
+    const { unmount } = renderWithI18n(<ProgressPanel />)
+    expect(await screen.findByTestId('progress-rank')).toHaveTextContent('Faixa: Broto')
+    unmount()
+    renderWithI18n(<ProgressPanel />, { locale: 'en' })
+    expect(await screen.findByTestId('progress-rank')).toHaveTextContent('Rank: Sprout')
+  })
+
+  it.each([
+    ['ausente (back antigo)', undefined],
+    ['desconhecida (back novo)', 'rank_novo'],
+  ])('faixa %s some, e o resto do painel continua', async (_caso, rank) => {
+    serve(progress(1340, 5, 1000, 1500, [], rank))
+    renderWithI18n(<ProgressPanel />)
+    expect(await screen.findByTestId('progress-level')).toHaveTextContent('Nível 5')
+    expect(screen.queryByTestId('progress-rank')).not.toBeInTheDocument()
+    expect(screen.queryByText(/rank_novo/)).not.toBeInTheDocument()
   })
 
   it('conquista com code desconhecido aparece com o texto do back, nos dois estados', async () => {
