@@ -1,4 +1,5 @@
 import { useImperativeHandle, type ReactElement, type Ref } from 'react'
+import { rankName } from './rankText'
 import { formatUnlockedAt } from './unlockedDate'
 import type { Achievement, Progress } from './types'
 import { useProgress, type ProgressState } from './useProgress'
@@ -7,6 +8,7 @@ import { achievementText } from '../../shared/i18n/achievementText'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
+import { Badge } from '../../shared/ui/Badge'
 
 export interface ProgressPanelHandle {
   refresh: () => void
@@ -47,6 +49,7 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
   const span = progress.next_level_xp - progress.level_floor_xp
   const into = progress.xp_total - progress.level_floor_xp
   const nextLevel = progress.level + 1
+  const rank = rankName(progress.rank, t)
   const amounts = { into: formatXp(into, locale), span: formatXp(span, locale) }
   // o aria-label da barra ja diz o nivel; o valor anunciado fica so com o XP, sem repetir o sufixo
   const valueText = t('progression.bar.valueText', amounts)
@@ -58,6 +61,11 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       >
         {t('progression.level', { level: progress.level })}
       </p>
+      {rank !== null && (
+        <Badge tone="neutral" data-testid="progress-rank">
+          {t('progression.rank.label', { name: rank })}
+        </Badge>
+      )}
       <p data-testid="progress-total" className="progress-total-value text-sm text-slate-300">
         {t('progression.xpTotal', { xp: formatXp(progress.xp_total, locale) })}
       </p>
