@@ -15,6 +15,9 @@ const CATALOGO = [
   ['veteran_50', 'Veterano II', 'Conclua 50 missões.'],
   ['veteran_100', 'Veterano III', 'Conclua 100 missões.'],
   ['kairya_partnership', 'Parceria com a Kairya', 'Conclua uma missão proposta pela Kairya.'],
+  ['first_pass', 'Primeira aprovação', 'Receba da Kairya uma avaliação “atende” numa entrega.'],
+  ['weekly_trial', 'Prova da semana vencida', 'Conclua a sua primeira missão especial.'],
+  ['comeback', 'A volta', 'Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.'],
 ] as const
 
 function progress(
@@ -104,7 +107,7 @@ describe('ProgressPanel', () => {
     expect(bloqueada).toHaveTextContent('Complete a diária 7 dias seguidos.')
   })
 
-  it('conquistas recolhem sem esconder nivel ou XP e abrem as sete informacoes', async () => {
+  it('conquistas recolhem sem esconder nivel ou XP e abrem as dez informacoes', async () => {
     serve(progress(260, 2, 100, 300, ['first_steps', 'kairya_partnership']))
     renderWithI18n(<ProgressPanel />)
     const level = await screen.findByTestId('progress-level')
@@ -117,7 +120,7 @@ describe('ProgressPanel', () => {
     expect(level).toBeVisible()
     expect(total).toBeVisible()
     const items = screen.getAllByTestId('progress-achievement')
-    expect(items).toHaveLength(7)
+    expect(items).toHaveLength(10)
     for (const item of items) expect(item).not.toBeVisible()
 
     summary?.click()
@@ -130,6 +133,24 @@ describe('ProgressPanel', () => {
     for (const item of items) expect(item).not.toBeVisible()
     expect(level).toBeVisible()
     expect(total).toBeVisible()
+  })
+
+  it('as tres conquistas derivadas: bloqueadas dizem como destravar, destravadas trazem a data', async () => {
+    serve(progress(260, 2, 100, 300, ['weekly_trial']))
+    renderWithI18n(<ProgressPanel />)
+    const items = await screen.findAllByTestId('progress-achievement')
+    const [firstPass, weeklyTrial, comeback] = items.slice(7)
+
+    expect(firstPass).toHaveAttribute('data-unlocked', 'false')
+    expect(firstPass).toHaveTextContent(
+      'Bloqueada: Receba da Kairya uma avaliação “atende” numa entrega.',
+    )
+    expect(weeklyTrial).toHaveAttribute('data-unlocked', 'true')
+    expect(weeklyTrial).toHaveTextContent('Prova da semana vencida')
+    expect(weeklyTrial).toHaveTextContent('Conquistada em 21/09/2026')
+    expect(comeback).toHaveTextContent(
+      'Bloqueada: Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.',
+    )
   })
 
   it('carregando tem role status', () => {

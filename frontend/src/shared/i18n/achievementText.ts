@@ -14,6 +14,11 @@ const KNOWN_CODES = [
   'veteran_50',
   'veteran_100',
   'kairya_partnership',
+  // As tres derivadas na leitura pelo back (F5): nunca gravadas, mas com
+  // texto proprio aqui como as demais.
+  'first_pass',
+  'weekly_trial',
+  'comeback',
 ] as const
 
 type KnownCode = (typeof KNOWN_CODES)[number]

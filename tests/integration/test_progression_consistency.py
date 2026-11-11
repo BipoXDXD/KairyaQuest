@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from focusquest.modules.missions.domain import MissionState
 from focusquest.modules.missions.models import Mission, MissionOperation, User
 from focusquest.modules.missions.service import concluir_missao, criar_missao
-from focusquest.modules.progression.domain import CATALOGO, Codigo, FaixaDoNivel
+from focusquest.modules.progression.domain import PAINEL, Codigo, FaixaDoNivel
 from focusquest.modules.progression.models import UserAchievement, XpEntry
 from focusquest.modules.progression.service import Progresso, ler_progresso
 
@@ -199,11 +199,14 @@ def test_conclusao_entre_leituras_nao_mistura_saldo_antigo_e_conquista_nova(
             None,
             None,
             None,
+            None,
+            None,
+            None,
         ]
 
     assert anterior.xp_total == 0
     assert anterior.faixa == FaixaDoNivel(1, 0, 100)
-    assert [c.conquista for c in anterior.conquistas] == list(CATALOGO)
+    assert [c.conquista for c in anterior.conquistas] == list(PAINEL)
     assert all(c.unlocked_at is None for c in anterior.conquistas), anterior
 
 
@@ -230,8 +233,8 @@ def test_saldo_sem_conquistas_preserva_o_catalogo(session: Session, saldo: int) 
     progresso = ler_progresso(session, 1)
     assert progresso.xp_total == saldo
     assert progresso.faixa == FaixaDoNivel(1, 0, 100)
-    assert [c.conquista for c in progresso.conquistas] == list(CATALOGO)
-    assert [c.unlocked_at for c in progresso.conquistas] == [None] * len(CATALOGO)
+    assert [c.conquista for c in progresso.conquistas] == list(PAINEL)
+    assert [c.unlocked_at for c in progresso.conquistas] == [None] * len(PAINEL)
 
 
 def test_varios_lancamentos_e_conquistas_nao_multiplicam_o_saldo(
@@ -256,12 +259,15 @@ def test_varios_lancamentos_e_conquistas_nao_multiplicam_o_saldo(
     progresso = ler_progresso(session, 1)
     assert progresso.xp_total == 120
     assert progresso.faixa == FaixaDoNivel(2, 100, 300)
-    assert [c.conquista for c in progresso.conquistas] == list(CATALOGO)
+    assert [c.conquista for c in progresso.conquistas] == list(PAINEL)
     assert [c.unlocked_at for c in progresso.conquistas] == [
         datas[0],
         datas[1],
         None,
         datas[2],
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -303,6 +309,9 @@ def test_leitura_filtra_saldo_e_conquistas_do_outro_usuario(session: Session) ->
         None,
         None,
         None,
+        None,
+        None,
+        None,
     ]
     progresso_alheio = ler_progresso(session, outro.id)
     assert progresso_alheio.xp_total == 220
@@ -311,6 +320,9 @@ def test_leitura_filtra_saldo_e_conquistas_do_outro_usuario(session: Session) ->
         None,
         None,
         AGORA + timedelta(days=1),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -352,6 +364,9 @@ def test_leitura_ve_as_proprias_alteracoes_sem_commitar_ou_alterar_o_estado(
         assert progresso.xp_total == 40
         assert [c.unlocked_at for c in progresso.conquistas] == [
             AGORA,
+            None,
+            None,
+            None,
             None,
             None,
             None,
