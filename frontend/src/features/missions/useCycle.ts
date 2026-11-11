@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestJson } from '../../shared/api/client'
-import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { Cycle } from './types'
 
@@ -15,7 +15,7 @@ import type { Cycle } from './types'
  */
 export type CycleState =
   | { status: 'loading' }
-  | { status: 'error'; failure: MissionsLoadFailure }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'loaded'; cycle: Cycle; refreshFailed: boolean }
 
 export interface UseCycleResult {
@@ -75,7 +75,7 @@ export function useCycle(): UseCycleResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
+        setState({ status: 'error', failure: loadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -106,7 +106,7 @@ export function useCycle(): UseCycleResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', failure: missionsLoadFailureFor(error) }
+              ? { status: 'error', failure: loadFailureFor(error) }
               : atual,
         )
       })

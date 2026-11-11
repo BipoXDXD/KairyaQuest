@@ -16,7 +16,7 @@ import type { CompletionRegistry } from './useCompletionRegistry'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useCycle, type CycleState } from './useCycle'
 import type { MessageKey } from '../../shared/i18n/catalog'
-import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import type { Locale } from '../../shared/i18n/locale'
 import { plural } from '../../shared/i18n/plural'
 import { useLocale } from '../../shared/i18n/useLocale'
@@ -244,11 +244,10 @@ function CycleContent({
         >
           <p className="font-semibold">{t('missions.cycle.loadFailed')}</p>
           <p className="mt-1">
-            {state.failure.kind === 'api' ? (
-              <FailureMessage failure={state.failure.text} />
-            ) : (
-              t('missions.cycle.unexpectedFailure')
-            )}
+            <LoadFailureMessage
+              failure={state.failure}
+              unexpected="missions.cycle.unexpectedFailure"
+            />
           </p>
           <button
             type="button"

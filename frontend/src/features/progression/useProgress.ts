@@ -28,16 +28,6 @@ export interface UseProgressResult {
   refresh: () => void
 }
 
-/**
- * A falha da carga, para a tela. O `ApiError` vira o texto do catalogo pelo
- * `kind`; sua `message` e de depuracao e nunca chega a tela. A leitura nao tem
- * erro de dominio com `code`: o que chega e rede ou servidor, e qualquer outra
- * coisa e defeito nosso, sem mensagem propria que ajude alguem.
- */
-function failureFor(error: unknown): LoadFailure {
-  return loadFailureFor(error, 'Falha inesperada ao carregar o progresso.')
-}
-
 export function useProgress(): UseProgressResult {
   const [state, setState] = useState<ProgressState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -84,7 +74,7 @@ export function useProgress(): UseProgressResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', failure: failureFor(error) })
+        setState({ status: 'error', failure: loadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -115,7 +105,7 @@ export function useProgress(): UseProgressResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', failure: failureFor(error) }
+              ? { status: 'error', failure: loadFailureFor(error) }
               : atual,
         )
       })

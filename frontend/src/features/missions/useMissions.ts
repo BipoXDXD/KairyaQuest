@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestJson } from '../../shared/api/client'
-import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import type { Mission } from '../../shared/types/mission'
 
 /**
@@ -16,7 +16,7 @@ import type { Mission } from '../../shared/types/mission'
 export type MissionsState =
   | { status: 'loading' }
   | { status: 'empty' }
-  | { status: 'error'; failure: MissionsLoadFailure }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'loaded'; missions: Mission[] }
 
 export interface UseMissionsResult {
@@ -70,7 +70,7 @@ export function useMissions(): UseMissionsResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
+        setState({ status: 'error', failure: loadFailureFor(error) })
       })
 
     return () => {
