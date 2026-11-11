@@ -1,4 +1,4 @@
-import { CampaignTrail } from '../features/campaigns/CampaignTrail'
+import { LanternTrail } from '../features/campaigns/LanternTrail'
 import { useT } from '../shared/i18n/useT'
 import { AreaHero } from './AreaHero'
 import { CAMPAIGNS_HEADING_ID } from './headings'
@@ -7,14 +7,14 @@ import { CAMPAIGNS_HEADING_ID } from './headings'
  * Campanhas — planos de estudo (README §7; spec do ciclo diario, "Campanhas
  * — a trilha").
  *
- * A pagina COMPOE, como o Quartel-General: o `main`, o titulo e a trilha da
- * semana -- `<CampaignTrail />`, de `features/campaigns/CampaignTrail.tsx`,
- * com titulos a partir do `h2`. `onOpenHeadquarters` e opcional e so
- * atravessa: quem decide a navegacao e o `App`, nao esta pagina; Campanhas
- * repassa o callback, e a trilha decide mostrar o botao "Ir ao
- * Quartel-General" so quando ele existe. Por isso Campanhas recebe uma prop,
- * e a fronteira da pagina (so compoe o `main`, o titulo e a trilha) continua
- * a mesma.
+ * A pagina COMPOE, como o Quartel-General: o `main`, o titulo e a trilha de
+ * lanternas da semana -- `<LanternTrail />`, de
+ * `features/campaigns/LanternTrail.tsx`, com titulos a partir do `h2`.
+ * `onOpenHeadquarters` e opcional e so atravessa: quem decide a navegacao e o
+ * `App`, nao esta pagina; Campanhas repassa o callback, e a trilha decide
+ * mostrar o botao "Ir ao Quartel-General" so quando ele existe e ha lanterna
+ * pronta. Por isso Campanhas recebe uma prop, e a fronteira da pagina (so
+ * compoe o `main`, o titulo e a trilha) continua a mesma.
  */
 export function Campaigns({
   onOpenHeadquarters,
@@ -33,7 +33,7 @@ export function Campaigns({
         title={t('campaigns.page.title')}
         note={t('campaigns.page.subtitle')}
       />
-      <CampaignTrail onOpenHeadquarters={onOpenHeadquarters} />
+      <LanternTrail onOpenHeadquarters={onOpenHeadquarters} />
     </main>
   )
 }
