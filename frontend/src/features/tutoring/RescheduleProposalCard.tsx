@@ -30,11 +30,12 @@ function Outcome({
   boardHref: string
   onGoToBoard?: () => void
 }): ReactElement {
+  const t = useT()
   switch (action.state) {
     case 'proposta':
       return (
         <DecisionControls
-          target={`o reagendamento: ${action.payload.instructions}`}
+          target={t('tutoring.reschedule.target', { instructions: action.payload.instructions })}
           decision={decision}
           onConfirm={onConfirm}
           onReject={onReject}
@@ -45,7 +46,7 @@ function Outcome({
       return (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <p data-testid="proposal-rescheduled" className="font-medium text-emerald-300">
-            Prazo reagendado
+            {t('tutoring.reschedule.done')}
           </p>
           <BoardLink href={boardHref} onGoToBoard={onGoToBoard} />
         </div>
@@ -53,7 +54,7 @@ function Outcome({
     case 'recusada':
       return (
         <p data-testid="proposal-rejected" className="mt-3 text-sm text-slate-400">
-          Proposta recusada
+          {t('tutoring.proposal.rejected')}
         </p>
       )
     case 'falhou':
@@ -103,19 +104,19 @@ export function RescheduleProposalCard({
       data-state={action.state}
       className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
     >
-      <h3 className="text-sm font-semibold text-slate-50">Proposta de reagendamento</h3>
+      <h3 className="text-sm font-semibold text-slate-50">{t('tutoring.reschedule.title')}</h3>
       <p data-testid="reschedule-instructions" className="mt-1 text-sm text-slate-100">
         {payload.instructions}
       </p>
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-300">
-        <dt className="text-slate-400">Prazo atual</dt>
+        <dt className="text-slate-400">{t('tutoring.reschedule.previousDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-previous-deadline" dateTime={payload.previous_deadline}>
             {formatDeadline(payload.previous_deadline)}
           </time>
         </dd>
 
-        <dt className="text-slate-400">Prazo proposto</dt>
+        <dt className="text-slate-400">{t('tutoring.reschedule.newDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-new-deadline" dateTime={payload.new_deadline}>
             {formatDeadline(payload.new_deadline)}
@@ -123,7 +124,7 @@ export function RescheduleProposalCard({
         </dd>
       </dl>
       <p data-testid="reschedule-reason" className="mt-1 text-sm text-slate-300">
-        <span className="text-slate-400">Motivo: </span>
+        <span className="text-slate-400">{t('tutoring.reschedule.reason')} </span>
         {t(RESCHEDULE_REASON_LABELS[payload.reason])}
       </p>
       <Outcome

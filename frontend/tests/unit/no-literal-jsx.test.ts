@@ -52,6 +52,18 @@ describe('nenhum texto literal no JSX do shell', () => {
     expect(await literalViolations(component('<p>Olá</p>'), 'src/pages/Headquarters.tsx')).toBe(1)
   })
 
+  it('vale para a tutoria', async () => {
+    expect(await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.tsx')).toBe(
+      1,
+    )
+  })
+
+  it('nao vale para o teste da tutoria', async () => {
+    expect(
+      await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.test.tsx'),
+    ).toBe(0)
+  })
+
   it.each([
     ['feature ainda nao migrada', 'src/features/missions/Fake.tsx'],
     ['teste do shell', 'src/app/Fake.test.tsx'],
