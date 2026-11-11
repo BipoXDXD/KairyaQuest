@@ -1181,7 +1181,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 
 | ID | O que continua aberto |
 |---|---|
-| 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
+| ~~49~~ | ~~Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico.~~ Resolvida pelo PR #104 (code SSE desconhecido vira falha genérica, não resultado desconhecido). Handoff: `docs/handoff/2026-11-11-sse-code-desconhecido.md`. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
 | ~~100~~ | ~~Log local sem segredos nos dois adaptadores: o Groq registra em `WARNING` o status HTTP, `retry-after` e `x-ratelimit-*` (valores saneados, até 64 caracteres), ou só o tipo da exceção em timeout, transporte e stream inválido; nunca corpo, chave, `Authorization` nem texto do usuário. Continua aberto: decidir codes/textos públicos para 4xx (401/403/404/413/429) no tradutor compartilhado chat/avaliação; hoje todos seguem `provedor_indisponivel`.~~ Obsoleta: o Groq foi removido com a volta da tutoria à Anthropic em 2026-11-10 (commit `e476f7b`; seção "Tutoria volta à API da Anthropic, com cache e teto diário", que registra "Pendência 100 encerrada"); o tradutor de 4xx do Groq deixou de existir. |
 | ~~100~~ | ~~**Encerrada em 2026-11-10** com a volta à Anthropic (ver topo).~~ Mesmo encerramento (commit `e476f7b`; mesma seção do `docs/HANDOFF.md`). |
