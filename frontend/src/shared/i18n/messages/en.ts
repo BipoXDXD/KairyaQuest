@@ -171,6 +171,76 @@ export const en = {
   'missions.evaluationFailure.generic.network':
     "Couldn't request the evaluation: the server is unreachable.",
 
+  'tutoring.name': 'Kairya',
+  'tutoring.panel.subtitle': 'your tutor',
+  'tutoring.panel.collapse': "Collapse Kairya's panel",
+  'tutoring.panel.expand': "Open Kairya's panel",
+  'tutoring.panel.openSheet': 'Talk to Kairya',
+  'tutoring.panel.closeSheet': 'Close the conversation',
+
+  'tutoring.conversation.region': 'Conversation with Kairya',
+  'tutoring.conversation.greeting':
+    'This is where you talk with Kairya, your tutor. Ask for a study mission or bring a question.',
+  'tutoring.history.loading': 'Loading the conversation…',
+  'tutoring.history.loadFailed':
+    "Couldn't load your conversation with Kairya. The request failed. Use the button to try again.",
+  'tutoring.status.loadFailed':
+    "Couldn't check whether Kairya is available. The request failed. Use the button to try again.",
+  'tutoring.retryLoad': 'Try again',
+  'tutoring.retry': 'Try again',
+  'tutoring.writing': 'Kairya is writing…',
+  'tutoring.message.author.user': 'You',
+  'tutoring.message.mark.generating': 'Answer in progress',
+  'tutoring.message.mark.interrupted': 'Answer interrupted',
+  'tutoring.message.mark.failed': 'Answer failed',
+  'tutoring.message.fallback':
+    "Answered by a substitute model ({model}) because the main model couldn't answer this question.",
+  'tutoring.input.label': 'Your message to Kairya',
+  'tutoring.send.idle': 'Send',
+  'tutoring.send.busy': 'Sending…',
+  'tutoring.counter.remaining.zero': '0 characters left.',
+  'tutoring.counter.remaining.one': '1 character left.',
+  'tutoring.counter.remaining.other': '{count} characters left.',
+  'tutoring.counter.over.one': '1 character over the {max} limit.',
+  'tutoring.counter.over.other': '{count} characters over the {max} limit.',
+
+  'tutoring.answer.announce.complete': 'Kairya finished answering.',
+  'tutoring.answer.announce.cut':
+    "Kairya's answer ran too long and was cut off. Try asking in parts.",
+  'tutoring.answer.announce.incomplete': "Kairya's answer arrived incomplete.",
+  'tutoring.answer.note.long':
+    "Kairya's last answer was cut off for being too long. Ask in parts; retrying may cut again.",
+  'tutoring.answer.note.refused':
+    "Kairya couldn't answer your last question. Retrying will likely give the same result. Ask a different way.",
+  'tutoring.answer.note.general':
+    "Your last question has no complete answer. The result is unknown. Retrying is safe: your question won't repeat.",
+
+  'tutoring.decision.confirm': 'Confirm',
+  'tutoring.decision.confirming': 'Confirming…',
+  'tutoring.decision.reject': 'Decline',
+  'tutoring.decision.rejecting': 'Declining…',
+  'tutoring.decision.refresh': 'Refresh the conversation',
+
+  'tutoring.proposal.title': 'Mission proposal',
+  'tutoring.proposal.target': 'the proposal: {instructions}',
+  'tutoring.proposal.criterion': 'Completion criterion:',
+  'tutoring.proposal.difficulty': 'Difficulty',
+  'tutoring.proposal.difficultyValue': '{value} of {max}',
+  'tutoring.proposal.estimate': 'Estimate',
+  'tutoring.proposal.minutes': '{minutes} min',
+  'tutoring.proposal.deadline': 'Deadline',
+  'tutoring.proposal.created': 'Mission created',
+  'tutoring.proposal.rejected': 'Proposal declined',
+  'tutoring.proposal.boardLink': 'See it at Headquarters',
+  'tutoring.proposal.unknown': "This version can't display this proposal.",
+
+  'tutoring.reschedule.title': 'Rescheduling proposal',
+  'tutoring.reschedule.target': 'the rescheduling: {instructions}',
+  'tutoring.reschedule.previousDeadline': 'Current deadline',
+  'tutoring.reschedule.newDeadline': 'Proposed deadline',
+  'tutoring.reschedule.reason': 'Reason:',
+  'tutoring.reschedule.done': 'Deadline rescheduled',
+
   'tutoring.messageFailure.safeRetry': "Retrying is safe: your question won't repeat.",
   'tutoring.messageFailure.tryAgain': 'Try again.',
   'tutoring.messageFailure.unknownResult.message':

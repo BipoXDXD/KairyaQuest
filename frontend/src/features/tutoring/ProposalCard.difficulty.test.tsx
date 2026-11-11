@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { renderWithI18n } from '../../test/i18n'
 import { ProposalCard } from './ProposalCard'
 import type { ActionRead } from './types'
 import type { ActionKeys } from './useActionKeys'
@@ -34,7 +35,7 @@ const chaves: ActionKeys = {
 
 describe('ProposalCard -- o teto da dificuldade', () => {
   it('escreve o teto de MAX_DIFFICULTY, e nao um numero fixo', () => {
-    render(
+    renderWithI18n(
       <ProposalCard
         action={proposta}
         keys={chaves}
