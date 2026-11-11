@@ -239,6 +239,28 @@ jobs:
       - name: HANDOFF so na consolidacao
         run: make check-handoff
 
+  check-wheel:
+    runs-on: ubuntu-24.04
+    # Um `uv build --wheel` do projeto (baixa o hatchling fixado no
+    # pyproject.toml) e a leitura do `namelist()`. Segundos de alvo; o teto
+    # cobre o download do backend e do Python com cache frio.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # `version` fixa o uv: o catalogo de interpretadores que ele baixa muda a
+      # cada release, e `.python-version` (3.14.10) so resolve se o catalogo do
+      # uv instalado o contiver. O 0.13.7 traz o 3.14.10.
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - name: Instalar dependencias do backend
+        run: uv sync --locked
+      - name: Prompts dentro do wheel
+        run: make check-wheel
+
   quality-gate:
     runs-on: ubuntu-24.04
     # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
@@ -246,9 +268,9 @@ jobs:
     timeout-minutes: 5
     # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
     # o agregador aprovaria sem te-lo verificado (limitacao registrada em
-    # docs/QUALITY.md s5). Os cinco jobs de verificacao estao aqui, e o loop
-    # abaixo confere os cinco.
-    needs: [check-handoff, check-web, check-api, check-e2e, check-secrets]
+    # docs/QUALITY.md s5). Os seis jobs de verificacao estao aqui, e o loop
+    # abaixo confere os seis.
+    needs: [check-handoff, check-web, check-api, check-e2e, check-secrets, check-wheel]
     if: always()
     steps:
       - name: Exigir sucesso explicito de todos os jobs
@@ -258,7 +280,8 @@ jobs:
           echo "check-api=${{ needs.check-api.result }}"
           echo "check-e2e=${{ needs.check-e2e.result }}"
           echo "check-secrets=${{ needs.check-secrets.result }}"
-          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}"; do
+          echo "check-wheel=${{ needs.check-wheel.result }}"
+          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}" "${{ needs.check-wheel.result }}"; do
             if [ "$r" != "success" ]; then
               echo "quality-gate reprovado: um job nao terminou em success" >&2
               exit 1

@@ -12,10 +12,14 @@ from typing import Any
 import anthropic
 import pytest
 
+from focusquest.core.idioma import Idioma
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import Ferramenta, MensagemDoTurno, Turno
 
+# A persona de producao, como a tutoria a monta: o teste do prefixo cacheado
+# olha o texto real que vai no bloco com `cache_control`.
 TURNO = Turno(
-    sistema="PERSONA",
+    sistema=persona_do_idioma(Idioma.PT_BR),
     contexto="CONTEXTO DO TURNO",
     mensagens=(
         MensagemDoTurno("user", "oi"),

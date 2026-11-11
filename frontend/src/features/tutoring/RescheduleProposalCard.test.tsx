@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { renderWithI18n } from '../../test/i18n'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatDeadline } from '../../shared/lib/deadline'
@@ -95,7 +96,7 @@ afterEach(() => {
 
 describe('RescheduleProposalCard', () => {
   it('R1 mostra a missao, o prazo atual, o proposto e o motivo em texto', () => {
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     expect(card()).toHaveAttribute('data-action-id', '31')
     expect(card()).toHaveAttribute('data-state', 'proposta')
@@ -129,13 +130,13 @@ describe('RescheduleProposalCard', () => {
     ['falta_de_tempo', 'Motivo: Falta de tempo'],
     ['mudanca_de_prioridade', 'Motivo: Mudança de prioridade'],
   ] as const)('R2 o motivo %s vira texto', (reason, text) => {
-    render(<Harness initial={{ ...proposta, payload: { ...proposta.payload, reason } }} />)
+    renderWithI18n(<Harness initial={{ ...proposta, payload: { ...proposta.payload, reason } }} />)
 
     expect(screen.getByTestId('reschedule-reason')).toHaveTextContent(text)
   })
 
   it('R3 Confirmar e Recusar dizem qual missao reagendam', () => {
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     expect(screen.getByRole('button', { name: `Confirmar o reagendamento: ${INSTRUCTIONS}` })).toBe(
       confirmButton(),
@@ -148,7 +149,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R4 clique duplo no Confirmar faz UM POST: os dois botoes desabilitados em voo', () => {
     const fetchMock = routeFetch({ [CONFIRM]: PENDING })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
     fireEvent.click(confirmButton())
@@ -161,7 +162,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R4 clique duplo no Recusar faz UM POST', () => {
     const fetchMock = routeFetch({ [REJECT]: PENDING })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(rejectButton())
     fireEvent.click(rejectButton())
@@ -179,7 +180,7 @@ describe('RescheduleProposalCard', () => {
     })
     const onMissionCreated = vi.fn()
     const onGoToBoard = vi.fn()
-    render(
+    renderWithI18n(
       <Harness initial={proposta} onMissionCreated={onMissionCreated} onGoToBoard={onGoToBoard} />,
     )
 
@@ -197,7 +198,7 @@ describe('RescheduleProposalCard', () => {
   })
 
   it('R5 executada sem onGoToBoard: o link segue so pelo href', () => {
-    render(<Harness initial={executada} />)
+    renderWithI18n(<Harness initial={executada} />)
 
     const link = screen.getByRole('link', { name: 'Ver no Quartel-General' })
     expect(link).toHaveAttribute('href', BOARD)
@@ -206,7 +207,7 @@ describe('RescheduleProposalCard', () => {
   })
 
   it('R6 recusada: marcada, sem botoes nem link', () => {
-    render(<Harness initial={{ ...proposta, state: 'recusada' }} />)
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'recusada' }} />)
 
     expect(screen.getByTestId('proposal-rejected')).toHaveTextContent('Proposta recusada')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
@@ -218,7 +219,7 @@ describe('RescheduleProposalCard', () => {
     ['reagendamento_invalido', INVALIDATED_TEXT],
     ['outro', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
   ])('R7 falhou com %s: o texto certo, sem botoes', (code, text) => {
-    render(<Harness initial={{ ...proposta, state: 'falhou', error_code: code }} />)
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'falhou', error_code: code }} />)
 
     expect(screen.getByTestId('proposal-expired')).toHaveTextContent(text)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
@@ -229,7 +230,9 @@ describe('RescheduleProposalCard', () => {
     const fetchMock = routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
     const onRefresh = vi.fn()
     const onMissionCreated = vi.fn()
-    render(<Harness initial={proposta} onRefresh={onRefresh} onMissionCreated={onMissionCreated} />)
+    renderWithI18n(
+      <Harness initial={proposta} onRefresh={onRefresh} onMissionCreated={onMissionCreated} />,
+    )
 
     fireEvent.click(confirmButton())
 
@@ -243,7 +246,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R9 confirmar com 422 prazo_expirado leva o cartao a falhou pelo prazo', async () => {
     const fetchMock = routeFetch({ [CONFIRM]: withCode(422, 'prazo_expirado') })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -256,7 +259,7 @@ describe('RescheduleProposalCard', () => {
     // O clique some com o botao focado e com o alerta da falha que repete; sem
     // um alerta novo, quem usa leitor de tela fica sem saber que a proposta caiu.
     routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -267,7 +270,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R15 o prazo expirado gravado agora tambem e anunciado', async () => {
     routeFetch({ [CONFIRM]: withCode(422, 'prazo_expirado') })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -277,7 +280,7 @@ describe('RescheduleProposalCard', () => {
   it('R16 uma falha que ja veio gravada do historico NAO e anunciada de novo', () => {
     // Abrir a conversa nao pode falar, ao leitor de tela, todas as propostas
     // que cairam em dias anteriores.
-    render(
+    renderWithI18n(
       <Harness initial={{ ...proposta, state: 'falhou', error_code: 'reagendamento_invalido' }} />,
     )
 
@@ -287,7 +290,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R10 falha de rede: o aviso fala do prazo, e o Confirmar vira Tentar de novo', async () => {
     routeFetch({ [CONFIRM]: networkFailure })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -302,7 +305,7 @@ describe('RescheduleProposalCard', () => {
   it('R11 ja decidida: Atualizar a conversa no lugar dos botoes', async () => {
     routeFetch({ [CONFIRM]: withCode(409, 'transicao_ilegal') })
     const onRefresh = vi.fn()
-    render(<Harness initial={proposta} onRefresh={onRefresh} />)
+    renderWithI18n(<Harness initial={proposta} onRefresh={onRefresh} />)
 
     fireEvent.click(confirmButton())
 
@@ -317,7 +320,7 @@ describe('RescheduleProposalCard', () => {
       [REJECT]: () => Response.json({ action: { ...proposta, state: 'recusada' } }),
     })
     const onMissionCreated = vi.fn()
-    render(<Harness initial={proposta} onMissionCreated={onMissionCreated} />)
+    renderWithI18n(<Harness initial={proposta} onMissionCreated={onMissionCreated} />)
 
     fireEvent.click(rejectButton())
 
@@ -330,7 +333,7 @@ describe('RescheduleProposalCard', () => {
 
   it('R13 falha ao recusar: o Recusar vira Tentar de novo, e o Confirmar volta ao normal', async () => {
     routeFetch({ [REJECT]: networkFailure })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(rejectButton())
 

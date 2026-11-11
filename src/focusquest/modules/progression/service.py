@@ -17,7 +17,6 @@ from focusquest.modules.missions.models import Mission, User
 from focusquest.modules.progression.domain import (
     CATALOGO,
     CONQUISTA_POR_CODIGO,
-    Codigo,
     Conquista,
     FaixaDoNivel,
     FatosDoUsuario,
@@ -81,7 +80,7 @@ def registrar_conclusao(session: Session, missao: Mission, agora: datetime) -> N
             session.add(
                 UserAchievement(
                     user_id=missao.user_id,
-                    code=conquista.codigo.value,
+                    code=conquista.codigo,
                     unlocked_at=agora,
                     xp_entry_id=entrada.id,
                 )
@@ -165,7 +164,7 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
         xp_total=total,
         level_before=nivel_do_saldo(antes),
         level_after=nivel_do_saldo(total),
-        achievements_unlocked=tuple(c for c in CATALOGO if c.codigo.value in codigos),
+        achievements_unlocked=tuple(c for c in CATALOGO if c.codigo in codigos),
     )
 
 
@@ -245,9 +244,7 @@ def ler_progresso(session: Session, user_id: int) -> Progresso:
         .outerjoin(UserAchievement, UserAchievement.user_id == user_id)
     ).all()
     total = linhas[0].xp_total
-    datas = {
-        Codigo(codigo): quando for _, codigo, quando in linhas if codigo is not None
-    }
+    datas = {codigo: quando for _, codigo, quando in linhas if codigo is not None}
     return Progresso(
         xp_total=total,
         faixa=faixa_do_nivel(total),

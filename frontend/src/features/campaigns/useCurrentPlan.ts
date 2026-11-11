@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { CurrentPlan, Plan } from './types'
 
@@ -15,7 +16,7 @@ import type { CurrentPlan, Plan } from './types'
  */
 export type CurrentPlanState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'no-plan' }
   | { status: 'loaded'; plan: Plan; refreshFailed: boolean }
 
@@ -32,12 +33,13 @@ export interface UseCurrentPlanResult {
 }
 
 /**
- * O `ApiError` ja traz prosa em pt-BR escrita pelo cliente HTTP (nunca o
- * `detail`). A leitura da trilha nao tem erro de dominio com `code`: o que
- * chega aqui e rede ou servidor, e qualquer outra coisa e defeito nosso.
+ * A falha da carga, para a tela. O `ApiError` vira o texto do catalogo pelo
+ * `kind`; sua `message` e de depuracao e nunca chega a tela. A leitura nao tem
+ * erro de dominio com `code`: o que chega e rede ou servidor, e qualquer outra
+ * coisa e defeito nosso, sem mensagem propria que ajude alguem.
  */
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar a trilha.'
+function failureFor(error: unknown): LoadFailure {
+  return loadFailureFor(error, 'Falha inesperada ao carregar a trilha.')
 }
 
 /**
@@ -89,7 +91,7 @@ export function useCurrentPlan(): UseCurrentPlanResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: failureFor(error) })
       })
     return () => {
       controller.abort()
@@ -122,7 +124,7 @@ export function useCurrentPlan(): UseCurrentPlanResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', message: messageFor(error) }
+              ? { status: 'error', failure: failureFor(error) }
               : atual,
         )
       })

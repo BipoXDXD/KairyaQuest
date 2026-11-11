@@ -20,7 +20,7 @@ Python ficassem em sincronia. Revisão-base: `d3d96a2` (`origin/main`).
 
 1. Atualize `.python-version` e tag e digest dos `FROM python:`; o teste aponta
    o que ficou para trás.
-2. Atualize o `version:` dos dois `astral-sh/setup-uv` do `quality.yml`
+2. Atualize o `version:` de cada `astral-sh/setup-uv` do `quality.yml`
    (`check-api`, `check-e2e`); confira com
    `uv --no-config python list <série> --all-versions` no uv a fixar. Se
    esquecer, o job falha no `uv sync --locked`.

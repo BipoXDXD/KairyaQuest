@@ -11,6 +11,7 @@ import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluatio
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
 
 /** O rotulo fixo de toda avaliacao concluida (README §5: o modelo interpreta). */
 const MODEL_LABEL = 'Avaliação da Kairya — interpretação do modelo, não verificação automática'
@@ -240,7 +241,7 @@ function EvidenceAndEvaluation({
   )
   const view = currentView(mission.evaluation, request)
   const failure = view.kind === 'failed' ? view.failure : null
-  const canRequest = view.kind !== 'concluded' && failure?.recovery !== 'refresh'
+  const canRequest = view.kind !== 'concluded' && failure?.action !== 'refresh'
 
   return (
     <div className="mt-2">
@@ -269,10 +270,10 @@ function EvidenceAndEvaluation({
             aria-describedby={describedBy}
             className={REQUEST_BUTTON_CLASS}
           >
-            {failure?.recovery === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Kairya'}
+            {failure?.action === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Kairya'}
           </button>
         )}
-        {failure?.recovery === 'refresh' && onReload !== undefined && (
+        {failure?.action === 'refresh' && onReload !== undefined && (
           <button
             type="button"
             data-testid="evaluation-reload"
@@ -299,7 +300,7 @@ function EvidenceAndEvaluation({
             data-testid="evaluation-error"
             className="w-full text-sm text-red-300"
           >
-            {failure.message}
+            <FailureMessage failure={failure} />
           </p>
         )}
       </div>

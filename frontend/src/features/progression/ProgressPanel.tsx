@@ -2,6 +2,7 @@ import { useImperativeHandle, type ReactElement, type Ref } from 'react'
 import { formatUnlockedAt } from './unlockedDate'
 import type { Achievement, Progress } from './types'
 import { useProgress, type ProgressState } from './useProgress'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 
 export interface ProgressPanelHandle {
   refresh: () => void
@@ -101,7 +102,9 @@ function ProgressContent({
     case 'error':
       return (
         <div role="alert" data-testid="progress-error" className="text-sm text-red-300">
-          <p>{state.message}</p>
+          <p>
+            <LoadFailureMessage failure={state.failure} />
+          </p>
           <button
             type="button"
             data-testid="progress-retry"
