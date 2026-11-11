@@ -1,388 +1,410 @@
-# Fase 4, Tarefa 4.7: painel da Kairya no design system — 2026-11-10
+# Pendência 65: três ou mais refresh concorrentes — 2026-11-10
 
-Objetivo: migrar a tutoria (painel, conversa, cartões de proposta e controles
-de decisão) para tokens e componentes da F4, sobre a tutoria da F3.
-Base: `wt/f4-migra-shell` (`5a3b014`) com merge de `origin/wt/f3-tutoring`
-(`4cbdd7f`) no commit `34081a3`.
+Objetivo: trocar o argumento estrutural da pendência 65 ("a guarda de
+sequência não depende de quantos pedidos estão em voo") por prova, em
+`useCycle` e `useCurrentPlan`. Revisão-base: `d65a97d`. **Só testes**:
+nenhuma linha de `src/` não-teste mudou, e o denominador da cobertura é o
+mesmo.
 
-Decisões:
+Testes novos, num `describe('tres ou mais refresh concorrentes')` em
+`frontend/src/features/missions/useCycle.test.tsx` e
+`frontend/src/features/campaigns/useCurrentPlan.test.tsx`. Um helper local
+(`emVoo`) deixa cada chamada em voo até o teste responder pelo índice, e cada
+resposta cede um macrotask dentro do `act` (mesmo recurso do teste da carga
+inicial que assenta depois), para que um "ignorado" não passe vacuamente.
+Sem relógio, sem `sleep`; a ordem é a das chamadas ao `routeFetch`.
 
-- Desktop: o `aside` é um `Panel as="aside"` com `glow` quando aberto (luz
-  da lanterna), dentro de uma coluna `sticky` de altura `h-dvh`. Celular:
-  `aside` sem moldura, porque o botão e a folha são fixos e uma caixa com
-  borda ficaria vazia no fluxo. A troca de layout passa a remontar o `aside`
-  inteiro (região viva inclusive); antes só o conteúdo remontava.
-- `Panel` ganhou `ref` e `aria-label` só na variante landmark (o `div`
-  continua sem nome); `IconButton` ganhou `ref`, `expanded`, `controls` e
-  `title`; `Button` ganhou `ref` no tipo. Cada extensão tem teste.
-- Retrato (`ART.kairya.portrait`) e avatar (`ART.kairya.avatar`) são
-  decorativos (`alt=""`, moldura `aria-hidden`): o nome vem do painel, do
-  título da folha e do botão. O P26 mudou de "tem nome acessível" para
-  "é decorativo", como pede o brief.
-- Mensagens da Kairya são `SpeechBubble` (`figure` nomeada "Kairya"); a da
-  pessoa, caixa simples com "Você". O carregamento é o `Skeleton`, com o
-  mesmo `data-testid` e o mesmo status `sr-only`.
-- Botões: Enviar e Confirmar `primary`; Recusar, Atualizar, Tentar de novo e
-  Fechar a conversa `secondary`; recolher/abrir é `IconButton` com seta.
-- As falhas continuam `role="alert"` (como a F3 as deixou), agora em
-  `text-feedback-danger`; não viraram `StatusLine` (`role="status"`) para não
-  trocar o papel que os testes e o leitor de tela esperam.
-- `.rpg-tutor` e `.tutor-*` saíram do `index.css`; os cinco arquivos da
-  tutoria saíram de `PENDING_MIGRATION`. No `layout.spec.ts`, o texto longo
-  da resposta é lido por `tutor-message-content`, e não mais pelo segundo
-  `p` da bolha (a autoria da Kairya agora é `figcaption`).
+| Teste | Cenário | Estado afirmado |
+|---|---|---|
+| F1 | três refresh respondendo na ordem inversa (3, 2, 1) | dado do terceiro |
+| F2 | dois sucessos velhos, depois falha do mais recente | dado da carga, `refreshFailed: true` |
+| F3 | sucesso do mais recente, depois duas falhas velhas | dado do mais recente, sem aviso |
+| F4 | dois refresh, `reload`, um terceiro refresh (quatro em voo) | só o refresh pedido depois do `reload` conta, inclusive contra a carga do próprio `reload` |
+| F5 | três refresh durante a carga inicial | sucesso velho não tira de "carregando"; falha do mais recente vira erro; respostas velhas depois não mudam o erro |
+| F6 (só plano) | o mais recente responde `plan: null`, os velhos com plano depois | `no-plan` |
 
-# Fase 4, Tarefa 4.6: shell, navegação e cabeçalhos das áreas — 2026-11-10
+Sabotagens temporárias, todas desfeitas com `git checkout` e lidas na saída
+do `vitest` (os dois arquivos se comportaram igual):
 
-Objetivo: migrar o shell (`App`, `SideNav`, cabeçalhos do Quartel-General e
-de Campanhas) para tokens e componentes, criar o barrel `shared/ui/index.ts`
-e a regra global de movimento reduzido.
-Base: commit da 4.5 (`3f2f823`).
+- (a) refresh aceita o penúltimo (`requestId.current - id > 1` no `then` e no
+  `catch`): F1, F2, F3, F5 (e F6) reprovam, junto com os três testes antigos
+  de dois refresh. F4 não reprova: os dois refresh velhos ficam a mais de um
+  passo depois do `reload`.
+- (b) `catch` do refresh sem checagem de `id`: F3 reprova (com os dois
+  testes antigos que já cobriam isso).
+- (c) refresh descarta **só** o penúltimo (`requestId.current - id === 1`):
+  F1–F5 (e F6) reprovam. Antes deste PR, (c) passava pelos três testes
+  antigos de dois refresh puros (que continuam verdes) e só era pega pelos
+  dois testes antigos de `reload` ("um reload que comeca com um refresh em
+  voo..." e "o refresh que falha durante um reload..."); F1–F5/F6 a provam
+  no caso direto.
+- (d) `then` do efeito sem checagem de `id`: F4 e F5 reprovam (a carga do
+  `reload` e a carga inicial velhas sobrescreveriam).
 
-Decisões:
+Decisão da coordenação (F5, autonomia delegada): a regra atual fica. Durante a carga inicial, se um
+refresh velho responde com dado bom e o mais recente falha, a tela vai para
+erro e o dado bom é descartado: "o pedido mais recente é a última palavra".
+Registrado em "Decisões aceitas" (65).
 
-- `SideNav` compõe `NavTabs` (mesmos `data-testid`; o marcador ativo passa a
-  ser o SVG do `NavTabs`, e o teste da F3 que procurava `▸` passou a
-  procurar o `svg`). O `<nav>` continua o único landmark; marca
-  (`font-display`) e nota (`text-text-muted`) no bloco do `LanguageSwitcher`,
-  com `flex-wrap` para caber na coluna de 224 px. Saíram o brasão `✦` e a
-  legenda "Explorar" (decorativos, `aria-hidden`).
-- Cabeçalho das áreas num componente `pages/AreaHero.tsx`, usado pelas duas
-  páginas: `header.area-hero.area-hero--{hq,campaigns}` com o gradiente da
-  spec (90 % → 20 % de `--ink-950`, arte bem mais visível) e o h1 + nota
-  dentro de `Panel elevation="surface"`. O véu escuro largo da F7 (todos os
-  stops ≥ 0,70) saiu: o contraste agora é texto sobre superfície sólida.
-- `heroContrast.test.ts` foi substituído por `pages/AreaHero.test.tsx`: a cor
-  do texto e a do fundo são lidas das classes que o componente aplica e
-  resolvidas em `tokens.css` (resolve o N1 da F7); um caso de sabotagem
-  (`text-border-subtle`) prova que a medição reprova.
-- Textos do shell e dos heroes foram para o catálogo, em PT e EN:
-  `shell.brand.{name,note}`, `shell.nav.{label,headquarters,campaigns}`,
-  `headquarters.hero.{title,note}`, `campaigns.hero.{title,note}`. Os textos
-  PT são os de antes, então os E2E seguem com os mesmos nomes. O "eyebrow"
-  dos heroes saiu (o brief só prevê h1 e nota).
-- `.rpg-main` virou `.area-main` (M3 da F7) e ficou só com o que as
-  features ainda não migradas usam (`section > h2` e a largura a partir de
-  1600 px); o padding dos `main` passou para utilities da escala. A
-  folga do fim do QG abaixo do lg virou a classe `.area-main--fab-clearance`
-  (`base.css`, `calc(var(--spacing) * 24)` = 96 px), porque `pb-24` está
-  fora da escala do lint. O botão fixo "Falar com a Kairya" ocupa 80 px de
-  baixo da tela (retrato de 40 px + `py-3` = 64 px, mais `bottom-4`); 96 px
-  deixam 16 px livres. Um E2E em 320 e 375 px confere que nenhum botão do
-  último cartão fica sob ele.
-- O Playwright passou a abrir com `locale: 'pt-BR'`: o shell agora segue
-  `navigator.language`, o Chromium do Playwright diz `en-US`, e os E2E que
-  procuram "Campanhas" e o h1 do QG em PT quebravam.
-- `renderWithI18n` ganhou `strict` (opção `reactStrictMode` do Testing
-  Library): um `StrictMode` aninhado no wrapper não duplicou os efeitos
-  (medido: 1 chamada em vez de 2).
-- Saíram de `PENDING_MIGRATION`: `App.tsx`, `SideNav.tsx`, `Campaigns.tsx`,
-  `Headquarters.tsx`.
+Limitação registrada como pendência 213: o `refresh` não tem prazo. Vale já
+para um pedido só, por isso não é da pendência 65.
 
-Pendências:
+Validação: os dois arquivos de teste passando (`45 passed`), `tsc -b`,
+`eslint` e `prettier --check` sem erro. `make check` no worktree, com a
+revisão do texto e o helper `pedirTresRefresh` já aplicados: `EXIT=0`;
+Vitest `Tests 1057 passed (1057)`; cobertura 100% (Statements 1337/1337,
+Branches 996/996, Functions 371/371, Lines 1298/1298); pytest `1669 passed,
+32 subtests passed`; Playwright `66 passed`; gitleaks `no leaks found`.
 
-- `make check` (E2E, incluindo o teste novo de reduced-motion em
-  `layout.spec.ts`, e axe nas duas larguras) não rodou nesta tarefa: o
-  Playwright exige a API e o PostgreSQL; fica com o gate do controlador.
-- M7 (4.4): a tarefa não tocou chave de XP; o `valueText` da galeria segue
-  montado à mão.
+# Prazo que preserva o status e texto que separa demora de rede — 2026-11-10
 
-# Fase 4, Tarefa 4.5: Field, NavTabs, LanguageSwitcher e SoundToggle — 2026-11-10
-
-Objetivo: os componentes de entrada e navegação em `frontend/src/shared/ui/`.
-Base: commit da 4.4 (`f6ff00b`), com a 4.3, a arte da F7 e a F3 PR1.
+Pendência 193. Revisão-base: `d65a97d`. Objetivo: depois que o status de
+uma resposta chegou, o prazo do `postJson` não o apaga mais; e a tela diz
+coisas diferentes para "a resposta demorou" e "não conectou".
 
 Decisões:
 
-- `LanguageSwitcher` é o `LocaleSwitcher` da F3 movido por `git mv` para
-  `shared/ui/`, com os casos de teste da F3 mantidos. Botões `Button
-  tertiary`, texto visível de `ui.language.short.*` e nome acessível de
-  `shell.locale.{ptBR,en}`, que o catálogo da F3 já guarda como `PT,
-  Português (Brasil)`/`EN, English`: concatenar a sigla de novo daria `PT,
-  PT, …`. O teste confere que o nome começa pelo texto visível (WCAG 2.5.3).
-  O ativo leva marcador `aria-hidden` e sublinhado grosso além do
-  `aria-pressed` (o `hover:underline` do terciário não imita o marcador). A
-  falha do `setLocale` aparece numa `StatusLine` danger montada desde o
-  início e `sr-only` enquanto vazia; o idioma anterior continua marcado. Só a
-  tentativa mais recente (contador em `useRef`) pode mostrar a falha.
-- `Field` por render prop (`FieldControlProps`), ajuda e erro em
-  `aria-describedby` nessa ordem, erro com ícone e `aria-invalid`; `help`/
-  `error` vazios contam como ausentes. Controle `border-border-strong` sobre
-  `bg-bg-canvas`, válido em qualquer elevação.
-- `NavTabs` sem landmark próprio (o `<nav>` é do `SideNav`), com
-  `aria-current`, barra, peso 700 e marcador SVG `aria-hidden` no ativo, e
-  `transition-colors` sem `motion-safe:`. O `SideNav` ainda não o usa: a
-  troca é da migração das 4.6–4.9.
-- `SoundToggle` controlado sobre o `IconButton`, ícone que muda de forma com
-  o estado; não é montado no app até a Fase 8.
-- Catálogo: `ui.language.short.{ptBR,en}` e `ui.sound.{voice,sfx}`. Galeria:
-  11 casos novos; `language-switcher-save-failed` usa um `I18nContext` com
-  `setLocale` que rejeita, porque o `I18nProvider` desta base não fala com
-  `/api/me`, e o `ui-states.spec.ts` clica em EN e espera a falha antes do
-  axe.
+- **Prazo único sobre cabeçalhos e corpo, status nunca descartado (desenho
+  B).** O timer continua até o fim do corpo; no `catch`, um `ApiError` que já
+  tem `status` sobe intacto (`hasResponseStatus`). Um corpo de erro que não
+  chega no prazo sai como `ApiError(status, code nulo)` e cai no texto
+  genérico, com reenvio seguro. Um 200 cujo corpo não chega continua sendo
+  resultado desconhecido. A alternativa A (prazo só até os cabeçalhos)
+  preservaria o `code` a qualquer hora, mas deixaria sem prazo o corpo que
+  não termina, e o botão voltaria a ficar preso.
+- **`ApiTimeoutError extends ApiError`**, com `status` e `code` nulos e
+  `name = 'ApiTimeoutError'`: o tipo é o que deixa a tela dizer "demorou" sem
+  ler a `message`.
+- **Três aberturas (N1).** `shared/api/transportFailure.ts` classifica a
+  falha (`transportFailureOf`: `ApiTimeoutError` → `timeout`; `ApiError`
+  sem status → `network`; resto → `null`) e `leadFor` dá a abertura. Textos
+  da revisão de ux-writing: timeout "A resposta demorou mais que o
+  esperado." e rede "Não foi possível conectar." (sem "servidor", que é
+  jargão, e sem atribuir a culpa à rede da pessoa). 5xx e `code`
+  desconhecido mantêm a abertura própria de cada tela. Um erro que não é
+  `ApiError` (um `TypeError` de `JSON.parse`) não ganha frase de rede.
+- **Os cinco tradutores trocam só a abertura** (início, reagendamento,
+  conclusão, avaliação, decisão da proposta). O fim "Tentar de novo é seguro:
+  …" fica igual em todos; as cinco traduções terminam com esse passo de
+  recuperação. `describeEvaluationErrorCode` (código gravado, após recarga)
+  não muda. `postStream` e `requestJson` ficam fora: o `open` continua
+  gerando `ApiError(null)` para rede, e as telas de GET mostram essa
+  `message` crua.
 
-Pendências:
+Alterações: `frontend/src/shared/api/client.ts` (classe, `catch` e docs do
+`postJson` e de `PostOptions`), `transportFailure.ts` novo, os cinco
+tradutores, seus testes de unidade e as 10 asserções de componente
+disparadas por `TypeError('Failed to fetch')` (`MissionList`,
+`ProposalCard`, `RescheduleProposalCard`, `useDecideAction`), que passam a
+esperar o texto de rede. Nenhuma reprovação de outra origem apareceu.
+O E2E do QG (`toContainText('Tentar de novo é seguro')` depois de
+`route.abort()`) continua válido porque o fim do texto não mudou.
 
-- `npx playwright test --project ui-states` (11 casos novos, incluindo o
-  `SETUP` novo) e `make check` não rodaram nesta tarefa: ficam com o gate do
-  controlador.
-- Quando o `I18nProvider` passar a gravar em `/api/me`, o caso da galeria
-  pode trocar o contexto falso por um `page.route` com 503.
+Verificação (nesta sessão): `client.test.ts` vermelho antes da correção nos
+4 casos novos/alterados; sabotagem temporária do `hasResponseStatus`
+(revertida) reprova só "um erro cujo corpo nao chega no prazo mantem o
+status, com code nulo". Os testes de unidade dos tradutores reprovaram só
+nos 14 casos novos de rede e prazo antes da implementação.
+`make check` completo: EXIT 0, com o `check-web` em 1070 testes e
+`Coverage summary` 100% em Statements, Branches, Functions e Lines, o
+`check-api` em 1669 testes e 100%, e o `check-e2e` em 66 passed.
 
-# Fase 4, Tarefa 4.4: componentes de superfície e retorno + mapa de arte — 2026-11-10
+Limitação nova: pendência 211.
 
-Objetivo: `Panel`, `Badge`, `ProgressBar`, `StatusLine`, `Skeleton`,
-`SpeechBubble` e `EmptyState` em `frontend/src/shared/ui/`, mais o mapa
-`ART` (`shared/ui/art.ts`) da arte da Fase 7. Base: merge local da 4.3
-(`wt/f4-componentes`, `5189789`) com `wt/f7-arte`; os 13 arquivos de
-`public/art/{kairya,scenes,empty,trial}` conferidos antes de começar.
+# Pendência 192/37: prazo no Concluir e na avaliação — 2026-11-10
 
-Decisões:
-
-- `assets.test.ts` lê o disco por `readSource.ts` (`sourceExists` e o novo
-  `sourceSize`), e não por `new URL(..., import.meta.url)`, que o Vite
-  reescreve como URL http no Vitest 5.0.1. Reprova caminho de `ART` sem
-  arquivo, `url('/...')` de CSS sem arquivo e arte acima de 200 KB.
-- `ProgressBar` e `Skeleton` tratam entrada impossível como erro de
-  programação (`RangeError`): `max` não positivo ou não finito, `value`
-  NaN, `lines` não inteiro ou menor que 1. `value` fora da faixa é limitado
-  a `[0, max]`. A largura do preenchimento vai no `style`, em %.
-- `SpeechBubble` liga a `figcaption` por `aria-labelledby`: o jsdom não dá à
-  `figure` o nome da legenda, e o atributo explícito vale em todo motor.
-  Só `celebrating` ganha `shadow-glow-lantern`; `concerned` usa a borda
-  `feedback-danger`.
-- `Badge` sem fundo próprio (texto e borda `border-current` no tom, pares já
-  medidos em `contrastPairs.ts`); `StatusLine` com um ícone SVG por tom, para
-  a cor não ser o único sinal.
-- `Panel`: props em união discriminada; `aria-labelledby` só com `as`
-  `section`/`aside`/`article` (ARIA 1.2 proíbe nomear `div` generic), e o
-  `div` não o repassa nem com o tipo contornado. `Skeleton` trata
-  `label=""` como ausente.
-- `EmptyState`: arte `alt=""` de 160 px com `width`/`height` e
-  `object-cover`; se falhar ao carregar, some e o texto fica (guarda o `src`
-  que falhou, então trocar a arte tenta de novo). Sem `body` ou
-  `action`, nada é renderizado no lugar.
-- Catálogo: só a chave nova `ui.loading` (`Carregando…` / `Loading…`). Pesos
-  só 400 e 700 (M8). Galeria: 22 casos novos em `src/test/gallery/`,
-  reaproveitando chaves existentes.
-
-Pendências:
-
-- O `npx playwright test --project ui-states` (axe e 44px nos 22 casos novos)
-  não foi rodado nesta tarefa: fica com o gate do controlador.
-- A fitness function de texto literal em JSX (`no-literal-jsx.test.ts`) não
-  existe nesta base; o `alt=""` do `EmptyState` não tem letra e deve passar
-  no seletor descrito no plano quando ela entrar.
-- Nenhuma tela consome os componentes ainda: a migração é das Tarefas
-  4.6–4.9 (o `TutorConversation` mantém o próprio esqueleto até lá).
-- O `valueText` da `ProgressBar` na galeria (`caseComponents.tsx`) é montado
-  à mão (`40 / 200`); passa a vir do catálogo, com `Intl`, quando a 4.6 criar
-  as chaves de XP.
-- A `StatusLine` fica montada e só o `children` muda (JSDoc): a migração das
-  4.6–4.9 não pode montá-la condicionalmente, ou o retorno fica mudo.
-
-# Fase 4, Tarefa 4.3: Button, IconButton, ConfirmDialog e lint de design — 2026-11-10
-
-Objetivo: os componentes de ação do design system em `frontend/src/shared/ui/`
-(sem barrel, que nasce na 4.6), um lint de design que barra classe fora dos
-tokens e uma galeria de estados medida pelo axe. Base: merge local da 4.2
-(`wt/f4-tipografia`) com a F3 PR1 (`wt/f3-i18n-catalogo`, `409031e`), porque
-a tarefa consome `useT` e o catálogo.
+Objetivo: um Concluir ou uma avaliação pendurados deixam de prender o cartão
+e a espera do "Atualizar o quadro". Revisão-base: `d65a97d`. Só frontend;
+nenhuma dependência, endpoint ou configuração entrou.
 
 Decisões:
 
-- **M8: peso 500 só em título.** A Alegreya Sans só tem 400 e 700 (4.2); um
-  `font-medium` no corpo cairia para 400 em silêncio. O 500 vive só na regra
-  de `h1`–`h4` do `base.css` (Alegreya). O lint de design reprova
-  `font-thin/extralight/light/medium/semibold/extrabold/black` e
-  `font-weight` 100/200/300/600/800/900. Botões usam 700 (`font-bold`).
-- Pirâmide de botões: `primary` sólido, `secondary` contorno (padrão),
-  `tertiary` link, `danger-confirm` sólido só dentro do `ConfirmDialog`.
-  Sem `className` público; alvo de 44px (`min-h-11 min-w-11`, `size-11` no
-  `IconButton`). `loading` não usa `disabled` (o foco não se perde): põe
-  `aria-busy` e `aria-disabled` e engole o clique com `preventDefault`, o que
-  barra também o submit nativo. A lógica comum fica em `shared/ui/busy.ts`
-  (`busyProps`); as classes base de todo botão, em `shared/ui/buttonBase.ts`.
-- O `secondary` tem `hover:border-text-primary` além do `hover:bg-bg-raised`:
-  dentro do `ConfirmDialog`, cujo fundo já é `bg-bg-raised`, o hover só de
-  fundo não mudava nada.
-- **Botão ocupado com `opacity-60`.** O rótulo de um botão em `loading`
-  (focável, `aria-disabled`) pode ficar abaixo de 4,5:1. Aceito pelo WCAG
-  1.4.3, que isenta componente inativo: o botão ocupado não aceita ação.
-- `ConfirmDialog` em `<dialog>` nativo com `showModal`; fechado, nada é
-  montado, então cada abertura nasce limpa e guarda quem tinha o foco para
-  devolvê-lo ao fechar. Foco inicial em Cancelar. Esc (`cancel`) é
-  cancelado e vira `onCancel`: quem fecha é o pai, pela prop `open`. Se o
-  navegador fechar mesmo assim (o Chrome manda um `cancel` não cancelável
-  no Esc sem ativação do usuário, visto na galeria), quem avisa é o `close`,
-  salvo quando o diálogo já foi reaberto (o efeito do StrictMode fecha e
-  reabre); o `cancel` não cancelável não avisa, e `onCancel` sai uma vez por
-  gesto. Guarda de "em voo" numa ref além do estado: cliques no mesmo lote
-  de render chamam o `onConfirm` uma vez. Um `onConfirm` que rejeita só tira
-  o "confirmando": contar a falha é do dono do `onConfirm` (escrito no JSDoc
-  da prop). Cancelar segue disponível durante o "confirmando"; o pai decide
-  se fecha com a ação em voo.
-- Lint de design (`designLint.test.ts`) lê `src/**/*.{ts,tsx,css}` do disco,
-  sem os testes. Os `.ts` entram porque classe também mora neles (a base dos
-  botões); uma sentinela confere que o `buttonBase.ts` é lido. A catraca
-  `PENDING_MIGRATION` só encolhe e é testada nos dois sentidos (arquivo sujo
-  fora dela e arquivo limpo ou inexistente dentro dela reprovam); as
-  4.6–4.9 tiram arquivos dela e a 4.9 a apaga. Nasceu com 20 `.tsx`
-  anteriores à fase (`App.tsx`, `app/`, `pages/`, `features/*` e o
-  `LocaleSwitcher` da F3). O `src/index.css` **não** entrou: as regras miram
-  utilitários de classe e as declarações dele são CSS puro (ver pendências);
-  quem prova que a varredura lê CSS é a sentinela `a varredura enxerga o CSS
-  de verdade`. O comentário do `base.css` citava `font-semibold` como
-  exemplo e foi trocado por `font-bold`, para o arquivo não entrar na lista
-  por um comentário.
-- Galeria (`ui-gallery.html` + `src/test/gallery/`): um caso por página,
-  fora do build de produção, servida pelo `vite` de desenvolvimento ao
-  projeto `ui-states` do Playwright, com `VITE_API_URL=/api` como o
-  frontend do E2E. O texto vem de chaves que já existem no catálogo, sem
-  chave só de teste. O estado "confirmando" vem do clique que o spec faz
-  (N3), sem prop nova no `ConfirmDialog`. A porta da galeria (5373 +
-  deslocamento) mora em `tests/e2e/servers.ts`, fora da faixa do frontend do
-  E2E (5273–5322) com qualquer deslocamento válido. O servidor da galeria
-  sobe em todo `npx playwright test`, mesmo filtrado por projeto.
-- O `<h1>` só para leitor de tela da galeria fica fora do `<dialog>` modal,
-  sem prop de nível de título no `ConfirmDialog`: o axe-core 4.13 medido na
-  galeria não acusa nada (ver comandos).
-- `src/test/dialog.ts`: o jsdom 30 não tem `showModal` nem `close`; o
-  preenchimento só define o que falta, e o `close` dele é síncrono (no
-  navegador o evento chega numa tarefa depois).
+- **Concluir: `MUTATION_TIMEOUT_MS` (20 s), o prazo que os outros POSTs de
+  banco já usam.** `concluir_missao` não tem modelo no caminho. Ao fim do
+  prazo a falha sai como `ApiTimeoutError` (`status` e `code` nulos), o tradutor
+  devolve `recovery: 'retry'`, a chave e o rascunho ficam no registro, o
+  retry pendente é marcado e o `registry.settled()` solta a recarga em
+  espera.
+- **Avaliação: `EVALUATION_TIMEOUT_MS = 105_000` (decisão do responsável),
+  nova constante em `frontend/src/shared/api/client.ts`.** O número espelha
+  à mão três valores, conferidos na `main` nesta entrega e sem mudança desde
+  o plano:
+
+  | Fonte | Valor | Efeito |
+  |---|---|---|
+  | `tutor_timeout_seconds` (`core/config.py`) | 60 s | limite da resposta do modelo, conferido só depois que o provedor responde; uma resposta legítima pode sair depois de 60 s |
+  | `FOLGA_DO_ORFAO` (`tutoring/service.py`) | 30 s | o corte do órfão da avaliação é 60 + 30 = 90 s; antes disso o reenvio recebe 409 `avaliacao_em_andamento` |
+  | `proxy_read_timeout` (`docker/nginx.conf`) | 90 s | em produção o nginx já responde 504 a um backend mudo aos 90 s |
+
+  90 s + 15 s de margem para a gravação final e a volta pela rede. Abaixo de
+  90 s o frontend cortaria respostas legítimas e o próprio `tempo_esgotado`;
+  acima, não compete com o 504 do nginx e só age quando nenhuma camada
+  responde. **O timeout do proxy da Coolify (Traefik) não foi verificado.**
+  Se `FOCUSQUEST_TUTOR_TIMEOUT_SECONDS`, a folga ou o nginx mudarem, a
+  constante muda junto (o teste E7 fixa o literal para isso aparecer).
 
 Alterações:
 
-- Novos: `frontend/src/shared/ui/{Button,IconButton,ConfirmDialog}.tsx`,
-  `busy.ts`, `buttonBase.ts`, os testes de cada um e `designLint.test.ts`;
-  `frontend/src/test/dialog.ts`; `frontend/src/test/gallery/{caseIds.ts,cases.tsx,caseComponents.tsx,main.tsx}`;
-  `frontend/ui-gallery.html`; `frontend/tests/e2e/ui-states.spec.ts`.
-- `frontend/src/test/setup.ts` (importa `dialog.ts`),
-  `frontend/src/shared/i18n/messages/{pt-BR,en}.ts` (`ui.dialog.cancel`),
-  `frontend/src/styles/base.css` (comentário),
-  `frontend/tests/e2e/servers.ts` (`GALERIA_URL`),
-  `frontend/playwright.config.ts` (quarto `webServer` e projeto
-  `ui-states`; o `chromium` ignora o spec da galeria),
-  `frontend/tests/unit/servers.test.ts`, `docs/QUALITY.md` §3 e §4 (dois
-  projetos, quatro servidores, faixa da galeria),
-  `docs/ARCHITECTURE.md` (quatro portas), `scripts/novo-worktree.sh`
-  (mensagem final com a porta da galeria).
+- `useCompleteMission.ts` e `useRequestEvaluation.ts` passam `{ timeoutMs }`
+  ao `postJson`; a doc dos dois hooks e a de `MUTATION_TIMEOUT_MS` foram
+  atualizadas.
+- Testes novos: `useCompleteMission.test.tsx` — E1 (falha `retry` só ao fim
+  dos 20 s), E2 (a recarga pedida durante o voo acontece quando o prazo
+  vence), E3 (o reenvio usa a MESMA `operation_id` e o timer é desarmado),
+  E4 (rascunho, chave e retry pendente ficam no registro);
+  `useRequestEvaluation.test.tsx` — E5 (falha `retry` só ao fim dos 105 s),
+  E6 (reenvio que encontra 409 `avaliacao_em_andamento` pede para esperar),
+  E7 (o literal 105 000), E8 (504 `tempo_esgotado` antes do prazo mantém o
+  texto próprio e não deixa timer). Os testes afirmam `recovery` e estado,
+  não o texto da falha de prazo, para não depender do PR-D.
 
-Comandos e resultados:
+Comandos e resultados lidos:
 
-- Testes dos três componentes antes da implementação: falharam (módulo
-  ausente); depois, 96 passaram junto com `src/shared/i18n`.
-- `designLint.test.ts` com a lista vazia: 6 regras reprovaram com 21
-  arquivos; com o comentário do `base.css` corrigido e os 20 `.tsx` na
-  lista, 20 passaram. Sabotagem: trocar um arquivo sujo da lista por um
-  limpo reprova as duas direções da catraca; voltar o glob para
-  `{tsx,css}` reprova a sentinela do `buttonBase.ts`.
-- Sabotagem da guarda de "em voo" (`if (inFlight.current && false)`):
-  o teste dos cliques repetidos reprova. Sabotagem da guarda do `cancel`
-  não cancelável: o teste do Esc seguido de `close` reprova (`onCancel`
-  duas vezes).
-- `make check-web` (exit 0): lint, Prettier e `tsc` limpos; 63 arquivos,
-  1168 testes passaram; cobertura 100% (1428/1428 statements, 1032/1032
-  branches, 404/404 functions, 1385/1385 lines).
-- Galeria conferida à mão no `vite` de desenvolvimento, com o axe-core 4.13
-  injetado no Chromium do painel do Claude: zero violações nos 18 casos,
-  inclusive `confirm-dialog-confirming` depois do clique; todo botão com
-  44px de altura; o diálogo abre modal com foco em Cancelar e o clique em
-  confirmar deixa `aria-busy` e `aria-disabled`. `page-has-heading-one`
-  sai "passes" no `confirm-dialog-open` e "inapplicable" no
-  `confirm-dialog-confirming`, nunca violação. Não é a execução do spec.
-- `tests/e2e/ui-states.spec.ts`: escrito e **não executado** (os
-  `webServer` incluem a API, que precisa do PostgreSQL; Playwright fica com
-  o gate do controlador).
+- Vermelho antes da implementação: `npx vitest run
+  src/features/missions/useCompleteMission.test.tsx` → 4 failed (E1–E4,
+  estado preso em `submitting`); `npx vitest run
+  src/features/missions/useRequestEvaluation.test.tsx` → 3 failed (E5–E7;
+  E8 já passava, é guarda de regressão).
+- Depois: `npx vitest run src/features/missions` → 20 arquivos, 528 testes
+  passando, sem aviso de `act` nem de atualização após unmount (os testes
+  antigos com POST que nunca responde só deixam um timer pendente).
+- `eslint`, `prettier --check` e `tsc -b --noEmit` nos arquivos tocados sem
+  erros.
+- `make check` completo: `EXIT 0`. Frontend 53 arquivos, 1054 testes,
+  cobertura 100% em instruções, ramos, funções e linhas; pytest 1669
+  passando; Playwright 66 passando; gitleaks sem vazamento.
 
-Pendências:
+# Log local das falhas do Groq (pendência 100, parte "log") — 2026-11-10
 
-- Rodar o projeto `ui-states` do Playwright no gate. O resultado de
-  `page-has-heading-one` nos casos do diálogo é inconsistente entre
-  "passes" e "inapplicable"; se uma versão futura do axe passar a acusar,
-  a saída é desligar só `page-has-heading-one`, com `disableRules`, nos
-  casos `confirm-dialog-*` do spec `ui-states` (o `ConfirmDialog` fixa o
-  título em `h2`), com o motivo escrito no próprio spec; nunca na suíte toda.
-- **O lint de design não cobre valores crus de CSS.** As regras miram
-  utilitários de classe; o `src/index.css` tem hex crus, `border-radius` de
-  50%/14px/4px, `box-shadow` e `text-shadow` decorativos e `font-size:
-  10px`, abaixo da escala. Ele não está na `PENDING_MIGRATION` porque não
-  viola regra nenhuma, então apagar a lista na 4.9 **não** quer dizer CSS
-  limpo: o `index.css` precisa de migração própria (ou de regras novas no
-  lint para hex, `px` e sombras).
-
-# Fase 4, Tarefa 4.2: tipografia Alegreya local — 2026-11-10
-
-Objetivo: trocar o Georgia provisório pela tipografia da spec (Alegreya nos
-títulos, Alegreya Sans no texto), servida localmente, com a escala de texto
-da spec. Base: `5e3253e` (Tarefa 4.1).
-
-Decisões:
-
-- **As fontes são assets, não dependências.** Seis woff2 e duas licenças SIL
-  OFL 1.1 em `frontend/public/fonts/`, sem pacote npm. Procedência, bytes e
-  SHA-256 em `docs/ART.md`, seção "Fontes".
-- **Sem CDN.** Servir da Google Fonts mandaria o IP e o User-Agent de cada
-  visitante a um terceiro (privacidade), acrescentaria uma origem externa ao
-  carregamento e deixaria o app sem fonte offline. Local, tudo sai da mesma
-  origem do app.
-- Só os subsets `latin` e `latin-ext`, com o `unicode-range` da Google Fonts:
-  o `latin-ext` só baixa quando a página usa um caractere dele. A Alegreya é
-  variável (um arquivo por subset declara `font-weight: 500 700`); a
-  Alegreya Sans é estática, um arquivo por peso.
-- `font-display: swap` em toda `@font-face` e preload só dos dois arquivos
-  principais (`alegreya-sans-400-latin`, `alegreya-latin`), com
-  `crossorigin`, que o preload de fonte exige para reaproveitar o download.
-- No `@theme`, `--font-*: initial` e `--text-*: initial` antes de declarar:
-  só existem `font-display`, `font-body` e `text-xs` a `text-4xl`
-  (12/14/16/18/22/28/36/48 px), mais `leading-body` 1,6 e `leading-heading`
-  1,15. O reset de `--font-*` não apaga o namespace `--font-weight-*`
-  (conferido no build).
-- `base.css` fica em `@layer base`: fora de layer, o `font-weight: 500` dos
-  títulos venceria utilities como `font-semibold` num `h2`.
-- As regras `.rpg-*` legadas trocam o Georgia por `var(--font-display)`;
-  `.rpg-nav-caption` e `.rpg-eyebrow` perdem a caixa alta e o
-  `letter-spacing: 0.18em` e passam de 600 para 700.
-- `layoutData` saiu de `layout.spec.ts` para `tests/e2e/layoutData.ts`, para
-  o `fonts.spec.ts` reaproveitar as mesmas respostas GET (o Playwright não
-  aceita uma spec importando outra).
+Objetivo: dar ao responsável um diagnóstico local das falhas do Groq (chave
+recusada, cota Free, rede) sem expor segredo nem texto do usuário e sem mudar
+o comportamento público. Revisão-base: `d65a97d`.
 
 Alterações:
 
-- Novos: `frontend/public/fonts/*`, `frontend/src/styles/fonts.css`,
-  `frontend/src/styles/base.css`, `frontend/src/shared/ui/fonts.test.ts`,
-  `frontend/tests/e2e/fonts.spec.ts`, `frontend/tests/e2e/layoutData.ts`.
-- `frontend/src/styles/tokens.css` (famílias, escala, leading),
-  `frontend/src/index.css` (imports e regras `.rpg-*`), `frontend/index.html`
-  (preload), `frontend/src/test/readSource.ts` (`sourceExists`, para checar
-  a existência de binários sem lê-los como texto),
-  `frontend/tests/e2e/layout.spec.ts` (importa o `layoutData`),
-  `docs/ART.md` (seção "Fontes").
+- `groq_provider.py` ganhou o logger `focusquest.modules.tutoring.groq_provider`
+  (filho de `focusquest`, obedece ao `FOCUSQUEST_LOG_LEVEL`). Cada falha
+  traduzida pelo adaptador (HTTP, timeout, transporte, stream inválido) deixa
+  uma linha `WARNING`, sem `exc_info`. Exceções fora dessas quatro famílias e
+  falhas decididas no serviço (limite total, texto não persistível) não passam
+  por este log:
+  - HTTP: `Falha HTTP do provedor Groq: status=<int>` seguido, na ordem fixa,
+    dos cabeçalhos presentes entre `retry-after` e os seis `x-ratelimit-*` da
+    documentação "Rate Limits" do Groq;
+  - timeout: `Tempo esgotado no provedor Groq: tipo=<classe>`;
+  - transporte e stream inválido: `Falha do provedor Groq: tipo=<classe>`.
+- Cada valor de cabeçalho é cortado em 64 caracteres e todo caractere fora de
+  `[A-Za-z0-9._:,+-]` vira `?`: espaço, `=`, `[`, quebra de linha e controle
+  não forjam campos nem linhas novas.
 
-Comandos e resultados:
+Decisões (registradas na coordenação, sem mudança de escopo):
 
-- `npx vitest run src/shared/ui/fonts.test.ts` antes do `fonts.css`: falhou
-  (`ENOENT` em `src/styles/fonts.css`); com `fonts.css` e tokens, 8 de 9
-  (faltava o preload); depois do preload: 9 passaram.
-- `npm run build`: `.font-bold{...font-weight:var(--font-weight-bold)}`
-  presente e `--font-weight-bold:700` no CSS gerado; `dist/fonts/` com os
-  seis woff2 e as licenças.
-- `make check-web` (exit 0): lint, Prettier e `tsc` limpos; 54 arquivos,
-  1044 testes passaram; cobertura 100% (1325/1325 statements, 989/989
-  branches, 369/369 functions, 1286/1286 lines).
-- `tests/e2e/fonts.spec.ts`: escrito e não executado (o E2E fica com o
-  controlador).
+- Nível `WARNING`, como o adaptador Anthropic.
+- Stream inválido também é registrado, só com o tipo: sem isso seria o único
+  caminho mudo, e a mensagem do `ValidationError` traz o `input_value` recebido.
+- `x-request-id` fica fora da allowlist; entra num PR futuro se o suporte do
+  Groq o exigir.
 
-Pendências:
+O que nunca vai ao log: corpo da resposta, chave, `Authorization`/`Bearer`,
+sistema e mensagens do turno, mensagem da exceção original, traceback e
+cabeçalhos fora da allowlist (`location`, `set-cookie`, `x-request-id`…). O
+teste `test_canario_nunca_aparece_no_log` semeia `CANARY-<uuid>` na chave, no
+sistema, na mensagem do usuário, no corpo, em `x-groq-debug`, em `set-cookie`,
+na mensagem do `ConnectError` e no `model`, com o `focusquest` em `DEBUG`, nos
+cenários HTTP, transporte e stream; foi conferido que ele reprova se um
+cabeçalho fora da allowlist entrar nela (sabotagem local, desfeita). `location`
+é coberto por outro teste da allowlist, e o timeout por
+`test_erro_de_transporte_registra_so_o_tipo`; `x-request-id` não tem teste
+próprio e fica fora só pela allowlist. O canário cobre o logger `focusquest`;
+os loggers `httpx2` e `httpcore2` (este registra cabeçalhos de resposta em
+`DEBUG`) continuam protegidos pela raiz em `WARNING` (`core/log.py`).
 
-- Componentes ainda usam `font-medium` (500) e `font-semibold` (600); a
-  Alegreya Sans só tem 400 e 700, então o navegador casa 500 com 400 e 600
-  com 700 enquanto isso. O lint de peso da Tarefa 4.3 os acusa e os põe na
-  `PENDING_MIGRATION`; a troca acontece na migração das áreas (4.6–4.9).
-  Peso 500 só em título (Alegreya).
-- O `text-*` resetado perde a altura de linha padrão do Tailwind em cada
-  tamanho; o texto herda `leading-body` (1,6) do `body`. Conferir no E2E de
-  layout e no axe que nada ficou apertado.
+Não mudou: tipos e mensagens das exceções, codes públicos, textos do
+frontend, contrato HTTP/SSE e banco. Nenhuma dependência nova.
+
+Pendências: a 100 segue aberta só na parte de codes/textos públicos para 4xx
+(linha atualizada na tabela). Nenhuma pendência nova.
+
+Comando: `make check` — aprovado (EXIT 0): Vitest 1046 testes em 53 arquivos;
+pytest 1695 passed e 32 subtests, cobertura 100,00% (2231 instruções, 410
+ramificações); Playwright 66 passed; gitleaks sem vazamentos.
+
+# Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
+
+Objetivo: provar, em conexões reais, a ordem global **ação → missão →
+avaliação → usuário** e os conflitos cruzados da escrita da avaliação, só
+com teste novo, sem mudar produção. Revisão-base: `2c09706`.
+
+Decisões:
+
+- **Recorte: a escrita da avaliação (transação 2 de `avaliar_missao`) contra
+  os dois fluxos de produção que disputam as mesmas linhas, nas duas ordens.**
+  É a única transação que passa por missão, avaliação e usuário; a
+  confirmação da Kairya cobre "ação → missão" e a conclusão cobre "missão →
+  usuário".
+- **Como a ordem é observada.** O PostgreSQL diz quem bloqueia quem
+  (`pg_blocking_pids`) e em qual tabela está a espera (`pg_locks`,
+  `locktype = 'tuple'`). Só então uma sonda `NOWAIT` (KEY SHARE para missão e
+  ação, SHARE para avaliação e usuário) confere o que quem espera **já**
+  segura e o que ainda não tocou. Sem `sleep` cego: o provedor falso segura a
+  resposta e a sessão da transação 2 pode segurar o próprio `commit`, por
+  eventos.
+- **A ordem "ação antes da missão" é observada em `confirmar_acao`.** O
+  cenário 3 abaixo mostra a confirmação esperando a missão já segurando a
+  ação. Isso contradiz a frase da F14 em `docs/ARCHITECTURE.md`, que a dá
+  como não observável por teste; o ARCHITECTURE.md não foi editado (está em
+  PRs abertos), e a correção ficou como pendência 209.
+- Helpers de espera e sonda são locais ao módulo: os equivalentes existentes
+  são privados de `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`, que outros PRs abertos tocam.
+  Reaproveitadas as fixtures `banco_migrado` e `fabrica` do `conftest.py`.
+
+Matriz provada (`tests/integration/test_ordem_global_das_travas.py`):
+
+| Teste | Quem segura | Quem espera, e onde | O que a sonda prova |
+|---|---|---|---|
+| `test_avaliacao_espera_o_usuario_ja_segurando_missao_e_avaliacao` | conclusão de outra missão do mesmo usuário (outra missão + usuário) | escrita da avaliação, em `users` | missão e avaliação já travadas |
+| `test_avaliacao_espera_a_missao_sem_tocar_avaliacao_nem_usuario` | confirmação da Kairya, reagendar a missão avaliada (ação + missão) | escrita da avaliação, em `missions` | avaliação e usuário livres |
+| `test_confirmacao_espera_a_missao_ja_segurando_a_acao` | escrita da avaliação retida no `commit` (missão, avaliação, usuário) | confirmação da Kairya, em `missions` | ação já travada |
+| `test_conclusao_espera_o_usuario_ja_segurando_a_propria_missao` | escrita da avaliação retida no `commit` | conclusão de outra missão, em `users` | a própria missão já travada |
+
+Depois de liberar o dono, o que cada teste afirma:
+
+- **Todos os quatro:** as duas transações terminam (o resultado de cada uma é
+  lido, sem `DeadlockDetected` nem outra exceção) e a avaliação fica
+  `concluida`, tentativa 1, veredito `atende`, com o modelo e o feedback do
+  provedor e bônus de 20.
+- **Testes 2 e 3:** a ação fica `falhou`/`reagendamento_invalido`, sem
+  `mission_id`, e o prazo da missão avaliada não muda. O teste 3 confere
+  também que a confirmação devolveu `ReagendamentoInvalido`.
+- **Testes 1, 2 e 4:** a ordem dos créditos das duas missões no livro-razão
+  (`xp_entries.id`) é a da serialização observada: teste 1, conclusão da
+  avaliada, conclusão da outra, bônus; teste 2, conclusão e bônus da
+  avaliada; teste 4, conclusão da avaliada, bônus, conclusão da outra. O
+  teste 3 não confere créditos.
+
+**Correção depois da revisão independente (corrida nos testes 3 e 4).** A
+primeira versão ligava `devolver_resposta` logo depois de submeter a
+avaliação, e a sessão observada marcava como transação 2 a primeira sessão
+aberta depois disso; se a transação 1 abrisse mais tarde, ela era tomada pela
+2. Duas mudanças: os testes 3 e 4 esperam `entrou_modelo` antes de liberar a
+resposta, como os testes 1 e 2; e a transação 2 passou a ser a primeira
+sessão aberta depois de o provedor **devolver** a resposta
+(`modelo_respondeu`, marcado na própria thread da avaliação), o que não
+depende de escalonamento. As outras passagens foram revistas: as sondas e a
+liberação do dono só acontecem depois de uma condição observada no banco ou
+num evento da thread.
+
+O que ficou de fora (não inventei teste para fechar):
+
+- Transação 1 (`abrir_tentativa`) e `registrar_falha` contra outros fluxos;
+  já há provas de 409, retomada e relógio em `test_evaluation_concorrencia.py`.
+- `iniciar_missao` e `reagendar_missao` pela tela × escrita da avaliação:
+  travam só a missão, como a confirmação, sem a ação na frente.
+- Confirmação de **criação** da Kairya (ação → `INSERT` de missão, que toma
+  KEY SHARE no usuário) × bônus.
+- `preparar_turno` da tutoria (FOR UPDATE no usuário, sem missão) × bônus e
+  × conclusão.
+- Duas escritas de avaliação de missões diferentes do mesmo usuário (as duas
+  missão → usuário; disputa só o usuário).
+- HTTP: a matriz roda nos serviços, não pelas rotas.
+
+Sabotagens (temporárias, revertidas com `git checkout -- src`; depois de cada
+uma, `git diff --exit-code -- src` saiu com 0):
+
+| Sabotagem | Reprovou |
+|---|---|
+| S1: transação 2 da avaliação trava o usuário antes da missão (`evaluation/service.py`) | testes 1 (`DID NOT RAISE` na sonda da missão) e 2 (`LockNotAvailable` em `users` na sonda que devia aceitar) |
+| S2: `_buscar_acao` sem `with_for_update` (`tutoring/service.py`) | teste 3 (`DID NOT RAISE` na sonda da ação) |
+| S3: `concluir_missao` trava o usuário antes da missão (`missions/service.py`) | teste 4 (`DID NOT RAISE` na sonda da própria missão) |
+| S4: `_corrente` sem `with_for_update` na missão (`evaluation_records.py`) | testes 1 (`DID NOT RAISE`, linha 458, sonda da missão), 2 e 3 (`DID NOT RAISE`, linha 541, sonda da missão) |
+
+S1, S2 e S3 foram refeitas depois da correção da corrida, com as mesmas
+reprovações da tabela.
+
+S4 refeita depois da correção, com a saída lida no teste 2: ele **não** para
+em `_esperar_bloqueio`. A transação 2 passa pela espera em `missions`
+(linha 497, aprovada) e reprova na linha 502, `_aceita` da avaliação, com
+`LockNotAvailable: could not obtain lock on row in relation
+"mission_evaluations"` na consulta `... FOR SHARE NOWAIT`. Leitura: sem o
+FOR UPDATE da missão, a transação 2 grava a avaliação e trava o usuário sem
+esperar ninguém, e só para no `INSERT` do bônus em `xp_entries`, cuja FK para
+`missions` toma FOR KEY SHARE na missão, que a confirmação segura com FOR
+UPDATE. Por isso ela ainda espera em `missions`, mas já segurando a
+avaliação, e o teste reprova pela ordem errada, não por "thread terminou
+antes". Depois da reversão, `git diff --exit-code -- src` saiu com 0.
+
+Comandos e resultados lidos (com `UV_PYTHON=3.14.10`):
+
+- Os plugins de estresse do revisor (`troca_rapida.py`, que faz
+  `sys.setswitchinterval(1e-6)`, e `atraso_tx1.py`, que atrasa 50 ms a
+  entrada de `avaliar_missao`) ficam fora do repositório e foram carregados
+  com `PYTHONPATH=<scratchpad> uv run pytest ... -p <plugin>`.
+- Na versão **anterior** à correção: `-p atraso_tx1`, testes 3 e 4
+  reprovados; `-p troca_rapida`, 3 execuções, testes 3 e 4 reprovados nas 3.
+- Na versão corrigida, 10 execuções de cada: `-p atraso_tx1` 10/10 verdes;
+  `-p troca_rapida` 10/10; `-p troca_rapida -p atraso_tx1` 10/10. Sem
+  plugin, 5/5 verdes. São as execuções feitas; não afirmam estabilidade
+  além delas.
+- Com os vizinhos `test_evaluation_concorrencia.py` e
+  `test_tutoring_conclusao_concorrencia.py`: 14 aprovados. Rodado de novo depois da
+  correção: 14 aprovados.
+- `ruff check`, `ruff format --check` e `mypy` no arquivo novo: sem erros.
+- `make check` e a suíte inteira **não executados** neste incremento.
+
+Defeitos de produção encontrados: nenhum.
+
+Alterações: novo `tests/integration/test_ordem_global_das_travas.py`; este
+HANDOFF (seção, linha 104 e pendência nova 209).
+
+# Engine única sob chamadas simultâneas — 2026-11-10
+
+Pendência 14, parte da corrida. Revisão-base: `2c09706`. `get_engine()` em
+`src/focusquest/core/database.py` ganhou um `threading.Lock` de módulo com
+dupla checagem: lê `_engine` sem trava (caminho comum, engine já criada) e,
+se for `None`, trava, confere de novo e só então cria. O FastAPI roda
+dependências síncronas no threadpool; sem a trava, duas requisições na
+partida podiam criar duas engines, com dois pools, e a perdedora ficava
+órfã. A engine continua preguiçosa e global; `/health`, `/ready` e
+`get_engine_se_configurada` não mudaram. Nenhuma dependência, contrato ou
+configuração mudou.
+
+Testes novos em `tests/unit/test_engine_unica.py`, sem banco (a criação é
+substituída por uma falsa) e sem `sleep`:
+
+- 4 threads chamam `get_engine()`; a primeira criação espera num
+  `threading.Event` (`wait(timeout=1.0)`) a segunda começar. Sem a trava, a
+  segunda entra e a acorda: mais de uma criação (de 2 a 4, conforme o
+  tempo das threads). Com a trava, a segunda fica no
+  lock, a espera expira e há uma criação só; todas as threads recebem o
+  mesmo objeto, e uma chamada posterior devolve o mesmo sem criar outra. O
+  custo do caminho verde é a espera de 1 s. As threads são `daemon` e o
+  `join` tem teto de 10 s: um deadlock vira falha sem segurar o processo.
+  Limite conhecido: o ramo interno `if _engine is None` falso só é coberto
+  se ao menos uma das threads 2–4 passar pela checagem externa durante a
+  espera de 1 s; numa máquina muito carregada isso pode não ocorrer e o
+  `fail_under = 100` acusaria o ramo.
+- Configuração ausente levanta `ValidationError`, `_engine` continua `None`
+  e a segunda chamada (numa thread com teto) levanta de novo, sem deadlock.
+
+Vermelho antes da correção (observado nesta execução): `assert 2 == 1` em `len(criadas)`
+(`test_chamadas_simultaneas_criam_uma_unica_engine`); o teste de
+configuração ausente já passava (guarda de regressão). Depois: `2 passed`,
+repetido 3 vezes. Sabotagem temporária, revertida: com a trava removida
+(volta à checagem única), o mesmo `assert 2 == 1`, `FAILED
+test_chamadas_simultaneas_criam_uma_unica_engine`. Cobertura de ramos de
+`get_engine` pelos testes novos: os quatro ramos cobertos (fora de cobertura
+no arquivo só as linhas de outras funções, exercitadas pelo resto da
+suíte).
+
+Validação: `ruff check`, `ruff format --check` e `mypy --strict` nos dois
+arquivos sem erros; `tests/unit/test_clock.py` e `tests/unit/test_config.py`
+passando. `make check` não executado nesta entrega.
+
+Fora do escopo, resíduo da pendência 14: `dispose()` da engine no shutdown.
+Exige um lifespan em `src/focusquest/main.py`, que está em quatro PRs abertos
+de outras frentes, e mover a criação para o lifespan mudaria o `/health` sem
+configuração.
 
 # Fase 4, Tarefa 4.1: tokens em 3 níveis e teste de contraste — 2026-11-10
 
@@ -475,207 +497,151 @@ Pendências:
 - `listSources` ainda não tem consumidor; a 4.3 (lint de design) é a
   primeira. Foi conferido à mão nesta tarefa.
 
-# i18n: tutoria no catálogo pt-BR/en — 2026-11-10
+# `.env` de worktree sem segredo — 2026-11-10
 
-Tarefa 7 do plano de i18n (PR 6). Os textos fixos de `TutorConversation`,
-`TutorPanel`, `ProposalCard`, `RescheduleProposalCard`, `DecisionControls`,
-`answerOutcome` e `questionLimit` viraram chaves `tutoring.*` nos dois
-catálogos. Os textos PT são os de antes, sem reescrita; os EN seguem o padrão
-de erro [o que falhou]. [causa]. [o que fazer]. nas duas falhas de carga e nas
-notas de reenvio (12 a 18 palavras).
+**Objetivo.** O `scripts/novo-worktree.sh` montava o `.env` do worktree novo
+copiando linha a linha o `.env` do principal, inclusive chaves de segredo
+reais (`FOCUSQUEST_GROQ_API_KEY`). Cada worktree multiplicava as cópias da
+chave em disco.
 
-Contrato: `QuestionLength.counter` passou de `string | null` para
-`Counter | null`, com `type Counter = { kind: 'remaining'; n } | { kind:
-'over'; n }` em `shared/types/counter.ts` (as missões também o usarão, e uma
-feature não importa da outra). O `TutorConversation` monta o texto com
-`plural(locale, n, …)` e as chaves `tutoring.counter.remaining.{zero,one,other}`
-e `tutoring.counter.over.{one,other}`; o `{max}` vem de `MAX_QUESTION_LENGTH`,
-cuja linha `export const` não mudou. Os asserts de `questionLimit.test.ts`
-passaram a afirmar o objeto (mudança de teste justificada pela troca de
-contrato, AGENTS.md §3, a registrar na descrição do PR); as frases PT do
-contador migraram para `TutorPanel.test.tsx` (P18b), inclusive o "Restam 0
-caracteres." que prova a forma `zero`. `announceAnswer` e `unansweredNote`
-devolvem `MessageKey`. O aviso de indisponível usa a chave
-`tutoring.messageFailure.providerNotConfigured.message`, que já tinha o mesmo
-texto.
+**Decisão.** O `.env` do worktree passa a ser gerado a partir do
+`.env.example` da `main` (lido com `git show main:.env.example`, a mesma
+revisão de onde o worktree nasce, antes de criar qualquer coisa). Do `.env`
+do principal só se lê `FOCUSQUEST_TEST_DATABASE_URL`, como antes: o nome do
+banco vira `focusquest_<nome>_test`, e servidor, credencial local e opções da
+URL ficam. O deslocamento do E2E continua sendo escrito no fim. Alternativa
+descartada: continuar copiando o principal e apagar chaves por padrão de nome
+(`*_API_KEY`, `*_TOKEN`...). É uma denylist: a próxima chave com outro nome
+vazaria em silêncio. O exemplo funciona como allowlist, porque só tem o que é
+seguro versionar. O custo é que ajustes não secretos do `.env` do principal
+(nível de log, modelo, URL do banco de desenvolvimento) não passam para o
+worktree, que fica com os valores do exemplo. Quem precisa de uma chave no
+worktree a preenche à mão.
 
-A regra `no-restricted-syntax` do ESLint passa a valer em
-`src/features/tutoring/**/*.tsx`, com caso em `tests/unit/no-literal-jsx.test.ts`.
-Cada arquivo de teste de componente da área ganhou casos em `en` que leem o
-esperado do catálogo `en`. O P7d (teto diário em inglês) passou a achar o
-campo pelo rótulo EN, que agora existe.
+**Alterações.** `scripts/novo-worktree.sh`: gera a partir do exemplo, recusa
+se a `main` não tiver `.env.example` e acrescenta a linha do banco de teste
+se o exemplo não a tiver (sem ela, o worktree cairia no banco do principal).
+Trava, validações, `noclobber` e as demais recusas não mudaram.
+`tests/integration/test_novo_worktree.py`: o repositório sintético versiona
+uma cópia do `.env.example` real. Teste novo com canários (`CANARY-<uuid>`)
+em toda chave que o exemplo deixa em branco, mais uma que ele não conhece.
+Dois testes novos cobrem as bordas acima. Dois testes antigos afirmavam a
+cópia de valores do principal (`FOCUSQUEST_TUTOR_MODEL`); passaram a afirmar
+o contrário, ou, no da chamada por outro worktree, que o servidor do banco de
+teste vem do principal e não do worktree que chamou. `docs/QUALITY.md`
+descreve a geração.
 
-Pendências:
-- `formatDeadline` (`shared/lib/deadline.ts`) ainda formata em `pt-BR` nos
-  dois idiomas; fica para quem migrar `shared/lib`.
-- Números interpolados (`{count}`, `{max}`, `{value}`, `{minutes}`) saem sem
-  `Intl.NumberFormat`; em `en` o contador mostra 4000, não 4,000.
+**Resultados.** O teste dos canários falhou antes da implementação, com dois
+canários no `.env` gerado. Depois dela, o arquivo
+`tests/integration/test_novo_worktree.py` inteiro passou: 56 testes. Ruff,
+`ruff format --check` e mypy passaram nesse arquivo, e `shellcheck -x` no
+script. `make check` completo roda no hook `pre-commit` deste commit (o commit só
+existe se ele passar).
 
-# i18n: shell, erros de API e módulos de falha no catálogo — 2026-11-10
+**Pendência.** Worktrees criados antes desta mudança ainda guardam a cópia
+da chave no próprio `.env`; apagá-la é manual.
 
-Tarefa 6 do plano de i18n (PR 5). `ApiError` ganha `kind` (`network`,
-`timeout`, `http`, `format`, `interrupted`), `retryAfterSeconds` e
-`receivedAt` (o instante em que o cliente recebeu o erro, lido antes do
-corpo). `parseRetryAfterSeconds` é a única leitura do `Retry-After` e aceita só
-inteiro decimal não negativo. O `message` do `ApiError` continua em PT, só para
-depuração. `shared/i18n/failureText.ts` traz `FailureText`, `apiErrorText` e
-`dailyLimitText`; `FailureMessage.tsx` renderiza `t(message) + ' ' +
-t(recovery)`.
+# Porta do PostgreSQL com prova de concordância — 2026-11-10
 
-Os seis módulos `*Failure.ts` passaram a devolver chaves do catálogo: o antigo
-campo `recovery` (o enum que decide o botão) virou `action`, e `recovery` agora
-é a chave do texto "o que fazer". Os mapas são exportados para o teste conferir
-as chaves. O texto PT dos módulos de falha não mudou (cada texto foi cortado na
-fronteira da frase), salvo os recoveries novos, para conferência:
-reagendamento `prazo_expirado` ("Escolha uma data e um horário futuros."),
-`prazo_derivado` (passa a usar "Atualize para ver o estado atual.") e
-`provedor_nao_configurado` na avaliação e na tutoria ("Configure o provedor e
-tente de novo."). O teto diário da tutoria usa o `Retry-After`: com ele,
-"A Kairya volta à meia-noite." (EN: "Kairya is back at midnight (Brasília time).");
-sem ele, "Tente de novo amanhã.". Os rótulos de estado e de motivo em
-`shared/types/mission.ts` viraram `MessageKey`.
+Pendência 11 resolvida. Revisão-base: `e57fa2b`. `tests/unit/test_porta_do_banco.py`
+toma `Settings.db_port` como referência e confere, com contagem esperada por
+extrator, `compose.yaml` (1), `.env.example` (variável 1, URLs 2) e
+`.github/workflows/quality.yml` (`ports` 2, URLs 4, `psql -p` 2). Varre
+menções `55xxx` em `config.py`, `.env.example`, `compose.yaml`, workflow,
+`docs/QUALITY.md` e `frontend/tests/e2e/servers.ts`, e usa `git grep` para
+recusar arquivo rastreado que repita a porta fora dessa lista (exceto
+`tests/`, este HANDOFF e os lockfiles). URL sem porta explícita é recusada com
+`arquivo:linha`. Teste unitário, sem banco; nenhum contrato, dependência ou
+configuração mudou. Fonte única (workflow montando URLs de uma `env` comum,
+compose sem padrão) foi avaliada e descartada: mudaria contratos do CI e
+quebraria `docker compose up` sem `.env`.
 
-Shell (`SideNav`, `areas.ts`) e o cabeçalho do `Headquarters` passam pelo
-`t()`. Fitness function: `no-restricted-syntax` em `eslint.config.js` contra
-literal com letra no JSX e em `aria-label`/`title`/`placeholder`/`alt`, só em
-`src/app/**` e `src/pages/Headquarters.tsx`. A prova está em
-`tests/unit/no-literal-jsx.test.ts`, inclusive o `\p{L}` com acento. Cada PR de
-área acrescenta a sua pasta ao `files`.
+Vermelho antes da implementação: `3 failed` (`NameError` nos extratores).
+Depois: `12 passed`. Sabotagens temporárias, cada uma revertida antes da
+seguinte, com a falha lida na saída:
 
-`renderWithI18n` ganhou `strict`, que liga o StrictMode pela opção
-`reactStrictMode` do Testing Library. Um `<StrictMode>` dentro da árvore fica
-abaixo do `wrapper` do provider, e ali o React 19 não repete os efeitos da
-montagem. O teste do `Headquarters` que conta dois pedidos sob StrictMode
-reprovou assim, e os testes de StrictMode de `CycleSection`, `MissionList` e
-`TutorPanel` passaram a usar a opção.
+| Sabotagem | Resultado |
+|---|---|
+| `.env.example:4` → `FOCUSQUEST_DB_PORT=55433` | `2 failed`: extrator da variável e varredura, ambos `.env.example:4: 55433` |
+| `compose.yaml:16` → `:-55433}` | `2 failed`: extrator do compose e varredura, ambos `compose.yaml:16: 55433` |
+| `quality.yml:88` → `- "55432:5432"` | `1 failed`: extrator de `ports`, "esperadas 2 … achadas 1" |
+| `docs/QUALITY.md:24` → `55433` | `1 failed`: só a varredura, `docs/QUALITY.md:24: 55433` |
+| `scripts/porta.txt` com `55432` (`git add -N`) | `1 failed`: `git grep`, `['scripts/porta.txt']` |
 
-As cargas de tela (`useMissions`, `useCycle`, `useProgress`,
-`useCurrentPlan`) deixaram de exibir `ApiError.message`: o estado de erro
-carrega um `LoadFailure` (`loadFailureFor` em `failureText.ts`), que é o texto
-do catálogo pelo `kind` para o `ApiError` e a mensagem fixa da área ("Falha
-inesperada ao carregar …") para o defeito. `LoadFailureMessage.tsx` exibe os
-dois. Na tela, "O servidor respondeu 503." virou "O servidor não conseguiu
-atender o pedido. Tente de novo em instantes.". Nenhuma tela exibe mais o
-`message` do `ApiError`.
+Limitação: uma porta DIFERENTE num arquivo novo fora da lista não é
+detectada; a lista é o que se declarou como fonte.
 
-Mensagens de erro em inglês: [o que falhou]. [causa]. [o que fazer]. em 12 a
-18 palavras, `message` e `recovery` somados. `errorTextLength.test.ts`
-enumera os textos pelas funções públicas de cada módulo de falha, com cada
-`code` e as falhas sem `code`. Cinco passavam de 18 palavras (os "Trying again
-is safe: …" viraram "Retrying is safe: …", e o da tutoria virou "your question
-won't repeat") e o `shell.locale.saveFailed` tinha 11 (ganhou "to the server").
+Validação: `ruff check`, `ruff format --check` e `mypy` no arquivo novo sem
+erros. `make check`: completo
+no hook `pre-commit` deste commit (o commit só existe se ele passar).
 
-Pendências:
-- ~~`useMissions`, `useCycle`, `useProgress` e `useCurrentPlan` ainda exibem
-  `ApiError.message`.~~ Resolvida neste PR (`LoadFailure`, acima). O fallback
-  "Falha inesperada ao carregar …" continua literal e vira chave no PR de cada
-  área.
-- Os demais literais dos componentes que exibem falha migram no PR da área.
-- PR da área da tutoria: com `action: 'unavailable'`, o `TutorConversation`
-  mostra a constante literal `UNAVAILABLE_TEXT`, e o recovery
-  `tutoring.messageFailure.providerNotConfigured.recovery` nunca aparece. Trocar
-  por `<FailureMessage failure={PRE_STREAM_FAILURE_BY_CODE.provedor_nao_configurado} />`
-  ou por uma chave própria.
-- Tarefa 9: a fitness function só olha `JSXText` e `JSXAttribute > Literal`, e
-  deixa passar `<p>{'Olá'}</p>`, `aria-label={'Fechar'}` e template literal com
-  letra. Acrescentar seletores de `Literal` e `TemplateLiteral` dentro de
-  `JSXExpressionContainer`, cada um com caso em `no-literal-jsx.test.ts`.
+# Paridade geral modelo/migração e Alembic offline — 2026-11-10
 
-# i18n: catálogo tipado e seletor de idioma — 2026-11-10
+Pendência 9/10. Revisão-base: `e57fa2b`. Nenhuma migração, modelo,
+dependência ou contrato mudou.
 
-Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
-`frontend/src/shared/i18n/`: catálogo próprio e tipado (`ptBR` define as chaves,
-`en` faz `satisfies Messages`), `translate` com interpolação `{nome}` que lança
-quando falta variável, `plural` sobre `Intl.PluralRules` com a forma opcional
-`zero`, e a detecção do idioma (cache `kairyaquest.locale` válido, senão
-`navigator.language`: `pt*` → `pt-BR`, o resto → `en`). O storage que lança
-(modo privado, cota) é tolerado: o cache só evita o "pisca" do idioma.
+`tests/integration/test_paridade_geral_do_esquema.py` roda `compare_metadata`
+do Alembic (`compare_type` e `compare_server_default` ligados, sem filtro)
+contra o banco migrado até `head`: diff vazio. Cobre tabelas, colunas, tipos,
+nulabilidade, server defaults, FKs com `ON DELETE`, UNIQUE e índices. Um
+segundo teste compara os nomes dos CHECKs por tabela, porque o autogenerate
+não compara CHECK. O autogenerate **não** compara, e por isso fica fora:
 
-O `I18nProvider` envolve o `<App/>` em `main.tsx`, guarda o idioma, espelha em
-`<html lang>` e no cache. O seletor PT/EN fica no bloco da marca da `SideNav`,
-dentro do landmark "Áreas" (`role="group"`, `aria-pressed`, `lang` e nome
-completo por botão). Neste PR a troca é só local: `users.locale` e
-`/api/me` entram nos PRs seguintes. Zero dependências novas.
+- o texto dos CHECKs (só o nome é comparado; o texto segue provado pelos
+  testes de comportamento, INSERT recusado);
+- o predicado de índice parcial (`postgresql_where` de
+  `uq_missions_especial_por_plano` e dos índices parciais de
+  `tutor_messages`): só unicidade e colunas entram.
 
-Convenções do catálogo, válidas para os PRs seguintes: chaves planas
-`<área>.<componente>.<papel>`; plural em chaves irmãs `.one`/`.other` (e
-`.zero` quando o texto do zero difere); números e datas formatados por
-`Intl.*` antes de entrar como variável. Testes de componente renderizam com
-`renderWithI18n` (`src/test/i18n.ts`); o setup do Vitest fixa
-`navigator.language` em `pt-BR` e limpa mocks e `localStorage` após cada teste.
-As strings da interface ainda estão fixas em PT; a migração é por área.
+Sabotagens temporárias no modelo, revertidas (`git diff --exit-code -- src`
+vazio), cada uma reprovando o teste esperado:
 
-O nome acessível de cada botão do seletor começa pelo texto visível ("PT,
-Português (Brasil)", "EN, English", WCAG 2.5.3), e o alvo de toque é de 44×44 px.
-O `vi.restoreAllMocks()` global do setup desfaz todo `vi.spyOn` após cada
-teste: spy criado em `beforeAll` vale só para o primeiro teste do arquivo,
-então spies nascem em `beforeEach` ou no próprio teste.
+- `ondelete` da FK `xp_entries.mission_id` de `CASCADE` para `SET NULL`:
+  `remove_fk` + `add_fk` em `xp_entries`;
+- sem `server_default=func.now()` em `users.created_at`: `modify_default`
+  em `users.created_at`;
+- `missions.instructions` de `Text` para `String(50)`: `modify_type`
+  `TEXT()` → `String(length=50)`;
+- `ck_xp_entries_amount` renomeado: "so no banco:
+  [('xp_entries', 'ck_xp_entries_amount')]; so no modelo:
+  [('xp_entries', 'ck_xp_entries_valor')]".
 
-Pendências deste PR: a conferência visual do seletor na coluna de 224px do
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
-# Arte da Kairya integrada (Fase 7) — 2026-11-10
+`tests/integration/test_migracoes_offline.py` gera SQL com `sql=True`, sem
+conexão, nas faixas: upgrade `base→0003` e `0004→head` (0005, 0006, 0007);
+downgrade `0007→0006`, `0004→0003` e `0002→base`. Exclusões, porque
+`op.get_bind()` offline não devolve resultado e a migração lê dados:
 
-Base `e57fa2b`. Os 13 WebP aprovados da Fase 7 (retrato, avatar, cinco
-expressões, dois cenários, três estados vazios e a prova da semana) estão em
-`frontend/public/art/{kairya,scenes,empty,trial}/`, todos abaixo de 200 KB.
-A procedência por arquivo (prompt, modelo, id da tarefa Tripo, data e custo
-real) e os retoques locais estão em [ART.md](ART.md).
+- upgrade da 0004 (backfill): `alembic -x test=true upgrade 0003:0004 --sql`
+  termina em `AttributeError: 'NoneType' object has no attribute 'scalars'`;
+- downgrade de 0003, 0005 e 0006 (guardas que contam linhas): cada um
+  termina em `AttributeError: 'NoneType' object has no attribute
+  'scalar_one'`.
 
-O painel da Kairya usa `kairya/portrait.webp`, com texto alternativo
-descritivo, e `kairya/avatar.webp`, que é decorativo. Os heroes do
-Quartel-General e de Campanhas usam `scenes/hq.webp` e
-`scenes/campaigns.webp`. Os placeholders `kairya-mentor.webp` e
-`kairya-avatar.webp` e os dois cenários medievais saíram de `public/art`.
-As expressões serão ligadas na Fase 6; os estados vazios e a prova da semana,
-na Fase 5. Não entra dependência, endpoint nem serviço novo.
+Sabotagens temporárias, revertidas (`git diff --exit-code -- alembic` vazio):
+faixa `0003:head` no lugar de `0004:head` e uma leitura de dados no upgrade da
+0007 reprovam só o caso `0004-ate-head` (1 failed, 4 passed).
 
-**Contraste dos heroes.** O axe não mede contraste sobre imagem de fundo, então
-o pior caso foi calculado pela fórmula WCAG 2.x. O cenário é um pixel branco
-(#ffffff) sob o gradiente de cor #07101b com alfa `a`, composto por canal como
-`a·cor + (1 − a)·255`. As cores do texto são o eyebrow #ecd1a4, o título
-`text-slate-50` (≈ #f8fafc) e o subtítulo #d3dce5. Os dois cenários têm
-realces quase brancos em toda a largura, e o texto alcança a borda direita
-no celular. Por isso todo stop entra na conta, não só o de 55%.
+Resultados lidos: os dois arquivos com `pytest` 7 passed; Ruff check, Ruff
+format `--check` e mypy estrito sem erros nos dois arquivos.
 
-| Stop | Alfa | Fundo resultante | Eyebrow | Título | Subtítulo |
-|---|---:|---|---:|---:|---:|
-| antigo QG 55% `99` | 0,600 | (106, 112, 118) | 3,40 | 4,80 | 3,62 |
-| antigo Campanhas 55% `80` | 0,502 | (131, 135, 141) | 2,45 | 3,46 | 2,61 |
-| antigo QG 100% `33` | 0,200 | (205, 207, 209) | 1,06 | 1,49 | 1,12 |
-| novo 0% `e6` | 0,902 | (31, 39, 49) | 10,16 | 14,34 | 10,81 |
-| novo 55% e 100% `b3` | 0,702 | (81, 87, 95) | **4,93** | 6,96 | 5,25 |
+Validação: `make check` completo roda no hook `pre-commit` deste commit (o
+commit só existe se ele passar); o resultado do CI fica no PR. Um gate anterior,
+rodado ao mesmo tempo que o de outro worktree, mostrou 2 `F` no pytest e foi
+cortado por timeout antes do resumo, sem nome dos testes; a suíte pytest
+inteira, rodada sozinha logo depois, passou sem falha. Possível intermitência
+sob carga, não reproduzida nem investigada.
 
-O alfa mínimo para 4,5:1 com fundo branco é 0,678 (eyebrow), 0,661
-(subtítulo) e 0,582 (título). `.rpg-hero-library` e `.rpg-hero-citadel`
-passaram a `#07101be6 0%, #07101bb3 55%, #07101bb3 100%`. O teste
-`frontend/src/heroContrast.test.ts` lê os stops e as cores do `index.css`
-e reprova qualquer stop abaixo de 4,5:1. Com o stop de 100% de Campanhas
-de volta em `1a`, ele falhou (1,19:1). A contrapartida é que a metade
-direita dos cenários fica mais escura do que antes.
+# Bíblia e voz da Kairya — 2026-11-10
 
-Comandos e resultados:
-
-- `make check-web`: ESLint, Prettier, `tsc -b` e Vitest aprovados, com
-  52 arquivos e 1007 testes e cobertura de 100% (1269/1269 instruções,
-  962/962 ramificações, 352/352 funções, 1235/1235 linhas).
-- `npx tsc --noEmit` no `frontend/`: exit 0.
-- O `make check` completo, que inclui `check-e2e` e axe, roda no gate de
-  commit.
-
-Pendências:
-
-- Renomear `.rpg-hero-citadel` para `.rpg-hero-campaigns` e
-  `.rpg-hero-library` para `.rpg-hero-hq` na Fase 4 (tarefa 4.6), num
-  refactor separado. A cena de Campanhas não mostra mais uma cidadela.
-- `empty/campaign-new.webp`: o retoque local deixou a lanterna com halo
-  claro, e ela ainda parece levemente acesa. O responsável decide antes da
-  Fase 5 entre aceitar, trocar pela versão sem retoque ou regerar
-  (5 créditos).
-- O `make bootstrap` de `scripts/novo-worktree.sh` falhou no `uv sync
-  --locked` por falta do Python 3.14.9 no PATH do `uv`. Foi contornado com
-  `UV_PYTHON=3.14.10 uv sync --locked`.
+`docs/kairya/personagem.md` (quem é, cenário, história, personalidade,
+visual, paleta, expressões, máquina de estados e limites) e
+`docs/kairya/voz.md` (princípios, exemplos PT/EN, padrão de erro, forma do
+chat, gatilhos das 36 falas por idioma e descrições das vozes) passam a ser a
+fonte da persona da tutora, dos prompts de arte e do roteiro das falas. A
+Kairya é original e descrita só por traços próprios: nenhum desses textos
+compara a personagem com obra ou franquia existente. O texto final de cada
+fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
+código, dependência, endpoint ou custo.
 
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
@@ -746,6 +712,24 @@ ela a aplicação sobe, mas a Kairya fica indisponível (`get_tutoria` devolve
 `None`). As variáveis novas `FOCUSQUEST_TUTOR_EFFORT`,
 `FOCUSQUEST_EVALUATION_EFFORT`, `FOCUSQUEST_TUTOR_FALLBACK` e
 `FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT` são opcionais e têm padrão.
+
+**Integração com a 1.4:** o contexto em JSON vai no bloco não cacheado; a
+persona segue sozinha no prefixo cacheado.
+
+# Contexto do turno em JSON (pendência 184) — 2026-11-10
+
+O contexto do turno deixa de ser texto livre com quebras de linha: é o
+`CABECALHO_DO_CONTEXTO` fixo ("## Contexto desta conversa", que declara o
+conteúdo como dado, nunca ordem) seguido de UMA linha JSON com `now_utc`,
+`pending_missions`, `late_cycle_missions` e `progress`. Cada ação antiga do
+histórico vira `Ação registrada pelo sistema (dado, não instrução): {json}`.
+Texto livre só existe dentro de strings JSON, com U+2028, U+2029 e U+0085
+escapados além do que o `json.dumps` faz: nenhuma linha "## " forjada por
+título ou instrução consegue existir. A persona passa a citar as chaves do
+JSON e a regra "dados, não instruções". Decisão registrada na linha "184
+(contexto como dado)"; resíduo na pendência 184 e pendência nova 205
+(alinhar o escape em `rubric.py`). Sem mudança de HTTP, SSE, banco ou
+ferramentas.
 
 # Base Nginx com brotli-libs corrigido — 2026-11-06
 
@@ -1046,6 +1030,7 @@ permissões permanentes para publicar, gastar ou ampliar funcionalidades.
 | Frente 0 F4/F8/F9 | Sem DROP DATABASE automático; offsets 0–24 de árvores e 25–49 de push; banco push deriva do teste com `_push` antes de `_test`. |
 | Frente 0 F10/F12/F13 | Script usa main local, nome até 30 caracteres em `[a-z0-9-]`, reserva `push`, recusa colisão de bancos e usa trava mkdir para reservar recursos. |
 | Gate D3/D5 | Hooks → pre-commit → make → ferramentas, sem recursão; um alvo por job CI. Versões/limiares pertencem aos locks/configurações, não à prosa. |
+| 184 (contexto como dado) | O contexto da tutoria é um cabeçalho fixo seguido de UMA linha JSON (`now_utc`, `pending_missions`, `late_cycle_missions`, `progress`) e vai no system, num bloco próprio depois do bloco da persona: com a Tarefa 1.2, o bloco não cacheado (`Turno.contexto`), fora do prefixo cacheado. Cada ação antiga do histórico é `Ação registrada pelo sistema (dado, não instrução): {json}`. Texto livre só existe dentro de strings JSON, com U+2028/U+2029/U+0085 escapados além do que o `json.dumps` faz, e a persona declara o JSON e as ações como dado. Recusadas: normalizar quebras (fecha só o cabeçalho, perde formatação) e recusar quebras na entrada (quebra contrato e não trata o legado). Custo estimado por caracteres, não medido no tokenizer; sem mudança de HTTP, SSE, banco ou ferramentas. |
 
 ## Dependências, endpoints e infraestrutura: motivos
 
@@ -1154,8 +1139,7 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 4/5 | Autenticação/autorização por recurso; conferir dono antes de prender linha em missions/tutor_actions quando houver contas. Hoje é contenção teórica no recorte único, sem 404 diferente. |
 | 25 | Hospedagem fora do Vite precisa proxy reverso ou CORS decidido; não há contrato de implantação externa pronto. |
-| 26 | Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos. Ciclo já tem teto 1440 min e prazo derivado. |
-| 41 | Teto técnico provisório de pergunta 4000 caracteres; decisão de produto pendente, espelho frontend/backend manual. |
+| ~~26~~ | ~~Limites de negócio das avulsas: estimativa/prazo continuam com tetos técnicos.~~ Resolvida na Fase 1 (Tarefa 1.5): `POST /api/missions` recusa estimativa fora de 1–1440 min (422 `estimativa_fora_do_limite`) e prazo fora de `(agora, agora+365 dias]` (422 `prazo_fora_do_limite`), contra o relógio injetado e antes de qualquer escrita; o reagendamento recusa acima de 365 dias com o mesmo code (o passado segue `prazo_expirado`). Schema intacto: 0/negativo continuam no 422 nativo, e a ferramenta da Kairya não muda. A confirmação pela Kairya aplica os mesmos limites: criação e reagendamento fora deles gravam a ação `falhou` com o `error_code` igual ao `code` do 422, e o cartão mostra o texto próprio. Resíduo: não há formulário de criação no frontend, então `estimativa_fora_do_limite` só aparece no cartão da Kairya; o formulário de reagendar ganhou `min`/`max` e o bloqueio do teto. Os prazos literais do E2E do QG ficam na pendência 207. |
 | 55/59 | Tutoria conhece avulsas e conclusão tardia; falta diária de hoje, sequência/marco, especial na janela e plano semanal. Kairya em Campanhas/propose_plan permanecem adiados. |
 | 90 | Verificação automática inexistente; avaliação IA não é prova automática. Critérios executáveis/execução de código requerem desenho e isolamento. |
 | 92 | Sem upload nem abertura de link; evidência texto 1–4000 e link http(s) até 2000. Armazenamento/SSRF/varredura não implementados. |
@@ -1173,25 +1157,25 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | ID | O que continua aberto |
 |---|---|
 | 8 | User ainda em missions/models; ao criar users, retirar a classe antiga para não duplicar tabela. |
-| 9/10 | Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado. |
-| 11 | Porta 55432 repetida em Settings/compose/exemplo/workflow, sem prova geral de divergência. |
+| ~~9/10~~ | ~~Paridade modelo/migração parcial; FKs/UNIQUE/índices específicos e CHECKs têm provas delimitadas, não comparação geral. Modo Alembic offline não é exercitado.~~ Resolvida em 2026-11-10 (seção "Paridade geral modelo/migração e Alembic offline"). Resíduo declarado: texto de CHECK e predicado de índice parcial (o Alembic não compara); offline sem upgrade da 0004 e sem downgrade de 0003/0005/0006 (leem dados). |
 | 12/151 | Settings recusa chave desconhecida do arquivo, mas descarta variável desconhecida do processo; `uv --env-file` muda esse caminho. Suíte ainda depende da raiz. |
-| 14 | Engine global/lazy, sem dispose no shutdown e corrida teórica; mover ao lifespan muda liveness sem configuração. |
+| 14 | Engine global/lazy, sem dispose no shutdown ~~e corrida teórica~~; mover ao lifespan muda liveness sem configuração. Corrida resolvida em 2026-11-10 (trava com dupla checagem em `get_engine`, `tests/unit/test_engine_unica.py`). Resta o dispose no shutdown, via lifespan em `main.py`. |
 | 32/161 | Códigos HTTP/SSE, dificuldade, dias por marco e rótulos Python/frontend espelhados à mão; respostas externas não têm validação runtime geral. |
 | 36 | Erro sem code persistente pode oferecer retry sem saída; fallback genérico é seguro, mas impreciso. |
 | 38 | Poda só chaves de conclusão de IDs explicitamente concluídos, após voos; ausências, rascunhos e chaves start/reschedule permanecem. Sem promessa de ganho de memória. |
 | 47 | Revalidar payload histórico com schema endurecido pode produzir ValidationError/500 na confirmação de create/reschedule; falta versionamento/compatibilidade dessas propostas. |
-| 65 | Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural. |
+| ~~65~~ | ~~Três ou mais refresh concorrentes de useCycle/useCurrentPlan não têm prova dedicada; redução ao caso de dois é argumento estrutural.~~ Resolvida em 2026-11-10 (seção "Pendência 65: três ou mais refresh concorrentes"): três e quatro pedidos em voo, em ordens adversas, nos dois hooks, com sabotagem (descartar só o penúltimo) que os testes de dois refresh puros deixavam passar e só os de `reload` pegavam; F1–F5/F6 a provam no caso direto. |
 | 80 | Sequência O(D) por conclusão; backfill 0004 O(N·D). Rever quando histórico justificar, sem otimização especulativa. |
 | 81 | CASCADE de xp_entry pode remover conquista em exclusão futura; hoje não há rota de exclusão. Conquista deve sobreviver se esse fluxo nascer. |
 | 88 | Pares missions↔progression e progression↔tutoring continuam no nível de pacote; constante de usuário/router foi corrigida. Evaluation não cria terceiro par. |
 | 97(a/c/g/i) | TypeDecorators semelhantes/cascade sem passive_deletes; último tool_use da mesma ferramenta vence e falso tem dois membros tool_input; rascunho retido após refresh; downgrade0005 pode falhar pela guarda0006 antes do bônus. |
 | 97/S-M6 | Só o rótulo foi recuperado; falta requisito verificável. Não inventar teste para fechar o item. |
 | 97/T-M1 | Provas de ausência de escrita antes do rollback são parciais; faltam todas as falhas, _mesma_evidencia, disputa UNIQUE e HTTP. Casos sequenciais não provam todos os entrelaçamentos. |
-| 104 | Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário. |
+| ~~104~~ | ~~Missão retida/usuário livre durante escrita de avaliação tem prova própria; falta matriz de conflitos cruzados e prova global ação→missão→avaliação→usuário.~~ Resolvida em 2026-11-10 (seção "Pendência 104: matriz de conflitos cruzados e ordem global das travas"): escrita da avaliação × confirmação da Kairya e × conclusão de outra missão, nas duas ordens, com sonda NOWAIT do que já está travado. Resíduo declarado: transação 1 e `registrar_falha`, início/reagendamento pela tela, confirmação de criação × bônus, `preparar_turno` × bônus/conclusão, duas avaliações do mesmo usuário e HTTP. |
 | 160 | Corridas antigas não provam universalmente relógio após trava; preservar testes de mecanismo. Início na virada, reagendamento e F25 após espera têm provas determinísticas, mas não encerram toda a matriz/releitura/UNIQUE. |
 | 164(a/c) | Reenvio direto pode aceitar chave de confirmação Kairya para mesmo conteúdo, sem nova escrita; epoch em texto passa na API de prazo, embora proposta Kairya o recuse. Sem mudança de contrato decidida. |
 | 165 | FK do histórico só aponta operation_id; missão/kind corretos são garantidos pelo serviço/transação, não por FK composta/CHECK do elo. |
+| ~~209~~ | ~~A F14 de `docs/ARCHITECTURE.md` diz que a ordem ação→missão não é observável por teste; `test_ordem_global_das_travas` a observa em `confirmar_acao`. Corrigir a frase quando o ARCHITECTURE.md estiver livre (hoje em PRs abertos).~~ Resolvida em 2026-11-10: a F14 passou a citar a prova de `test_ordem_global_das_travas.py` para ação→missão e para missão/avaliação→usuário. |
 
 ### Provedor, custo e diagnósticos
 
@@ -1199,16 +1183,18 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 |---|---|
 | 49 | Code SSE desconhecido usa texto de resultado desconhecido, mesmo com falha gravada. GET antigo versus updateAction já foi corrigido por reconciliação; sobra o texto genérico. |
 | 53 | Cofre/chamada real pela tela no Linux não documentados; Keychain macOS não é solução presumida para esta máquina. |
+| 100 | Log local sem segredos nos dois adaptadores: o Groq registra em `WARNING` o status HTTP, `retry-after` e `x-ratelimit-*` (valores saneados, até 64 caracteres), ou só o tipo da exceção em timeout, transporte e stream inválido; nunca corpo, chave, `Authorization` nem texto do usuário. Continua aberto: decidir codes/textos públicos para 4xx (401/403/404/413/429) no tradutor compartilhado chat/avaliação; hoje todos seguem `provedor_indisponivel`. |
 | 100 | **Encerrada em 2026-11-10** com a volta à Anthropic (ver topo). |
 | 106 | Corte de órfão pode anteceder fim de tentativa viva com retries SDK; retomada pode duplicar chamada paga, embora tentativa antiga não grave nem duplique bônus. |
 | 175 | Refusal/context_window/fallback efetivo não provocados em chamada real; avaliação não distingue recusa de inválida nem tem provas de todas as paradas. Aceitação do beta não prova substituição real. |
 | 176 | Retry de contexto excedido conserva histórico; aumentar teto não compacta contexto. Orientação de dividir ajuda apenas parcialmente. |
 | 177/203 | Teto 2048 e fallback ainda podem exceder timeout total60s; latência real/espera adequada não medidas. Alterar custo/timeout depende do responsável. |
 | 180 | Amostra real tardia autorizada de2026-09-30 existe; não cobre especial vencida, nova sequência de reschedule_mission sob persona atual nem tela. |
-| 184 | Instruções com quebras entram cruas no contexto e podem forjar cabeçalhos; efeito no modelo real não medido. Normalização/recusa ainda não decidida. |
+| 184 (resíduo) | Contexto e ações antigas agora vão como JSON; efeito do formato novo no modelo real não medido — os roteiros reais e os `referencia_*_real.json` são do prompt antigo. Regravar exige autorização e custo. Verificado neste incremento: Ruff, `ruff format --check`, mypy, `tests/unit` e os `test_camada3_*` (servidor falso) verdes; `test_tutoring_service.py` ajustado e verde no `make check` do gate de integração com o #48 (o registro só entra no commit se o gate passar). Tamanho do prefixo cacheado contra o mínimo do modelo não medido: conferir com `count_tokens` ou `usage.cache_read_input_tokens` no próximo roteiro real autorizado. |
 | 200 | Beta server-side-fallback-2026-07-01 tem data fixa; acompanhar compatibilidade em atualização SDK. Desligamento configurável; 4xx agora tem log local (100). |
 | 201 | Avaliação sem fallback; adotá-lo pede modelo efetivamente servido persistido e prova strict no substituto. |
 | 202/204 | Emenda parcial/substituto não medida na recusa real; custo por iteration/categoria da recusa não persistidos. Sem normalizar texto por suposição. |
+| 205 | `rubric.py` usa `json.dumps(ensure_ascii=False)` sem escapar U+2028, U+2029 e U+0085, que `splitlines()` trata como quebra; a tutoria escapa (`context._como_dado`). Alinhar a avaliação num PR próprio. |
 | 206 | A tela de limite diário não destrava sozinha à meia-noite; hoje basta recarregar. A Fase 3 refaz essa tela. |
 
 ### Interface, acessibilidade e manutenção
@@ -1223,9 +1209,12 @@ nem autorização de implementá-los. Decisões aceitas ficam na seção seguint
 | 94/150 | Logs frontend só console; backend simples sem correlação/JSON. Reload/workers/log-config uvicorn não exercitados; Alembic usa log próprio; nova interpolação de segredo exige revisão. |
 | 130 | Rever runner ubuntu-24.04 em2026-12-01; troca por PR com gate inteiro na imagem nova. |
 | 162 | Tolerância a reschedules/reward ausentes permanece para deploy defasado; remover conjuntamente quando esse cenário não existir, com os testes correspondentes. |
-| 192/37 | Concluir e avaliação sem timeout frontend; espera do quadro pode persistir. Avaliação precisa prazo compatível com backend/órfão, não20s indiscriminados. |
-| 193 | Timeout20s sem medida real de rede; texto não distingue demora/rede. Timer na leitura de corpo de erro pode perder status/code e custar outro reenvio seguro. |
+| 192/37 | Prazo da avaliação (105 s) espelha à mão tutor_timeout_seconds + FOLGA_DO_ORFAO (= proxy_read_timeout 90 s) + 15 s; sem medida real de latência (177/203) e sem verificar o timeout do proxy da Coolify (Traefik). Reenvio após o prazo passa do corte do órfão e pode repetir a chamada ao provedor (106). |
+| 193 | Prazo de 20 s sem medida real de rede. Corpo de erro que não chega no prazo preserva o status e perde o code: os erros só distinguíveis pelo code (409, e o 504 `tempo_esgotado` da avaliação) caem no texto genérico, com reenvio seguro. |
+| 211 | Textos de falha de transporte (`leadFor`) trocam a abertura "Não foi possível <ação>." pela causa, então não nomeiam a ação que falhou, e o de recusar por rede ("Não foi possível conectar. Tentar de novo é seguro.") tem 9 palavras, abaixo da faixa 12–18 da revisão de ux-writing. Rever junto do fim "Tentar de novo é seguro: …", que o E2E do QG verifica. |
 | 194 | Anúncio de falha gravada provado no DOM, não VoiceOver/NVDA/TalkBack/dialog móvel. Remontagem não repete alerta de propósito. |
+| 207 | E2E do QG usa prazos literais de 2027; trocar por datas relativas a hoje antes de 2027-01-10. |
+| 213 | `refresh` de useCycle/useCurrentPlan não tem prazo (`requestJson` sem `signal`). Se o pedido mais recente nunca responde, as respostas mais velhas são todas descartadas e a tela fica no estado anterior, ou em "carregando" se a carga inicial foi invalidada. Vale para um refresh só; prazo pede decisão de valor e de mensagem. |
 
 ## Decisões aceitas e limitações operacionais
 
@@ -1237,16 +1226,18 @@ Não confundir estes registros com defeitos novos ou implementação pendente:
 | 22/23 | Lock npm pode divergir local/CI; tabela Vitest vazia não prova cobertura, limiar/resumo sim. Limites em QUALITY. |
 | 29/30 | Raiz é convenção com receita externa; barra final produz307. Não mudar Settings/redirect por estética. |
 | 39 | Preparação Playwright usa rede/apt; falha reprova fechado. Sem cache parcial introduzido. |
+| 41 | Pergunta à tutora limitada a 4000 caracteres, decidido pelo dono. O espelho `MAX_QUESTION_LENGTH` (frontend) ↔ `TAMANHO_MAXIMO_DA_PERGUNTA` (backend) é provado por `tests/unit/test_limite_da_pergunta.py`, que reprova com `arquivo:linha` dos dois lados se divergirem, e com o caminho do arquivo se a constante do frontend sumir. Mudar o número é decisão de produto. |
 | 44/71 | Medições antigas de mutações são histórico de prova, não taxas universais atuais nem tarefas por repetir. |
 | 46 | Erro após recolhimento do órfão pode corresponder a estado persistido interrompida, não falhou. |
 | 52 | Estado indisponível do browser pode ser fixture; API real sem chave é provada separadamente. Não declarar tutoria real por esse cenário. |
 | 54/56 | Janela E2E perto da meia-noite SP aceita; segunda leitura de clock pós-commit é risco teórico, não bug reproduzido. |
+| 65 | Durante a carga inicial, com vários refresh em voo, o pedido mais recente decide: se ele falha, a tela vai para erro mesmo que um refresh mais velho tenha trazido dado válido (teste F5). Decisão da coordenação (F5, autonomia delegada); mudar é alteração de comportamento. |
 | 67/68/69/70 | Subtítulo/fixture aceitos; reload invalida imediatamente e efeito cria outra geração; refresh após unmount é no-op sem efeito observável, aceito. |
 | 73/74/75/76 | Compose só no principal; bancos sobrevivem à remoção de worktree; limpeza DB manual, sem DROP automático. Push simultâneo mesma árvore colide; script não atualiza main pela rede. |
 | 79/82/85 | Reward congelado versus painel atual é correto; progression usa enums de tutoring; posição do texto de progresso no contexto não é requisito de ordenação. |
 | 98 | PRs antigos #4–#18 podem pertencer ao remoto anterior, recriado; usar hash/época para identificar. Não confundir com PRs atuais de mesmo número. |
 | 108 | Banco E2E limpo por execução, mas compartilhado entre specs; falso reiniciar não limpa banco. Assertar IDs/deltas, não contagens/XP absolutos; axe de uma spec pode incluir cartões anteriores. |
-| 110 | Reagendar sem teto é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. |
+| 110 | Reagendar sem teto de quantidade é escolha do recorte, com histórico visível; limite não está implicitamente autorizado. O novo prazo, pela tela ou pela Kairya, tem desde a Tarefa 1.5 o horizonte de 365 dias (`prazo_fora_do_limite`, pendência 26); a contagem de reagendamentos continua sem teto. |
 | 164(b) | Reenvio de ação executada devolve missão atual, não sua fotografia antiga; a ação/idempotência permanece igual. |
 | 170/171/172 | error_code também marca corte; stop_sequence/pause_turn hoje normais pois ferramentas de servidor inexistem; parcial pode aparecer antes da recusa final e depois sumir. Fallback atenua, não elimina a última limitação. |
 | 182/185 | _completar usa sessão própria sem cache anterior; risco se contrato mudar. Chat depende de ciclo legível, confiando em CHECK/FKs, sem proteção para dado impossível por eles. |
@@ -1279,3 +1270,165 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
+
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.

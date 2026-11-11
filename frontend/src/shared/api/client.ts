@@ -43,7 +43,8 @@ const BASE_URL = configured
  * escolher o texto (`apiErrorText`); a `message` nao serve para isso.
  *
  * - `network`: nao houve resposta (rede fora, pedido abortado pelo chamador);
- * - `timeout`: o prazo do `postJson` acabou, e o resultado e desconhecido;
+ * - `timeout`: o prazo do pedido acabou (`ApiTimeoutError`); num POST o
+ *   resultado e desconhecido;
  * - `http`: o servidor respondeu com status de erro;
  * - `format`: a resposta chegou, mas num formato que o cliente nao le;
  * - `interrupted`: a leitura do corpo caiu no meio do stream.
@@ -147,6 +148,23 @@ export function parseRetryAfterSeconds(header: string | null): number | null {
 }
 
 /**
+ * O prazo do pedido acabou antes da resposta. No `postJson` o resultado e
+ * DESCONHECIDO -- o servidor pode ter gravado; no `requestJson`, a leitura so
+ * nao chegou. O tipo proprio e o que deixa a tela dizer "demorou" sem ler a
+ * `message`; `status` e `code` seguem nulos, como na rede fora, porque nenhuma
+ * resposta foi aproveitada.
+ */
+export class ApiTimeoutError extends ApiError {
+  constructor(options?: ErrorOptions) {
+    super('O servidor demorou demais para responder.', null, null, {
+      ...options,
+      kind: 'timeout',
+    })
+    this.name = 'ApiTimeoutError'
+  }
+}
+
+/**
  * Le o `code` do corpo de erro da API, ou `null` quando ele nao existe.
  *
  * Nem todo corpo de erro tem `code`: o 422 do FastAPI manda so a lista de erros
@@ -205,31 +223,73 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
 }
 
 /**
+ * O prazo, em milissegundos, que todo GET (`requestJson`) da ao servidor.
+ *
+ * Existe porque um `refresh` sem prazo cujo pedido nunca respondia prendia a
+ * tela no estado anterior, ou em "carregando" (pendencia 213 do HANDOFF): a
+ * guarda "o pedido mais recente decide" descarta as respostas velhas, entao
+ * so a falha do mais recente tira a tela dali. Mesma ordem de grandeza do
+ * `MUTATION_TIMEOUT_MS` -- uma leitura de banco, sem modelo no caminho --, e
+ * tambem sem medida real de rede (pendencia 193).
+ */
+export const READ_TIMEOUT_MS = 20_000
+
+/**
  * Faz um GET em `path` e devolve o JSON desserializado.
  *
  * `path` comeca com barra e NAO termina com barra: `/api/missions/` responde
  * 307 e gasta um round-trip a cada chamada, em silencio.
+ *
+ * Todo GET tem o prazo `READ_TIMEOUT_MS`, e estoura-lo sai como
+ * `ApiTimeoutError`, com as mesmas regras do `postJson`. O `signal` de quem
+ * chama continua abortando o pedido, e esse aborto NAO vira prazo: quem
+ * cancelou sabe por que cancelou.
  */
 export async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  return send<T>(path, { headers: { Accept: 'application/json' }, signal })
+  return sendWithin<T>(path, { headers: { Accept: 'application/json' } }, READ_TIMEOUT_MS, signal)
 }
 
 /**
  * O prazo, em milissegundos, que os POSTs que mudam estado da tela (Iniciar,
- * Reagendar, confirmar e recusar a proposta da Kairya) dao ao servidor.
+ * Concluir, Reagendar, confirmar e recusar a proposta da Kairya) dao ao
+ * servidor.
  *
  * Sao operacoes de banco, sem modelo no caminho: 20 s e muito mais que o
  * normal, e ainda assim o botao nao fica preso para sempre num pedido que o
- * navegador manteve aberto. O Concluir e a avaliacao NAO usam (pendencia 37 e
- * 190): a avaliacao chama o modelo e pode demorar mais que isto.
+ * navegador manteve aberto. A avaliacao NAO usa: ela chama o modelo e tem o
+ * prazo proprio, `EVALUATION_TIMEOUT_MS`.
  */
 export const MUTATION_TIMEOUT_MS = 20_000
+
+/**
+ * O prazo, em milissegundos, que o pedido de avaliacao da ao servidor.
+ *
+ * O numero e ESPELHADO A MAO do backend e da infraestrutura, e muda junto com
+ * eles:
+ *
+ * - `tutor_timeout_seconds` (60 s, `core/config.py`): o limite da resposta do
+ *   modelo. Ele so e conferido quando um evento do provedor chega, entao uma
+ *   resposta legitima -- inclusive o proprio `tempo_esgotado` -- pode sair
+ *   depois dos 60 s;
+ * - `FOLGA_DO_ORFAO` (30 s, `tutoring/service.py`): a avaliacao em curso so
+ *   vira orfa, e o reenvio so e aceito como retomada, 60 + 30 = 90 s depois de
+ *   pedida. Antes disso o reenvio recebe 409 `avaliacao_em_andamento`;
+ * - `proxy_read_timeout` (90 s, `docker/nginx.conf`): em producao o nginx ja
+ *   responde 504 a um backend mudo nesse ponto. O prazo daqui fica ACIMA dele
+ *   para nao competir com uma resposta real; ele so age quando nenhuma camada
+ *   responde (proxy de fora, conexao meio-aberta).
+ *
+ * 90 s + 15 s de margem para a gravacao final e a volta pela rede. A margem e
+ * julgamento, sem medida real de latencia (HANDOFF, pendencias 192/37).
+ */
+export const EVALUATION_TIMEOUT_MS = 105_000
 
 /** As opcoes do `postJson`. */
 export interface PostOptions {
   /**
-   * Aborta o pedido depois desse tempo, e a falha sai como a de rede fora --
-   * `ApiError` sem status e sem `code`. Sem a opcao, o pedido nao tem prazo.
+   * Aborta o pedido depois desse tempo, e a falha sai como `ApiTimeoutError`
+   * -- sem status e sem `code`, salvo quando o status ja tinha chegado (ver
+   * `postJson`). Sem a opcao, o pedido nao tem prazo.
    */
   timeoutMs?: number
 }
@@ -244,13 +304,15 @@ export interface PostOptions {
  *
  * O unico aborto que existe e o do PRAZO (`timeoutMs`), e ele segue o mesmo
  * raciocinio: ao fim do prazo o resultado e DESCONHECIDO -- o servidor pode ter
- * gravado --, e por isso a falha sai igual a de rede fora (`status` e `code`
- * nulos), que as telas ja tratam como "repita com a mesma chave". O prazo cobre
- * tambem a leitura do corpo: uma resposta que comecou e nao termina prende o
- * botao do mesmo jeito.
+ * gravado --, e por isso a falha sai como `ApiTimeoutError` (`status` e `code`
+ * nulos), que as telas tratam como "repita com a mesma chave". O prazo cobre
+ * cabecalhos E corpo: uma resposta que comecou e nao termina prende o botao do
+ * mesmo jeito, e um 200 cujo corpo nao chegou tambem e resultado desconhecido.
+ * Um status de ERRO que ja chegou, porem, e fato e nao e apagado: a falha sai
+ * como `ApiError` com esse status, e o `code` sai nulo se o corpo de erro nao
+ * chegou no prazo.
  *
- * `setTimeout` com `AbortController`, e nao `AbortSignal.timeout`: o timer do
- * segundo e interno ao navegador, e os testes com timers falsos nao o alcancam.
+ * O prazo mora em `sendWithin`, o mesmo do `requestJson`.
  */
 export async function postJson<T>(
   path: string,
@@ -266,24 +328,47 @@ export async function postJson<T>(
   if (timeoutMs === undefined) {
     return send<T>(path, init)
   }
+  return sendWithin<T>(path, init, timeoutMs)
+}
 
-  const controller = new AbortController()
+/**
+ * O `send` com prazo: aborta o pedido ao fim de `timeoutMs` e traduz esse
+ * aborto em `ApiTimeoutError`, salvo quando o status de erro ja tinha chegado
+ * (ver `postJson`).
+ *
+ * `signal`, quando vem, e o cancelamento de quem chama, combinado com o do
+ * prazo: qualquer um dos dois aborta o pedido, mas so o do prazo vira
+ * `ApiTimeoutError`. `setTimeout` com `AbortController`, e nao
+ * `AbortSignal.timeout`: o timer do segundo e interno ao navegador, e os
+ * testes com timers falsos nao o alcancam.
+ */
+async function sendWithin<T>(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  const deadline = new AbortController()
   const timer = setTimeout(() => {
-    controller.abort()
+    deadline.abort()
   }, timeoutMs)
+  const combined =
+    signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal])
   try {
-    return await send<T>(path, { ...init, signal: controller.signal })
+    return await send<T>(path, { ...init, signal: combined })
   } catch (cause) {
-    if (controller.signal.aborted) {
-      throw new ApiError('O servidor demorou demais para responder.', null, null, {
-        cause,
-        kind: 'timeout',
-      })
+    if (deadline.signal.aborted && !hasResponseStatus(cause)) {
+      throw new ApiTimeoutError({ cause })
     }
     throw cause
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Se a falha ja traz o status de uma resposta que chegou. */
+function hasResponseStatus(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status !== null
 }
 
 /** Um evento do stream SSE, com o `data` ja desserializado. */

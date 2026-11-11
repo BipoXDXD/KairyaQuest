@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { ptBR } from '../../shared/i18n/messages/pt-BR'
-import { ACTION_FAILURE_BY_CODE, describeActionFailure, failedActionText } from './actionFailure'
+import {
+  ACTION_FAILURE_BY_CODE,
+  describeActionFailure,
+  failedActionText,
+  recordedErrorCode,
+} from './actionFailure'
 
 const FAILED = {
   message: 'tutoring.actionFailure.failed.message',
@@ -15,6 +20,16 @@ const EXPIRED = {
 
 const INVALIDATED = {
   message: 'tutoring.actionFailure.rescheduleInvalid.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const ESTIMATE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.estimateOutOfBounds.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const DEADLINE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
   recovery: 'tutoring.actionFailure.askNewProposal',
 }
 
@@ -52,6 +67,8 @@ describe('describeActionFailure', () => {
       },
     ],
     ['prazo_expirado', 422, { ...EXPIRED, action: 'expired' }],
+    ['estimativa_fora_do_limite', 422, { ...ESTIMATE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
+    ['prazo_fora_do_limite', 422, { ...DEADLINE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
   ])('traduz %s', (code, status, esperado) => {
     for (const attempted of ['confirm', 'reject'] as const) {
       for (const kind of ['create_mission', 'reschedule_mission'] as const) {
@@ -71,7 +88,7 @@ describe('describeActionFailure', () => {
   )
 
   it.each([
-    ['rede fora', new ApiError('x', null, null)],
+    ['5xx sem code', new ApiError('x', 500, null)],
     ['422 sem code', new ApiError('x', 422, null)],
     ['code desconhecido', new ApiError('x', 409, 'code_novo')],
     ['herdado do prototipo', new ApiError('x', 409, 'hasOwnProperty')],
@@ -84,10 +101,36 @@ describe('describeActionFailure', () => {
     })
   })
 
+  it.each([
+    ['rede fora', new ApiError('x', null, null), 'shared.transport.network.lead'],
+    ['prazo', new ApiTimeoutError(), 'shared.transport.timeout.lead'],
+  ])(
+    '%s: confirmar abre com a causa e diz que repetir nao cria duas missoes',
+    (_caso, error, message) => {
+      expect(describeActionFailure(error, 'confirm', 'create_mission')).toEqual({
+        message,
+        recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+        action: 'retry',
+      })
+    },
+  )
+
   it('recusar tem o proprio texto generico', () => {
-    expect(
-      describeActionFailure(new ApiError('x', null, null), 'reject', 'create_mission'),
-    ).toEqual(UNCONFIRMED_REJECT)
+    expect(describeActionFailure(new ApiError('x', 500, null), 'reject', 'create_mission')).toEqual(
+      UNCONFIRMED_REJECT,
+    )
+  })
+
+  it.each([
+    ['rede fora', new ApiError('x', null, null), 'shared.transport.network.lead'],
+    ['prazo', new ApiTimeoutError(), 'shared.transport.timeout.lead'],
+  ])('%s: recusar abre com a causa', (_caso, error, message) => {
+    for (const kind of ['create_mission', 'reschedule_mission'] as const) {
+      expect(describeActionFailure(error, 'reject', kind)).toEqual({
+        ...UNCONFIRMED_REJECT,
+        message,
+      })
+    }
   })
 
   it('reagendamento_invalido: a acao foi gravada falhou, e o cartao passa a esse estado', () => {
@@ -104,7 +147,7 @@ describe('describeActionFailure', () => {
 
   it('confirmar um reagendamento sem resposta diz que o prazo nao muda duas vezes', () => {
     expect(
-      describeActionFailure(new ApiError('x', null, null), 'confirm', 'reschedule_mission'),
+      describeActionFailure(new ApiError('x', 500, null), 'confirm', 'reschedule_mission'),
     ).toEqual({
       message: 'tutoring.actionFailure.unconfirmedReschedule.message',
       recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
@@ -112,9 +155,20 @@ describe('describeActionFailure', () => {
     })
   })
 
+  it.each([
+    ['rede fora', new ApiError('x', null, null), 'shared.transport.network.lead'],
+    ['prazo', new ApiTimeoutError(), 'shared.transport.timeout.lead'],
+  ])('%s: confirmar um reagendamento abre com a causa', (_caso, error, message) => {
+    expect(describeActionFailure(error, 'confirm', 'reschedule_mission')).toEqual({
+      message,
+      recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
+      action: 'retry',
+    })
+  })
+
   it('recusar um reagendamento tem o mesmo texto generico da criacao', () => {
     expect(
-      describeActionFailure(new ApiError('x', null, null), 'reject', 'reschedule_mission'),
+      describeActionFailure(new ApiError('x', 500, null), 'reject', 'reschedule_mission'),
     ).toEqual(UNCONFIRMED_REJECT)
   })
 
@@ -133,6 +187,8 @@ describe('failedActionText', () => {
   it.each([
     ['prazo_expirado', EXPIRED],
     ['reagendamento_invalido', INVALIDATED],
+    ['estimativa_fora_do_limite', ESTIMATE_OUT_OF_BOUNDS],
+    ['prazo_fora_do_limite', DEADLINE_OUT_OF_BOUNDS],
     ['proposta_invalida', FAILED],
     // Um code que existe no mapa mas nao e gravado na acao cai no generico.
     ['transicao_ilegal', FAILED],
@@ -145,5 +201,27 @@ describe('failedActionText', () => {
   it('o texto generico tem as chaves no catalogo', () => {
     expect(Object.hasOwn(ptBR, FAILED.message)).toBe(true)
     expect(Object.hasOwn(ptBR, FAILED.recovery)).toBe(true)
+  })
+})
+
+describe('recordedErrorCode', () => {
+  it.each([
+    'prazo_expirado',
+    'reagendamento_invalido',
+    'estimativa_fora_do_limite',
+    'prazo_fora_do_limite',
+  ])('%s: o backend gravou a acao como falhou, e o code volta', (code) => {
+    expect(recordedErrorCode(new ApiError('x', 422, code))).toBe(code)
+  })
+
+  it.each([
+    ['um code que nao grava', new ApiError('x', 409, 'transicao_ilegal')],
+    ['um code desconhecido', new ApiError('x', 409, 'code_novo')],
+    ['um code herdado do prototipo', new ApiError('x', 409, 'toString')],
+    ['sem code', new ApiError('x', 500, null)],
+    ['o prazo', new ApiTimeoutError()],
+    ['um erro que nao e ApiError', new Error('x')],
+  ])('%s: a acao nao mudou', (_caso, error) => {
+    expect(recordedErrorCode(error)).toBeNull()
   })
 })

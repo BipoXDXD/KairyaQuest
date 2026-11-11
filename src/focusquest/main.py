@@ -25,6 +25,7 @@ from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
+    EstimativaForaDoLimite,
     LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
@@ -34,6 +35,7 @@ from focusquest.core.errors import (
     PlanoExistenteError,
     PrazoDerivadoError,
     PrazoExpiradoError,
+    PrazoForaDoLimite,
     PrazoInalteradoError,
     ProvedorNaoConfiguradoError,
     ReagendamentoInvalidoError,
@@ -48,6 +50,7 @@ from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
+from focusquest.modules.tutoring import domain as tutoring_domain
 from focusquest.modules.tutoring.router import router as tutoring_router
 
 _log = logging.getLogger(__name__)
@@ -148,6 +151,10 @@ class CodigoDeErro(StrEnum):
     PROVEDOR_INDISPONIVEL = "provedor_indisponivel"
     TEMPO_ESGOTADO = "tempo_esgotado"
     AVALIACAO_INVALIDA = "avaliacao_invalida"
+    # Os dois seguintes tambem sao o `error_code` gravado na acao da Kairya que
+    # saiu dos limites; o valor vem de la, e as duas pontas nao divergem.
+    ESTIMATIVA_FORA_DO_LIMITE = tutoring_domain.ESTIMATIVA_FORA_DO_LIMITE
+    PRAZO_FORA_DO_LIMITE = tutoring_domain.PRAZO_FORA_DO_LIMITE
 
 
 @app.exception_handler(RequestValidationError)
@@ -311,6 +318,30 @@ def _prazo_expirado(request: Request, exc: PrazoExpiradoError) -> JSONResponse:
     confirmacao de uma proposta a falha ja foi gravada na acao."""
     return _erro(
         status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PRAZO_EXPIRADO
+    )
+
+
+@app.exception_handler(EstimativaForaDoLimite)
+def _estimativa_fora_do_limite(
+    request: Request, exc: EstimativaForaDoLimite
+) -> JSONResponse:
+    """422 com `code`: o corpo e bem formado, a regra de negocio da avulsa e
+    que o recusa (pendencia 26). A mensagem diz a faixa aceita."""
+    return _erro(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        str(exc),
+        CodigoDeErro.ESTIMATIVA_FORA_DO_LIMITE,
+    )
+
+
+@app.exception_handler(PrazoForaDoLimite)
+def _prazo_fora_do_limite(request: Request, exc: PrazoForaDoLimite) -> JSONResponse:
+    """422 com `code`, como `_prazo_expirado`: o prazo depende do relogio, e
+    regra de relogio nao e validacao de schema."""
+    return _erro(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        str(exc),
+        CodigoDeErro.PRAZO_FORA_DO_LIMITE,
     )
 
 

@@ -143,3 +143,23 @@ class ReagendamentoInvalidoError(DomainError):
     """A proposta de reagendamento nao vale mais: a missao sumiu, foi concluida
     ou ja tem aquele prazo (F17). A acao foi GRAVADA como `falhou` antes deste
     erro subir -- a rota commita e so entao levanta."""
+
+
+class EstimativaForaDoLimite(DomainError):
+    """A estimativa da avulsa sai da faixa de negocio (pendencia 26).
+
+    Faixa e nao teto tecnico: a coluna guarda ate 2**31-1, e um dia (1440
+    minutos) e o maior bloco que ainda e "uma missao" -- o mesmo teto que o
+    ciclo ja impunha a diaria e a especial. O pedido e bem formado; e a regra
+    de negocio que o recusa, entao o 422 sai com `code` proprio.
+    """
+
+
+class PrazoForaDoLimite(DomainError):
+    """O prazo da avulsa nao esta em `(agora, agora + 365 dias]` (pendencia 26).
+
+    Depende do relogio, e por isso nao mora no schema: o schema nao le hora.
+    Na criacao pela tela cobre o passado e o longe demais; na confirmacao da
+    Kairya e no reagendamento, so o longe demais (o passado e
+    `PrazoExpiradoError`, F9).
+    """

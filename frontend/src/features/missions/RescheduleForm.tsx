@@ -7,7 +7,7 @@ import {
 } from '../../shared/types/mission'
 import { sameDraft } from './rescheduleDraft'
 import type { RescheduleFailure } from './rescheduleFailure'
-import type { RescheduleDraft } from './types'
+import type { OpenReschedule, RescheduleDraft } from './types'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import { useT } from '../../shared/i18n/useT'
 
@@ -31,6 +31,23 @@ const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_d
 const RETRY_NOTICE =
   'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.'
 
+/**
+ * O horizonte do prazo da avulsa, o mesmo do servidor (pendencia 26). O
+ * servidor continua sendo quem decide (`prazo_fora_do_limite`); aqui ele so
+ * evita um envio que voltaria recusado.
+ */
+const HORIZONTE_DO_PRAZO_MS = 365 * 24 * 60 * 60 * 1000
+
+/** A janela do novo prazo, em hora civil de Sao Paulo, a partir de `nowMs`. */
+function deadlineWindow(nowMs: number): { min: string; max: string; maxMs: number } {
+  const maxMs = nowMs + HORIZONTE_DO_PRAZO_MS
+  return {
+    min: isoToSaoPauloCivil(new Date(nowMs).toISOString()),
+    max: isoToSaoPauloCivil(new Date(maxMs).toISOString()),
+    maxMs,
+  }
+}
+
 /** Os ids de `aria-describedby` presentes, juntos; `undefined` sem nenhum. */
 function joinIds(...ids: (string | null)[]): string | undefined {
   const present = ids.filter((id) => id !== null)
@@ -38,12 +55,18 @@ function joinIds(...ids: (string | null)[]): string | undefined {
 }
 
 /** Por que o rascunho nao pode sair, ou `null` se pode. */
-function blockedReason(draft: RescheduleDraft): string | null {
+function blockedReason(draft: RescheduleDraft, maxMs: number): string | null {
   if (draft.civil === '') {
     return 'Informe a data e a hora do novo prazo.'
   }
-  if (saoPauloCivilToIso(draft.civil) === null) {
+  const iso = saoPauloCivilToIso(draft.civil)
+  if (iso === null) {
     return 'Esse horário não existe no horário de Brasília. Escolha outro.'
+  }
+  // O passado fica com o servidor (`prazo_expirado`): o minuto civil nao
+  // decide sozinho se "agora" ja passou, e o teto sim.
+  if (Date.parse(iso) > maxMs) {
+    return 'O novo prazo pode ser no máximo 365 dias a partir de agora.'
   }
   if (draft.reason === null) {
     return 'Escolha o motivo para salvar o novo prazo.'
@@ -60,21 +83,28 @@ function blockedReason(draft: RescheduleDraft): string | null {
  * - **Recolhido por padrao**, como a evidencia: o cartao continua curto, e os
  *   campos ficam FORA do documento quando fechado (nada invisivel na ordem de
  *   tabulacao).
- * - **O rascunho mora aqui**, e nao no registro (F20): perder um instante e um
- *   botao de opcao numa recarga custa dois cliques (pendencia 112). Abrir
- *   recomeca do prazo ATUAL, sem motivo marcado.
+ * - **O rascunho mora no registro** (pendencia 112), como o da evidencia: o
+ *   reload remonta os cartoes, e o formulario recomeca de `saved` -- aberto,
+ *   com o que foi digitado e a janela de quando abriu. Cada mudanca vai para
+ *   `onSave`; fechar pelo botao descarta (`onSave(null)`). Abrir recomeca do
+ *   prazo ATUAL, sem motivo marcado.
  * - **Aberto e derivado do prazo**: o disclosure fica aberto enquanto o prazo
- *   da missao e o mesmo de quando foi aberto. O sucesso muda o prazo (o
+ *   da missao e o mesmo de quando foi aberto. Um `saved` de outro prazo monta
+ *   fechado (e sem mexer no foco). O sucesso muda o prazo (o
  *   servidor recusa o prazo igual com `prazo_inalterado`), e o disclosure fecha
  *   sozinho -- sem efeito que muda estado ao ver a prop mudar. A falha nao muda
  *   o prazo: o formulario fica com o que foi digitado.
  * - **Salvar desabilitado com o porque em texto**, ligado por
  *   `aria-describedby`, como o motivo do Concluir bloqueado.
- * - **Falha `retry`** (nao se sabe se o prazo mudou): os campos continuam
- *   editaveis; sem mudar nada, o botao diz "Tentar de novo" e reenvia o MESMO
- *   rascunho (a chave retida so vale para o mesmo conteudo, F13). Mudou o
- *   rascunho, o botao volta a "Salvar novo prazo" -- e o cartao troca a chave
- *   antes de enviar.
+ * - **Janela do prazo de agora a agora+365 dias** (pendencia 26), contada do
+ *   instante em que o disclosure abriu: `min`/`max` no campo e o teto no
+ *   bloqueio. O passado fica com o servidor (`prazo_expirado`).
+ * - **Chave retida** (`pendingRetry`: o envio com resultado desconhecido): os
+ *   campos continuam editaveis; sem mudar nada, o botao diz "Tentar de novo" e
+ *   reenvia o MESMO rascunho (a chave retida so vale para o mesmo conteudo,
+ *   F13). Mudou o rascunho, o botao volta a "Salvar novo prazo" -- e o registro
+ *   troca a chave antes de enviar. O "ultimo enviado" vem do registro, e nao
+ *   daqui: sobrevive a remontagem junto com a chave.
  * - **Foco**: o botao de salvar sai do documento no sucesso; o foco que caiu
  *   no `body` volta ao botao do disclosure. Foco que ja foi para outro lugar
  *   nao se rouba.
@@ -87,6 +117,9 @@ export function RescheduleForm({
   disabled,
   failure,
   onSubmit,
+  saved,
+  onSave,
+  pendingRetry,
   describedBy,
 }: {
   mission: Mission
@@ -95,14 +128,24 @@ export function RescheduleForm({
   /** A ultima falha do reagendamento que se corrige ou se repete aqui. */
   failure: RescheduleFailure | null
   onSubmit: (draft: RescheduleDraft) => void
+  /** O reagendamento aberto guardado no registro. Lido so na montagem. */
+  saved: OpenReschedule | null
+  /** Guarda o reagendamento aberto no registro; `null` o descarta. */
+  onSave: (open: OpenReschedule | null) => void
+  /** O rascunho do envio cuja chave ficou retida, ou `null`. */
+  pendingRetry: RescheduleDraft | null
   describedBy?: string
 }) {
   const t = useT()
-  // O prazo da missao quando o disclosure foi aberto; `null` = fechado.
-  const [openedFor, setOpenedFor] = useState<string | null>(null)
-  const [draft, setDraft] = useState<RescheduleDraft>({ civil: '', reason: null })
-  // O ultimo rascunho enviado: e com ele que "Tentar de novo" se compara.
-  const [sent, setSent] = useState<RescheduleDraft | null>(null)
+  // `null` = fechado. O instante de abertura e lido no clique, nunca no render
+  // (render puro); um `saved` de outro prazo nao reabre.
+  const [open, setOpen] = useState<OpenReschedule | null>(() =>
+    saved !== null && saved.openedFor === mission.deadline ? saved : null,
+  )
+  const keep = (next: OpenReschedule | null) => {
+    setOpen(next)
+    onSave(next)
+  }
   const toggleRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const regionId = `${id}-region`
@@ -110,16 +153,20 @@ export function RescheduleForm({
   const blockedId = `${id}-blocked`
   const noticeId = `${id}-retry-notice`
 
-  const expanded = openedFor === mission.deadline
-  const closedBySuccess = openedFor !== null && !expanded
+  // So o aberto para o prazo ATUAL vale: o sucesso muda o prazo e fecha.
+  const current = open?.openedFor === mission.deadline ? open : null
+  const expanded = current !== null
+  const closedBySuccess = open !== null && !expanded
   useEffect(() => {
     if (closedBySuccess && document.activeElement === document.body) {
       toggleRef.current?.focus({ preventScroll: true })
     }
   }, [closedBySuccess])
 
-  const blocked = blockedReason(draft)
-  const retrySame = failure?.action === 'retry' && sent !== null && sameDraft(sent, draft)
+  const draft: RescheduleDraft = current?.draft ?? { civil: '', reason: null }
+  const bounds = deadlineWindow(current?.openedAtMs ?? 0)
+  const blocked = blockedReason(draft, bounds.maxMs)
+  const retrySame = pendingRetry !== null && sameDraft(pendingRetry, draft)
   const retryLabel = retrySame || failure?.action === 'retry-with-new-operation'
 
   return (
@@ -133,23 +180,25 @@ export function RescheduleForm({
         aria-describedby={describedBy}
         onClick={() => {
           if (expanded) {
-            setOpenedFor(null)
+            keep(null)
             return
           }
-          setOpenedFor(mission.deadline)
-          setDraft({
-            civil: isoToSaoPauloCivil(mission.deadline),
-            reason: null,
-            originalDeadline: mission.deadline,
+          keep({
+            openedFor: mission.deadline,
+            openedAtMs: Date.now(),
+            draft: {
+              civil: isoToSaoPauloCivil(mission.deadline),
+              reason: null,
+              originalDeadline: mission.deadline,
+            },
           })
-          setSent(null)
         }}
         className={TOGGLE_CLASS}
       >
         Reagendar prazo
       </button>
       <div id={regionId} className="mt-2 flex flex-col gap-2">
-        {expanded && (
+        {current !== null && (
           <>
             <label htmlFor={fieldId} className="text-sm font-medium text-slate-200">
               Novo prazo (horário de Brasília)
@@ -158,10 +207,12 @@ export function RescheduleForm({
               id={fieldId}
               data-testid="reschedule-deadline"
               type="datetime-local"
+              min={bounds.min}
+              max={bounds.max}
               value={draft.civil}
               disabled={disabled}
               onChange={(event) => {
-                setDraft({ ...draft, civil: event.target.value })
+                keep({ ...current, draft: { ...draft, civil: event.target.value } })
               }}
               className={`${FIELD_CLASS} self-start`}
             />
@@ -176,7 +227,7 @@ export function RescheduleForm({
                     data-testid={`reschedule-reason-${reason}`}
                     checked={draft.reason === reason}
                     onChange={() => {
-                      setDraft({ ...draft, reason })
+                      keep({ ...current, draft: { ...draft, reason } })
                     }}
                     className="focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
                   />
@@ -202,7 +253,6 @@ export function RescheduleForm({
                 retrySame ? noticeId : null,
               )}
               onClick={() => {
-                setSent(draft)
                 onSubmit(draft)
               }}
               className={SUBMIT_CLASS}

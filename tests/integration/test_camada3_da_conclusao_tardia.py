@@ -2,8 +2,8 @@
 diaria de ontem em andamento pelo `ProvedorAnthropic.responder` de producao.
 
 A chamada real (`camada3_da_conclusao_tardia.main`) mede que o modelo, com a
-diaria de ontem na secao de conclusao tardia e uma avulsa pendente com `#id`
-no contexto, NAO propoe `reschedule_mission` quando a pessoa pede para adiar a
+diaria de ontem em `late_cycle_missions` e uma avulsa pendente com `id` no
+contexto, NAO propoe `reschedule_mission` quando a pessoa pede para adiar a
 diaria; estes testes provam o mesmo caminho contra o falso.
 """
 
@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from focusquest.modules.tutoring.domain import TipoDeAcao
+from focusquest.modules.tutoring.persona import PERSONA
 from focusquest.modules.tutoring.provider import Proposta
 from integration import camada3, camada3_da_conclusao_tardia
 from integration.conftest import TIMEOUT_DE_TESTE
@@ -50,18 +51,25 @@ def test_o_contexto_traz_a_diaria_de_ontem_tardia_e_a_avulsa_pelo_id(
     falso: ServidorAnthropicFalso,
 ) -> None:
     """Sem a secao da conclusao tardia, a chamada real mediria outra coisa; sem
-    a avulsa com `#id`, o modelo nao teria o que reagendar por engano."""
+    a avulsa com `id`, o modelo nao teria o que reagendar por engano."""
     falso.roteiro = Roteiro(blocos=(Texto(("Certo.",)),))
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
-    sistema = falso.recebidas[-1].contexto_do_turno
-    assert "Missões do ciclo em conclusão tardia" in sistema
-    assert (
-        "- diária de ontem: Resolver 5 exercícios de laço (em andamento desde "
-        "2026-10-01T02:40:00+00:00; pode ser concluída antes de "
-        "2026-10-02T03:00:00+00:00, que é 2026-10-02T00:00:00-03:00 em São Paulo)"
-    ) in sistema
-    assert f"- #{camada3_da_conclusao_tardia.ID_DA_AVULSA}: " in sistema
+    recebida = falso.recebidas[-1]
+    assert recebida.prefixo_cacheado == [PERSONA]
+    contexto = recebida.dados_do_contexto
+    assert contexto["late_cycle_missions"] == [
+        {
+            "kind": "diária de ontem",
+            "instructions": "Resolver 5 exercícios de laço",
+            "started_at": "2026-10-01T02:40:00+00:00",
+            "complete_before_utc": "2026-10-02T03:00:00+00:00",
+            "complete_before_sao_paulo": "2026-10-02T00:00:00-03:00",
+        }
+    ]
+    assert camada3_da_conclusao_tardia.ID_DA_AVULSA in [
+        m["id"] for m in contexto["pending_missions"]
+    ]
     assert "diária de ontem" in corpo["messages"][0]["content"]
     assert [t["name"] for t in corpo["tools"]] == [
         TipoDeAcao.CRIAR_MISSAO.value,

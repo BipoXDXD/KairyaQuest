@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { ptBR } from '../../shared/i18n/messages/pt-BR'
 import {
   describeEvaluationErrorCode,
@@ -89,7 +89,22 @@ describe('describeEvaluationFailure', () => {
 
   it('erro sem code (5xx, corpo que nao e JSON) cai no generico', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, null))).toEqual(GENERIC)
-    expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual(GENERIC)
+  })
+
+  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
+    expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual({
+      message: 'shared.transport.network.lead',
+      recovery: 'missions.evaluationFailure.generic.recovery',
+      action: 'retry',
+    })
+  })
+
+  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
+    expect(describeEvaluationFailure(new ApiTimeoutError())).toEqual({
+      message: 'shared.transport.timeout.lead',
+      recovery: 'missions.evaluationFailure.generic.recovery',
+      action: 'retry',
+    })
   })
 
   it('um 404 SEM code (rota ausente, deploy desencontrado) manda atualizar, nao "tente de novo"', () => {
