@@ -3,6 +3,13 @@ import { expect, test, type Page } from '@playwright/test'
 import type { Cycle } from '../../src/features/missions/types'
 import type { Progress } from '../../src/features/progression/types'
 import type { Mission } from '../../src/shared/types/mission'
+import { diaEMes, diaRelativo, somarDias } from './datas'
+
+// O dia do ciclo antigo e o do novo, relativos a hoje (pendencia 207); a
+// semana do plano antigo termina no dia do ciclo antigo.
+const DIA_ANTIGO = diaRelativo(-1)
+const DIA_NOVO = diaRelativo(0)
+const INICIO_DA_SEMANA = somarDias(DIA_ANTIGO, -6)
 
 const daily = (id: number, day: string): Mission => ({
   id,
@@ -25,16 +32,16 @@ const daily = (id: number, day: string): Mission => ({
   reschedules: [],
 })
 const oldCycle: Cycle = {
-  today: '2026-10-04',
-  mission: daily(7700, '2026-10-04'),
+  today: DIA_ANTIGO,
+  mission: daily(7700, DIA_ANTIGO),
   streak: 3,
   days_to_milestone: 4,
   special: null,
   late_daily: null,
 }
 const newCycle: Cycle = {
-  today: '2026-10-05',
-  mission: daily(7701, '2026-10-05'),
+  today: DIA_NOVO,
+  mission: daily(7701, DIA_NOVO),
   streak: 0,
   days_to_milestone: 7,
   special: null,
@@ -42,9 +49,9 @@ const newCycle: Cycle = {
 }
 const oldPlan = {
   plan: {
-    week_start: '2026-09-28',
+    week_start: INICIO_DA_SEMANA,
     days: Array.from({ length: 7 }, (_, index) => ({
-      day: index < 3 ? `2026-09-${String(28 + index)}` : `2026-10-0${String(index - 2)}`,
+      day: somarDias(INICIO_DA_SEMANA, index),
       availability: index === 6 ? 'disponivel' : 'fora_do_plano',
       mission: index === 6 ? oldCycle.mission : null,
     })),
@@ -94,7 +101,7 @@ async function setup(page: Page, next: () => Promise<'success' | 'failure'>) {
     }
   })
   await page.goto('/')
-  await expect(page.getByText('Diária de 2026-10-04', { exact: true })).toBeVisible()
+  await expect(page.getByText(`Diária de ${DIA_ANTIGO}`, { exact: true })).toBeVisible()
   await expect(page.getByTestId('progress-total')).toHaveText('20 XP no total')
   await expect(page.getByTestId('tutor-greeting')).toBeVisible()
   expect(calls.get('/api/cycle')).toBe(1)
@@ -129,10 +136,10 @@ async function sameTabReturn(page: Page, advanceServerDay: () => void) {
 }
 
 async function currentData(page: Page) {
-  await expect(page.getByTestId('cycle-today')).toContainText('05/10')
+  await expect(page.getByTestId('cycle-today')).toContainText(diaEMes(DIA_NOVO))
   await expect(page.getByTestId('cycle-streak')).toContainText('0 dias seguidos')
-  await expect(page.getByText('Diária de 2026-10-05', { exact: true })).toBeVisible()
-  await expect(page.getByText('Diária de 2026-10-04', { exact: true })).toHaveCount(0)
+  await expect(page.getByText(`Diária de ${DIA_NOVO}`, { exact: true })).toBeVisible()
+  await expect(page.getByText(`Diária de ${DIA_ANTIGO}`, { exact: true })).toHaveCount(0)
   await expect(page.getByTestId('progress-total')).toHaveText('60 XP no total')
 }
 
@@ -151,7 +158,7 @@ test('retorno na mesma aba depois da virada do servidor atualiza em silêncio se
   await sameTabReturn(page, advanceServerDay)
   await expect.poll(() => calls.get('/api/cycle')).toBe(2)
   await expect.poll(() => calls.get('/api/progress')).toBe(2)
-  await expect(page.getByText('Diária de 2026-10-04', { exact: true })).toBeVisible()
+  await expect(page.getByText(`Diária de ${DIA_ANTIGO}`, { exact: true })).toBeVisible()
   await expect(page.getByTestId('progress-total')).toHaveText('20 XP no total')
   await expect(page.getByTestId('cycle-loading')).toHaveCount(0)
   await expect(page.getByTestId('progress-loading')).toHaveCount(0)
@@ -176,7 +183,7 @@ test('falha ao retornar preserva os dados e os botões Atualizar recuperam ciclo
   await sameTabReturn(page, advanceServerDay)
   await expect(page.getByTestId('cycle-stale')).toBeVisible()
   await expect(page.getByTestId('progress-stale')).toBeVisible()
-  await expect(page.getByText('Diária de 2026-10-04', { exact: true })).toBeVisible()
+  await expect(page.getByText(`Diária de ${DIA_ANTIGO}`, { exact: true })).toBeVisible()
   await expect(page.getByTestId('progress-total')).toHaveText('20 XP no total')
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
   fail = false

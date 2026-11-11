@@ -43,10 +43,10 @@ class Settings(ConfiguracaoDeLog):
     Nenhum campo tem valor padrao para credencial de BANCO: esquecer de
     configurar precisa falhar na partida, nao conectar em um banco qualquer.
 
-    A excecao e a chave do Groq, e ela e deliberada. O README s14 manda
+    A excecao e a chave da Anthropic, e ela e deliberada. O README s14 manda
     mostrar indisponibilidade quando nao ha credencial: a ausencia dela e um
     ESTADO do produto (a Kairya fora do ar, o Quartel-General funcionando), nao
-    uma configuracao esquecida. Por isso `groq_api_key` e opcional, e
+    uma configuracao esquecida. Por isso `anthropic_api_key` e opcional, e
     `SecretStr` a esconde do `repr` e dos logs.
 
     Variaveis desconhecidas sao REJEITADAS, nao ignoradas. Uma variavel que
@@ -55,7 +55,7 @@ class Settings(ConfiguracaoDeLog):
     lugar so onde esta escrito.
 
     Variavel VAZIA conta como ausente (`env_ignore_empty`): o .env.example
-    traz a chave como `FOCUSQUEST_GROQ_API_KEY=`, e uma chave vazia que
+    traz a chave como `FOCUSQUEST_ANTHROPIC_API_KEY=`, e uma chave vazia que
     virasse `SecretStr("")` diria "configurada" para uma credencial que nao
     existe.
     """
@@ -84,19 +84,28 @@ class Settings(ConfiguracaoDeLog):
     # (scripts/push-env.sh).
     e2e_port_offset: int = Field(default=0, ge=0, le=49)
 
-    groq_api_key: SecretStr | None = None
-    # Compatibilidade com .env antigos e os testes historicos do adaptador.
-    # NENHUM destes campos seleciona provedor/modelo/fallback de producao.
     anthropic_api_key: SecretStr | None = None
-    # Endereco usado somente pelo adaptador/testes historicos.
+    # Escrito por extenso, e nao `None`: com `base_url=None` o SDK obedece a
+    # `ANTHROPIC_BASE_URL` do ambiente (medido), e uma variavel solta no shell
+    # mandaria a conversa para outro endereco.
     anthropic_base_url: str = "https://api.anthropic.com"
-    # Legado: o adaptador Groq fixa o modelo e nao le este campo. O padrao
-    # espelha o destino atual para nao sugerir Claude em novos arquivos .env.
-    tutor_model: str = "openai/gpt-oss-20b"
-    # Teto da conversa; a avaliacao tem 2048 para comportar feedback e JSON.
+    # O mesmo modelo conversa e avalia; o esforco e que muda entre os dois.
+    tutor_model: str = "claude-sonnet-5-5"
+    # O teto de SAIDA de uma resposta da Kairya. O thinking adaptativo gasta
+    # deste mesmo teto; a saida e cobrada pelo uso real, nao pelo teto.
     tutor_max_tokens: int = Field(default=2048, ge=1)
     tutor_timeout_seconds: float = Field(default=60, gt=0)
     tutor_history_messages: int = Field(default=20, ge=1)
-    # Legado, ignorado pela dependencia de producao. Mesmo true nao autoriza
-    # Anthropic nem fallback. Mantido para nao quebrar arquivos .env existentes.
-    tutor_fallback: bool = False
+    # Teto de chamadas ao modelo por dia (de Sao Paulo) por estudante: guarda
+    # de orcamento da API, nao regra do produto. O reenvio de uma pergunta
+    # interrompida tambem conta, porque tambem e pago.
+    tutor_daily_turn_limit: int = Field(default=60, ge=1)
+    # O fallback do lado do servidor para a recusa (pendencia 174, beta): a API
+    # refaz a requisicao recusada no modelo que a Anthropic recomenda para a
+    # categoria da recusa. Desligar com FOCUSQUEST_TUTOR_FALLBACK=false se o
+    # beta mudar e a API passar a recusar a requisicao inteira.
+    tutor_fallback: bool = True
+    # `output_config.effort` (os modelos 5.x recusam `temperature` e
+    # `budget_tokens`): chat curto em `low`, a avaliacao da rubrica em `medium`.
+    tutor_effort: Literal["low", "medium", "high"] = "low"
+    evaluation_effort: Literal["low", "medium", "high"] = "medium"
