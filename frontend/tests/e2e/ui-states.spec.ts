@@ -24,7 +24,9 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await page.getByRole('button', { name: 'EN, English' }).click()
     const status = page.getByRole('status')
     await expect(status).toHaveAttribute('data-tone', 'danger')
-    await expect(status).toContainText('salvar o idioma English')
+    // O nome do idioma na falha é o endônimo, com o `lang` do próprio idioma.
+    await expect(status).toContainText('English')
+    await expect(status.locator('[lang="en"]')).toHaveText('English')
     await expect(status).toBeVisible()
     await expect(page.getByRole('button', { name: 'PT, Português (Brasil)' })).toHaveAttribute(
       'aria-pressed',

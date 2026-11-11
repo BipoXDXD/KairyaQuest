@@ -498,7 +498,7 @@ describe('MissionList -- concluir', () => {
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveAttribute('role', 'alert')
     expect(aviso).toHaveTextContent(
-      'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível concluir a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
     // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
     // completed, nunca do texto da falha (que ja esta no alert). O `<p>` do
@@ -938,9 +938,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     await within(card(7)).findByText('Não foi possível registrar esta tentativa. Tente de novo.')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
-    await within(card(7)).findByText(
-      /Não foi possível concluir a missão: sem conexão com o servidor\./,
-    )
+    await within(card(7)).findByText(/Não foi possível concluir a missão: sem conexão\./)
     fireEvent.click(await bPedeAtualizar())
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -1825,11 +1823,12 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       )
       expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
       const linha = within(card(7)).getByTestId('mission-started-at')
-      expect(linha).toHaveTextContent(`Iniciada em ${formatDeadline(iniciada.started_at ?? '')}`)
-      expect(within(linha).getByText(formatDeadline(iniciada.started_at ?? ''))).toHaveAttribute(
-        'dateTime',
-        iniciada.started_at,
+      expect(linha).toHaveTextContent(
+        `Iniciada em ${formatDeadline(iniciada.started_at ?? '', 'pt-BR')}`,
       )
+      expect(
+        within(linha).getByText(formatDeadline(iniciada.started_at ?? '', 'pt-BR')),
+      ).toHaveAttribute('dateTime', iniciada.started_at)
       expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
       // O Concluir continua ali, em andamento.
       expect(within(card(7)).getByTestId('mission-complete')).toBeEnabled()
@@ -1936,7 +1935,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
 
       expect(await within(card(7)).findByTestId('mission-start-error')).toHaveTextContent(
-        'Não foi possível iniciar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível iniciar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
       )
       const repetir = within(card(7)).getByTestId('mission-start')
       expect(repetir).toHaveTextContent('Tentar de novo')
@@ -2055,7 +2054,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       })
 
       const prazo = within(card(7)).getByTestId('mission-deadline')
-      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline))
+      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline, 'pt-BR'))
       expect(prazo).toHaveAttribute('dateTime', reagendada.deadline)
       const toggle = within(card(7)).getByRole('button', { name: 'Reagendar prazo' })
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -2065,7 +2064,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'Reagendada 1 vez',
       )
       expect(within(card(7)).getByTestId('mission-reschedule-entry')).toHaveTextContent(
-        `${formatDeadline(pendente.deadline)} → ${formatDeadline(reagendada.deadline)} · Falta de tempo · por você`,
+        `${formatDeadline(pendente.deadline, 'pt-BR')} → ${formatDeadline(reagendada.deadline, 'pt-BR')} · Falta de tempo · por você`,
       )
     })
 
@@ -2335,7 +2334,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
         await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
         expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
-          'Não foi possível reagendar a missão: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+          'Não foi possível reagendar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
         )
         continuaNoPrimeiro()
         expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')

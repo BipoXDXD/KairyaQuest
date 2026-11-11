@@ -136,16 +136,16 @@ describe('LanguageSwitcher', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
 
-    const status = screen.getByRole('status')
+    const status = await screen.findByRole('status', { name: '' })
     await vi.waitFor(() => {
       expect(status).toHaveTextContent(SAVE_FAILED_EN)
     })
     expect(setLocale).toHaveBeenCalledWith('en')
-    expect(status).toHaveAttribute('data-tone', 'danger')
-    expect(status.parentElement).not.toHaveClass('sr-only')
-    expect(status).toBeVisible()
-    // O nome do idioma dentro da frase em PT leva o próprio `lang` (WCAG 3.1.2).
+    // O endônimo leva o `lang` do próprio idioma (WCAG 3.1.2).
     expect(within(status).getByText('English')).toHaveAttribute('lang', 'en')
+    expect(screen.getByRole('status')).toHaveAttribute('data-tone', 'danger')
+    expect(screen.getByRole('status').parentElement).not.toHaveClass('sr-only')
+    expect(status).toBeVisible()
     expect(screen.getByRole('button', { name: 'PT, Português (Brasil)' })).toHaveAttribute(
       'aria-pressed',
       'true',

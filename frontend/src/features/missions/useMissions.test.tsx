@@ -86,7 +86,7 @@ describe('useMissions', () => {
     })
   })
 
-  it('chega em error com mensagem generica quando a falha nao e um ApiError', async () => {
+  it('chega em error como falha inesperada, sem texto, quando a falha nao e um ApiError', async () => {
     // 200 com corpo corrompido: o `response.json()` do cliente lanca
     // SyntaxError, que nao passa pela traducao em ApiError.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nao e json')))
@@ -98,7 +98,7 @@ describe('useMissions', () => {
     })
     expect(result.current.state).toEqual({
       status: 'error',
-      failure: { kind: 'unexpected', message: expect.stringMatching(/inesperad/i) },
+      failure: { kind: 'unexpected' },
     })
   })
 

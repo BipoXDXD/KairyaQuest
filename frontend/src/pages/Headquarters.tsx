@@ -4,6 +4,7 @@ import { MissionList, type MissionListHandle } from '../features/missions/Missio
 import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
 import { TutorPanel } from '../features/tutoring/TutorPanel'
 import { useT } from '../shared/i18n/useT'
+import { AreaHero } from './AreaHero'
 import { HEADQUARTERS_HEADING_ID } from './headings'
 
 /**
@@ -61,25 +62,21 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
   }, [hidden, refreshProgress])
   return (
     <div hidden={hidden} className="headquarters-layout lg:flex">
-      {/* `pb-24` no celular: o botao fixo "Falar com a Kairya" fica no canto de
-          baixo, e sem a folga cobriria os botoes do ultimo cartao do quadro
+      {/* `area-main--fab-clearance` (base.css): abaixo do lg, 96 px de folga
+          no fim, porque o botao fixo "Falar com a Kairya" ocupa os 80 px de
+          baixo da tela e cobriria os botoes do ultimo cartao do quadro
           (README §7: a conversa nao cobre botoes). */}
       <main
         data-testid="headquarters"
         hidden={hidden}
-        className="rpg-main mx-auto w-full max-w-3xl flex-1 px-4 py-8 pb-24 lg:pb-8"
+        className="area-main area-main--fab-clearance mx-auto w-full min-w-0 flex-1 px-4 pt-8 lg:px-6 lg:py-8 xl:p-8"
       >
-        <header className="rpg-hero rpg-hero-library mb-6">
-          <p className="rpg-eyebrow">{t('headquarters.header.eyebrow')}</p>
-          <h1
-            id={HEADQUARTERS_HEADING_ID}
-            tabIndex={-1}
-            className="rounded text-2xl font-bold tracking-tight text-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-          >
-            {t('headquarters.header.title')}
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">{t('headquarters.header.subtitle')}</p>
-        </header>
+        <AreaHero
+          scene="hq"
+          headingId={HEADQUARTERS_HEADING_ID}
+          title={t('headquarters.header.title')}
+          note={t('headquarters.header.subtitle')}
+        />
         <ProgressPanel ref={progress} />
         <CycleSection ref={cycle} onMissionCompleted={refreshProgress} />
         <MissionList ref={board} onMissionCompleted={refreshProgress} />

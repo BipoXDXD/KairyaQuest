@@ -20,7 +20,7 @@ interface LocaleOption {
   /**
    * O nome do idioma na própria língua, igual nos dois catálogos. Entra na
    * mensagem de falha ao salvar ("Não foi possível salvar o idioma English"),
-   * com o `lang` do próprio idioma (WCAG 3.1.2).
+   * com o `lang` do próprio idioma.
    */
   endonymKey: MessageKey
 }
@@ -48,7 +48,8 @@ const OPTIONS: readonly LocaleOption[] = [
  * pronunciar o nome na língua certa.
  * Clicar no idioma ativo não faz nada.
  *
- * A falha ao salvar aparece numa `StatusLine` montada desde o início (uma
+ * A troca aplica na hora; se o servidor recusar, o provider volta ao idioma
+ * anterior e o seletor avisa. A falha ao salvar aparece numa `StatusLine` montada desde o início (uma
  * live region que nasce com conteúdo pode ficar muda) e escondida só da vista
  * (`sr-only`) enquanto vazia, para o ícone do tom não aparecer sozinho.
  */

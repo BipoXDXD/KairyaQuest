@@ -1,5 +1,8 @@
 import { useId, useState } from 'react'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 import { describeEvidence, stripEnds } from './evidenceLimit'
+import { counterText, linkErrorText } from './evidenceText'
 import type { EvidenceDraft } from './types'
 
 const TOGGLE_CLASS =
@@ -16,9 +19,6 @@ function joinIds(...ids: (string | null)[]): string | undefined {
   const present = ids.filter((id) => id !== null)
   return present.length === 0 ? undefined : present.join(' ')
 }
-
-const RETRY_NOTICE =
-  'A entrega anterior pode ter chegado. Tente de novo antes de editar a evidência.'
 
 /**
  * A entrega com evidencia, recolhida por padrao (E17): Concluir continua a um
@@ -59,6 +59,8 @@ export function EvidenceForm({
   retryPending?: boolean
   describedBy?: string
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   const [linkTouched, setLinkTouched] = useState(false)
   const [expanded, setExpanded] = useState(() => draft.text !== '' || draft.link !== '')
   const id = useId()
@@ -90,7 +92,7 @@ export function EvidenceForm({
         }}
         className={TOGGLE_CLASS}
       >
-        Entregar com evidência (opcional)
+        {t('missions.evidence.toggle')}
       </button>
       <div id={regionId} className="mt-2 flex flex-col gap-2">
         {expanded && (
@@ -101,11 +103,11 @@ export function EvidenceForm({
                 data-testid="evidence-retry-notice"
                 className="text-xs text-amber-200"
               >
-                {RETRY_NOTICE}
+                {t('missions.evidence.retryNotice')}
               </p>
             )}
             <label htmlFor={textId} className="text-sm font-medium text-slate-200">
-              O que você fez
+              {t('missions.evidence.textLabel')}
             </label>
             <textarea
               id={textId}
@@ -126,7 +128,7 @@ export function EvidenceForm({
               className={`${FIELD_CLASS} resize-y`}
             />
             <p id={counterId} data-testid="evidence-counter" className="text-xs text-slate-400">
-              {described.counter}
+              {described.counter === null ? null : counterText(described.counter, locale, t)}
             </p>
             {textMissing && (
               <p
@@ -134,11 +136,11 @@ export function EvidenceForm({
                 data-testid="evidence-text-missing"
                 className="text-xs text-amber-200"
               >
-                Para entregar o link, conte também o que você fez.
+                {t('missions.evidence.textMissing')}
               </p>
             )}
             <label htmlFor={linkId} className="text-sm font-medium text-slate-200">
-              Link (opcional)
+              {t('missions.evidence.linkLabel')}
             </label>
             <input
               id={linkId}
@@ -175,7 +177,7 @@ export function EvidenceForm({
                 data-testid="evidence-link-error"
                 className="text-xs text-red-300"
               >
-                {linkError}
+                {linkErrorText(linkError, t)}
               </p>
             )}
           </>

@@ -214,6 +214,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
       client_message_id: state.request.client_message_id,
       reply_to_id: null,
       error_code: null,
+      fallback_model: null,
       created_at: createdAt,
       actions: [],
     })
@@ -256,6 +257,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
       client_message_id: state.request.client_message_id,
       reply_to_id: null,
       error_code: null,
+      fallback_model: null,
       created_at: createdAt,
       actions: [],
     }
@@ -294,6 +296,7 @@ test('fechar, backdrop e link do quadro liberam o teclado do fundo', async ({ pa
       client_message_id: null,
       reply_to_id: 9299,
       error_code: null,
+      fallback_model: null,
       created_at: ONTEM,
       actions: [
         {

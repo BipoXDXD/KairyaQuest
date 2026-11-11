@@ -48,11 +48,11 @@ describe('o texto das aberturas de transporte', () => {
   it.each([
     [
       'missions.completionFailure.unconfirmed.timeout',
-      'Não foi possível concluir a missão: o servidor demorou demais para responder.',
+      'Não foi possível concluir a missão: o servidor demorou demais.',
     ],
     [
       'missions.completionFailure.unconfirmed.network',
-      'Não foi possível concluir a missão: sem conexão com o servidor.',
+      'Não foi possível concluir a missão: sem conexão.',
     ],
   ] as const)('%s em pt-BR', (key, esperado) => {
     expect(translate('pt-BR', key)).toBe(esperado)

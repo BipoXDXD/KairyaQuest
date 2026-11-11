@@ -11,10 +11,9 @@ import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluatio
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
+import type { MessageKey } from '../../shared/i18n/catalog'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
-
-/** O rotulo fixo de toda avaliacao concluida (README §5: o modelo interpreta). */
-const MODEL_LABEL = 'Avaliação da Kairya — interpretação do modelo, não verificação automática'
+import { useT, type Translate } from '../../shared/i18n/useT'
 
 /**
  * O que vira ancora: so `http`/`https`, sem diferenciar maiusculas (EM2). O
@@ -30,9 +29,9 @@ const REQUEST_BUTTON_CLASS =
   'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
 /** O selo da verificacao, sempre em texto (E4). Exaustivo sobre o tipo. */
-const VERIFICATION_LABELS: Record<Verification, string> = {
-  autodeclarada: 'Autodeclarada',
-  com_evidencia: 'Com evidência',
+const VERIFICATION_LABELS: Readonly<Record<Verification, MessageKey>> = {
+  autodeclarada: 'missions.evaluation.verification.selfDeclared',
+  com_evidencia: 'missions.evaluation.verification.withEvidence',
 }
 
 function VerdictIcon({ d }: { d: string }) {
@@ -60,19 +59,19 @@ function VerdictIcon({ d }: { d: string }) {
  * como os de `features/campaigns/availability.ts` (tecnica copiada, nao
  * importada: features nao se importam).
  */
-const VERDICT_DISPLAY: Record<Verdict, { label: string; icon: ReactElement; tone: string }> = {
+const VERDICT_DISPLAY: Record<Verdict, { label: MessageKey; icon: ReactElement; tone: string }> = {
   atende: {
-    label: 'Critério atendido',
+    label: 'missions.evaluation.verdict.meets',
     icon: <VerdictIcon d="M5 12l5 5L20 7" />,
     tone: 'text-emerald-200',
   },
   parcial: {
-    label: 'Atendido em parte',
+    label: 'missions.evaluation.verdict.partial',
     icon: <VerdictIcon d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18" />,
     tone: 'text-amber-200',
   },
   nao_atende: {
-    label: 'Critério não atendido',
+    label: 'missions.evaluation.verdict.notMet',
     icon: <VerdictIcon d="M6 6l12 12M18 6L6 18" />,
     tone: 'text-red-300',
   },
@@ -147,19 +146,20 @@ function currentView(
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo agora. */
-function statusText(view: EvaluationView): string {
+function statusText(view: EvaluationView, t: Translate): string {
   if (view.kind === 'requesting') {
-    return 'A Kairya está avaliando…'
+    return t('missions.evaluation.requesting')
   }
   return view.kind === 'concluded' && view.fresh
-    ? `Avaliação concluída: ${VERDICT_DISPLAY[view.verdict].label}.`
+    ? t('missions.evaluation.concluded', { verdict: t(VERDICT_DISPLAY[view.verdict].label) })
     : ''
 }
 
 function EvidenceLink({ link }: { link: string }) {
+  const t = useT()
   return (
     <p data-testid="evaluation-evidence-link" className="mt-1 text-sm break-all text-slate-300">
-      <span className="text-slate-400">Link: </span>
+      <span className="text-slate-400">{t('missions.evaluation.link')} </span>
       {LINK_SCHEME.test(link) ? (
         <a
           href={link}
@@ -168,7 +168,7 @@ function EvidenceLink({ link }: { link: string }) {
           className="text-sky-300 underline underline-offset-2 hover:text-sky-200 focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:outline-none"
         >
           {link}
-          <span className="sr-only"> (abre em nova aba)</span>
+          <span className="sr-only"> {t('missions.evaluation.opensInNewTab')}</span>
         </a>
       ) : (
         link
@@ -178,6 +178,7 @@ function EvidenceLink({ link }: { link: string }) {
 }
 
 function ConcludedEvaluation({ view }: { view: ConcludedView }) {
+  const t = useT()
   const { label, icon, tone } = VERDICT_DISPLAY[view.verdict]
   return (
     <div className="mt-2 flex flex-col gap-1 text-sm">
@@ -187,20 +188,20 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
         className={`inline-flex items-center gap-1 font-semibold ${tone}`}
       >
         {icon}
-        <span>{label}</span>
+        <span>{t(label)}</span>
       </p>
       <p data-testid="evaluation-feedback" className="whitespace-pre-line text-slate-200">
         {view.feedback}
       </p>
       <p data-testid="evaluation-label" className="text-xs text-slate-400">
-        {MODEL_LABEL}
+        {t('missions.evaluation.modelLabel')}
       </p>
       {/* EM1: sem `reward` (a leitura depois de recarregar, ou a resposta
           idempotente de uma avaliacao ja concluida) nao ha o numero; o saldo
           esta no painel de progresso. Com `reward`, quem fala e o anuncio. */}
       {view.verdict === 'atende' && view.reward === null && (
         <p data-testid="evaluation-bonus-credited" className="text-emerald-200">
-          Bônus de XP creditado ao seu saldo.
+          {t('missions.evaluation.bonusCredited')}
         </p>
       )}
     </div>
@@ -231,10 +232,11 @@ function EvidenceAndEvaluation({
   evidence: Evidence
   onRewarded?: () => void
   onReload?: () => void
-  reloadLabel: string
+  reloadLabel: MessageKey
   reloadWaiting: boolean
   describedBy?: string
 }) {
+  const t = useT()
   const { state: request, request: requestEvaluation } = useRequestEvaluation(
     mission.id,
     onRewarded,
@@ -256,7 +258,7 @@ function EvidenceAndEvaluation({
       {view.kind === 'concluded' && <ConcludedEvaluation view={view} />}
       {view.kind === 'in_progress' && (
         <p data-testid="evaluation-in-progress" className="mt-2 text-sm text-slate-300">
-          Avaliação em andamento
+          {t('missions.evaluation.inProgress')}
         </p>
       )}
 
@@ -270,7 +272,9 @@ function EvidenceAndEvaluation({
             aria-describedby={describedBy}
             className={REQUEST_BUTTON_CLASS}
           >
-            {failure?.action === 'retry' ? 'Tentar de novo' : 'Pedir avaliação da Kairya'}
+            {t(
+              failure?.action === 'retry' ? 'missions.action.retry' : 'missions.evaluation.request',
+            )}
           </button>
         )}
         {failure?.action === 'refresh' && onReload !== undefined && (
@@ -281,12 +285,14 @@ function EvidenceAndEvaluation({
             onClick={onReload}
             className={REQUEST_BUTTON_CLASS}
           >
-            {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
-            <span className="sr-only">a missão: {mission.instructions}</span>
+            {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
+            <span className="sr-only">
+              {t('missions.card.whichMission', { instructions: mission.instructions })}
+            </span>
           </button>
         )}
         <div role="status" data-testid="evaluation-status" className="text-sm text-sky-200">
-          <p data-testid="evaluation-status-text">{statusText(view)}</p>
+          <p data-testid="evaluation-status-text">{statusText(view, t)}</p>
           {view.kind === 'concluded' && view.reward !== null && (
             <RewardAnnouncement reward={view.reward} bonus />
           )}
@@ -331,17 +337,18 @@ export function EvaluationPanel({
   mission,
   onRewarded,
   onReload,
-  reloadLabel = 'Atualizar o quadro',
+  reloadLabel = 'missions.reload.board',
   reloadWaiting = false,
   describedBy,
 }: {
   mission: Mission
   onRewarded?: () => void
   onReload?: () => void
-  reloadLabel?: string
+  reloadLabel?: MessageKey
   reloadWaiting?: boolean
   describedBy?: string
 }) {
+  const t = useT()
   // `== null` de proposito: uma API anterior ao E nem manda as chaves.
   if (mission.verification == null) {
     return null
@@ -354,7 +361,7 @@ export function EvaluationPanel({
         data-testid="evaluation-verification"
         className="inline-block rounded-full border border-slate-400/50 px-2 py-0.5 text-xs font-medium text-slate-200"
       >
-        {VERIFICATION_LABELS[mission.verification]}
+        {t(VERIFICATION_LABELS[mission.verification])}
       </span>
       {mission.evidence != null && (
         <EvidenceAndEvaluation

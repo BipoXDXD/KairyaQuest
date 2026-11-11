@@ -1,11 +1,11 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
-import { renderWithI18n } from '../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Progress } from '../features/progression/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
 import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion, Reward } from '../shared/types/reward'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
+import { renderWithI18n } from '../test/i18n'
 import { stubViewport } from '../test/viewport'
 import { Headquarters } from './Headquarters'
 import { HEADQUARTERS_HEADING_ID } from './headings'
@@ -38,6 +38,13 @@ function stubPage() {
   })
 }
 
+/** Espera os efeitos das features assentarem, para o teste nao terminar no meio de uma atualizacao. */
+async function settle() {
+  await screen.findByTestId('missions-empty')
+  await screen.findByTestId('tutor-greeting')
+  await screen.findByTestId('progress-level')
+}
+
 describe('Headquarters', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -51,8 +58,6 @@ describe('Headquarters', () => {
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading).toHaveTextContent(/^Headquarters — your study dashboard$/)
     // Cada texto preso ao seu lugar no cabecalho: trocar duas chaves irmas reprova.
-    expect(heading.previousElementSibling).toHaveTextContent(/^Adventurer's library$/)
-    expect(heading.previousElementSibling).toHaveClass('rpg-eyebrow')
     expect(heading.nextElementSibling).toHaveTextContent(
       /^What's open, with its deadline and reward\.$/,
     )
@@ -136,6 +141,50 @@ describe('Headquarters', () => {
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
     await screen.findByTestId('progress-level')
+  })
+
+  it('o cabeçalho da área usa a cena do QG', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')
+    expect(header).toHaveClass('area-hero', 'area-hero--hq')
+    await settle()
+  })
+
+  it('o texto do hero fica sobre um Panel surface, não sobre a imagem', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    const panel = heading.closest('[data-elevation]')
+    expect(panel).toHaveAttribute('data-elevation', 'surface')
+    expect(panel).toHaveTextContent('O que está em aberto, com prazo e recompensa.')
+    expect(panel).not.toHaveClass('area-hero')
+    await settle()
+  })
+
+  it('o h1 continua sendo o primeiro heading', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    await settle()
+    expect(screen.getAllByRole('heading')[0]).toBe(screen.getByRole('heading', { level: 1 }))
+  })
+
+  it('em inglês, o título e a nota vêm do catálogo', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />, { locale: 'en' })
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Headquarters — your study dashboard',
+    )
+    expect(screen.getByText("What's open, with its deadline and reward.")).toBeInTheDocument()
+    await settle()
   })
 
   it('oculta, esconde o main e o painel da Kairya, sem desmontar', async () => {

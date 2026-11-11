@@ -9,6 +9,7 @@ import { sameDraft } from './rescheduleDraft'
 import type { RescheduleFailure } from './rescheduleFailure'
 import type { OpenReschedule, RescheduleDraft } from './types'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
 
 const TOGGLE_CLASS =
@@ -27,9 +28,6 @@ const SUBMIT_CLASS =
 
 /** A ordem dos motivos na tela: a do README §5. */
 const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_de_prioridade']
-
-const RETRY_NOTICE =
-  'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.'
 
 /**
  * O horizonte do prazo da avulsa, o mesmo do servidor (pendencia 26). O
@@ -55,21 +53,21 @@ function joinIds(...ids: (string | null)[]): string | undefined {
 }
 
 /** Por que o rascunho nao pode sair, ou `null` se pode. */
-function blockedReason(draft: RescheduleDraft, maxMs: number): string | null {
+function blockedReason(draft: RescheduleDraft, maxMs: number): MessageKey | null {
   if (draft.civil === '') {
-    return 'Informe a data e a hora do novo prazo.'
+    return 'missions.reschedule.blocked.missingDeadline'
   }
   const iso = saoPauloCivilToIso(draft.civil)
   if (iso === null) {
-    return 'Esse horário não existe no horário de Brasília. Escolha outro.'
+    return 'missions.reschedule.blocked.nonexistentTime'
   }
   // O passado fica com o servidor (`prazo_expirado`): o minuto civil nao
   // decide sozinho se "agora" ja passou, e o teto sim.
   if (Date.parse(iso) > maxMs) {
-    return 'O novo prazo pode ser no máximo 365 dias a partir de agora.'
+    return 'missions.reschedule.blocked.tooFar'
   }
   if (draft.reason === null) {
-    return 'Escolha o motivo para salvar o novo prazo.'
+    return 'missions.reschedule.blocked.missingReason'
   }
   return null
 }
@@ -211,13 +209,13 @@ export function RescheduleForm({
         }}
         className={TOGGLE_CLASS}
       >
-        Reagendar prazo
+        {t('missions.reschedule.toggle')}
       </button>
       <div id={regionId} className="mt-2 flex flex-col gap-2">
         {current !== null && (
           <>
             <label htmlFor={fieldId} className="text-sm font-medium text-slate-200">
-              Novo prazo (horário de Brasília)
+              {t('missions.reschedule.deadlineLabel')}
             </label>
             <input
               id={fieldId}
@@ -233,7 +231,9 @@ export function RescheduleForm({
               className={`${FIELD_CLASS} self-start`}
             />
             <fieldset className="flex flex-col gap-1" disabled={disabled}>
-              <legend className="text-sm font-medium text-slate-200">Por que reagendar?</legend>
+              <legend className="text-sm font-medium text-slate-200">
+                {t('missions.reschedule.reasonLegend')}
+              </legend>
               {REASONS.map((reason) => (
                 <label key={reason} className="flex items-center gap-2 text-sm text-slate-200">
                   <input
@@ -257,7 +257,7 @@ export function RescheduleForm({
                 data-testid="reschedule-retry-notice"
                 className="text-xs text-amber-200"
               >
-                {RETRY_NOTICE}
+                {t('missions.reschedule.retryNotice')}
               </p>
             )}
             <button
@@ -273,11 +273,11 @@ export function RescheduleForm({
               }}
               className={SUBMIT_CLASS}
             >
-              {retryLabel ? 'Tentar de novo' : 'Salvar novo prazo'}
+              {t(retryLabel ? 'missions.action.retry' : 'missions.reschedule.submit')}
             </button>
             {blocked !== null && (
               <p id={blockedId} data-testid="reschedule-blocked" className="text-sm text-amber-200">
-                {blocked}
+                {t(blocked)}
               </p>
             )}
             {failure !== null && (
