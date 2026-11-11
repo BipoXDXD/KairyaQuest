@@ -75,6 +75,38 @@ Todos sob `flock` da trava do deslocamento 9, com `memory_pressure` a 52% livre.
   com cobertura `100.00%`; vitest `2177 passed (2177)`; Playwright
   `123 passed`; gitleaks `no leaks found`; `check-wheel` ok.
 
+## Revisão do PR: o bloqueio agora é provado na UNIQUE, na perdedora certa
+
+O achado: `_esperar_um_bloqueio_por_trava` aceitava qualquer conexão com
+`wait_event_type = 'Lock'`, sem provar que era a perdedora nem que a espera era
+no índice único. Correção (só no arquivo de teste):
+
+- `_conexoes_da_perdedora` arma um listener `checkout` do pool e guarda o `pid`
+  de todo backend entregue depois de armado, antes de a perdedora escrever
+  (serve ao serviço e à API, que roda noutra thread do TestClient).
+- `_esperar_a_perdedora_na_unique` só aceita um desses `pid`s com
+  `wait_event_type = 'Lock'` **e** `wait_event = 'transactionid'`; o `pid` do
+  próprio monitor é excluído. Polling com `time.monotonic` e teto, como antes.
+- Se o `join` da thread estourar o teto, `_cancelar_conexoes`
+  (`pg_cancel_backend`) solta a conexão antes do assert.
+- Três testes novos provam o filtro: espera em trava `advisory` (também
+  `Lock`) estoura o teto; conjunto de `pid`s vazio estoura o teto; o cancelamento
+  derruba a consulta com `QueryCanceled`.
+
+Comandos e resultados (sob `flock` da trava do deslocamento 9):
+
+- 5 execuções seguidas de `uv run pytest tests/integration/test_recusas_sem_escrita.py
+  tests/unit/test_mesma_evidencia.py`: `102 passed` nas cinco (3.44s, 3.50s,
+  3.78s, 3.07s, 3.05s).
+- Sabotagem: `wait_event = 'transactionid'` trocado por `'advisory'` no filtro.
+  Resultado: 2 falhas em 30.53s (`test_vencedora_commita_a_perdedora_bloqueada_recebe_a_chave_gasta`
+  por `a perdedora nunca ficou bloqueada no indice unico da vencedora`, e
+  `test_a_espera_nao_aceita_trava_que_nao_e_a_do_indice_unico` por
+  `DID NOT RAISE`). Desfeita; o arquivo voltou idêntico ao anterior.
+- `make check` depois da correção: `EXIT 0`; pytest `2082 passed, 32 subtests
+  passed` com cobertura `100.00%`, vitest `2177 passed`, Playwright `123 passed`,
+  gitleaks `no leaks found`, `check-wheel` ok.
+
 ## Resíduo (o que T-M1 ainda não cobre)
 
 - A prova de ausência de escrita vale para `concluir`, `iniciar` e `reagendar`

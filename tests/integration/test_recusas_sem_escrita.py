@@ -32,13 +32,14 @@ mesmo criou.
 import threading
 import time
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Connection, Engine, delete, inspect, select, text
+from sqlalchemy import Connection, Engine, delete, event, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -807,28 +808,64 @@ def test_a_unique_recusa_a_perdedora_e_o_rollback_desfaz_o_que_ela_escreveu(
     }
 
 
-def _esperar_um_bloqueio_por_trava(engine: Engine) -> None:
-    """Espera, observando o PostgreSQL, ate alguma conexao esperar uma trava.
-
-    E a prova de que a perdedora CHEGOU ao indice unico e esta presa na
-    transacao da vencedora, sem adivinhar quanto tempo isso leva. `AUTOCOMMIT`
-    porque `pg_stat_activity` e fotografada por transacao: numa transacao
-    aberta a espera nunca apareceria.
+@contextmanager
+def _conexoes_da_perdedora(engine: Engine) -> Iterator[set[int]]:
+    """Registra o `pid` de todo backend que o pool entregar enquanto o bloco
+    roda (inclusive o do monitor, que as consultas abaixo excluem). Armado
+    ANTES de a perdedora comecar, ele guarda a conexao dela antes de qualquer
+    INSERT/flush, seja a perdedora o servico (sessao propria) ou a API (sessao
+    da requisicao, noutra thread do TestClient).
     """
-    limite = time.monotonic() + SEGUNDOS_LIMITE
+    pids: set[int] = set()
+
+    def registrar(dbapi_conexao: Any, _registro: Any, _proxy: Any) -> None:
+        pids.add(dbapi_conexao.info.backend_pid)
+
+    event.listen(engine, "checkout", registrar)
+    try:
+        yield pids
+    finally:
+        event.remove(engine, "checkout", registrar)
+
+
+def _esperar_a_perdedora_na_unique(
+    engine: Engine, pids: set[int], *, limite_s: float = SEGUNDOS_LIMITE
+) -> None:
+    """Espera, observando o PostgreSQL, ate a perdedora (uma das conexoes em
+    `pids`) esperar o `transactionid` da vencedora.
+
+    `wait_event_type = 'Lock'` + `wait_event = 'transactionid'` e a espera de
+    uma insercao num indice unico por uma chave que outra transacao ainda
+    pode confirmar; qualquer outra trava (relacao, advisory, tupla) ou
+    qualquer outra conexao nao serve de prova. Sem adivinhar quanto tempo isso
+    leva. `AUTOCOMMIT` porque `pg_stat_activity` e fotografada por transacao:
+    numa transacao aberta a espera nunca apareceria.
+    """
+    limite = time.monotonic() + limite_s
+    consulta = text(
+        "SELECT count(*) FROM pg_stat_activity "
+        "WHERE pid = ANY(CAST(:pids AS integer[])) AND pid <> pg_backend_pid() "
+        "AND wait_event_type = 'Lock' AND wait_event = 'transactionid'"
+    )
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as monitor:
         while time.monotonic() < limite:
-            esperando = monitor.execute(
-                text(
-                    "SELECT count(*) FROM pg_stat_activity "
-                    "WHERE datname = current_database() "
-                    "AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()"
-                )
-            ).scalar_one()
-            if esperando:
+            if monitor.execute(consulta, {"pids": sorted(pids)}).scalar_one():
                 return
             threading.Event().wait(INTERVALO_DA_OBSERVACAO)
-    pytest.fail("a perdedora nunca ficou bloqueada na chave da vencedora")
+    pytest.fail("a perdedora nunca ficou bloqueada no indice unico da vencedora")
+
+
+def _cancelar_conexoes(engine: Engine, pids: set[int]) -> None:
+    """Cancela a consulta em curso dessas conexoes, para que uma perdedora que
+    estourou o teto nao fique presa depois do teste."""
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as monitor:
+        monitor.execute(
+            text(
+                "SELECT pg_cancel_backend(pid) FROM pg_stat_activity "
+                "WHERE pid = ANY(CAST(:pids AS integer[])) AND pid <> pg_backend_pid()"
+            ),
+            {"pids": sorted(pids)},
+        )
 
 
 def _disputar(
@@ -840,7 +877,8 @@ def _disputar(
     vencedora_confirma: bool,
 ) -> str:
     """A vencedora segura a chave SEM commitar; a perdedora (numa thread) e
-    observada bloqueada; so entao a vencedora commita ou desfaz."""
+    observada bloqueada no indice unico; so entao a vencedora commita ou
+    desfaz."""
     resultado: list[str] = []
 
     def rodar() -> None:
@@ -855,16 +893,22 @@ def _disputar(
         concluir_missao(
             vencedora, ESTUDANTE, ganha, chave, clock=_relogio, evidencia=TEXTO
         )
-        thread.start()
-        _esperar_um_bloqueio_por_trava(cenario.engine)
-        if vencedora_confirma:
-            vencedora.commit()
-        else:
-            vencedora.rollback()
+        with _conexoes_da_perdedora(cenario.engine) as pids:
+            thread.start()
+            try:
+                _esperar_a_perdedora_na_unique(cenario.engine, pids)
+                if vencedora_confirma:
+                    vencedora.commit()
+                else:
+                    vencedora.rollback()
+            finally:
+                vencedora.close()
+                thread.join(timeout=SEGUNDOS_LIMITE)
+                if thread.is_alive():
+                    _cancelar_conexoes(cenario.engine, pids)
+                    thread.join(timeout=SEGUNDOS_LIMITE)
     finally:
         vencedora.close()
-        if thread.ident is not None:
-            thread.join(timeout=SEGUNDOS_LIMITE)
     assert not thread.is_alive(), "a perdedora ficou presa"
     assert len(resultado) == 1
     return resultado[0]
@@ -1017,3 +1061,100 @@ def test_a_api_tem_um_so_efeito_quando_a_chave_e_gasta_em_sequencia(
 
     assert (segunda.status_code, segunda.json()["code"]) == OUTRO_PEDIDO
     assert cenario.foto() == depois_da_primeira
+
+
+# ---------------------------------------------------------------------------
+# A prova de bloqueio so vale se o filtro dela nao aceita qualquer espera
+# ---------------------------------------------------------------------------
+
+CHAVE_ADVISORY = 424242
+
+
+def test_a_espera_nao_aceita_trava_que_nao_e_a_do_indice_unico(
+    cenario: Cenario,
+) -> None:
+    """Uma conexao bloqueada em `wait_event = 'advisory'` (tambem do tipo
+    `Lock`) NAO prova que a perdedora chegou a UNIQUE: o filtro exige
+    `transactionid` e o teto estoura em vez de aceitar a espera errada."""
+    with cenario.engine.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as dona:
+        dona.execute(text("SELECT pg_advisory_lock(:k)"), {"k": CHAVE_ADVISORY})
+        try:
+            with _conexoes_da_perdedora(cenario.engine) as pids:
+
+                def esperar_a_trava() -> None:
+                    with cenario.engine.connect().execution_options(
+                        isolation_level="AUTOCOMMIT"
+                    ) as presa:
+                        presa.execute(
+                            text("SELECT pg_advisory_lock(:k)"), {"k": CHAVE_ADVISORY}
+                        )
+                        presa.execute(
+                            text("SELECT pg_advisory_unlock(:k)"),
+                            {"k": CHAVE_ADVISORY},
+                        )
+
+                thread = threading.Thread(target=esperar_a_trava)
+                thread.start()
+                try:
+                    with pytest.raises(pytest.fail.Exception):
+                        _esperar_a_perdedora_na_unique(
+                            cenario.engine, pids, limite_s=0.5
+                        )
+                finally:
+                    dona.execute(
+                        text("SELECT pg_advisory_unlock(:k)"), {"k": CHAVE_ADVISORY}
+                    )
+                    thread.join(timeout=SEGUNDOS_LIMITE)
+                assert not thread.is_alive()
+        finally:
+            dona.execute(text("SELECT pg_advisory_unlock_all()"))
+
+
+def test_a_espera_nao_aceita_um_pid_que_nao_e_o_da_perdedora(
+    cenario: Cenario,
+) -> None:
+    """Sem nenhuma conexao registrada, o filtro nao ve espera alguma."""
+    with pytest.raises(pytest.fail.Exception):
+        _esperar_a_perdedora_na_unique(cenario.engine, set(), limite_s=0.3)
+
+
+def test_cancelar_conexoes_solta_a_perdedora_presa(cenario: Cenario) -> None:
+    desfecho: list[str] = []
+
+    def dormir() -> None:
+        try:
+            with cenario.engine.connect() as presa:
+                presa.execute(text("SELECT pg_sleep(60)"))
+            desfecho.append("terminou")
+        except Exception as erro:
+            desfecho.append(type(erro.__cause__ or erro).__name__)
+
+    with _conexoes_da_perdedora(cenario.engine) as pids:
+        thread = threading.Thread(target=dormir)
+        thread.start()
+        limite = time.monotonic() + SEGUNDOS_LIMITE
+        while not pids and time.monotonic() < limite:
+            threading.Event().wait(INTERVALO_DA_OBSERVACAO)
+        # A consulta so e cancelavel depois de comecar: espere o pg_sleep.
+        with cenario.engine.connect().execution_options(
+            isolation_level="AUTOCOMMIT"
+        ) as monitor:
+            while (
+                time.monotonic() < limite
+                and not monitor.execute(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE pid = ANY(CAST(:p AS integer[])) "
+                        "AND query LIKE '%pg_sleep%' AND state = 'active'"
+                    ),
+                    {"p": sorted(pids)},
+                ).scalar_one()
+            ):
+                threading.Event().wait(INTERVALO_DA_OBSERVACAO)
+        _cancelar_conexoes(cenario.engine, pids)
+        thread.join(timeout=SEGUNDOS_LIMITE)
+
+    assert not thread.is_alive()
+    assert desfecho == ["QueryCanceled"]
