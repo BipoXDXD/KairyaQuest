@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
 import type { Mission } from '../../shared/types/mission'
+import { renderWithI18n } from '../../test/i18n'
 import type { RescheduleFailure } from './rescheduleFailure'
 import { RescheduleForm } from './RescheduleForm'
+import type { OpenReschedule, RescheduleDraft } from './types'
 
 const missao: Mission = {
   id: 7,
@@ -27,29 +29,47 @@ const missao: Mission = {
 }
 
 const falhaEdit: RescheduleFailure = {
-  message: 'O novo prazo precisa estar no futuro.',
-  recovery: 'edit',
+  message: 'missions.rescheduleFailure.deadlinePassed.message',
+  recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+  action: 'edit',
 }
 const falhaRetry: RescheduleFailure = {
-  message:
-    'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-  recovery: 'retry',
+  message: 'missions.rescheduleFailure.unconfirmed.message',
+  recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+  action: 'retry',
 }
 const falhaNovaChave: RescheduleFailure = {
-  message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-  recovery: 'retry-with-new-operation',
+  message: 'missions.failure.reusedOperation',
+  recovery: 'missions.failure.tryAgain',
+  action: 'retry-with-new-operation',
 }
 
 type Props = Parameters<typeof RescheduleForm>[0]
 
 function renderForm(props: Partial<Props> = {}) {
-  const onSubmit = vi.fn()
-  const all: Props = { mission: missao, disabled: false, failure: null, onSubmit, ...props }
-  const view = render(<RescheduleForm {...all} />)
+  const onSubmit = vi.fn<(draft: RescheduleDraft) => void>()
+  const onSave = vi.fn<(open: OpenReschedule | null) => void>()
+  const all: Props = {
+    mission: missao,
+    disabled: false,
+    failure: null,
+    onSubmit,
+    saved: null,
+    onSave,
+    pendingRetry: null,
+    ...props,
+  }
+  const view = renderWithI18n(<RescheduleForm {...all} />)
   const rerender = (next: Partial<Props>) => {
     view.rerender(<RescheduleForm {...all} {...next} />)
   }
-  return { onSubmit, rerender }
+  /** O rascunho do ultimo envio: o que o registro guarda com a chave retida. */
+  const enviado = () => {
+    const last = onSubmit.mock.lastCall
+    if (last === undefined) throw new Error('nada foi enviado')
+    return last[0]
+  }
+  return { onSubmit, onSave, rerender, enviado }
 }
 
 const toggle = () => screen.getByRole('button', { name: 'Reagendar prazo' })
@@ -195,15 +215,17 @@ describe('RescheduleForm', () => {
   })
 
   it('falha "retry": o aviso ligado ao botao, e "Tentar de novo" sem mudar nada reenvia o MESMO rascunho (F13)', () => {
-    const { rerender, onSubmit } = renderForm()
+    const { rerender, onSubmit, enviado } = renderForm()
     abrir()
     fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })
     fireEvent.click(screen.getByLabelText('Falta de tempo'))
     fireEvent.click(salvar())
 
-    rerender({ failure: falhaRetry })
+    rerender({ failure: falhaRetry, pendingRetry: enviado() })
 
-    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(falhaRetry.message)
+    expect(screen.getByTestId('reschedule-error')).toHaveTextContent(
+      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    )
     const aviso = screen.getByTestId('reschedule-retry-notice')
     expect(aviso).toHaveTextContent(
       'O pedido anterior pode ter chegado. Sem mudar nada, “Tentar de novo” o reenvia com segurança.',
@@ -222,12 +244,12 @@ describe('RescheduleForm', () => {
   })
 
   it('falha "retry" e a pessoa muda o rascunho: o botao volta a "Salvar novo prazo" e o aviso sai', () => {
-    const { rerender, onSubmit } = renderForm()
+    const { rerender, onSubmit, enviado } = renderForm()
     abrir()
     fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })
     fireEvent.click(screen.getByLabelText('Falta de tempo'))
     fireEvent.click(salvar())
-    rerender({ failure: falhaRetry })
+    rerender({ failure: falhaRetry, pendingRetry: enviado() })
 
     fireEvent.click(screen.getByLabelText('Dificuldade'))
 
@@ -241,18 +263,18 @@ describe('RescheduleForm', () => {
     })
 
     // O que conta e o ULTIMO envio: voltar ao motivo do primeiro ja e outro pedido.
-    rerender({ failure: falhaRetry })
+    rerender({ failure: falhaRetry, pendingRetry: enviado() })
     fireEvent.click(screen.getByLabelText('Falta de tempo'))
     expect(salvar()).toHaveTextContent('Salvar novo prazo')
   })
 
   it('falha "retry" e a pessoa muda SO a data: o botao volta a "Salvar novo prazo"', () => {
-    const { rerender, onSubmit } = renderForm()
+    const { rerender, onSubmit, enviado } = renderForm()
     abrir()
     fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })
     fireEvent.click(screen.getByLabelText('Falta de tempo'))
     fireEvent.click(salvar())
-    rerender({ failure: falhaRetry })
+    rerender({ failure: falhaRetry, pendingRetry: enviado() })
     expect(salvar()).toHaveTextContent('Tentar de novo')
 
     fireEvent.change(campo(), { target: { value: '2026-10-06T18:00' } })
@@ -338,6 +360,104 @@ describe('RescheduleForm', () => {
     abrir()
 
     expect(campo()).toHaveValue('2026-10-02T18:00')
+  })
+})
+
+describe('RescheduleForm: o rascunho mora no registro (pendencia 112)', () => {
+  const guardado: OpenReschedule = {
+    openedFor: missao.deadline,
+    openedAtMs: Date.parse('2026-09-23T15:00:00Z'),
+    draft: { civil: '2026-10-05T18:00', reason: 'dificuldade', originalDeadline: missao.deadline },
+  }
+
+  it('monta aberto com o reagendamento guardado: prazo, motivo e a janela de quando abriu', () => {
+    renderForm({ saved: guardado })
+
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+    expect(campo()).toHaveValue('2026-10-05T18:00')
+    expect(screen.getByLabelText('Dificuldade')).toBeChecked()
+    expect(campo()).toHaveAttribute('min', '2026-09-23T12:00')
+    expect(salvar()).toHaveTextContent('Salvar novo prazo')
+  })
+
+  it('guardado com outro prazo (a missao ja mudou), monta fechado e nao rouba o foco', () => {
+    renderForm({ saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' } })
+
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('reschedule-submit')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('guardado com outro prazo, a montagem o descarta do registro, uma vez so', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(null)
+    rerender({ disabled: true })
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('o descarte da montagem nao apaga o reagendamento aberto depois dela', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+    abrir()
+    const novoOnSave = vi.fn<(open: OpenReschedule | null) => void>()
+    rerender({ onSave: novoOnSave })
+
+    expect(novoOnSave).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenCalledTimes(2)
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ openedFor: missao.deadline }))
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('guardado com o prazo atual, a montagem nao descarta nada', () => {
+    expect(renderForm({ saved: guardado }).onSave).not.toHaveBeenCalled()
+  })
+
+  it('sem nada guardado, a montagem nao descarta nada', () => {
+    expect(renderForm().onSave).not.toHaveBeenCalled()
+  })
+
+  it('abrir e cada mudanca guardam o reagendamento aberto; fechar o descarta', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(5_000)
+    const { onSave } = renderForm()
+    abrir()
+    expect(onSave).toHaveBeenLastCalledWith({
+      openedFor: missao.deadline,
+      openedAtMs: 5_000,
+      draft: { civil: '2026-10-02T18:00', reason: null, originalDeadline: missao.deadline },
+    })
+
+    fireEvent.change(campo(), { target: { value: '2026-10-05T18:00' } })
+    fireEvent.click(screen.getByLabelText('Falta de tempo'))
+
+    expect(onSave).toHaveBeenLastCalledWith({
+      openedFor: missao.deadline,
+      openedAtMs: 5_000,
+      draft: {
+        civil: '2026-10-05T18:00',
+        reason: 'falta_de_tempo',
+        originalDeadline: missao.deadline,
+      },
+    })
+    fireEvent.click(toggle())
+    expect(onSave).toHaveBeenLastCalledWith(null)
+    expect(onSave).toHaveBeenCalledTimes(4)
+    vi.restoreAllMocks()
+  })
+
+  it('com a chave retida para o MESMO rascunho, oferece "Tentar de novo" mesmo sem a falha (remontou)', () => {
+    renderForm({ saved: guardado, pendingRetry: guardado.draft })
+
+    expect(salvar()).toHaveTextContent('Tentar de novo')
+    expect(screen.getByTestId('reschedule-retry-notice')).toBeInTheDocument()
+    expect(screen.queryByTestId('reschedule-error')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Falta de tempo'))
+
+    expect(salvar()).toHaveTextContent('Salvar novo prazo')
   })
 })
 

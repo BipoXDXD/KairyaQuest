@@ -15,7 +15,8 @@ Leia, nesta ordem:
 1. `README.md` — a especificação completa do produto. É a autoridade final.
 2. `docs/ARCHITECTURE.md` — responsabilidades, convenções e onde cada tipo de
    arquivo mora.
-3. `docs/HANDOFF.md` — estado corrente: decisões, alterações, pendências.
+3. `docs/HANDOFF.md` e `docs/handoff/` — estado corrente: decisões,
+   alterações, pendências.
 4. `docs/QUALITY.md` — o gate de qualidade, o que ele mede e o que ele
    deliberadamente não mede.
 
@@ -144,12 +145,14 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   certa.
 - **Justifique dependência, contrato e infraestrutura.** Nenhuma biblioteca,
   nenhum endpoint e nenhum serviço entram sem um motivo escrito no
-  `docs/HANDOFF.md`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
+  arquivo de handoff do PR, em `docs/handoff/`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
   Terraform e cloud até haver necessidade real (README §3).
-- **Mantenha `docs/HANDOFF.md` atualizado.** Objetivo, revisão-base, decisões,
+- **Registre o handoff em `docs/handoff/`, um arquivo por PR** (regras em
+  `docs/handoff/README.md`); só o PR de consolidação edita o
+  `docs/HANDOFF.md`. Objetivo, revisão-base, decisões,
   alterações, comandos, resultados e pendências — sem segredos e sem caminhos
-  pessoais. Um incremento que resolve uma pendência a risca de lá; um que cria
-  uma limitação a escreve lá.
+  pessoais. Um incremento que resolve uma pendência ou cria uma limitação diz
+  isso no seu arquivo, e a consolidação aplica no `docs/HANDOFF.md`.
 
 ## 5. Descoberta de instruções por cada agente
 

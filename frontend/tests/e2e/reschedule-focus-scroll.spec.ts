@@ -1,5 +1,12 @@
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
 import type { Mission } from '../../src/shared/types/mission'
+import { campoDeHorario, diaRelativo, instanteRelativo, isoUtc } from './datas'
+
+// Datas relativas a hoje (pendencia 207): o prazo original, o novo prazo
+// pedido e um prazo ja passado para o caso recusado.
+const PRAZO_ORIGINAL = isoUtc(instanteRelativo(140, 12))
+const NOVO_PRAZO = instanteRelativo(149, 12)
+const PRAZO_PASSADO = instanteRelativo(-70, 8)
 
 const original: Mission = {
   id: 47001,
@@ -9,7 +16,7 @@ const original: Mission = {
   estimated_minutes: 30,
   mission_type: 'avulsa',
   day: null,
-  deadline: '2027-04-01T15:00:00Z',
+  deadline: PRAZO_ORIGINAL,
   state: 'pendente',
   availability: 'disponivel',
   started_at: null,
@@ -23,14 +30,14 @@ const original: Mission = {
 }
 const changed: Mission = {
   ...original,
-  deadline: '2027-04-10T15:00:00Z',
+  deadline: isoUtc(NOVO_PRAZO),
   reschedules: [
     {
-      previous_deadline: '2027-04-01T15:00:00Z',
-      new_deadline: '2027-04-10T15:00:00Z',
+      previous_deadline: PRAZO_ORIGINAL,
+      new_deadline: isoUtc(NOVO_PRAZO),
       reason: 'falta_de_tempo',
       origin: 'usuario',
-      rescheduled_at: '2026-10-05T10:00:00Z',
+      rescheduled_at: isoUtc(instanteRelativo(-1, 7)),
     },
   ],
 }
@@ -44,6 +51,8 @@ async function setup(page: Page) {
   const posts: unknown[] = []
   const unexpected: string[] = []
   const bodies: Record<string, unknown> = {
+    // O boot do idioma (`ServerLocaleSync`): o mesmo idioma da tela, sem escrita.
+    '/api/me': { display_name: 'Aventureira', locale: 'pt-BR' },
     '/api/missions': [
       original,
       ...Array.from({ length: 7 }, (_, index) => ({
@@ -61,7 +70,7 @@ async function setup(page: Page) {
     },
     '/api/plans/current': { plan: null },
     '/api/cycle': {
-      today: '2026-10-05',
+      today: diaRelativo(0),
       mission: null,
       streak: 0,
       days_to_milestone: 7,
@@ -147,7 +156,8 @@ for (const scenario of [
     const { failed, movedFocus } = scenario
     try {
       await toggle.click()
-      const civil = failed ? '2026-09-01T08:00' : '2027-04-10T12:00'
+      const pedido = failed ? PRAZO_PASSADO : NOVO_PRAZO
+      const civil = campoDeHorario(pedido)
       await card.getByLabel('Novo prazo (horário de Brasília)').fill(civil)
       await card.getByLabel('Falta de tempo', { exact: true }).check()
       await card.getByTestId('reschedule-submit').click()
@@ -156,7 +166,7 @@ for (const scenario of [
       expect(posts).toEqual([
         {
           operation_id: expect.any(String),
-          new_deadline: failed ? '2026-09-01T11:00:00.000Z' : '2027-04-10T15:00:00.000Z',
+          new_deadline: pedido.toISOString(),
           reason: 'falta_de_tempo',
         },
       ])
@@ -183,7 +193,7 @@ for (const scenario of [
       await reply(failed)
       if (failed) {
         await expect(card.getByTestId('reschedule-error')).toHaveText(
-          'O novo prazo precisa estar no futuro.',
+          'O novo prazo precisa estar no futuro. Escolha uma data e um horário futuros.',
         )
         await expect(card.getByTestId('reschedule-error')).toHaveAttribute('role', 'alert')
         await expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -191,14 +201,14 @@ for (const scenario of [
         await expect(card.getByLabel('Falta de tempo', { exact: true })).toBeChecked()
         await expect(card.getByTestId('mission-deadline')).toHaveAttribute(
           'datetime',
-          '2027-04-01T15:00:00Z',
+          PRAZO_ORIGINAL,
         )
         await expect(card.getByTestId('mission-reschedule-entry')).toHaveCount(0)
       } else {
         await expect(card.getByTestId('mission-reschedule-status')).toHaveText('Prazo reagendado.')
         await expect(card.getByTestId('mission-deadline')).toHaveAttribute(
           'datetime',
-          '2027-04-10T15:00:00Z',
+          isoUtc(NOVO_PRAZO),
         )
         await expect(card.getByTestId('mission-reschedule-count')).toHaveText('Reagendada 1 vez')
         await expect(card.getByTestId('mission-reschedule-entry')).toHaveCount(1)

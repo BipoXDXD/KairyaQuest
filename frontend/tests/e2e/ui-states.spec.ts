@@ -24,7 +24,7 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await page.getByRole('button', { name: 'EN, English' }).click()
     const status = page.getByRole('status')
     await expect(status).toHaveAttribute('data-tone', 'danger')
-    await expect(status).toContainText('EN, English')
+    await expect(status).toContainText('salvar o idioma English')
     await expect(status).toBeVisible()
     await expect(page.getByRole('button', { name: 'PT, Português (Brasil)' })).toHaveAttribute(
       'aria-pressed',

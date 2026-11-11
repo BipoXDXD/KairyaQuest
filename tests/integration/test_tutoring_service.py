@@ -5,7 +5,6 @@ bufferiza a resposta inteira, e so aqui da para olhar o banco NO
 INSTANTE de cada evento.
 """
 
-import json
 import threading
 from collections.abc import Callable, Generator
 from datetime import UTC, date, datetime, timedelta
@@ -25,7 +24,6 @@ from focusquest.modules.missions.domain import MissionType
 from focusquest.modules.missions.models import Mission
 from focusquest.modules.missions.service import concluir_missao, iniciar_missao
 from focusquest.modules.progression.models import XpEntry
-from focusquest.modules.tutoring.context import CABECALHO_DO_CONTEXTO
 from focusquest.modules.tutoring.domain import (
     RESPOSTA_LONGA,
     CodigoDoStream,
@@ -47,7 +45,7 @@ from focusquest.modules.tutoring.service import (
     preparar_turno,
     transmitir,
 )
-from integration.conftest import Conversa
+from integration.conftest import TIMEOUT_DA_DEMORA, Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
@@ -56,6 +54,7 @@ from integration.provedor_falso import (
     ServidorAnthropicFalso,
     Substituicao,
     Texto,
+    dados_do_contexto,
 )
 
 ESTUDANTE = 1
@@ -110,15 +109,6 @@ def _resposta(fabrica: sessionmaker[Session], resposta_id: int) -> TutorMessage:
 def _para_gerar(preparo: JaRespondida | ParaGerar) -> ParaGerar:
     assert isinstance(preparo, ParaGerar)
     return preparo
-
-
-def _contexto_do_sistema(sistema: str) -> dict[str, Any]:
-    """O JSON do contexto: a ultima linha do sistema, logo depois do
-    cabecalho fixo (pendencia 184)."""
-    *_, cabecalho, linha = sistema.rpartition(f"{CABECALHO_DO_CONTEXTO}\n")
-    assert cabecalho == f"{CABECALHO_DO_CONTEXTO}\n"
-    dados: dict[str, Any] = json.loads(linha)
-    return dados
 
 
 # --- O caminho feliz -------------------------------------------------------
@@ -247,6 +237,7 @@ def test_stream_cortado_sem_fim_vira_provedor_indisponivel(
     assert (vista.status, vista.content) == (StatusDaMensagem.FALHOU, "meio")
 
 
+@pytest.mark.parametrize("prazo_do_provedor", [TIMEOUT_DA_DEMORA])
 def test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial(
     fabrica: sessionmaker[Session],
     tutoria: Tutoria,
@@ -256,7 +247,7 @@ def test_demora_no_meio_vira_tempo_esgotado_com_o_texto_parcial(
     # A demora cai antes do segundo pedaco: "meio" ja chegou.
     falso.roteiro = Roteiro(
         blocos=(Texto(("meio", "resto")),),
-        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, 1.2),
+        atrasar_evento=(APOS_O_PRIMEIRO_PEDACO, TIMEOUT_DA_DEMORA * 4),
     )
     preparo = _para_gerar(_preparar(fabrica, tutoria, conversa.id("demora")))
     *_, final = _transmitir(fabrica, tutoria, preparo)
@@ -465,7 +456,7 @@ def test_pedir_xp_no_chat_nao_altera_o_saldo(
             ).select_from(XpEntry)
         ).one()
     assert depois == antes
-    assert "progress" in _contexto_do_sistema(falso.recebidas[-1].corpo["system"])
+    assert "progress" in falso.recebidas[-1].dados_do_contexto
 
 
 def test_o_turno_leva_so_mensagens_completas(
@@ -1003,7 +994,7 @@ def _contexto_do_turno(
         tutoria=tutoria,
         clock=relogio or (lambda: agora),
     )
-    return _contexto_do_sistema(_para_gerar(preparo).turno.sistema)
+    return dados_do_contexto(_para_gerar(preparo).turno.contexto)
 
 
 def _tipos_tardios(contexto: dict[str, Any]) -> list[str]:

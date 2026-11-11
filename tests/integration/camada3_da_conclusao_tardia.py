@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from focusquest.core.config import Settings
+from focusquest.core.idioma import Idioma
 from focusquest.modules.missions.cycle_domain import (
     Availability,
     dia_de,
@@ -42,7 +43,7 @@ from focusquest.modules.missions.models import Mission
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import TipoDeAcao
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import (
     Delta,
     MensagemDoTurno,
@@ -101,14 +102,18 @@ def _diaria_de_ontem(agora: datetime) -> MissaoLida:
 
 def turno(agora: datetime) -> Turno:
     base = montar_turno(
-        persona=PERSONA,
+        persona=persona_do_idioma(Idioma.PT_BR),
         agora=agora,
         pendentes=[_avulsa(agora)],
         progresso=camada3._SEM_PROGRESSO,
         historico=[],
         tardias=(_diaria_de_ontem(agora),),
     )
-    return Turno(sistema=base.sistema, mensagens=(MensagemDoTurno("user", _PEDIDO),))
+    return Turno(
+        sistema=base.sistema,
+        contexto=base.contexto,
+        mensagens=(MensagemDoTurno("user", _PEDIDO),),
+    )
 
 
 def capturar(
@@ -168,6 +173,8 @@ def main() -> None:
         max_tokens=settings.tutor_max_tokens,
         timeout_segundos=settings.tutor_timeout_seconds,
         fallback=settings.tutor_fallback,
+        esforco=settings.tutor_effort,
+        esforco_da_avaliacao=settings.evaluation_effort,
     )
     agora = datetime.now(UTC)
     try:

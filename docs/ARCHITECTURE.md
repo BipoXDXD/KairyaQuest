@@ -21,22 +21,31 @@ preservados no [HANDOFF](HANDOFF.md). Relatos completos de implementação e
 resultados antigos estão no Git em `ca3b03c:docs/HANDOFF.md`; não são
 instruções para repetir fases concluídas.
 
-## Tutoria de produção: Groq Free (2026-10-22)
+## Tutoria de produção: Anthropic (2026-11-10)
 
-`dependencies.get_tutoria` monta exclusivamente `ProvedorGroq` com a chave
-`FOCUSQUEST_GROQ_API_KEY`; não importa nem instancia o adaptador Anthropic.
-`groq_provider.py` usa HTTPX2 já instalado, endpoint/modelo fixos, SSE e
-ferramentas locais com esquema gerado em `tool_definitions.py`. Sem chave,
-retorna `None`. Não há retry, redirect, proxy do ambiente ou fallback.
-As regras de autorização, confirmação, avaliação e XP continuam nos serviços.
-Erros HTTP e respostas interrompidas falham sem executar ferramentas.
-A gratuidade depende de manter a conta no plano Free: [GROQ.md](GROQ.md).
+Cada falha traduzida pelo adaptador (HTTP, timeout, transporte, stream
+inválido) deixa uma linha `WARNING` no log local: status HTTP com
+`retry-after` e `x-ratelimit-*` saneados, ou o tipo da exceção; nunca corpo,
+chave nem texto do usuário (pendência 100).
+Isso descrevia o adaptador anterior. No adaptador Anthropic, só a falha
+HTTP deixa a linha `WARNING`: status, tipo da exceção e `retry-after` e
+`anthropic-ratelimit-*` saneados (até 64 caracteres); timeout e transporte
+não são registrados (`test_diagnostico_do_provedor.py`).
 
-O adaptador Anthropic e os roteiros de caracterização históricos permanecem
-para testes, sem caminho de seleção na dependência de produção. O navegador
-de testes usa `tests/integration/e2e_app.py`, chave fictícia e host loopback;
-essa entrada não é incluída no pacote da aplicação. As descrições antigas de
-fallback abaixo documentam somente esse comportamento legado.
+`dependencies.get_tutoria` monta `ProvedorAnthropic` com a chave
+`FOCUSQUEST_ANTHROPIC_API_KEY`; sem chave, retorna `None` e a tela mostra
+indisponibilidade. O adaptador manda o esforço em `output_config.effort`
+(`tutor_effort` na conversa, `evaluation_effort` na avaliação) e nunca envia
+`temperature`, `top_p`, `top_k` nem `budget_tokens`, que os modelos 5.x
+recusam. O prefixo estático vai em cache: `cache_control` na última
+ferramenta e no bloco da persona; o contexto do turno e o histórico ficam
+depois do ponto de cache. O contexto do turno (o `CABECALHO_DO_CONTEXTO`
+seguido de uma linha JSON com `now_utc`, `pending_missions`,
+`late_cycle_missions` e `progress`, pendência 184) é um bloco próprio de
+`system`, sem `cache_control`, logo depois do bloco da persona. As regras
+de autorização, confirmação, avaliação e XP continuam nos serviços. O navegador de testes usa
+`tests/integration/e2e_app.py`, chave fictícia e host loopback; essa entrada
+não é incluída no pacote da aplicação.
 
 ## 1. O que existe hoje
 
@@ -52,8 +61,9 @@ KairyaQuest/
 │       ├── missions/          # ciclo, planos, missões, entregas e prazos
 │       ├── tutoring/          # conversa, provedor e propostas confirmáveis
 │       ├── progression/       # XP, níveis e conquistas
-│       └── evaluation/        # avaliação das evidências pela tutora
-├── alembic/                   # migrações; versões 0001 a 0007
+│       ├── evaluation/        # avaliação das evidências pela tutora
+│       └── users/             # idioma do usuário e /api/me
+├── alembic/                   # migrações; versões 0001 a 0009
 ├── tests/                     # testes Python unitários e de integração
 ├── frontend/
 │   ├── public/art/            # cenários e retratos locais; docs/ART.md
@@ -94,11 +104,13 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
 - **Não existe `repository.py`.** O `service.py` de `missions` usa a `Session`
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
-- **Não existe o módulo `progress`, nem módulo `users`.** O modelo `User`
-  mora em `modules/missions/models.py` como dívida consciente (ver
-  `docs/HANDOFF.md`). O módulo `tutoring` **nasceu no 1b-1** (backend) e
-  ganhou o lado do frontend (`frontend/src/features/tutoring/`) **no
-  1b-2** — a feature existe hoje, não é mais contrato.
+- **Não existe o módulo `progress`.** O módulo `users` nasceu na F3 (idioma
+  e `/api/me`), mas o modelo `User` continua em `modules/missions/models.py`:
+  as tabelas de `missions` apontam para `users.id`, e mudar a classe faria
+  `missions` importar `users` (ver `docs/HANDOFF.md`). O módulo `tutoring`
+  **nasceu no 1b-1** (backend) e ganhou o lado do frontend
+  (`frontend/src/features/tutoring/`) **no 1b-2** — a feature existe hoje,
+  não é mais contrato.
 - **No frontend, `styles/` e `shared/ui/` nasceram na Fase 4, Tarefa 4.1.**
   `styles/tokens.css` é a fonte única dos tokens visuais; `shared/ui/` tem,
   por ora, só `tokens/` (contraste WCAG e pares) e o `tokens.test.ts`.
@@ -209,20 +221,20 @@ consumido por `missions`).
 
 ## 3. Responsabilidades por camada
 
-### Backend — `missions`, `tutoring`, `progression` e `evaluation` existem; o resto é contrato
+### Backend — `missions`, `tutoring`, `progression`, `evaluation` e `users` existem; o resto é contrato
 
 Conforme o README §3. A coluna **Estado** diz se a camada já tem um arquivo
 real, e em qual módulo.
 
 | Camada | Responsabilidade | O que **não** faz | Estado |
 |---|---|---|---|
-| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
-| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
-| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`, `evaluation`) |
+| `router.py` | Coordena HTTP: recebe a requisição validada, chama o serviço, torna a transação permanente e devolve o contrato de saída. | Não contém regra de negócio nem acesso direto ao banco. Não trata erro: os erros de domínio sobem e `main.py` os traduz. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
+| `schemas.py` | Contratos de entrada e saída (Pydantic): a fronteira entre o mundo externo e o interno. | Não é o modelo de persistência. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
+| `service.py` | Executa o caso de uso: orquestra domínio e persistência, decide o que é sucesso e o que é falha. | Não conhece `Request`, `Response` nem código HTTP. | existe (`missions`, `tutoring`, `progression`, `evaluation`, `users`) |
 | `domain.py` | Concentra as regras, independentes de framework: transições de estado válidas, cálculo de XP, duração real (`missions`); enums e transição da ação (`tutoring`); a curva de nível e o catálogo de conquistas (`progression`, D). | Não importa SQLAlchemy, FastAPI nem nada de I/O. | existe (`missions`, `tutoring`, `progression`) |
 | `repository.py` | Trata o banco: consultas e gravações, quando a camada se justificar. | Não decide regra; só busca e persiste. | contrato |
 | `models.py` | Mapeamento SQLAlchemy das tabelas. | Não é o contrato da API. | existe (`missions`, `tutoring`, `progression`) |
-| `provider.py` / `groq_provider.py` / `tool_definitions.py` / `anthropic_provider.py` (legado) / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno (o contexto vai como um cabeçalho fixo e uma linha JSON no system, depois da persona, e as ações antigas como "Ação registrada pelo sistema" + JSON: todo texto livre fica dentro de strings, como na avaliação), o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
+| `provider.py` / `tool_definitions.py` / `anthropic_provider.py` / `persona.py` / `context.py` / `sse.py` / `dependencies.py` | Peças específicas da tutoria: o `Protocol` do provedor, o único adaptador que importa o SDK, o prompt de sistema, a montagem do turno (a persona sozinha é o `Turno.sistema`, o prefixo cacheado; o contexto vai em `Turno.contexto` como um cabeçalho fixo e uma linha JSON, que o adaptador manda no bloco de `system` NÃO cacheado, depois do bloco da persona; as ações antigas vão como "Ação registrada pelo sistema" + JSON: todo texto livre fica dentro de strings, como na avaliação), o formato SSE e a dependência que resolve "sem chave". | O adaptador é a **única** peça que importa `anthropic`; nenhuma outra camada da tutoria sabe que existe Anthropic. | existe (`tutoring`) |
 | `core/` | Configuração, conexão e infraestrutura comum a todos os módulos. | Não é depósito de funções soltas. | existe |
 
 **A dependência é `tutoring → missions`, nunca o contrário.**
@@ -271,6 +283,8 @@ módulos**, nunca pelos modelos deles diretamente. As arestas, conferidas nos
 - `evaluation → tutoring`: `tutoring.provider` (o `Protocol`, `Ferramenta`,
   `Turno` e os erros do provedor), `tutoring.service` (`Tutoria`,
   `FOLGA_DO_ORFAO`) e `tutoring.dependencies` (`get_tutoria`);
+- `evaluation → users`: `users.service` (`ler_idioma`, só leitura), para
+  escolher a rubrica pelo idioma gravado (F3);
 - **ninguém importa `evaluation` além de `main.py`**, que registra o router e
   o handler de `AvaliacaoFalhouError`. Conferido: `grep -rn
   "modules.evaluation" src` fora do próprio módulo acha só `main.py:34` e
@@ -281,6 +295,18 @@ importa `missions`, o `MissionRead` (que mostra a evidência e a avaliação na
 listagem, no ciclo e na trilha) teria de importar esse módulo de volta, e
 seria um terceiro par nos dois sentidos (pendência 88). Até esta integração
 o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
+
+**O módulo `users` (F3).** Lê e grava o idioma do usuário (`GET`/`PATCH
+/api/me`). Arestas: `users → missions.models` (`User`, que continua lá; ver
+`docs/HANDOFF.md`) e `users → core` (`Idioma`, `CampoDesconhecidoError`,
+sessão e usuário único). `users` é importado por `main.py` (o router) e,
+só pela função de leitura `ler_idioma`, por `tutoring.service` e
+`evaluation.service`, que escolhem a persona e a rubrica pelo idioma gravado
+(F3). Não forma par nos dois sentidos: `users` não importa `tutoring` nem
+`evaluation`. O router
+tem uma exceção à regra "não trata erro": a `RotaQueRecusaCampoExtra` troca o
+`RequestValidationError` com `extra_forbidden` por `CampoDesconhecidoError`,
+sem montar resposta; o 400 continua sendo traduzido em `main.py`.
 
 **`evaluation/errors.py`, e por que `core/` não tem módulos.**
 `AvaliacaoFalhouError(falha)` é o erro da falha **já gravada** (E13). Nasceu em
@@ -604,7 +630,11 @@ o fallback: continua no endpoint estável.
 **Erros antes do stream** (a pergunta não é gravada): `503
 provedor_nao_configurado` (sem chave); `409 mensagem_em_andamento` (já há
 uma resposta `gerando`); `409 operacao_reutilizada` (`client_message_id`
-com outro `content`); `422` do Pydantic (corpo inválido).
+com outro `content`); `429 limite_diario_da_tutoria` (o teto diário de
+turnos acabou; header `Retry-After` com os segundos até a meia-noite de
+America/Sao_Paulo; nada é gravado e o modelo não é chamado; vale também para
+o reenvio de pergunta interrompida ou falhada); `422` do Pydantic (corpo
+inválido).
 
 **Erros dentro do stream** (`event: error`, coluna `error_code`), do enum
 `CodigoDoStream` de `tutoring/domain.py` — fora do `CodigoDeErro` de
@@ -1109,7 +1139,7 @@ pendente, o estado, o início e "reagendada N vez(es); último motivo", e as aç
 antigas entram como texto por tipo (F19).
 
 **A confirmação de um reagendamento** executa pelo **mesmo** `reagendar_missao`,
-com `origin = 'tifa'` e o `operation_id` da confirmação, e revalida tudo (F17):
+com `origin = 'kairya'` e o `operation_id` da confirmação, e revalida tudo (F17):
 prazo passado → ação `falhou`/`prazo_expirado` e `422`; missão que mudou (não
 existe mais, concluída, prazo já igual, tipo derivado) → ação
 `falhou`/`reagendamento_invalido` e `409`; chave reutilizada →
@@ -1136,14 +1166,16 @@ dentro do `reagendar_missao`, a missão; nenhum caminho trava na ordem inversa.
 Dois reagendamentos simultâneos, com chaves diferentes, viram **dois elos
 encadeados** (o `previous_deadline` do segundo é o `new_deadline` do primeiro),
 nunca uma atualização perdida. Provado por conexões reais em
-`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`; a
-ordem "ação antes da missão" **não é observável por teste** (nenhum caminho
-tenta a ordem inversa) e está declarada no docstring de `confirmar_acao`. Os
-testes anteriores de detecção de corrida dependem do escalonador (pendência 160).
-A confirmação da Kairya × conclusão (pendência 167) ganhou uma prova das duas
-ordens em `test_tutoring_conclusao_concorrencia.py`, na branch
-`wt/kairya-conclusao`, commit `0cb4cc2`, PR #7. Essa prova pertence à feature;
-a `main` em `5ba81c3` ainda não contém o módulo.
+`test_acompanhamento_concorrencia.py` e `test_tutoring_reagendamento.py`. A
+ordem "ação antes da missão", declarada no docstring de `confirmar_acao`, é
+observada em `test_ordem_global_das_travas.py` (pendência 104): com a missão
+retida pela escrita da avaliação, a confirmação espera nela já segurando a
+ação, e uma sonda `NOWAIT` confirma a ação travada; o mesmo módulo prova
+missão e avaliação antes do usuário, sem depender do escalonador. Os testes de
+detecção de corrida de `test_acompanhamento_concorrencia.py` e
+`test_tutoring_reagendamento.py` dependem dele (pendência 160). A confirmação
+da Kairya × conclusão (pendência 167) tem prova das duas ordens em
+`test_tutoring_conclusao_concorrencia.py`.
 
 **Início diário na virada civil (160 parcial).**
 `test_inicio_virada_dia_concorrencia.py` retém a pré-carga, observa os PIDs exatos
@@ -1633,7 +1665,7 @@ IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
 | O que o produto deve ser? Qual a regra da spec sobre isto? | `README.md` — autoridade final |
 | Onde vai este arquivo? De que este diretório é responsável? Qual é o contrato HTTP? | **este documento** |
 | Como rodo o gate? O que ele mede, o que não mede, e o que ele **não** protege? | `docs/QUALITY.md` |
-| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` |
+| O que já foi feito, o que foi decidido e por quê, o que ainda está pendente? | `docs/HANDOFF.md` e os arquivos por PR de `docs/handoff/` |
 | Como trabalho aqui sem quebrar nada? | `AGENTS.md` (e `CLAUDE.md`, que o importa) |
 
 A fronteira entre este documento e os outros dois de `docs/`: **arquitetura**

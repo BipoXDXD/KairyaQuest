@@ -4,7 +4,7 @@
 
 Prepare o KairyaQuest no macOS com PyCharm. **Node.js, React, TypeScript, Vite e Tailwind CSS já estão preparados.** Reaproveite o frontend existente; não reinicie o projeto. Complete apenas as ferramentas e integrações necessárias e entregue uma base executável, organizada e testada.
 
-KairyaQuest é uma plataforma de estudos gamificada inspirada em Final Fantasy. Kairya será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
+KairyaQuest é uma plataforma de estudos gamificada com interface inspirada em RPGs de fantasia. Kairya será a tutora interativa: ensinará, delegará tarefas, acompanhará prazos, fará cobranças e concederá recompensas. Ela é central no produto, não decoração nem mensagens prontas.
 
 Sou estudante de engenharia de software; usarei Kimi, Codex e Claude. Entregue incrementos, não o produto inteiro. Commit, push, merge, publicação e contratação exigem autorização.
 
@@ -125,12 +125,11 @@ Separe a IA da Kairya dos agentes de desenvolvimento. Assinaturas de Kimi, Codex
 
 Prepare um provedor configurável, com SDK oficial ou HTTPX. Sem credenciais, prepare o contrato e mostre indisponibilidade. Adaptador determinístico é para testes, não tutoria real.
 
-O provedor de produção é **Groq Free**, com `openai/gpt-oss-20b` e chave
-`FOCUSQUEST_GROQ_API_KEY` somente no backend. Não usar créditos da Anthropic,
-fallback pago, troca automática de modelo ou upgrade de plano. Sem chave ou
-com cota esgotada, mostrar indisponibilidade. A conta Groq deve permanecer
-no plano Free; a API de conversa não comprova o plano de cobrança.
-Configuração e limites em [docs/GROQ.md](docs/GROQ.md).
+O provedor de produção é a **API da Anthropic** (`claude-sonnet-5-5` por
+padrão), com a chave `FOCUSQUEST_ANTHROPIC_API_KEY` somente no backend. O
+esforço é configurável (`FOCUSQUEST_TUTOR_EFFORT`, `FOCUSQUEST_EVALUATION_EFFORT`),
+o prefixo estático (persona e ferramentas) vai em cache e um teto diário de
+turnos por usuário limita o gasto. Sem chave, mostrar indisponibilidade.
 
 Mantenha chamadas e credenciais no backend, com limites, timeouts e modelo configuráveis. Não envie chaves ao navegador nem repita chamadas indefinidamente. Falhas não podem duplicar missões ou recompensas.
 
@@ -146,7 +145,7 @@ Envie apenas contexto relevante: objetivos, tarefas, progresso e preferências. 
 
 Avalie entregas por evidências. Não execute código do estudante na API; futura execução exige isolamento e limites. Teste a integração sem chamadas pagas ou segredos reais.
 
-## 7. Interface inspirada em Final Fantasy
+## 7. Interface inspirada em RPGs de fantasia
 
 Crie uma ferramenta de estudos com identidade de RPG, não uma landing page. Use azul-marinho profundo, superfícies escuras, prata, verde-mako e vermelho discreto. Defina tokens de cores, espaçamento, tipografia, bordas, foco e movimento; priorize contraste e hierarquia.
 
@@ -161,7 +160,7 @@ Planeje estas áreas; implemente só o recorte inicial:
 - **Diário:** sessões, decisões, conquistas e evolução.
 - **Tutoria:** conversa, propostas, explicações e avaliações.
 
-Combine termos temáticos e comuns, como “Campanhas — planos de estudo”. Não exija conhecer Final Fantasy.
+Combine termos temáticos e comuns, como “Campanhas — planos de estudo”. Não exija conhecer nenhum jogo específico.
 
 Crie componentes de missão, progresso, recompensa, mensagem e confirmação. Cubra carregamento, vazio, erro, proposta e conclusão. Preserve texto digitado após falhas e permita reenvio sem duplicação.
 
@@ -258,7 +257,7 @@ Instruções aninhadas não enfraquecem qualidade. Justifique dependências, con
 
 Use um implementador por worktree. Separe branches, diretórios, portas e bancos; revisão não autoriza editar a árvore de outro agente.
 
-Mantenha `docs/HANDOFF.md` com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos.
+Registre o handoff de cada PR num arquivo próprio em `docs/handoff/` (regras em `docs/handoff/README.md`), com objetivo, revisão-base, decisões, alterações, comandos, resultados e pendências, sem segredos. Só o PR de consolidação edita o `docs/HANDOFF.md`.
 
 ## 14. Entrega verificável
 

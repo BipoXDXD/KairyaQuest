@@ -14,6 +14,7 @@ import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission } from './useRescheduleMission'
 import { useStartMission } from './useStartMission'
+import type { FailureText } from '../../shared/i18n/failureText'
 
 const ROTA = 'POST /api/missions/7/reschedule'
 
@@ -69,6 +70,7 @@ function renderReschedule() {
   const rendered = renderHook(() => {
     const { registry, reload: requestReload } = useCompletionRegistry(reload)
     return {
+      registry,
       ...useRescheduleMission(7, registry),
       start: useStartMission(7, registry).start,
       complete: useCompleteMission(7, registry).complete,
@@ -154,8 +156,9 @@ describe('useRescheduleMission', () => {
         expect(result.current.state).toEqual({
           status: 'failed',
           failure: {
-            message: 'O novo prazo é igual ao atual. Escolha outro horário.',
-            recovery: 'edit',
+            message: 'missions.rescheduleFailure.unchanged.message',
+            recovery: 'missions.rescheduleFailure.unchanged.recovery',
+            action: 'edit',
           },
         })
       })
@@ -208,7 +211,7 @@ describe('useRescheduleMission', () => {
     await waitFor(() => {
       expect(result.current.state).toMatchObject({
         status: 'failed',
-        failure: { recovery: 'retry' },
+        failure: { action: 'retry' },
       })
     })
     act(() => {
@@ -217,7 +220,7 @@ describe('useRescheduleMission', () => {
     await waitFor(() => {
       expect(result.current.state).toMatchObject({
         status: 'failed',
-        failure: { recovery: 'edit' },
+        failure: { action: 'edit' },
       })
     })
     expect(requestsTo(fetchMock, ROTA).map(jsonBody)).toEqual([
@@ -225,6 +228,62 @@ describe('useRescheduleMission', () => {
       { operation_id: K1, new_deadline: '2026-10-05T21:00:59.123456Z', reason: 'falta_de_tempo' },
     ])
     expect(result.current.lastRescheduled).toBeNull()
+  })
+
+  it('depois de uma falha "retry", outro conteudo sai com chave NOVA ja no primeiro envio (pendencia 112)', async () => {
+    const fetchMock = routeFetch({
+      [ROTA]: (_, call) =>
+        call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+    })
+    const { result } = renderReschedule()
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        status: 'failed',
+        failure: { action: 'retry' },
+      })
+    })
+    expect(result.current.registry.sentRescheduleFor(7)).toEqual(RASCUNHO)
+
+    act(() => {
+      result.current.reschedule({ ...RASCUNHO, reason: 'dificuldade' })
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'rescheduled', mission: reagendada })
+    })
+    expect(sentKeys(fetchMock)).toEqual([K1, K2])
+    expect(result.current.registry.sentRescheduleFor(7)).toBeNull()
+  })
+
+  it('o sucesso apaga o reagendamento aberto do registro; a falha o conserva', async () => {
+    routeFetch({
+      [ROTA]: (_, call) =>
+        call === 1
+          ? Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 })
+          : Response.json(reagendada),
+    })
+    const { result } = renderReschedule()
+    const aberto = { openedFor: '2026-10-02T21:00:00Z', openedAtMs: 0, draft: RASCUNHO }
+    result.current.registry.saveRescheduleDraft(7, aberto)
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({ status: 'failed' })
+    })
+    expect(result.current.registry.rescheduleDraftFor(7)).toEqual(aberto)
+
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({ status: 'rescheduled' })
+    })
+    expect(result.current.registry.rescheduleDraftFor(7)).toBeNull()
   })
 
   it('usa o horario de verao historico: o processo esta em Tokyo, o prazo e de Sao Paulo', async () => {
@@ -317,28 +376,37 @@ describe('useRescheduleMission', () => {
     expect(sentKeys(fetchMock)).toEqual([K1, K1])
   })
 
-  it.each<[string, RescheduleDraft, Route, string]>([
+  it.each<[string, RescheduleDraft, Route, FailureText]>([
     [
       'prazo_expirado',
       RASCUNHO,
       comCode('prazo_expirado', 422),
-      'O novo prazo precisa estar no futuro.',
+      {
+        message: 'missions.rescheduleFailure.deadlinePassed.message',
+        recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+      },
     ],
     [
       'prazo_inalterado',
       RASCUNHO,
       comCode('prazo_inalterado', 409),
-      'O novo prazo é igual ao atual. Escolha outro horário.',
+      {
+        message: 'missions.rescheduleFailure.unchanged.message',
+        recovery: 'missions.rescheduleFailure.unchanged.recovery',
+      },
     ],
     [
       'um 422 sem code',
       RASCUNHO,
       () => Response.json({ detail: [] }, { status: 422 }),
-      'O novo prazo não foi aceito. Revise a data e o motivo.',
+      {
+        message: 'missions.rescheduleFailure.notAccepted.message',
+        recovery: 'missions.rescheduleFailure.notAccepted.recovery',
+      },
     ],
   ])(
     'depois de %s (edit), a falha chega traduzida e a chave sai',
-    async (_caso, rascunho, rota, mensagem) => {
+    async (_caso, rascunho, rota, texto) => {
       const fetchMock = routeFetch({
         [ROTA]: (init, call) => (call === 1 ? rota(init, call) : semResposta(init, call)),
       })
@@ -350,7 +418,7 @@ describe('useRescheduleMission', () => {
       await waitFor(() => {
         expect(result.current.state).toEqual({
           status: 'failed',
-          failure: { message: mensagem, recovery: 'edit' },
+          failure: { ...texto, action: 'edit' },
         })
       })
       act(() => {
@@ -548,7 +616,7 @@ describe('useRescheduleMission', () => {
 
     expect(result.current.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
     })
   })
 

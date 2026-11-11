@@ -1,10 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import type { Locale } from '../../shared/i18n/locale'
+import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { StrictMode } from 'react'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { controlledStream, sseFrame, streamResponse } from '../../test/sse'
 import { stubViewport } from '../../test/viewport'
-import { UNKNOWN_RESULT } from './messageFailure'
 import { PANEL_OPEN_KEY } from './panelPreference'
 import { describeQuestionLength } from './questionLimit'
 import { TutorConversation } from './TutorConversation'
@@ -62,9 +62,16 @@ const answer = (
 const PENDING: Route = () => new Promise<Response>(() => undefined)
 
 const preStreamError =
-  (status: number, body: unknown): Route =>
+  (status: number, body: unknown, headers: Record<string, string> = {}): Route =>
   () =>
-    Response.json(body, { status })
+    Response.json(body, { status, headers })
+
+/** O 429 do teto diario como o backend manda: com os segundos ate a meia-noite. */
+const DAILY_LIMIT = preStreamError(
+  429,
+  { code: 'limite_diario_da_tutoria' },
+  { 'Retry-After': '3600' },
+)
 
 /** O endereco do quadro, que a pagina passa ao painel (a feature nao o conhece). */
 const BOARD_HREF = '#missions-heading'
@@ -73,6 +80,7 @@ function mountPanel(
   routes: Record<string, Route>,
   kind: 'desktop' | 'mobile' = 'desktop',
   onMissionCreated: () => void = vi.fn(),
+  locale: Locale = 'pt-BR',
 ) {
   const fetchMock = routeFetch({
     [STATUS]: () => Response.json({ available: true }),
@@ -83,7 +91,9 @@ function mountPanel(
   return {
     fetchMock,
     viewport,
-    ...render(<TutorPanel onMissionCreated={onMissionCreated} boardHref={BOARD_HREF} />),
+    ...renderWithI18n(<TutorPanel onMissionCreated={onMissionCreated} boardHref={BOARD_HREF} />, {
+      locale,
+    }),
   }
 }
 
@@ -259,6 +269,41 @@ describe('TutorPanel: estados da conversa', () => {
     expect(input()).toBeDisabled()
     expect(screen.queryByTestId('tutor-failure')).not.toBeInTheDocument()
     expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+  })
+
+  it('P7b o teto diario desabilita o campo ate a meia-noite, sem tentar de novo', async () => {
+    mountPanel({ [SEND]: DAILY_LIMIT })
+
+    await typeAndSend('Mais uma')
+
+    expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
+      'Você chegou ao limite de conversas de hoje. A Kairya volta à meia-noite.',
+    )
+    expect(input()).toHaveValue('Mais uma')
+    expect(input()).toBeDisabled()
+    expect(sendButton()).toBeDisabled()
+    expect(screen.queryByTestId('tutor-retry')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tutor-unavailable')).not.toBeInTheDocument()
+  })
+
+  it('P7c o teto diario sem Retry-After pede para voltar amanha', async () => {
+    mountPanel({ [SEND]: preStreamError(429, { code: 'limite_diario_da_tutoria' }) })
+
+    await typeAndSend('Mais uma')
+
+    expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
+      'Você chegou ao limite de conversas de hoje. Tente de novo amanhã.',
+    )
+  })
+
+  it('P7d o teto diario em ingles diz a hora de Brasilia', async () => {
+    mountPanel({ [SEND]: DAILY_LIMIT }, 'desktop', vi.fn(), 'en')
+
+    await typeAndSend('One more')
+
+    expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
+      "Kairya can't answer now. You've reached today's conversation limit. Kairya is back at midnight (Brasília time).",
+    )
   })
 
   it('P8 o status que falha oferece tentar de novo', async () => {
@@ -489,7 +534,9 @@ describe('TutorPanel: o envio', () => {
 
     await typeAndSend('Oi')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(UNKNOWN_RESULT.message)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Não deu para saber se a resposta chegou inteira. Ela foi interrompida no caminho. Tentar de novo é seguro: a pergunta não será duplicada.',
+    )
     await waitFor(() => {
       expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
     })
@@ -624,7 +671,7 @@ describe('TutorPanel: o envio', () => {
     await typeAndSend('Pergunta recusada')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A Kairya não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
+      'A Kairya não pôde responder a esta pergunta. O conteúdo foi recusado. Pergunte de outro jeito.',
     )
     expect(screen.queryByText('Comeco recusado')).not.toBeInTheDocument()
     expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
@@ -735,9 +782,9 @@ describe('TutorPanel: o envio', () => {
         question: null,
         partial: '',
         failure: {
-          message:
-            'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
-          recovery: 'retry',
+          message: 'tutoring.messageFailure.providerUnavailable.message',
+          recovery: 'tutoring.messageFailure.safeRetry',
+          action: 'retry',
         },
       },
     ],
@@ -772,7 +819,7 @@ describe('TutorPanel: o envio', () => {
         reloadHistory: vi.fn(),
         updateAction: vi.fn(),
       }
-      render(
+      renderWithI18n(
         <TutorConversation
           conversation={conversation}
           status={{ status: 'unavailable' }}
@@ -806,7 +853,7 @@ describe('TutorPanel: desktop', () => {
     expect(localStorage.getItem(PANEL_OPEN_KEY)).toBe('false')
 
     unmount()
-    render(<TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />)
+    renderWithI18n(<TutorPanel onMissionCreated={vi.fn()} boardHref={BOARD_HREF} />)
     expect(screen.getByTestId('tutor-panel-toggle')).toHaveAttribute('aria-expanded', 'false')
     expect(document.getElementById('tutor-panel-body')).toBeNull()
 
@@ -1249,7 +1296,7 @@ describe('TutorPanel: isolamento e limpeza da folha', () => {
         </div>
       </div>
     )
-    const mounted = render(strict ? <StrictMode>{tree}</StrictMode> : tree)
+    const mounted = renderWithI18n(tree, { strict })
     // O atributo booleano também pode ter um valor anterior não vazio.
     const previous = screen.getByText('Já inerte').parentElement!
     previous.setAttribute('inert', 'anterior')
@@ -1360,7 +1407,7 @@ it('QG oculto libera o fundo, conserva conversa e só contém foco quando volta 
       </div>
     </div>
   )
-  const { rerender } = render(tree(false))
+  const { rerender } = renderWithI18n(tree(false))
   fireEvent.click(screen.getByTestId('tutor-sheet-open'))
   await ready()
   type('Rascunho entre áreas')

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
 import { I18nContext } from '../i18n/i18nContext'
@@ -15,7 +15,7 @@ function renderWithSetLocale(setLocale: (next: Locale) => Promise<void>) {
 }
 
 const SAVE_FAILED_EN =
-  'Não foi possível salvar o idioma EN, English. A conexão falhou. Tente de novo.'
+  'Não foi possível salvar o idioma English. O servidor não confirmou a troca. Tente de novo.'
 
 describe('LanguageSwitcher', () => {
   afterEach(() => {
@@ -136,11 +136,16 @@ describe('LanguageSwitcher', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
 
-    const status = await screen.findByText(SAVE_FAILED_EN)
+    const status = screen.getByRole('status')
+    await vi.waitFor(() => {
+      expect(status).toHaveTextContent(SAVE_FAILED_EN)
+    })
     expect(setLocale).toHaveBeenCalledWith('en')
-    expect(screen.getByRole('status')).toHaveAttribute('data-tone', 'danger')
-    expect(screen.getByRole('status').parentElement).not.toHaveClass('sr-only')
+    expect(status).toHaveAttribute('data-tone', 'danger')
+    expect(status.parentElement).not.toHaveClass('sr-only')
     expect(status).toBeVisible()
+    // O nome do idioma dentro da frase em PT leva o próprio `lang` (WCAG 3.1.2).
+    expect(within(status).getByText('English')).toHaveAttribute('lang', 'en')
     expect(screen.getByRole('button', { name: 'PT, Português (Brasil)' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -184,7 +189,9 @@ describe('LanguageSwitcher', () => {
     const en = screen.getByRole('button', { name: 'EN, English' })
 
     fireEvent.click(en)
-    await screen.findByText(SAVE_FAILED_EN)
+    await vi.waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(SAVE_FAILED_EN)
+    })
     fireEvent.click(en)
 
     await vi.waitFor(() => {

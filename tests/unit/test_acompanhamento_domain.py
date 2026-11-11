@@ -34,7 +34,7 @@ def test_os_motivos_sao_os_tres_do_readme() -> None:
 
 
 def test_as_origens_e_os_tipos_de_operacao() -> None:
-    assert [o.value for o in OrigemDoReagendamento] == ["usuario", "tifa"]
+    assert [o.value for o in OrigemDoReagendamento] == ["usuario", "kairya"]
     assert [t.value for t in TipoDeOperacao] == ["complete", "start", "reschedule"]
 
 

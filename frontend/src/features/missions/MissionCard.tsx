@@ -5,15 +5,17 @@ import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
 import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
-import { sameDraft } from './rescheduleDraft'
 import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
-import type { EvidenceDraft, RescheduleDraft } from './types'
+import type { EvidenceDraft, OpenReschedule } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
 import { useStartMission, type StartState } from './useStartMission'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import type { FailureText } from '../../shared/i18n/failureText'
+import { useT } from '../../shared/i18n/useT'
 
 const CARD_CLASS =
   'rpg-mission-card min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
@@ -141,7 +143,7 @@ function CompletionControls({
   }
 
   const failure = completion.status === 'failed' ? completion.failure : null
-  const canComplete = mission.state !== 'concluida' && failure?.recovery !== 'refresh'
+  const canComplete = mission.state !== 'concluida' && failure?.action !== 'refresh'
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -163,7 +165,7 @@ function CompletionControls({
           {blocked}
         </p>
       )}
-      {failure?.recovery === 'refresh' && (
+      {failure?.action === 'refresh' && (
         <button
           type="button"
           data-testid="mission-reload"
@@ -192,7 +194,7 @@ function CompletionControls({
           data-testid="mission-completion-error"
           className="w-full text-sm text-red-300"
         >
-          {failure.message}
+          <FailureMessage failure={failure} />
         </p>
       )}
     </div>
@@ -246,14 +248,14 @@ function latestFromActions(start: StartState, rescheduled: Mission | null): Miss
 
 /** A falha que pede atualizar, com o botao de recarga do cartao. */
 function RefreshNotice({
-  message,
+  failure,
   testId,
   onReload,
   reloadWaiting,
   reloadLabel,
   instructions,
 }: {
-  message: string
+  failure: FailureText
   testId: string
   onReload: () => void
   reloadWaiting: boolean
@@ -273,7 +275,7 @@ function RefreshNotice({
         <span className="sr-only">a missão: {instructions}</span>
       </button>
       <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
-        {message}
+        <FailureMessage failure={failure} />
       </p>
     </>
   )
@@ -322,9 +324,9 @@ function StartControls({
   const shown = startable || start.status !== 'idle'
   return (
     <div className={`${shown ? 'mt-3 ' : ''}flex flex-wrap items-center gap-3`}>
-      {failure?.recovery === 'refresh' ? (
+      {failure?.action === 'refresh' ? (
         <RefreshNotice
-          message={failure.message}
+          failure={failure}
           testId="mission-start"
           instructions={mission.instructions}
           onReload={onReload}
@@ -351,7 +353,7 @@ function StartControls({
               data-testid="mission-start-error"
               className="w-full text-sm text-red-300"
             >
-              {failure.message}
+              <FailureMessage failure={failure} />
             </p>
           )}
         </>
@@ -398,6 +400,7 @@ export function MissionCard({
    */
   reloadLabel?: string
 }) {
+  const t = useT()
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
   const { state: start, start: startMission } = useStartMission(listed.id, registry)
   const {
@@ -405,25 +408,18 @@ export function MissionCard({
     reschedule: rescheduleMission,
     lastRescheduled,
   } = useRescheduleMission(listed.id, registry)
-  // O ultimo rascunho de reagendamento enviado. Ref, e nao estado: so e lido no
-  // clique, e mudar nao deve renderizar nada.
-  const lastSentReschedule = useRef<RescheduleDraft | null>(null)
-  const submitReschedule = (draft: RescheduleDraft) => {
-    // Depois de uma falha `retry` a chave fica RETIDA, e ela so vale para o
-    // MESMO conteudo (F13). Se a pessoa mudou prazo ou motivo, o pedido e outro:
-    // a chave sai antes do envio, e ele nao cai num `operacao_reutilizada`
-    // evitavel. Sem mudanca, a mesma chave reenvia.
-    const previous = lastSentReschedule.current
-    if (
-      reschedule.status === 'failed' &&
-      reschedule.failure.recovery === 'retry' &&
-      previous !== null &&
-      !sameDraft(previous, draft)
-    ) {
-      registry.releaseActionKey(listed.id, 'reschedule')
+  // O rascunho do Reagendar e o conteudo do ultimo envio moram no REGISTRO,
+  // com a chave (pendencia 112): sobrevivem a remontagem, e o hook troca a chave
+  // antes do envio quando o conteudo mudou. Com o envio em voo nao ha retry a
+  // oferecer; fora dele, o ultimo envio so existe enquanto a chave esta retida.
+  const pendingRetry =
+    reschedule.status === 'submitting' ? null : registry.sentRescheduleFor(listed.id)
+  const saveReschedule = (open: OpenReschedule | null) => {
+    if (open === null) {
+      registry.discardRescheduleDraft(listed.id)
+      return
     }
-    lastSentReschedule.current = draft
-    rescheduleMission(draft)
+    registry.saveRescheduleDraft(listed.id, open)
   }
   // O rascunho da evidencia (E17): lido do REGISTRO na montagem e gravado nele
   // a cada mudanca. O reload do quadro remonta os cartoes; guardado so aqui, o
@@ -477,8 +473,7 @@ export function MissionCard({
   // O formulario so existe enquanto ha o que concluir: nao na concluida, nem
   // depois de uma falha que pede atualizar (a missao ja mudou no servidor).
   const retryPending = registry.isRetryPending(listed.id)
-  const completionStale =
-    completion.status === 'failed' && completion.failure.recovery === 'refresh'
+  const completionStale = completion.status === 'failed' && completion.failure.action === 'refresh'
   const offersEvidence = mission.state !== 'concluida' && !completionStale
   // O reagendamento e so da avulsa (F7: o prazo da diaria e da especial vem do
   // ciclo) e so enquanto nao concluida (F8). Uma falha que pede atualizar -- a
@@ -488,7 +483,7 @@ export function MissionCard({
     mission.mission_type === 'avulsa' &&
     mission.state !== 'concluida' &&
     !completionStale &&
-    rescheduleFailure?.recovery !== 'refresh'
+    rescheduleFailure?.action !== 'refresh'
   // As regioes vivas nascem com o cartao e so no que tem o que anunciar: a
   // missao listada nao concluida (a do Reagendar, so na avulsa).
   const liveStart = listed.state !== 'concluida'
@@ -512,7 +507,7 @@ export function MissionCard({
           data-testid="mission-state"
           className="rpg-mission-state shrink-0 rounded-full border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-300"
         >
-          {MISSION_STATE_LABELS[mission.state]}
+          {t(MISSION_STATE_LABELS[mission.state])}
         </span>
       </div>
 
@@ -606,14 +601,17 @@ export function MissionCard({
           mission={mission}
           disabled={completing || starting || rescheduling}
           failure={rescheduleFailure}
-          onSubmit={submitReschedule}
+          onSubmit={rescheduleMission}
+          saved={registry.rescheduleDraftFor(listed.id)}
+          onSave={saveReschedule}
+          pendingRetry={pendingRetry}
           describedBy={titleId}
         />
       )}
-      {rescheduleFailure?.recovery === 'refresh' && (
+      {rescheduleFailure?.action === 'refresh' && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <RefreshNotice
-            message={rescheduleFailure.message}
+            failure={rescheduleFailure}
             testId="mission-reschedule"
             instructions={mission.instructions}
             onReload={onReload}
