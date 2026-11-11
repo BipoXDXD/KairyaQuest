@@ -44,6 +44,12 @@ sobreviveu na pasta de notas da coordenação. Dela:
    abortou o stream. A parada está entre o 200 (preparo e commit já
    concluídos: o 200 só sai depois de `preparar_turno`) e o evento `done`:
    `_proximo` em thread, SDK, falso, `_completar` e o commit.
+   **Ressalvas.** (a) O `done` também faz `GET` se o histórico não estiver
+   carregado (`historyStatus !== 'loaded'`); no E2E ele já está. (b) Os
+   caminhos `failed`/`unknown` com `question === null` também não fazem `GET`:
+   mostram a falha no estado do envio, não na lista. Sem o `trace.zip` (DOM no
+   instante da falha), o rastro não distingue esse ramo de "não terminou"; a
+   conclusão 1 é a leitura mais provável, não a única.
 2. **Lentidão uniforme não explica.** Com a rodada ~10x mais lenta, um turno
    de ~90 ms levaria ~1 s. O turno precisou de mais de 5 s: foi um **estancamento**
    de pelo menos 5 s num salto só, não lentidão proporcional.
