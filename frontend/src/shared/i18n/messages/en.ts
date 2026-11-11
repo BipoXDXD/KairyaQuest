@@ -6,11 +6,24 @@ import type { Messages } from '../catalog'
  * dois catalogos: o nome acessivel comeca pelo texto visivel (WCAG 2.5.3).
  */
 export const en = {
+  'shell.brand.name': 'KairyaQuest',
+  'shell.brand.note': 'Your study journey',
+  'shell.nav.label': 'Areas',
+  'shell.nav.headquarters': 'Headquarters',
+  'shell.nav.campaigns': 'Campaigns',
+  'headquarters.hero.title': 'Headquarters — your study dashboard',
+  'headquarters.hero.note': "What's open, with due dates and rewards.",
+  'campaigns.hero.title': 'Campaigns — study plans',
+  'campaigns.hero.note': 'The whole week, day by day, and the special mission.',
   'shell.locale.label': 'Language',
   'shell.locale.ptBR': 'PT, Português (Brasil)',
   'shell.locale.en': 'EN, English',
   'shell.locale.saveFailed':
     "Couldn't save {language} as your language. The connection failed. Try again.",
   'ui.dialog.cancel': 'Cancel',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
   'ui.loading': 'Loading…',
+  'ui.sound.voice': "Kairya's voice",
+  'ui.sound.sfx': 'Sound effects',
 } as const satisfies Messages

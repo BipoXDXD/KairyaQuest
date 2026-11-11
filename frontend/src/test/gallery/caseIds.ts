@@ -42,6 +42,17 @@ export const GALLERY_CASE_IDS = [
   'empty-state-missions',
   'empty-state-plan',
   'empty-state-campaign-new',
+  'field-default',
+  'field-help',
+  'field-error',
+  'field-raised',
+  'nav-tabs-default',
+  'language-switcher-default',
+  'language-switcher-save-failed',
+  'sound-toggle-voice-on',
+  'sound-toggle-voice-off',
+  'sound-toggle-sfx-on',
+  'sound-toggle-sfx-off',
 ] as const
 
 export type GalleryCaseId = (typeof GALLERY_CASE_IDS)[number]
