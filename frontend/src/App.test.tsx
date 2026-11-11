@@ -6,7 +6,7 @@ import type { Progress } from './features/progression/types'
 import type { Mission } from './shared/types/mission'
 import { controlledStream, sseFrame } from './test/sse'
 import { requestsTo, routeFetch } from './test/fetchRoutes'
-import { memoryStorage } from './test/audioDoubles'
+import { fakeAudio, memoryStorage, type FakeAudio } from './test/audioDoubles'
 import { renderWithI18n } from './test/i18n'
 import { stubViewport } from './test/viewport'
 
@@ -190,6 +190,44 @@ describe('App', () => {
     expect(requestsTo(fetchMock, 'GET /api/tutoring/messages')).toHaveLength(1)
     // O ciclo atualiza em silêncio ao retornar; não é uma remontagem.
     expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
+  })
+
+  it('trocar de área corta a voz da fala, e voltar não fala de novo', async () => {
+    stubPage()
+    const elements: FakeAudio[] = []
+    renderWithI18n(<App />, {
+      audio: {
+        storage: memoryStorage({
+          'kairyaquest.sound': '{"voice":true,"sfx":true}',
+          'kairyaquest.soundInvite': '1',
+        }),
+        createElement: () => {
+          const element = fakeAudio()
+          elements.push(element)
+          return element
+        },
+      },
+      presence: {
+        greeting: true,
+        clock: () => new Date('2026-11-10T12:00:00Z'),
+        storage: memoryStorage(),
+        random: () => 0,
+      },
+    })
+    await settleHeadquarters()
+    await screen.findByRole('figure', { name: 'Kairya' })
+    const voice = elements[0]
+    expect(voice?.play).toHaveBeenCalledTimes(1)
+    const pausesBefore = voice?.pause.mock.calls.length ?? 0
+
+    fireEvent.click(screen.getByTestId('nav-campaigns'))
+    expect(voice?.pause).toHaveBeenCalledTimes(pausesBefore + 1)
+    await screen.findByTestId('trail-no-plan')
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('nav-headquarters'))
+    })
+
+    expect(voice?.play).toHaveBeenCalledTimes(1)
   })
 
   it('cada abertura de Campanhas busca a trilha de novo', async () => {

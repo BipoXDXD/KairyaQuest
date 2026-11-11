@@ -9,6 +9,8 @@ export interface KairyaContextValue {
   dispatchAll(events: readonly KairyaEvent[]): void
   /** Informa a sequência lida no ciclo; no-op quando a saudação está desligada. */
   reportStreak(streak: number): void
+  /** A sequência da última chamada de `reportStreak`; `null` sem leitura ou com a saudação desligada. */
+  readStreak(): number | null
 }
 
 /**

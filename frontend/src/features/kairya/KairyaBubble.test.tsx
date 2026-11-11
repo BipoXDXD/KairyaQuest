@@ -2,6 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { useEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageSwitcher } from '../../shared/ui/LanguageSwitcher'
+import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
 import { renderWithI18n } from '../../test/i18n'
 import { readSource } from '../../test/readSource'
 import type { KairyaEvent } from './events'
@@ -19,7 +20,12 @@ function Probe({ onReady }: { onReady: (dispatch: (event: KairyaEvent) => void) 
   return <output data-testid="mood">{state.mood}</output>
 }
 
-function setup(locale: 'pt-BR' | 'en' = 'pt-BR') {
+const SOUND_ON = {
+  'kairyaquest.sound': '{"voice":true,"sfx":true}',
+  'kairyaquest.soundInvite': '1',
+}
+
+function setup(locale: 'pt-BR' | 'en' = 'pt-BR', audio?: Parameters<typeof renderWithI18n>[1]) {
   const handle: { current: ((event: KairyaEvent) => void) | null } = { current: null }
   renderWithI18n(
     <>
@@ -31,7 +37,7 @@ function setup(locale: 'pt-BR' | 'en' = 'pt-BR') {
         }}
       />
     </>,
-    { locale },
+    { locale, ...audio },
   )
   return (event: KairyaEvent) => {
     expect(handle.current).not.toBeNull()
@@ -240,5 +246,43 @@ describe('KairyaBubble', () => {
       classes.filter((name) => /transition|animate/.test(name) && !name.startsWith('motion-safe:')),
     ).toEqual([])
     expect(readSource('src/index.css')).toContain('--animate-reward-in:')
+  })
+
+  describe('voz da fala', () => {
+    function setupWithVoice() {
+      const elements: FakeAudio[] = []
+      const send = setup('pt-BR', {
+        audio: {
+          storage: memoryStorage(SOUND_ON),
+          createElement: () => {
+            const element = fakeAudio()
+            elements.push(element)
+            return element
+          },
+        },
+      })
+      return { send, voice: () => elements[0] }
+    }
+
+    it('a fala mostrada toca o mp3 dela', () => {
+      const { send, voice } = setupWithVoice()
+
+      send(MISSION_DONE)
+
+      expect(voice()?.src).toBe('/audio/pt-BR/mission_done_1.mp3')
+      expect(voice()?.play).toHaveBeenCalledTimes(1)
+    })
+
+    it('Fechar a fala corta a voz e a bolha fechada não toca de novo', async () => {
+      const { send, voice } = setupWithVoice()
+      send(MISSION_DONE)
+      const pausesBefore = voice()?.pause.mock.calls.length ?? 0
+
+      fireEvent.click(screen.getByRole('button', { name: 'Fechar a fala da Kairya' }))
+      await act(async () => Promise.resolve())
+
+      expect(voice()?.pause).toHaveBeenCalledTimes(pausesBefore + 1)
+      expect(voice()?.play).toHaveBeenCalledTimes(1)
+    })
   })
 })

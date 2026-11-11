@@ -7,6 +7,7 @@ import type { Mood } from './events'
 import { KairyaFace } from './KairyaFace'
 import { isOpeningLine, lineKey } from './lines'
 import { useKairya } from './useKairya'
+import { useSpokenCue } from './useSpokenCue'
 
 /** Só a comemoração e a preocupação têm tom próprio; o resto é neutro. */
 const TONE: Readonly<Record<Mood, SpeechTone>> = {
@@ -38,6 +39,9 @@ function CloseIcon(): ReactElement {
  * A fala da Kairya, em linha na página. Guarda o `LineId` (não o texto): trocar
  * o idioma com a bolha aberta mostra a mesma fala no outro idioma.
  *
+ * A voz é a da legenda: `useSpokenCue` toca o mp3 da fala mostrada e corta
+ * quando ela some.
+ *
  * A região `role="status"` existe desde o primeiro render (uma região nova já
  * com texto pode ficar muda) e só leva a fala de abertura do dia: a celebração
  * já é anunciada pelo `RewardAnnouncement`.
@@ -50,6 +54,7 @@ export function KairyaBubble(): ReactElement {
   const t = useT()
   const { state, dispatch } = useKairya()
   const { cue, mood } = state
+  useSpokenCue(cue)
   const anchor = useRef<HTMLDivElement>(null)
   const announced = cue !== null && isOpeningLine(cue.line) ? t(lineKey(cue.line)) : ''
   return (

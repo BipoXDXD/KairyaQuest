@@ -152,3 +152,38 @@ describe('saudação do dia', () => {
     expect(view.result.current.state.cue).toBeNull()
   })
 })
+
+describe('readStreak', () => {
+  it('é null antes de qualquer leitura do ciclo', () => {
+    const view = setup({ greeting: true, clock: () => MORNING_DAY_10, storage: memoryStorage() })
+    expect(view.result.current.readStreak()).toBeNull()
+  })
+
+  it('devolve a sequência da última chamada de reportStreak', () => {
+    const view = setup({ greeting: true, clock: () => MORNING_DAY_10, storage: memoryStorage() })
+    act(() => {
+      view.result.current.reportStreak(3)
+    })
+    act(() => {
+      view.result.current.reportStreak(5)
+    })
+    expect(view.result.current.readStreak()).toBe(5)
+  })
+
+  it('com greeting=false continua null depois de reportStreak', () => {
+    const view = setup({ greeting: false })
+    act(() => {
+      view.result.current.reportStreak(3)
+    })
+    expect(view.result.current.readStreak()).toBeNull()
+  })
+
+  it('mantém a identidade entre renders, mesmo depois de reportStreak', () => {
+    const view = setup({ greeting: true, clock: () => MORNING_DAY_10, storage: memoryStorage() })
+    const first = view.result.current.readStreak
+    act(() => {
+      view.result.current.reportStreak(3)
+    })
+    expect(view.result.current.readStreak).toBe(first)
+  })
+})
