@@ -2,7 +2,7 @@ import { test as base } from '@playwright/test'
 import { diaCivil } from './datas'
 
 /** A chave que a Kairya grava ao saudar (`GREETING_STORAGE_KEY`, em `dailyOpening.ts`). */
-const CHAVE_DA_SAUDACAO = 'kairyaquest.lastGreeting'
+export const CHAVE_DA_SAUDACAO = 'kairyaquest.lastGreeting'
 
 /**
  * O `test` dos specs: o mesmo do Playwright, com a saudacao do dia ja dada.
