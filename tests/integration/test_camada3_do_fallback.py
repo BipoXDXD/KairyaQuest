@@ -18,7 +18,7 @@ from focusquest.modules.tutoring.anthropic_provider import BETA_DO_FALLBACK
 from focusquest.modules.tutoring.provider import Delta, Fim
 from integration import camada3, camada3_do_fallback
 from integration.camada3_do_fallback import Captura
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_FOLGADO
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     Roteiro,
@@ -36,7 +36,7 @@ def _capturar(falso: ServidorAnthropicFalso) -> Captura:
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         agora=AGORA,
     )
     return captura

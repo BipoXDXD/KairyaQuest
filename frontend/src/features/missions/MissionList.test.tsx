@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { createRef, StrictMode } from 'react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
+import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { formatDeadline } from '../../shared/lib/deadline'
@@ -86,7 +87,7 @@ describe('MissionList', () => {
       vi.fn(() => new Promise<Response>(() => {})),
     )
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const carregando = screen.getByTestId('missions-loading')
     expect(carregando).toHaveAttribute('role', 'status')
@@ -97,7 +98,7 @@ describe('MissionList', () => {
   it('mostra o estado vazio quando a API responde [] -- e nao o de erro', async () => {
     stubFetchResolving([])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const vazio = await screen.findByTestId('missions-empty')
     expect(vazio).toHaveTextContent(/nenhuma missão/i)
@@ -107,14 +108,23 @@ describe('MissionList', () => {
     expect(screen.queryByTestId('missions-list')).not.toBeInTheDocument()
   })
 
+  it('em ingles, o erro de carga sai do catalogo', async () => {
+    stubFetchResolving({ detail: 'Banco indisponível.' }, { status: 503 })
+
+    renderWithI18n(<MissionList />, { locale: 'en' })
+
+    expect(await screen.findByTestId('missions-error')).toHaveTextContent(HTTP_FAILURE_TEXT.en)
+  })
+
   it('mostra o estado de erro quando a API falha -- e nao o vazio', async () => {
     stubFetchResolving({ detail: 'Banco indisponível.' }, { status: 503 })
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const erro = await screen.findByTestId('missions-error')
     expect(erro).toHaveAttribute('role', 'alert')
-    expect(erro).toHaveTextContent('O servidor respondeu 503.')
+    expect(erro).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
+    expect(erro).not.toHaveTextContent('O servidor respondeu 503.')
     expect(erro).toHaveTextContent(/falha ao carregar/i)
     // A prosa do backend nao chega a tela (spec do ciclo diario, secao Erros).
     expect(erro).not.toHaveTextContent('Banco indisponível.')
@@ -128,7 +138,7 @@ describe('MissionList', () => {
   it('mostra o estado de erro quando a rede falha, sem status para exibir', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     expect(await screen.findByTestId('missions-error')).toHaveTextContent(
       /não foi possível falar com o servidor/i,
@@ -142,7 +152,7 @@ describe('MissionList', () => {
       .mockResolvedValueOnce(Response.json([pendente]))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-error')
 
     fireEvent.click(screen.getByTestId('missions-retry'))
@@ -155,7 +165,7 @@ describe('MissionList', () => {
   it('lista as missoes na ordem que a API devolveu', async () => {
     stubFetchResolving([pendente, concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     const itens = screen.getAllByTestId('mission-item')
@@ -167,7 +177,7 @@ describe('MissionList', () => {
   it('marca a lista com role="list" EXPLICITA, que o list-style do Tailwind removeria', async () => {
     stubFetchResolving([pendente, concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const lista = await screen.findByTestId('missions-list')
     // A asseveracao que de fato reprova e a do ATRIBUTO. Medido: com apenas
@@ -186,7 +196,7 @@ describe('MissionList', () => {
   it('exibe os campos da missao, com o prazo como instante no atributo dateTime', async () => {
     stubFetchResolving([pendente])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.getByTestId('mission-instructions')).toHaveTextContent(
@@ -217,7 +227,7 @@ describe('MissionList', () => {
     // diria 20/09/2026 11:30 e reprovaria.
     stubFetchResolving([{ ...pendente, deadline: '2026-09-20T02:30:00Z' }])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.getByTestId('mission-deadline')).toHaveTextContent(/19\/09\/2026.*23:30/)
@@ -226,7 +236,7 @@ describe('MissionList', () => {
   it('omite a duracao real quando a API a devolve nula', async () => {
     stubFetchResolving([pendente])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.queryByTestId('mission-actual-duration')).not.toBeInTheDocument()
@@ -235,7 +245,7 @@ describe('MissionList', () => {
   it('exibe a duracao real quando a API a devolve', async () => {
     stubFetchResolving([concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.getByTestId('mission-actual-duration')).toHaveTextContent('70')
@@ -244,7 +254,7 @@ describe('MissionList', () => {
   it('traduz cada valor de state para o rotulo em portugues, sem mostrar o dado cru', async () => {
     stubFetchResolving([pendente, emAndamento, concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     const rotulos = screen.getAllByTestId('mission-state').map((no) => no.textContent)
@@ -254,7 +264,7 @@ describe('MissionList', () => {
   it('nao deixa nenhum valor cru de state escapar para a tela', async () => {
     stubFetchResolving([pendente, emAndamento, concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.getByTestId('missions')).not.toHaveTextContent(/em_andamento/)
@@ -285,7 +295,7 @@ describe('MissionList -- concluir', () => {
   it('oferece Concluir so para a missao que ainda nao foi concluida', async () => {
     stubFetchResolving([pendente, emAndamento, concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     const [itemPendente, itemEmAndamento, itemConcluida] = screen.getAllByTestId('mission-item')
@@ -301,7 +311,7 @@ describe('MissionList -- concluir', () => {
     // nao nascer so quando ha algo para anunciar.
     stubFetchResolving([pendente])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const status = await screen.findByTestId('mission-completion-status')
     expect(status).toHaveAttribute('role', 'status')
@@ -318,7 +328,7 @@ describe('MissionList -- concluir', () => {
     // nao deveria existir no cartao dela.
     stubFetchResolving([concluida])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(screen.queryByTestId('mission-completion-status')).not.toBeInTheDocument()
@@ -329,7 +339,7 @@ describe('MissionList -- concluir', () => {
     // todos os botoes, e o leitor de tela nao teria como distingui-los.
     stubFetchResolving([pendente])
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     expect(
       await screen.findByRole('button', {
@@ -344,7 +354,7 @@ describe('MissionList -- concluir', () => {
       .mockResolvedValueOnce(Response.json([pendente]))
       .mockImplementationOnce(() => new Promise<Response>(() => {}))
     vi.stubGlobal('fetch', fetchMock)
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     const botao = await screen.findByTestId('mission-complete')
 
     fireEvent.click(botao)
@@ -367,7 +377,7 @@ describe('MissionList -- concluir', () => {
         .mockResolvedValueOnce(Response.json([pendente]))
         .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta)),
     )
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     // P4: a regiao viva e o MESMO elemento de antes do clique -- um `role`
     // novo que nasce ja com texto nao e anunciado por todo leitor de tela.
     const statusAntes = await screen.findByTestId('mission-completion-status')
@@ -404,7 +414,7 @@ describe('MissionList -- concluir', () => {
         .mockResolvedValueOnce(Response.json([pendente]))
         .mockResolvedValueOnce(Response.json(pendenteConcluida)),
     )
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     const statusAntes = await screen.findByTestId('mission-completion-status')
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
@@ -434,7 +444,7 @@ describe('MissionList -- concluir', () => {
         .mockResolvedValueOnce(Response.json([pendente]))
         .mockResolvedValueOnce(Response.json({ ...pendenteConcluida, reward: null })),
     )
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     const statusAntes = await screen.findByTestId('mission-completion-status')
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
@@ -465,7 +475,7 @@ describe('MissionList -- concluir', () => {
         .mockResolvedValueOnce(Response.json([pendente]))
         .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta)),
     )
-    render(<MissionList onMissionCompleted={onMissionCompleted} />)
+    renderWithI18n(<MissionList onMissionCompleted={onMissionCompleted} />)
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
@@ -481,14 +491,14 @@ describe('MissionList -- concluir', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
     const aviso = await screen.findByTestId('mission-completion-error')
     expect(aviso).toHaveAttribute('role', 'alert')
     expect(aviso).toHaveTextContent(
-      'Não foi possível confirmar a conclusão. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      'Não foi possível concluir a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
     // A regiao viva nao duplica o aviso: `statusText` so fala de submitting e
     // completed, nunca do texto da falha (que ja esta no alert). O `<p>` do
@@ -518,7 +528,7 @@ describe('MissionList -- concluir', () => {
       )
       .mockResolvedValueOnce(Response.json(pendenteConcluidaResposta))
     vi.stubGlobal('fetch', fetchMock)
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
@@ -548,12 +558,12 @@ describe('MissionList -- concluir', () => {
         ),
       )
     vi.stubGlobal('fetch', fetchMock)
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
     expect(await screen.findByTestId('mission-completion-error')).toHaveTextContent(
-      'Esta missão não está mais no quadro. Atualize o quadro para ver as missões atuais.',
+      'Esta missão não está mais no quadro. Ela pode ter sido removida. Atualize o quadro para ver as missões atuais.',
     )
     expect(screen.queryByTestId('mission-complete')).not.toBeInTheDocument()
     expect(
@@ -576,7 +586,7 @@ describe('MissionList -- concluir', () => {
       )
       .mockResolvedValueOnce(Response.json([pendenteConcluida]))
     vi.stubGlobal('fetch', fetchMock)
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
@@ -722,7 +732,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoA, missaoB]), ok([missaoAConcluida, missaoBConcluida])],
       posts: { 7: [conflict('transicao_ilegal')], 8: [conflict('transicao_ilegal')] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     fireEvent.click(within(card(8)).getByTestId('mission-complete'))
@@ -759,7 +769,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoA, missaoB]), ok([missaoAConcluida, missaoBConcluida])],
       posts: { 7: [postA.reply], 8: [conflict('transicao_ilegal')] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     const atualizar = await bPedeAtualizar()
@@ -795,7 +805,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoA, missaoB, missaoC]), ok([missaoA, missaoBConcluida, missaoC])],
       posts: { 7: [postA.reply], 8: [conflict('transicao_ilegal')], 9: [postC.reply] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     fireEvent.click(within(card(9)).getByTestId('mission-complete'))
@@ -829,7 +839,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
         8: [conflict('transicao_ilegal')],
       },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     await within(card(7)).findByTestId('mission-completion-error')
@@ -868,7 +878,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
         8: [conflict('transicao_ilegal')],
       },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     fireEvent.click(await bPedeAtualizar())
@@ -897,7 +907,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoB]), ok([missaoBConcluida])],
       posts: { 8: [conflict('transicao_ilegal')] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     const atualizar = await bPedeAtualizar()
     expect(atualizar).toBeEnabled()
@@ -921,14 +931,14 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
         8: [conflict('transicao_ilegal')],
       },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     // A: K1 recusada por pertencer a outra operacao; o "Tentar de novo" sai
     // com K2, que falha por rede -- resultado desconhecido, K2 fica.
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     await within(card(7)).findByText('Não foi possível registrar esta tentativa. Tente de novo.')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
-    await within(card(7)).findByText(/Não foi possível confirmar a conclusão/)
+    await within(card(7)).findByText(/Não foi possível concluir a missão: sem conexão\./)
     fireEvent.click(await bPedeAtualizar())
     await waitFor(() => {
       expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Concluída')
@@ -950,7 +960,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
     // documento. Aqui a lista nem carregou.
     routedFetch({ lists: [], posts: {} })
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     const anuncio = screen.getByTestId('missions-reload-status')
     // A asseveracao do ATRIBUTO: o jsdom nao da role a um `<p>`, mas a guarda
@@ -964,7 +974,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoA, missaoB])],
       posts: { 8: [conflict('transicao_ilegal')] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     const atualizar = await bPedeAtualizar()
@@ -1007,7 +1017,7 @@ describe('MissionList -- atualizar o quadro com uma conclusao em voo', () => {
       lists: [ok([missaoA, missaoB]), ok([missaoA, missaoB])],
       posts: { 8: [conflict('transicao_ilegal')] },
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     // Sem error boundary, o React nao rejoga a excecao do manipulador de
@@ -1065,7 +1075,7 @@ describe('MissionList -- a recarga pedida pela pagina', () => {
       'POST /api/missions/7/complete': () => post,
     })
     const ref = createRef<MissionListHandle>()
-    render(<MissionList ref={ref} />)
+    renderWithI18n(<MissionList ref={ref} />)
     await screen.findByTestId('missions-list')
     fireEvent.click(screen.getByTestId('mission-complete'))
 
@@ -1142,7 +1152,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
   it('o formulario de evidencia aparece so na missao nao concluida', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente, concluida]) })
 
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     await screen.findByTestId('missions-list')
     expect(within(card(7)).getByTestId('evidence-toggle')).toBeInTheDocument()
@@ -1159,7 +1169,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'GET /api/missions': () => Response.json([pendente]),
       'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: '  Resumo entregue no caderno. ', link: 'https://x.dev/resumo' })
@@ -1178,7 +1188,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'POST /api/missions/7/complete': () =>
         Response.json(comRecompensa({ ...pendenteComEvidencia, evidence: null })),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: '   ' })
@@ -1191,7 +1201,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
 
   it('Concluir fica desabilitado com link ruim, e com link sem texto', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     const concluir = within(card(7)).getByTestId('mission-complete')
 
@@ -1213,7 +1223,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'GET /api/missions': () => Response.json([pendente]),
       'POST /api/missions/7/complete': () => new Promise<Response>(() => {}),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: 'Fiz' })
@@ -1231,7 +1241,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
           ? Promise.reject(new TypeError('Failed to fetch'))
           : Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: 'Resumo entregue no caderno.' })
@@ -1256,7 +1266,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
           ? Response.json({ detail: [{ msg: 'x' }] }, { status: 422 })
           : Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: 'Resumo entregue no caderno.' })
@@ -1287,7 +1297,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
         'POST /api/missions/7/complete': (_init, call) =>
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : depois(call),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencher(7, { text: 'Resumo entregue no caderno.', link: 'https://x.dev/a' })
       fireEvent.click(within(card(7)).getByTestId('mission-complete'))
@@ -1356,7 +1366,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
         'POST /api/missions/8/complete': () =>
           Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencher(7, { text: 'Resumo entregue no caderno.' })
       fireEvent.click(within(card(7)).getByTestId('mission-complete'))
@@ -1390,7 +1400,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
         ),
       'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: 'Texto do sete', link: 'https://x.dev/sete' })
@@ -1422,7 +1432,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'POST /api/missions/7/complete': () =>
         Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     preencher(7, { text: 'Texto do sete' })
     preencher(8, { text: 'Texto do oito' })
@@ -1450,7 +1460,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
           terminar = resolve
         }),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     // A conclusao de 8 fica em voo; a avaliacao de 7 falha pedindo atualizar.
@@ -1482,7 +1492,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'GET /api/missions': () => Response.json([pendente]),
       'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     preencher(7, { text: 'Resumo entregue no caderno.' })
     const concluir = within(card(7)).getByTestId('mission-complete')
@@ -1510,7 +1520,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
           resolver = resolve
         }),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     fireEvent.click(within(card(7)).getByTestId('mission-complete'))
     const outroBotao = within(card(8)).getByTestId('mission-complete')
@@ -1527,7 +1537,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
 
   it('o cartao que ja vem concluido do quadro nao rouba o foco', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([concluida]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     expect(document.activeElement).toBe(document.body)
@@ -1540,7 +1550,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'POST /api/missions/8/complete': () =>
         Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     preencher(7, { text: 'Metade do resumo', link: 'https://x.dev/a' })
     const campoAntes = within(card(7)).getByLabelText('O que você fez')
@@ -1566,7 +1576,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'GET /api/missions': () => Response.json([pendente]),
       'POST /api/missions/7/complete': () => Response.json(comRecompensa(pendenteComEvidencia)),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     preencher(7, { text: 'Resumo entregue no caderno.' })
@@ -1597,7 +1607,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
           reward: bonus,
         }),
     })
-    render(<MissionList onMissionCompleted={onMissionCompleted} />)
+    renderWithI18n(<MissionList onMissionCompleted={onMissionCompleted} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
 
@@ -1607,7 +1617,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
 
   it('com o formulario RECOLHIDO e rascunho invalido, o motivo do Concluir desabilitado fica a vista e ligado', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     preencher(7, { text: 'Fiz', link: 'ftp://x' })
 
@@ -1626,7 +1636,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
 
   it('o motivo cobre o link sem texto e o texto acima do limite, e some com o rascunho valido', async () => {
     routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
     const concluir = within(card(7)).getByTestId('mission-complete')
     expect(within(card(7)).queryByTestId('mission-complete-blocked')).not.toBeInTheDocument()
@@ -1652,7 +1662,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
       'POST /api/missions/7/evaluation': () =>
         Response.json({ detail: 'x', code: 'sem_evidencia' }, { status: 409 }),
     })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pedir avaliação da Kairya' }))
     fireEvent.click(
@@ -1669,7 +1679,7 @@ describe('MissionList -- entrega com evidencia e avaliacao no cartao', () => {
   it('o toggle e o pedir avaliacao sao descritos pelo titulo da missao', async () => {
     const outra: Mission = { ...pendenteComEvidencia, id: 9, instructions: 'Revisar grafos' }
     routeFetch({ 'GET /api/missions': () => Response.json([pendente, outra]) })
-    render(<MissionList />)
+    renderWithI18n(<MissionList />)
     await screen.findByTestId('missions-list')
 
     expect(
@@ -1761,7 +1771,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () =>
           Response.json([pendente, perdida, expirada, { ...iniciada, id: 12 }, concluida]),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
 
       const iniciar = within(card(7)).getByTestId('mission-start')
@@ -1774,7 +1784,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
 
     it('a regiao viva do inicio ja existe, vazia, antes do clique', async () => {
       routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const regiao = within(card(7)).getByTestId('mission-start-status')
       expect(regiao).toHaveAttribute('role', 'status')
@@ -1787,7 +1797,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/start': () => post.promise,
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
 
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
@@ -1813,11 +1823,12 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       )
       expect(within(card(7)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
       const linha = within(card(7)).getByTestId('mission-started-at')
-      expect(linha).toHaveTextContent(`Iniciada em ${formatDeadline(iniciada.started_at ?? '')}`)
-      expect(within(linha).getByText(formatDeadline(iniciada.started_at ?? ''))).toHaveAttribute(
-        'dateTime',
-        iniciada.started_at,
+      expect(linha).toHaveTextContent(
+        `Iniciada em ${formatDeadline(iniciada.started_at ?? '', 'pt-BR')}`,
       )
+      expect(
+        within(linha).getByText(formatDeadline(iniciada.started_at ?? '', 'pt-BR')),
+      ).toHaveAttribute('dateTime', iniciada.started_at)
       expect(within(card(7)).queryByTestId('mission-start')).not.toBeInTheDocument()
       // O Concluir continua ali, em andamento.
       expect(within(card(7)).getByTestId('mission-complete')).toBeEnabled()
@@ -1827,7 +1838,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       routeFetch({
         'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }, concluida]),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       expect(within(card(12)).getByTestId('mission-started-at')).toBeInTheDocument()
       expect(within(card(7)).queryByTestId('mission-started-at')).not.toBeInTheDocument()
@@ -1838,7 +1849,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       routeFetch({
         'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }]),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const vazio = within(card(12)).getByTestId('mission-start-status').parentElement
       expect(vazio).not.toHaveClass('mt-3')
@@ -1850,7 +1861,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-complete'))
       expect(within(card(7)).getByTestId('mission-start')).toBeDisabled()
@@ -1870,7 +1881,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': () => Response.json(iniciada),
         'POST /api/missions/7/complete': () => Response.json(comRecompensa(concluidaComDuracao)),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       await within(card(7)).findByText('Missão iniciada.')
@@ -1887,7 +1898,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': (_, call) => Response.json(call === 1 ? [pendente] : [iniciada]),
         'POST /api/missions/7/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
 
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
@@ -1918,13 +1929,13 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': (_, call) =>
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(iniciada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
 
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
 
       expect(await within(card(7)).findByTestId('mission-start-error')).toHaveTextContent(
-        'Não foi possível confirmar o início. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+        'Não foi possível iniciar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
       )
       const repetir = within(card(7)).getByTestId('mission-start')
       expect(repetir).toHaveTextContent('Tentar de novo')
@@ -1943,7 +1954,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': (_, call) =>
           call === 1 ? conflito('operacao_reutilizada') : Response.json(iniciada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       await within(card(7)).findByTestId('mission-start-error')
@@ -1959,7 +1970,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/start': () => Response.json(iniciada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const iniciar = within(card(7)).getByTestId('mission-start')
       iniciar.focus()
@@ -1982,7 +1993,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente, B]),
         'POST /api/missions/7/start': () => Response.json(iniciada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       const outro = within(card(8)).getByTestId('mission-start')
@@ -1999,7 +2010,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       routeFetch({
         'GET /api/missions': () => Response.json([pendente, { ...iniciada, id: 12 }, concluida]),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       for (const id of [7, 12]) {
         const toggle = within(card(id)).getByRole('button', { name: 'Reagendar prazo' })
@@ -2017,7 +2028,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/reschedule': () => post.promise,
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const regiao = within(card(7)).getByTestId('mission-reschedule-status')
       expect(regiao).toHaveAttribute('role', 'status')
@@ -2043,7 +2054,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       })
 
       const prazo = within(card(7)).getByTestId('mission-deadline')
-      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline))
+      expect(prazo).toHaveTextContent(formatDeadline(reagendada.deadline, 'pt-BR'))
       expect(prazo).toHaveAttribute('dateTime', reagendada.deadline)
       const toggle = within(card(7)).getByRole('button', { name: 'Reagendar prazo' })
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -2053,7 +2064,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'Reagendada 1 vez',
       )
       expect(within(card(7)).getByTestId('mission-reschedule-entry')).toHaveTextContent(
-        `${formatDeadline(pendente.deadline)} → ${formatDeadline(reagendada.deadline)} · Falta de tempo · por você`,
+        `${formatDeadline(pendente.deadline, 'pt-BR')} → ${formatDeadline(reagendada.deadline, 'pt-BR')} · Falta de tempo · por você`,
       )
     })
 
@@ -2063,7 +2074,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': (_, call) =>
           call === 1 ? conflito('prazo_expirado', 422) : Response.json(reagendada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-09-01T08:00', 'Dificuldade')
 
@@ -2093,7 +2104,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': (_, call) =>
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2120,7 +2131,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': (_, call) =>
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2143,7 +2154,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': (_, call) =>
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2168,7 +2179,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([original]),
         'POST /api/missions/7/reschedule': () => conflito('prazo_inalterado'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const alvo = within(card(7))
       fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
@@ -2207,7 +2218,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
             ? Promise.reject(new TypeError('Failed to fetch'))
             : conflito('prazo_inalterado'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const alvo = within(card(7))
       fireEvent.click(alvo.getByRole('button', { name: 'Reagendar prazo' }))
@@ -2244,7 +2255,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/start': () => new Promise<Response>(() => undefined),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       expect(within(card(7)).getByTestId('reschedule-submit')).toBeEnabled()
@@ -2260,7 +2271,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': () => Response.json([pendente]),
         'POST /api/missions/7/complete': () => new Promise<Response>(() => undefined),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
 
@@ -2278,7 +2289,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
           'POST /api/missions/7/reschedule': (init, call) =>
             call === 1 ? Response.json(reagendada) : segundo(init, call),
         })
-        render(<MissionList />)
+        renderWithI18n(<MissionList />)
         await screen.findByTestId('missions-list')
         preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
         fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2323,7 +2334,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       it('falha "retry": o prazo do primeiro fica, a mensagem aparece e o botao diz "Tentar de novo"', async () => {
         await segundoReagendamento(() => Promise.reject(new TypeError('Failed to fetch')))
         expect(await within(card(7)).findByTestId('reschedule-error')).toHaveTextContent(
-          'Não foi possível confirmar o reagendamento.',
+          'Não foi possível reagendar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
         )
         continuaNoPrimeiro()
         expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent('Tentar de novo')
@@ -2335,7 +2346,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'GET /api/missions': (_, call) => Response.json(call === 1 ? [pendente] : [concluida]),
         'POST /api/missions/7/reschedule': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
 
@@ -2371,7 +2382,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': () => Response.json(atualizada),
         'POST /api/missions/7/reschedule': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       await waitFor(() => {
@@ -2405,7 +2416,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': () =>
           Response.json({ ...reagendada, state: 'em_andamento', started_at: iniciada.started_at }),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       await within(card(7)).findByText('Missão iniciada.')
@@ -2428,7 +2439,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': () =>
           Response.json({ ...reagendada, state: 'em_andamento', started_at: iniciada.started_at }),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2455,12 +2466,12 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
             ...reagendamento,
             previous_deadline: reagendamento.new_deadline,
             new_deadline: '2026-10-07T21:00:00Z',
-            origin: 'tifa',
+            origin: 'kairya',
           },
         ],
       }
       routeFetch({ 'GET /api/missions': () => Response.json([duas, pendente]) })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       expect(within(card(7)).getByTestId('mission-reschedule-count')).toHaveTextContent(
         'Reagendada 2 vezes',
@@ -2472,7 +2483,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
 
     it('sem reagendamento, nada de historico', async () => {
       routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       expect(within(card(7)).queryByTestId('mission-reschedule-count')).not.toBeInTheDocument()
       expect(within(card(7)).queryByTestId('mission-reschedule-history')).not.toBeInTheDocument()
@@ -2488,7 +2499,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': () => postA.promise,
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       fireEvent.click(within(card(7)).getByTestId('mission-start'))
       fireEvent.click(within(card(8)).getByTestId('mission-start'))
@@ -2527,7 +2538,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/reschedule': () => postA.promise,
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
@@ -2569,7 +2580,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
           call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : repeated.promise,
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const originalCard = card(7)
       expect(
@@ -2631,7 +2642,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
           call === 1 ? conflito('operacao_reutilizada') : Response.json(iniciada),
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const originalCard = card(7)
       fireEvent.click(within(originalCard).getByTestId('mission-start'))
@@ -2659,6 +2670,115 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       expect(crypto.randomUUID).toHaveBeenCalledTimes(3)
     })
 
+    /** Falha o Iniciar de B com `transicao_ilegal` e recarrega o quadro: os cartoes remontam. */
+    async function remontarPeloCartaoB(fetchMock: Mock) {
+      fireEvent.click(within(card(8)).getByTestId('mission-start'))
+      fireEvent.click(await within(card(8)).findByTestId('mission-start-reload'))
+      await waitFor(() => {
+        expect(requestsTo(fetchMock, 'GET /api/missions')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        expect(within(card(8)).getByTestId('mission-state')).toHaveTextContent('Em andamento')
+      })
+    }
+
+    const quadroQueRemonta = (_: unknown, call: number) =>
+      Response.json(call === 1 ? [pendente, B] : [pendente, { ...B, state: 'em_andamento' }])
+
+    it('o rascunho do reagendar sobrevive a remontagem: volta aberto, com prazo e motivo (pendencia 112)', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      renderWithI18n(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      const campoAntes = within(card(7)).getByLabelText('Novo prazo (horário de Brasília)')
+
+      await remontarPeloCartaoB(fetchMock)
+
+      const alvo = within(card(7))
+      const campoDepois = alvo.getByLabelText('Novo prazo (horário de Brasília)')
+      expect(campoDepois).not.toBe(campoAntes)
+      expect(campoDepois).toHaveValue('2026-10-05T18:00')
+      expect(alvo.getByLabelText('Falta de tempo')).toBeChecked()
+      expect(alvo.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+      expect(alvo.getByTestId('reschedule-submit')).toHaveTextContent('Salvar novo prazo')
+    })
+
+    it('fechar o disclosure descarta o rascunho: depois da remontagem ele volta fechado', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      renderWithI18n(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByRole('button', { name: 'Reagendar prazo' }))
+
+      await remontarPeloCartaoB(fetchMock)
+
+      expect(within(card(7)).getByTestId('reschedule-toggle')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+    })
+
+    it('retry e remontagem: sem mudar nada, "Tentar de novo" reenvia com a MESMA chave', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/7/reschedule': (_, call) =>
+          call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      renderWithI18n(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      await remontarPeloCartaoB(fetchMock)
+
+      const salvar = within(card(7)).getByTestId('reschedule-submit')
+      expect(salvar).toHaveTextContent('Tentar de novo')
+      expect(within(card(7)).getByTestId('reschedule-retry-notice')).toBeInTheDocument()
+      fireEvent.click(salvar)
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(chaves(fetchMock, 'POST /api/missions/7/reschedule')).toEqual([K1, K1])
+    })
+
+    it('retry, remontagem e outro motivo: a chave troca ANTES do envio, sem tomar o 409', async () => {
+      const fetchMock = routeFetch({
+        'GET /api/missions': quadroQueRemonta,
+        'POST /api/missions/7/reschedule': (init, call) => {
+          if (call === 1) return Promise.reject(new TypeError('Failed to fetch'))
+          // O servidor real: a chave K1 ja foi usada com outro conteudo.
+          return String(init?.body).includes(K1)
+            ? conflito('operacao_reutilizada')
+            : Response.json(reagendada)
+        },
+        'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
+      })
+      renderWithI18n(<MissionList />)
+      await screen.findByTestId('missions-list')
+      preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+      await within(card(7)).findByTestId('reschedule-error')
+
+      await remontarPeloCartaoB(fetchMock)
+      fireEvent.click(within(card(7)).getByLabelText('Dificuldade'))
+      expect(within(card(7)).getByTestId('reschedule-submit')).toHaveTextContent(
+        'Salvar novo prazo',
+      )
+      fireEvent.click(within(card(7)).getByTestId('reschedule-submit'))
+
+      await within(card(7)).findByText('Prazo reagendado.')
+      expect(requestsTo(fetchMock, 'POST /api/missions/7/reschedule').map(jsonBody)).toEqual([
+        { operation_id: K1, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'falta_de_tempo' },
+        { operation_id: K3, new_deadline: '2026-10-05T21:00:00.000Z', reason: 'dificuldade' },
+      ])
+    })
+
     it('uma chave retida do Reagendar não transforma Iniciar em retry depois da remontagem', async () => {
       const fetchMock = routeFetch({
         'GET /api/missions': (_, call) =>
@@ -2667,7 +2787,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
         'POST /api/missions/7/start': () => Response.json(iniciada),
         'POST /api/missions/8/start': () => conflito('transicao_ilegal'),
       })
-      render(<MissionList />)
+      renderWithI18n(<MissionList />)
       await screen.findByTestId('missions-list')
       const originalCard = card(7)
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
@@ -2736,7 +2856,7 @@ describe('quadro reconcilia chaves pelo GET autoritativo', () => {
       })
       const ref = createRef<MissionListHandle>()
       const content = <MissionList ref={ref} />
-      render(strict ? <StrictMode>{content}</StrictMode> : content)
+      renderWithI18n(content, { strict })
       fireEvent.click(await screen.findByTestId('mission-complete'))
       await screen.findByTestId('mission-completion-error')
       const post = requestsTo(fetchMock, 'POST /api/missions/7/complete')
@@ -2801,7 +2921,7 @@ describe('quadro conserva chaves sem prova terminal', () => {
         'POST /api/missions/7/complete': () => Promise.reject(new TypeError('resposta perdida')),
       })
       const ref = createRef<MissionListHandle>()
-      render(<MissionList ref={ref} />)
+      renderWithI18n(<MissionList ref={ref} />)
       fireEvent.click(await screen.findByTestId('mission-complete'))
       await screen.findByTestId('mission-completion-error')
       act(() => ref.current!.reload())
@@ -2844,7 +2964,7 @@ describe('quadro conserva chaves sem prova terminal', () => {
       'POST /api/missions/7/complete': () => Promise.reject(new TypeError('resposta perdida')),
     })
     const ref = createRef<MissionListHandle>()
-    render(<MissionList ref={ref} />)
+    renderWithI18n(<MissionList ref={ref} />)
     fireEvent.click(await screen.findByTestId('mission-complete'))
     await screen.findByTestId('mission-completion-error')
     act(() => ref.current!.reload())
@@ -2854,5 +2974,116 @@ describe('quadro conserva chaves sem prova terminal', () => {
     expect(screen.getByTestId('mission-state')).toHaveTextContent('Pendente')
     expect(registry().operationIdFor(7)).toBe(key)
     expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('o reagendamento aberto sai do registro quando perde o sentido', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const outroPrazo = '2026-09-27T13:00:00Z'
+
+  function abrirReagendamento() {
+    fireEvent.click(screen.getByRole('button', { name: 'Reagendar prazo' }))
+    fireEvent.click(screen.getByLabelText('Falta de tempo'))
+  }
+
+  it('o prazo mudou fora do cartao: a remontagem descarta o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(call === 2 ? [{ ...pendente, deadline: outroPrazo }] : [pendente]),
+    })
+    const ref = createRef<MissionListHandle>()
+    renderWithI18n(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+    expect(registry().rescheduleDraftFor(7)?.openedFor).toBe(pendente.deadline)
+
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-deadline')).toHaveAttribute('datetime', outroPrazo)
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+
+    // O prazo volta ao de antes: o rascunho antigo nao ressuscita aberto.
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-deadline')).toHaveAttribute('datetime', pendente.deadline)
+    })
+    expect(screen.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'false')
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+  })
+
+  it('o mesmo prazo na remontagem conserva o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    const ref = createRef<MissionListHandle>()
+    renderWithI18n(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+    const aberto = registry().rescheduleDraftFor(7)
+
+    await act(async () => ref.current!.reload())
+    await screen.findByTestId('missions-list')
+
+    expect(registry().rescheduleDraftFor(7)).toEqual(aberto)
+    expect(screen.getByTestId('reschedule-toggle')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('a missao foi concluida fora do cartao: a leitura terminal descarta o reagendamento aberto', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': (_init, call) =>
+        Response.json(
+          call === 2
+            ? [
+                {
+                  ...pendente,
+                  state: 'concluida',
+                  availability: 'concluida',
+                  completed_at: '2026-09-19T13:10:00Z',
+                },
+              ]
+            : [pendente],
+        ),
+    })
+    const ref = createRef<MissionListHandle>()
+    renderWithI18n(<MissionList ref={ref} />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+
+    await act(async () => ref.current!.reload())
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
+  })
+
+  it('o Concluir com sucesso descarta o reagendamento aberto da missao', async () => {
+    const registry = observeRegistry()
+    routeFetch({
+      'GET /api/missions': () => Response.json([pendente]),
+      'POST /api/missions/7/complete': () =>
+        Response.json(
+          comRecompensa({
+            ...pendente,
+            state: 'concluida',
+            availability: 'concluida',
+            completed_at: '2026-09-19T13:10:00Z',
+          }),
+        ),
+    })
+    renderWithI18n(<MissionList />)
+    await screen.findByTestId('missions-list')
+    abrirReagendamento()
+
+    fireEvent.click(screen.getByTestId('mission-complete'))
+    await waitFor(() => {
+      expect(screen.getByTestId('mission-state')).toHaveTextContent('Concluída')
+    })
+    expect(registry().rescheduleDraftFor(7)).toBeNull()
   })
 })

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { requestsTo } from '../../test/fetchRoutes'
 import { bytesOf, controlledStream, sseFrame, streamResponse } from '../../test/sse'
 
 // O cliente resolve a URL base no CARREGAMENTO do modulo e lanca quando a
@@ -79,16 +80,282 @@ describe('client', () => {
       expect(new Headers(init.headers).get('Accept')).toBe('application/json')
     })
 
-    it('repassa o AbortSignal recebido', async () => {
+    it('o abort do AbortSignal recebido chega ao fetch, e a falha nao e de prazo', async () => {
+      // O `signal` que o `fetch` recebe nao e mais o do chamador: e a
+      // combinacao dele com o prazo (pendencia 213). O que importa e o efeito
+      // -- abortar o do chamador aborta o pedido --, e que esse cancelamento
+      // nao saia vestido de "demorou".
       const controller = new AbortController()
-      const fetchMock = vi.fn().mockResolvedValue(Response.json([]))
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/missions', controller.signal))
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(init.signal?.aborted).toBe(false)
+      controller.abort()
+      const erro = await pending
+
+      expect(init.signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as Error).message).toBe('Não foi possível falar com o servidor.')
+    })
+  })
+
+  describe('requestJson com prazo', () => {
+    /** Um `fetch` que nunca responde e so o `signal` destrava, como o real. */
+    function fetchUntilAborted() {
+      return vi.fn((_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        })
+      })
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('o prazo de leitura e de 20 s', async () => {
+      const { READ_TIMEOUT_MS } = await loadClient()
+
+      expect(READ_TIMEOUT_MS).toBe(20_000)
+    })
+
+    it('sem signal do chamador, o pedido pendurado falha como prazo ao fim de READ_TIMEOUT_MS', async () => {
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle'))
+      await vi.advanceTimersByTimeAsync(19_999)
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      const erro = await pending
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect((erro as Error).cause).toBeInstanceOf(Error)
+    })
+
+    it('com signal do chamador, o prazo continua valendo', async () => {
+      const controller = new AbortController()
+      vi.stubGlobal('fetch', fetchUntilAborted())
+      const { ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      await vi.advanceTimersByTimeAsync(20_000)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      // O prazo nao cancela o signal de quem chamou: e o hook que decide o
+      // que o aborto DELE significa.
+      expect(controller.signal.aborted).toBe(false)
+    })
+
+    it('a resposta que chega a tempo desliga o timer do prazo', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ id: 1 })))
+      const { requestJson } = await loadClient()
+
+      await expect(requestJson('/cycle')).resolves.toEqual({ id: 1 })
+
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('um erro cujo status ja chegou continua erro com status, mesmo se o corpo estoura o prazo', async () => {
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        const response = new Response(null, { status: 503 })
+        vi.spyOn(response, 'json').mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        )
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle'))
+      await vi.advanceTimersByTimeAsync(20_000)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(503)
+      expect((erro as Error).message).toBe('O servidor respondeu 503.')
+    })
+  })
+
+  // O Safari 17.0-17.3 nao tem `AbortSignal.any`. Os mesmos casos rodam com e
+  // sem ela: o que o chamador ve -- o tipo da falha e nenhum timer pendurado --
+  // nao pode depender do navegador.
+  describe.each([
+    { modo: 'com AbortSignal.any', semAny: false },
+    { modo: 'sem AbortSignal.any (Safari 17.0-17.3)', semAny: true },
+  ])('requestJson com signal do chamador, $modo', ({ semAny }) => {
+    let original: PropertyDescriptor | undefined
+
+    /**
+     * Um `fetch` que obedece ao `signal` como o real: rejeita na hora se ele
+     * ja chegou abortado, e senao so o abort o destrava.
+     */
+    function fetchUntilAborted() {
+      return vi.fn((_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          const abortError = new DOMException('The operation was aborted.', 'AbortError')
+          if (init?.signal?.aborted === true) {
+            reject(abortError)
+            return
+          }
+          init?.signal?.addEventListener('abort', () => {
+            reject(abortError)
+          })
+        })
+      })
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      original = Object.getOwnPropertyDescriptor(AbortSignal, 'any')
+      if (semAny) {
+        Reflect.deleteProperty(AbortSignal, 'any')
+      }
+    })
+
+    afterEach(() => {
+      if (original !== undefined) {
+        Object.defineProperty(AbortSignal, 'any', original)
+      }
+      vi.useRealTimers()
+    })
+
+    it('o aborto do chamador sai como falha de rede, sem prazo e sem timer pendurado', async () => {
+      const controller = new AbortController()
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(init.signal?.aborted).toBe(false)
+      controller.abort()
+      const erro = await pending
+
+      expect(init.signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as Error).message).toBe('Não foi possível falar com o servidor.')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('o fim do prazo sai como ApiTimeoutError, sem abortar o chamador e sem timer pendurado', async () => {
+      const controller = new AbortController()
+      vi.stubGlobal('fetch', fetchUntilAborted())
+      const { ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      await vi.advanceTimersByTimeAsync(20_000)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      expect(controller.signal.aborted).toBe(false)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('o motivo do aborto do chamador chega ao signal do pedido', async () => {
+      const controller = new AbortController()
+      const motivo = new Error('a tela fechou')
+      const fetchMock = fetchUntilAborted()
       vi.stubGlobal('fetch', fetchMock)
       const { requestJson } = await loadClient()
 
-      await requestJson('/missions', controller.signal)
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      controller.abort(motivo)
+      await pending
 
-      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
-      expect(init.signal).toBe(controller.signal)
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.reason).toBe(motivo)
+    })
+
+    it('o motivo do signal que ja chega abortado chega ao signal do pedido', async () => {
+      const controller = new AbortController()
+      const motivo = new Error('a tela fechou')
+      controller.abort(motivo)
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { requestJson } = await loadClient()
+
+      await failureOf(requestJson('/cycle', controller.signal))
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.reason).toBe(motivo)
+    })
+
+    it('o signal que ja chega abortado sai como falha de rede, nunca como prazo', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const erro = await failureOf(requestJson('/cycle', controller.signal))
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
+  describe('requestJson sem AbortSignal.any: o vinculo com o chamador', () => {
+    let original: PropertyDescriptor | undefined
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      original = Object.getOwnPropertyDescriptor(AbortSignal, 'any')
+      Reflect.deleteProperty(AbortSignal, 'any')
+    })
+
+    afterEach(() => {
+      if (original !== undefined) {
+        Object.defineProperty(AbortSignal, 'any', original)
+      }
+      vi.useRealTimers()
+    })
+
+    it('depois da resposta, abortar o chamador nao alcanca mais o pedido encerrado', async () => {
+      const controller = new AbortController()
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 1 }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { requestJson } = await loadClient()
+
+      await expect(requestJson('/cycle', controller.signal)).resolves.toEqual({ id: 1 })
+      controller.abort()
+
+      // O pedido ja terminou: o vinculo com o signal do chamador foi desfeito.
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false)
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
 
@@ -111,6 +378,68 @@ describe('client', () => {
       const headers = new Headers(init.headers)
       expect(headers.get('Content-Type')).toBe('application/json')
       expect(headers.get('Accept')).toBe('application/json')
+    })
+  })
+
+  describe('patchJson', () => {
+    it('envia PATCH com o corpo em JSON e devolve a resposta desserializada', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ locale: 'en' }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { patchJson } = await loadClient()
+
+      const resposta = await patchJson<{ locale: string }>('/me', { locale: 'en' })
+
+      expect(resposta).toEqual({ locale: 'en' })
+      const pedidos = requestsTo(fetchMock, 'PATCH /api/me')
+      expect(pedidos).toHaveLength(1)
+      expect(pedidos[0]?.body).toBe('{"locale":"en"}')
+      const headers = new Headers(pedidos[0]?.headers)
+      expect(headers.get('Content-Type')).toBe('application/json')
+      expect(headers.get('Accept')).toBe('application/json')
+    })
+
+    it('status de erro vira ApiError com o status e o code, como no postJson', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ code: 'campo_desconhecido' }, { status: 400 })),
+      )
+      const { ApiError, patchJson } = await loadClient()
+
+      const erro = await failureOf(patchJson('/me', { locale: 'en', role: 'admin' }))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).toMatchObject({ status: 400, code: 'campo_desconhecido' })
+    })
+
+    it('com timeoutMs, aborta o pedido pendurado e falha como rede fora', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(
+            (_input: string, init?: RequestInit) =>
+              new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => {
+                  reject(new DOMException('The operation was aborted.', 'AbortError'))
+                })
+              }),
+          ),
+        )
+        const { ApiError, patchJson } = await loadClient()
+
+        const pending = failureOf(patchJson('/me', { locale: 'en' }, { timeoutMs: 5000 }))
+        await vi.advanceTimersByTimeAsync(5000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect(erro).toMatchObject({
+          status: null,
+          code: null,
+          message: 'O servidor demorou demais para responder.',
+        })
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 
@@ -148,10 +477,10 @@ describe('client', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('aborta o pedido pendurado ao fim do prazo e falha como rede fora, com a causa', async () => {
+    it('aborta o pedido pendurado ao fim do prazo e falha como prazo (ApiTimeoutError), com a causa', async () => {
       const fetchMock = fetchUntilAborted()
       vi.stubGlobal('fetch', fetchMock)
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const pending = failureOf(
         postJson('/missions/7/start', { operation_id: 'op-1' }, { timeoutMs: 5000 }),
@@ -162,12 +491,16 @@ describe('client', () => {
       const erro = await pending
 
       expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      // Subtipo de ApiError: quem so conhece ApiError continua tratando o prazo.
       expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).name).toBe('ApiTimeoutError')
       // Como a falha de rede: sem status e sem code, e e isso que faz as telas
       // oferecerem o reenvio com a MESMA chave (resultado desconhecido).
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
       expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('timeout')
       expect((erro as Error).cause).toBeInstanceOf(Error)
     })
 
@@ -187,15 +520,213 @@ describe('client', () => {
         return Promise.resolve(response)
       })
       vi.stubGlobal('fetch', fetchMock)
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
+
+      const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+      await vi.advanceTimersByTimeAsync(5000)
+      const erro = await pending
+
+      // Um 200 cujo corpo nao chegou e resultado DESCONHECIDO, nunca
+      // `ApiError(200)`: a tela precisa oferecer o reenvio com a mesma chave.
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      // Subtipo de ApiError: quem so conhece ApiError continua tratando o prazo.
+      expect(erro).toBeInstanceOf(ApiError)
+      expect((erro as Error).name).toBe('ApiTimeoutError')
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('timeout')
+    })
+
+    it('um erro cujo corpo nao chega no prazo mantem o status, com code nulo', async () => {
+      // Os cabecalhos do 409 chegaram; o corpo, nao. O status ja e fato: o
+      // servidor leu e recusou. Reescreve-lo como "demorou" (status nulo)
+      // fazia a tela oferecer um reenvio que nao era preciso.
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        const response = new Response(null, { status: 409 })
+        vi.spyOn(response, 'json').mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        )
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
       await vi.advanceTimersByTimeAsync(5000)
       const erro = await pending
 
       expect(erro).toBeInstanceOf(ApiError)
-      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
-      expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('http')
+      expect((erro as Error).message).toBe('O servidor respondeu 409.')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    describe('corpo de erro com prazo proprio', () => {
+      /**
+       * Um `fetch` cujos cabecalhos de erro chegam em `headersAtMs` e cujo
+       * corpo (JSON com `code`) chega `bodyDelayMs` depois dos cabecalhos, ou
+       * nunca (`null`). O `json()` obedece ao `signal`, como o de verdade.
+       */
+      function errorAfter(
+        status: number,
+        code: string,
+        headersAtMs: number,
+        bodyDelayMs: number | null,
+      ) {
+        return vi.fn((_input: string, init?: RequestInit) => {
+          return new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              const response = new Response(null, { status })
+              vi.spyOn(response, 'json').mockImplementation(
+                () =>
+                  new Promise((resolveBody, rejectBody) => {
+                    const timer =
+                      bodyDelayMs === null
+                        ? undefined
+                        : setTimeout(() => {
+                            resolveBody({ detail: 'sem acento', code })
+                          }, bodyDelayMs)
+                    init?.signal?.addEventListener('abort', () => {
+                      clearTimeout(timer)
+                      rejectBody(new DOMException('The operation was aborted.', 'AbortError'))
+                    })
+                  }),
+              )
+              resolve(response)
+            }, headersAtMs)
+          })
+        })
+      }
+
+      it('o prazo do corpo de erro e de 5 s', async () => {
+        const { ERROR_BODY_TIMEOUT_MS } = await loadClient()
+
+        expect(ERROR_BODY_TIMEOUT_MS).toBe(5000)
+      })
+
+      it('um 409 cujos cabecalhos chegam no limite do prazo ainda entrega o code', async () => {
+        vi.stubGlobal('fetch', errorAfter(409, 'avaliacao_em_andamento', 4900, 2000))
+        const { ApiError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+        await vi.advanceTimersByTimeAsync(4900 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('avaliacao_em_andamento')
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('o 504 tempo_esgotado da avaliacao que chega no limite do prazo ainda entrega o code', async () => {
+        const { ApiError, EVALUATION_TIMEOUT_MS, postJson } = await loadClient()
+        vi.stubGlobal('fetch', errorAfter(504, 'tempo_esgotado', EVALUATION_TIMEOUT_MS - 100, 2000))
+
+        const pending = failureOf(
+          postJson('/missions/7/evaluate', {}, { timeoutMs: EVALUATION_TIMEOUT_MS }),
+        )
+        await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS - 100 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(504)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('tempo_esgotado')
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('o mesmo vale para o GET: um 409 no limite do prazo de leitura entrega o code', async () => {
+        const { ApiError, READ_TIMEOUT_MS, requestJson } = await loadClient()
+        vi.stubGlobal(
+          'fetch',
+          errorAfter(409, 'avaliacao_em_andamento', READ_TIMEOUT_MS - 100, 2000),
+        )
+
+        const pending = failureOf(requestJson('/cycle'))
+        await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 100 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('avaliacao_em_andamento')
+      })
+
+      it('o corpo de erro que nunca chega acaba 5 s depois dos cabecalhos, com o status e sem code', async () => {
+        vi.stubGlobal('fetch', errorAfter(409, 'avaliacao_em_andamento', 4900, null))
+        const { ApiError, ApiTimeoutError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+        // Passou o prazo global (5000), mas o corpo de erro ainda tem a sua folga.
+        await vi.advanceTimersByTimeAsync(4900 + 4999)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('um 200 cujo corpo passa dos 5 s do corpo de erro, mas chega dentro do prazo, chega intacto', async () => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(() => {
+            const response = new Response(null, { status: 200 })
+            vi.spyOn(response, 'json').mockImplementation(
+              () =>
+                new Promise((resolve) => {
+                  setTimeout(() => {
+                    resolve({ id: 7 })
+                  }, 6000)
+                }),
+            )
+            return Promise.resolve(response)
+          }),
+        )
+        const { postJson } = await loadClient()
+
+        const pending = postJson('/missions/7/start', {}, { timeoutMs: 8000 })
+        await vi.advanceTimersByTimeAsync(6000)
+
+        await expect(pending).resolves.toEqual({ id: 7 })
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('um 200 cujo corpo nunca chega continua falhando no prazo global, como prazo', async () => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn((_input: string, init?: RequestInit) => {
+            const response = new Response(null, { status: 200 })
+            vi.spyOn(response, 'json').mockImplementation(
+              () =>
+                new Promise((_resolve, reject) => {
+                  init?.signal?.addEventListener('abort', () => {
+                    reject(new DOMException('The operation was aborted.', 'AbortError'))
+                  })
+                }),
+            )
+            return Promise.resolve(response)
+          }),
+        )
+        const { ApiTimeoutError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 8000 }))
+        await vi.advanceTimersByTimeAsync(7999)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1)
+
+        expect(await pending).toBeInstanceOf(ApiTimeoutError)
+      })
     })
 
     it('uma resposta a tempo desarma o timer e chega intacta', async () => {
@@ -233,16 +764,18 @@ describe('client', () => {
     it('transforma falha de rede em ApiError sem status nem code, preservando a causa', async () => {
       const causa = new TypeError('Failed to fetch')
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(causa))
-      const { ApiError, postJson } = await loadClient()
+      const { ApiError, ApiTimeoutError, postJson } = await loadClient()
 
       const erro = await failureOf(postJson('/missions/7/complete', { operation_id: 'op-1' }))
 
       expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
       // status nulo e o que distingue "nao houve resposta" de "o servidor
       // respondeu mal": a tela nao deve dizer 500 quando nada chegou.
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).cause).toBe(causa)
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('network')
       expect((erro as Error).message).toMatch(/servidor/i)
     })
 
@@ -340,6 +873,91 @@ describe('client', () => {
       expect(erro).toBeInstanceOf(ApiError)
       expect((erro as Error).message).toBe('O servidor respondeu 503.')
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+    })
+  })
+
+  describe('parseRetryAfterSeconds', () => {
+    it.each([
+      ['120', 120],
+      ['0', 0],
+      ['-5', null],
+      ['abc', null],
+      ['', null],
+      ['1.5', null],
+      ['Wed, 21 Oct 2026 07:28:00 GMT', null],
+      [null, null],
+    ])('%j vira %j', async (header, expected) => {
+      const { parseRetryAfterSeconds } = await loadClient()
+
+      expect(parseRetryAfterSeconds(header)).toBe(expected)
+    })
+  })
+
+  describe('Retry-After e instante do erro', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('um 429 com Retry-After guarda os segundos e o instante em que a resposta chegou', async () => {
+      vi.useFakeTimers()
+      const chegada = new Date('2026-11-10T15:00:00Z')
+      vi.setSystemTime(chegada)
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json(
+              { detail: 'x', code: 'limite_diario_da_tutoria' },
+              { status: 429, headers: { 'Retry-After': '60' } },
+            ),
+          ),
+      )
+      const { ApiError, postJson } = await loadClient()
+
+      const erro = await failureOf(postJson('/x', {}))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).toMatchObject({ kind: 'http', status: 429, retryAfterSeconds: 60 })
+      expect((erro as InstanceType<typeof ApiError>).receivedAt).toEqual(chegada)
+    })
+
+    it('um Retry-After que nao e inteiro vira null, nunca NaN', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json({ detail: 'x' }, { status: 429, headers: { 'Retry-After': 'abc' } }),
+          ),
+      )
+      const { postJson } = await loadClient()
+
+      expect(await failureOf(postJson('/x', {}))).toMatchObject({ retryAfterSeconds: null })
+    })
+
+    it('sem resposta nao ha Retry-After', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+      const { postJson } = await loadClient()
+
+      expect(await failureOf(postJson('/x', {}))).toMatchObject({
+        kind: 'network',
+        retryAfterSeconds: null,
+      })
+    })
+
+    it('o ApiError construido sem os detalhes: sem status e rede, com status e http', async () => {
+      vi.useFakeTimers()
+      const agora = new Date('2026-11-10T12:00:00Z')
+      vi.setSystemTime(agora)
+      const { ApiError } = await loadClient()
+
+      expect(new ApiError('x', null, null)).toMatchObject({
+        kind: 'network',
+        retryAfterSeconds: null,
+        receivedAt: agora,
+      })
+      expect(new ApiError('x', 409, 'c')).toMatchObject({ kind: 'http' })
     })
   })
 
@@ -463,6 +1081,7 @@ describe('client', () => {
 
       expect(error).toBeInstanceOf(ApiError)
       expect(error).toMatchObject({
+        kind: 'http',
         status,
         code,
         message: `O servidor respondeu ${String(status)}.`,
@@ -487,6 +1106,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'network',
         status: null,
         code: null,
         message: 'Não foi possível falar com o servidor.',
@@ -528,6 +1148,7 @@ describe('client', () => {
       stream.fail(new TypeError('network error'))
 
       expect(await failureOf(events.next())).toMatchObject({
+        kind: 'interrupted',
         status: 200,
         code: null,
         message: 'A resposta foi interrompida no caminho.',
@@ -543,6 +1164,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'format',
         status: 200,
         message: 'A resposta chegou num formato inesperado.',
       })
@@ -572,6 +1194,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'format',
         status: 200,
         message: 'A resposta chegou num formato inesperado.',
       })

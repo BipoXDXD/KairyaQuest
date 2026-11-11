@@ -25,7 +25,9 @@ from focusquest.core.database import get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
+    CampoDesconhecidoError,
     EstimativaForaDoLimite,
+    LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
     MissaoExpiradaError,
     MissaoNaoEncontradaError,
@@ -45,12 +47,15 @@ from focusquest.core.errors import (
 from focusquest.core.log import configurar_logging
 from focusquest.modules.evaluation.errors import AvaliacaoFalhouError
 from focusquest.modules.evaluation.router import router as evaluation_router
+from focusquest.modules.evaluation.rubric import rubricas
 from focusquest.modules.missions.cycle_router import router as cycle_router
 from focusquest.modules.missions.domain import FalhaDaAvaliacao, TransicaoIlegalError
 from focusquest.modules.missions.router import router as missions_router
 from focusquest.modules.progression.router import router as progression_router
 from focusquest.modules.tutoring import domain as tutoring_domain
+from focusquest.modules.tutoring.persona import personas
 from focusquest.modules.tutoring.router import router as tutoring_router
+from focusquest.modules.users.router import router as users_router
 
 _log = logging.getLogger(__name__)
 
@@ -74,7 +79,14 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
 
     A linha registrada diz o nivel, e so ele: nenhum outro campo da
     configuracao entra no log.
+
+    Antes de tudo, le e valida a persona e a rubrica de todo idioma: um
+    prompt ausente ou vazio e defeito de build e derruba a partida com
+    `PromptInvalidoError` nomeando o arquivo, em vez de falhar no turno do
+    estudante. Vem antes do log para nao deixar handler para tras.
     """
+    personas()
+    rubricas()
     raiz = logging.getLogger()
     app_logger = logging.getLogger("focusquest")
     handlers_de_antes = raiz.handlers[:]
@@ -98,6 +110,7 @@ app.include_router(cycle_router)
 app.include_router(progression_router)
 app.include_router(tutoring_router)
 app.include_router(evaluation_router)
+app.include_router(users_router)
 
 # O corpo dos DOIS caminhos de 404, escrito uma vez. Ele e o mesmo de
 # proposito: ver `_nao_pertence`.
@@ -132,6 +145,7 @@ class CodigoDeErro(StrEnum):
     OPERACAO_REUTILIZADA = "operacao_reutilizada"
     PROVEDOR_NAO_CONFIGURADO = "provedor_nao_configurado"
     MENSAGEM_EM_ANDAMENTO = "mensagem_em_andamento"
+    LIMITE_DIARIO_DA_TUTORIA = "limite_diario_da_tutoria"
     ACAO_NAO_ENCONTRADA = "acao_nao_encontrada"
     PRAZO_EXPIRADO = "prazo_expirado"
     PRAZO_DERIVADO = "prazo_derivado"
@@ -153,6 +167,7 @@ class CodigoDeErro(StrEnum):
     # saiu dos limites; o valor vem de la, e as duas pontas nao divergem.
     ESTIMATIVA_FORA_DO_LIMITE = tutoring_domain.ESTIMATIVA_FORA_DO_LIMITE
     PRAZO_FORA_DO_LIMITE = tutoring_domain.PRAZO_FORA_DO_LIMITE
+    CAMPO_DESCONHECIDO = "campo_desconhecido"
 
 
 @app.exception_handler(RequestValidationError)
@@ -287,6 +302,19 @@ def _em_andamento(request: Request, exc: MensagemEmAndamentoError) -> JSONRespon
     return _erro(status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.MENSAGEM_EM_ANDAMENTO)
 
 
+@app.exception_handler(LimiteDiarioDaTutoriaError)
+def _limite_diario(request: Request, exc: LimiteDiarioDaTutoriaError) -> JSONResponse:
+    """429 com `Retry-After`: o teto do dia acabou e volta a meia-noite de
+    Sao Paulo. A pergunta nao foi gravada; o cliente pode repeti-la depois."""
+    resposta = _erro(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        str(exc),
+        CodigoDeErro.LIMITE_DIARIO_DA_TUTORIA,
+    )
+    resposta.headers["Retry-After"] = str(exc.segundos_ate_liberar)
+    return resposta
+
+
 @app.exception_handler(AcaoNaoEncontradaError)
 def _acao_nao_encontrada(request: Request, exc: AcaoNaoEncontradaError) -> JSONResponse:
     """404 com corpo fixo, como a missao: o motivo verdadeiro (inexistente ou
@@ -394,6 +422,23 @@ def _avaliacao_em_andamento(
     """409: outra tentativa esta avaliando esta missao. O cliente espera."""
     return _erro(
         status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.AVALIACAO_EM_ANDAMENTO
+    )
+
+
+@app.exception_handler(CampoDesconhecidoError)
+def _campo_desconhecido(request: Request, exc: CampoDesconhecidoError) -> JSONResponse:
+    """400, e nao o 422 nativo: o corpo trouxe um campo que o contrato nao tem
+    (`id`, `role`, `display_name` no `PATCH /api/me`). A correcao do cliente e
+    tirar o campo, nao trocar o valor.
+
+    O corpo e fixo e nao nomeia o campo: o nome vem do cliente, e ecoa-lo
+    aqui traria de volta o risco de texto nao representavel em UTF-8 que o
+    handler do 422 trata com escapes.
+    """
+    return _erro(
+        status.HTTP_400_BAD_REQUEST,
+        "campo desconhecido no corpo",
+        CodigoDeErro.CAMPO_DESCONHECIDO,
     )
 
 

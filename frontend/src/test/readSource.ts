@@ -28,6 +28,16 @@ export function readSource(pathFromFrontend: string): string {
   return text
 }
 
+/** Diz se um caminho relativo a `frontend/` existe (arquivo ou pasta); serve a binários (woff2). */
+export function sourceExists(pathFromFrontend: string): boolean {
+  return existsSync(resolve(FRONTEND_ROOT, pathFromFrontend))
+}
+
+/** Tamanho em bytes de um arquivo relativo a `frontend/`; ausente é erro (ENOENT). */
+export function sourceSize(pathFromFrontend: string): number {
+  return statSync(resolve(FRONTEND_ROOT, pathFromFrontend)).size
+}
+
 /** Bytes de um arquivo relativo a `frontend/`, sem decodificar; vazio é erro. */
 export function readSourceBytes(pathFromFrontend: string): Uint8Array {
   const bytes = new Uint8Array(readFileSync(sourcePath(pathFromFrontend)))
@@ -43,16 +53,6 @@ export function readSourceBytes(pathFromFrontend: string): Uint8Array {
  */
 export function isSourceFile(pathFromFrontend: string): boolean {
   return statSync(sourcePath(pathFromFrontend), { throwIfNoEntry: false })?.isFile() ?? false
-}
-
-/** Diz se um arquivo relativo a `frontend/` existe; serve a binários (woff2). */
-export function sourceExists(pathFromFrontend: string): boolean {
-  return existsSync(resolve(FRONTEND_ROOT, pathFromFrontend))
-}
-
-/** Tamanho em bytes de um arquivo relativo a `frontend/`; ausente é erro (ENOENT). */
-export function sourceSize(pathFromFrontend: string): number {
-  return statSync(resolve(FRONTEND_ROOT, pathFromFrontend)).size
 }
 
 /** Caminhos relativos a `frontend/` que casam com o glob, em ordem estável. */

@@ -1,36 +1,81 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import { describePreStreamFailure, describeStreamFailure, UNKNOWN_RESULT } from './messageFailure'
+import { ptBR } from '../../shared/i18n/messages/pt-BR'
+import {
+  describePreStreamFailure,
+  describeStreamFailure,
+  PRE_STREAM_FAILURE_BY_CODE,
+  STREAM_FAILURE_BY_CODE,
+  UNKNOWN_RESULT,
+} from './messageFailure'
 
 describe('describePreStreamFailure', () => {
   it.each([
     [
       'provedor_nao_configurado',
       503,
-      'unavailable',
-      'A Kairya está fora do ar: falta configurar o provedor.',
+      {
+        message: 'tutoring.messageFailure.providerNotConfigured.message',
+        recovery: 'tutoring.messageFailure.providerNotConfigured.recovery',
+        action: 'unavailable',
+      },
     ],
     [
       'mensagem_em_andamento',
       409,
-      'retry',
-      'A Kairya ainda está respondendo a pergunta anterior. Espere um instante e tente de novo.',
+      {
+        message: 'tutoring.messageFailure.inProgress.message',
+        recovery: 'tutoring.messageFailure.inProgress.recovery',
+        action: 'retry',
+      },
     ],
     [
       'operacao_reutilizada',
       409,
-      'retry-with-new-id',
-      'Não foi possível registrar esta pergunta. Tente de novo.',
+      {
+        message: 'tutoring.messageFailure.reusedOperation.message',
+        recovery: 'tutoring.messageFailure.tryAgain',
+        action: 'retry-with-new-id',
+      },
     ],
-  ])('traduz %s', (code, status, recovery, message) => {
-    expect(describePreStreamFailure(new ApiError('x', status, code))).toEqual({ message, recovery })
+  ])('traduz %s', (code, status, esperado) => {
+    expect(describePreStreamFailure(new ApiError('x', status, code))).toEqual(esperado)
   })
+
+  it('o teto diario com Retry-After diz que a Kairya volta a meia-noite', () => {
+    const error = new ApiError('x', 429, 'limite_diario_da_tutoria', { retryAfterSeconds: 3600 })
+
+    expect(describePreStreamFailure(error)).toEqual({
+      message: 'tutoring.messageFailure.dailyLimit.message',
+      recovery: 'tutoring.messageFailure.dailyLimit.backAtMidnight',
+      action: 'daily-limit',
+    })
+  })
+
+  it('o teto diario sem Retry-After pede para voltar amanha', () => {
+    const error = new ApiError('x', 429, 'limite_diario_da_tutoria')
+
+    expect(describePreStreamFailure(error)).toEqual({
+      message: 'tutoring.messageFailure.dailyLimit.message',
+      recovery: 'tutoring.messageFailure.dailyLimit.backTomorrow',
+      action: 'daily-limit',
+    })
+  })
+
+  it.each(Object.entries(PRE_STREAM_FAILURE_BY_CODE))(
+    'as chaves de %s existem no catalogo',
+    (_code, failure) => {
+      expect(Object.hasOwn(ptBR, failure.message)).toBe(true)
+      expect(Object.hasOwn(ptBR, failure.recovery)).toBe(true)
+    },
+  )
 
   it('o 422 sem code pede para editar, e nao para repetir', () => {
     // Repetir o mesmo corpo daria o mesmo 422; so mudar o texto resolve.
     expect(describePreStreamFailure(new ApiError('x', 422, null))).toEqual({
-      message: 'A pergunta não foi aceita. Confira o texto e envie de novo.',
-      recovery: 'edit',
+      message: 'tutoring.messageFailure.rejectedBody.message',
+      recovery: 'tutoring.messageFailure.rejectedBody.recovery',
+      action: 'edit',
     })
   })
 
@@ -51,40 +96,50 @@ describe('describePreStreamFailure', () => {
 
   it('o resultado desconhecido diz que repetir e seguro', () => {
     expect(UNKNOWN_RESULT).toEqual({
-      message:
-        'Não deu para saber se a resposta chegou inteira. Tentar de novo é seguro: a pergunta não será duplicada.',
-      recovery: 'retry',
+      message: 'tutoring.messageFailure.unknownResult.message',
+      recovery: 'tutoring.messageFailure.safeRetry',
+      action: 'retry',
     })
   })
 })
 
 describe('describeStreamFailure', () => {
   it.each([
-    [
-      'provedor_indisponivel',
-      'A Kairya não conseguiu responder agora. Tentar de novo é seguro: a pergunta não será duplicada.',
-    ],
-    [
-      'tempo_esgotado',
-      'A resposta da Kairya demorou demais. Tentar de novo é seguro: a pergunta não será duplicada.',
-    ],
-    [
-      'proposta_invalida',
-      'A Kairya tentou propor uma missão que não passou na validação. Tente de novo ou peça de outro jeito.',
-    ],
+    ['provedor_indisponivel', 'tutoring.messageFailure.providerUnavailable.message'],
+    ['tempo_esgotado', 'tutoring.messageFailure.timeout.message'],
   ])('traduz %s, sempre com reenvio pelo mesmo id', (code, message) => {
-    expect(describeStreamFailure(code)).toEqual({ message, recovery: 'retry' })
+    expect(describeStreamFailure(code)).toEqual({
+      message,
+      recovery: 'tutoring.messageFailure.safeRetry',
+      action: 'retry',
+    })
+  })
+
+  it('a proposta invalida sugere pedir de outro jeito', () => {
+    expect(describeStreamFailure('proposta_invalida')).toEqual({
+      message: 'tutoring.messageFailure.invalidProposal.message',
+      recovery: 'tutoring.messageFailure.invalidProposal.recovery',
+      action: 'retry',
+    })
   })
 
   it('a recusa orienta a perguntar de outro jeito e descarta o parcial (pendencia 120)', () => {
     // A orientacao da API: o texto que veio antes da recusa nao e resposta.
     expect(describeStreamFailure('resposta_recusada')).toEqual({
-      message:
-        'A Kairya não pôde responder a esta pergunta. Tentar de novo tende a dar o mesmo resultado: pergunte de outro jeito.',
-      recovery: 'retry',
+      message: 'tutoring.messageFailure.refused.message',
+      recovery: 'tutoring.messageFailure.refused.recovery',
+      action: 'retry',
       discardsPartial: true,
     })
   })
+
+  it.each(Object.entries(STREAM_FAILURE_BY_CODE))(
+    'as chaves de %s existem no catalogo',
+    (_code, failure) => {
+      expect(Object.hasOwn(ptBR, failure.message)).toBe(true)
+      expect(Object.hasOwn(ptBR, failure.recovery)).toBe(true)
+    },
+  )
 
   it.each(['code_novo', 'constructor'])('%s cai no resultado desconhecido', (code) => {
     expect(describeStreamFailure(code)).toBe(UNKNOWN_RESULT)

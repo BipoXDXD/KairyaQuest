@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { en } from '../../shared/i18n/messages/en'
+import { renderWithI18n } from '../../test/i18n'
 import { EvidenceForm } from './EvidenceForm'
-import { COUNTER_VISIBLE_FROM } from './evidenceLimit'
+import { COUNTER_VISIBLE_FROM, MAX_EVIDENCE_LENGTH, MAX_LINK_LENGTH } from './evidenceLimit'
 import type { EvidenceDraft } from './types'
 
 const VAZIO: EvidenceDraft = { text: '', link: '' }
@@ -39,7 +41,7 @@ function abrir() {
 
 describe('EvidenceForm', () => {
   it('comeca recolhido: aria-expanded="false" e nenhum campo no documento', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
 
     const botao = screen.getByRole('button', { name: 'Entregar com evidência (opcional)' })
     expect(botao).toHaveAttribute('aria-expanded', 'false')
@@ -48,7 +50,7 @@ describe('EvidenceForm', () => {
   })
 
   it('clicar abre: aria-expanded="true", o texto e o link rotulados', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
 
     abrir()
 
@@ -65,7 +67,7 @@ describe('EvidenceForm', () => {
   })
 
   it('clicar de novo recolhe', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
 
     abrir()
     abrir()
@@ -77,7 +79,7 @@ describe('EvidenceForm', () => {
   })
 
   it('um rascunho que ja tem conteudo comeca aberto (o cartao remontou)', () => {
-    render(<Controlado inicial={{ text: 'Fiz a lista', link: '' }} />)
+    renderWithI18n(<Controlado inicial={{ text: 'Fiz a lista', link: '' }} />)
 
     expect(
       screen.getByRole('button', { name: 'Entregar com evidência (opcional)' }),
@@ -86,14 +88,14 @@ describe('EvidenceForm', () => {
   })
 
   it('um rascunho so com link tambem comeca aberto', () => {
-    render(<Controlado inicial={{ text: '', link: 'https://x.dev' }} />)
+    renderWithI18n(<Controlado inicial={{ text: '', link: 'https://x.dev' }} />)
 
     expect(screen.getByLabelText('Link (opcional)')).toHaveValue('https://x.dev')
   })
 
   it('digitar chama onChange com o rascunho inteiro', () => {
     const onChange = vi.fn()
-    render(<Controlado onChange={onChange} />)
+    renderWithI18n(<Controlado onChange={onChange} />)
     abrir()
 
     fireEvent.change(screen.getByLabelText('O que você fez'), {
@@ -111,7 +113,7 @@ describe('EvidenceForm', () => {
   })
 
   it('longe do limite nao mostra contador; perto dele, mostra e liga ao campo', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
     abrir()
     const texto = screen.getByLabelText('O que você fez')
     expect(screen.getByTestId('evidence-counter')).toBeEmptyDOMElement()
@@ -125,7 +127,7 @@ describe('EvidenceForm', () => {
   })
 
   it('digitando um link invalido, o erro NAO aparece nem e anunciado', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
 
@@ -139,7 +141,7 @@ describe('EvidenceForm', () => {
   })
 
   it('depois do primeiro blur, editar para valido apaga o erro e a proxima digitacao invalida nao o anuncia de novo', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
     fireEvent.change(link, { target: { value: 'x' } })
@@ -162,7 +164,7 @@ describe('EvidenceForm', () => {
   })
 
   it('sair do campo (blur) com link valido nao mostra erro', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
 
@@ -173,7 +175,7 @@ describe('EvidenceForm', () => {
   })
 
   it('link invalido mostra o erro com role="alert" ao SAIR do campo, ligado a ele', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
     abrir()
     const link = screen.getByLabelText('Link (opcional)')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -188,7 +190,7 @@ describe('EvidenceForm', () => {
   })
 
   it('link valido nao mostra erro nem marca o campo como invalido', () => {
-    render(<Controlado inicial={{ text: 'x', link: 'HTTPS://x.dev' }} />)
+    renderWithI18n(<Controlado inicial={{ text: 'x', link: 'HTTPS://x.dev' }} />)
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Link (opcional)')).not.toHaveAttribute('aria-invalid')
@@ -196,7 +198,7 @@ describe('EvidenceForm', () => {
   })
 
   it('so com link, avisa que falta contar o que foi feito', () => {
-    render(<Controlado inicial={{ text: '  ', link: 'https://x.dev' }} />)
+    renderWithI18n(<Controlado inicial={{ text: '  ', link: 'https://x.dev' }} />)
 
     const aviso = screen.getByTestId('evidence-text-missing')
     expect(aviso).toHaveTextContent('Para entregar o link, conte também o que você fez.')
@@ -207,7 +209,7 @@ describe('EvidenceForm', () => {
   })
 
   it('o toggle mantem o nome exato e ganha a missao como descricao (describedBy)', () => {
-    render(
+    renderWithI18n(
       <>
         <h3 id="titulo-7">Ler o capitulo 3</h3>
         <EvidenceForm
@@ -225,7 +227,7 @@ describe('EvidenceForm', () => {
   })
 
   it('sem describedBy, o toggle nao tem descricao', () => {
-    render(<Controlado />)
+    renderWithI18n(<Controlado />)
 
     expect(
       screen.getByRole('button', { name: 'Entregar com evidência (opcional)' }),
@@ -233,20 +235,20 @@ describe('EvidenceForm', () => {
   })
 
   it('com texto, nao mostra o aviso de texto faltando', () => {
-    render(<Controlado inicial={{ text: 'Fiz', link: 'https://x.dev' }} />)
+    renderWithI18n(<Controlado inicial={{ text: 'Fiz', link: 'https://x.dev' }} />)
 
     expect(screen.queryByTestId('evidence-text-missing')).not.toBeInTheDocument()
   })
 
   it('disabled desabilita os dois campos', () => {
-    render(<Controlado inicial={{ text: 'Fiz', link: '' }} disabled />)
+    renderWithI18n(<Controlado inicial={{ text: 'Fiz', link: '' }} disabled />)
 
     expect(screen.getByLabelText('O que você fez')).toBeDisabled()
     expect(screen.getByLabelText('Link (opcional)')).toBeDisabled()
   })
 
   it('com retry pendente, os campos ficam SOMENTE LEITURA (focaveis) e o aviso os descreve', () => {
-    render(<Controlado inicial={{ text: 'Feito', link: '' }} retryPending />)
+    renderWithI18n(<Controlado inicial={{ text: 'Feito', link: '' }} retryPending />)
 
     const aviso = screen.getByTestId('evidence-retry-notice')
     expect(aviso).toHaveTextContent(
@@ -266,12 +268,63 @@ describe('EvidenceForm', () => {
   })
 
   it('sem retry pendente, nao ha aviso e os campos editam', () => {
-    render(<Controlado inicial={{ text: 'Feito', link: '' }} />)
+    renderWithI18n(<Controlado inicial={{ text: 'Feito', link: '' }} />)
 
     expect(screen.queryByTestId('evidence-retry-notice')).not.toBeInTheDocument()
     expect(screen.getByLabelText('O que você fez')).toBeEnabled()
     expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('readonly')
     expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-readonly')
     expect(screen.getByLabelText('O que você fez')).not.toHaveAttribute('aria-describedby')
+  })
+
+  it.each([
+    ['resta 1', MAX_EVIDENCE_LENGTH - 1, 'Resta 1 caractere.'],
+    ['restam N', COUNTER_VISIBLE_FROM + 1, 'Restam 399 caracteres.'],
+    ['restam 0', MAX_EVIDENCE_LENGTH, 'Restam 0 caracteres.'],
+    ['passou 1', MAX_EVIDENCE_LENGTH + 1, 'Passou 1 caractere do limite de 4000.'],
+    ['passou N', MAX_EVIDENCE_LENGTH + 3, 'Passou 3 caracteres do limite de 4000.'],
+  ])('o contador em pt-BR: %s', (_nome, tamanho, esperado) => {
+    renderWithI18n(<Controlado inicial={{ text: 'a'.repeat(tamanho), link: '' }} />)
+
+    expect(screen.getByTestId('evidence-counter')).toHaveTextContent(esperado)
+  })
+
+  it('link acima do limite mostra o erro de tamanho ao sair do campo', () => {
+    renderWithI18n(<Controlado />)
+    abrir()
+    const link = screen.getByLabelText('Link (opcional)')
+
+    fireEvent.change(link, { target: { value: `https://x.dev/${'a'.repeat(MAX_LINK_LENGTH)}` } })
+    fireEvent.blur(link)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('O link passa de 2000 caracteres.')
+  })
+
+  it('em en, rotulos, contador e erro do link saem do catalogo ingles', () => {
+    renderWithI18n(
+      <Controlado inicial={{ text: 'a'.repeat(MAX_EVIDENCE_LENGTH + 2), link: '' }} />,
+      {
+        locale: 'en',
+      },
+    )
+    expect(screen.getByRole('button', { name: en['missions.evidence.toggle'] })).toBeInTheDocument()
+    expect(screen.getByTestId('evidence-counter')).toHaveTextContent(
+      '2 characters over the 4000 limit.',
+    )
+    const link = screen.getByLabelText(en['missions.evidence.linkLabel'])
+
+    fireEvent.change(link, { target: { value: 'x' } })
+    fireEvent.blur(link)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(en['missions.evidence.linkError.format'])
+    expect(screen.getByLabelText(en['missions.evidence.textLabel'])).toBeInTheDocument()
+  })
+
+  it('em en, o contador no limite exato diz que nao resta nada', () => {
+    renderWithI18n(<Controlado inicial={{ text: 'a'.repeat(MAX_EVIDENCE_LENGTH), link: '' }} />, {
+      locale: 'en',
+    })
+
+    expect(screen.getByTestId('evidence-counter')).toHaveTextContent('No characters left.')
   })
 })

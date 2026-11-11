@@ -1,6 +1,8 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
+import { caixasSeSobrepoem } from './caixas'
+import { diaEMes, diasEntre, segundaDaSemana, somarDias } from './datas'
 import { API_URL } from './servers'
 
 /**
@@ -23,42 +25,6 @@ const EXECUCAO = randomUUID().slice(0, 8)
 
 interface CicloDaApi {
   today: string
-}
-
-/** A segunda-feira da semana de uma data civil, em aritmetica UTC pura. */
-function segundaDe(civil: string): string {
-  const dia = new Date(`${civil}T12:00:00Z`)
-  dia.setUTCDate(dia.getUTCDate() - ((dia.getUTCDay() + 6) % 7))
-  return dia.toISOString().slice(0, 10)
-}
-
-/** "23/09", escrito por extenso: o E2E nao importa o formatador da aplicacao. */
-function diaMes(civil: string): string {
-  return `${civil.slice(8, 10)}/${civil.slice(5, 7)}`
-}
-
-/** Uma data civil deslocada `deslocamento` dias, em aritmetica UTC pura. */
-function diaCivil(civil: string, deslocamento: number): string {
-  const dia = new Date(`${civil}T12:00:00Z`)
-  dia.setUTCDate(dia.getUTCDate() + deslocamento)
-  return dia.toISOString().slice(0, 10)
-}
-
-/**
- * Se duas caixas de `boundingBox()` se sobrepoem. Uma caixa NULA reprova: e
- * o elemento sem caixa (oculto ou fora do layout), e tratar isso como "sem
- * sobreposicao" deixaria passar um botao escondido.
- */
-function caixasSeSobrepoem(
-  a: { x: number; y: number; width: number; height: number } | null,
-  b: { x: number; y: number; width: number; height: number } | null,
-): boolean {
-  expect(a, 'boundingBox() nulo: o elemento nao tem caixa').not.toBeNull()
-  expect(b, 'boundingBox() nulo: o elemento nao tem caixa').not.toBeNull()
-  // Os `expect` acima ja reprovaram se alguma for nula; isto so estreita o
-  // tipo (e, por seguranca, responde "sobrepoe", nunca "passa").
-  if (a === null || b === null) return true
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 /**
@@ -111,7 +77,7 @@ test.beforeAll(async ({ playwright }) => {
   hoje = ciclo.today
   const resposta = await api.post('/api/plans', {
     data: {
-      week_start: segundaDe(hoje),
+      week_start: segundaDaSemana(hoje),
       days: DIAS,
       bonus: {
         instructions: `Especial (e2e ${EXECUCAO})`,
@@ -121,7 +87,7 @@ test.beforeAll(async ({ playwright }) => {
     },
   })
   expect(resposta.status()).toBe(201)
-  missaoDeHoje = DIAS[(new Date(`${hoje}T12:00:00Z`).getUTCDay() + 6) % 7]!.instructions
+  missaoDeHoje = DIAS[diasEntre(segundaDaSemana(hoje), hoje)]!.instructions
   await api.dispose()
 })
 
@@ -137,7 +103,7 @@ test('a missao de hoje do plano semeado aparece com a data civil da API, e passa
 }) => {
   const ciclo = await abrirCiclo(page)
 
-  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaMes(hoje))
+  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaEMes(hoje))
   // O plano foi criado hoje: os dias anteriores estao fora do plano, e a
   // sequencia comeca do zero.
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/0 de 7/)
@@ -228,7 +194,7 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
     'veteran_10',
     'veteran_50',
     'veteran_100',
-    'tifa_partnership',
+    'kairya_partnership',
   ])
 
   const primeirosPassos = painel.locator(
@@ -285,9 +251,9 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
 
   // Os dias depois de hoje, dentro da mesma semana: bau fechado, "revelada
   // no dia" -- nunca a missao (B3/C11 da spec do ciclo).
-  const segunda = segundaDe(hoje)
+  const segunda = segundaDaSemana(hoje)
   for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
-    const dia = diaCivil(segunda, deslocamento)
+    const dia = somarDias(segunda, deslocamento)
     if (dia > hoje) {
       const item = campanhas.locator(`[data-testid="trail-day"][data-day="${dia}"]`)
       await expect(item.getByTestId('trail-chest')).toContainText('revelada no dia')

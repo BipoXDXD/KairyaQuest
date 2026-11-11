@@ -44,6 +44,19 @@ class MensagemEmAndamentoError(DomainError):
     """
 
 
+class LimiteDiarioDaTutoriaError(DomainError):
+    """O estudante ja fez hoje todos os turnos que o teto diario permite.
+
+    O teto e guarda de orcamento da API, nao regra do produto. Carrega quantos
+    segundos faltam ate a meia-noite de Sao Paulo, quando a contagem zera: e o
+    `Retry-After` da resposta.
+    """
+
+    def __init__(self, segundos_ate_liberar: int) -> None:
+        super().__init__("o limite de conversas de hoje acabou")
+        self.segundos_ate_liberar = segundos_ate_liberar
+
+
 class AcaoNaoEncontradaError(DomainError):
     """Nao existe acao da tutoria com o identificador pedido -- ou ela e de
     outro usuario.
@@ -149,4 +162,13 @@ class PrazoForaDoLimite(DomainError):
     Na criacao pela tela cobre o passado e o longe demais; na confirmacao da
     Kairya e no reagendamento, so o longe demais (o passado e
     `PrazoExpiradoError`, F9).
+    """
+
+
+class CampoDesconhecidoError(DomainError):
+    """O corpo trouxe um campo que o contrato nao tem.
+
+    Separado do 422 de valor invalido porque a correcao do cliente e outra:
+    tirar o campo, e nao mudar o valor. Hoje so `/api/me` o levanta, pela
+    `RotaQueRecusaCampoExtra` de `users/router.py`.
     """

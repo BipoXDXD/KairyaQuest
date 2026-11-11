@@ -30,6 +30,7 @@ from urllib.parse import urlsplit
 import anthropic
 
 from focusquest.core.config import Settings
+from focusquest.core.idioma import Idioma
 from focusquest.modules.progression.domain import CATALOGO, FaixaDoNivel
 from focusquest.modules.progression.service import ConquistaNoPainel, Progresso
 from focusquest.modules.tutoring.anthropic_provider import (
@@ -38,7 +39,7 @@ from focusquest.modules.tutoring.anthropic_provider import (
 )
 from focusquest.modules.tutoring.context import montar_turno
 from focusquest.modules.tutoring.domain import TipoDeAcao
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 
 # O quadro de progresso vazio (D15), pelo mesmo motivo do quadro de missoes
 # vazio abaixo: a camada 3 so compara a SEQUENCIA de tipos de evento, e nao o
@@ -94,19 +95,25 @@ def comparavel(tipos: Sequence[str]) -> list[str]:
     return [t for t in tipos if t not in DESCARTADOS_PELO_SDK]
 
 
+def _sistema_completo(agora: datetime) -> str:
+    """A persona e o contexto num texto so, como esta captura sempre mandou."""
+    turno = montar_turno(
+        persona=persona_do_idioma(Idioma.PT_BR),
+        agora=agora,
+        pendentes=[],
+        progresso=_SEM_PROGRESSO,
+        historico=[],
+    )
+    return f"{turno.sistema}\n\n{turno.contexto}"
+
+
 def capturar(
     cliente: anthropic.Anthropic, *, modelo: str, max_tokens: int, agora: datetime
 ) -> list[str]:
     with cliente.messages.with_streaming_response.create(
         model=modelo,
         max_tokens=max_tokens,
-        system=montar_turno(
-            persona=PERSONA,
-            agora=agora,
-            pendentes=[],
-            progresso=_SEM_PROGRESSO,
-            historico=[],
-        ).sistema,
+        system=_sistema_completo(agora),
         messages=[{"role": "user", "content": _PEDIDO}],
         tools=[
             {

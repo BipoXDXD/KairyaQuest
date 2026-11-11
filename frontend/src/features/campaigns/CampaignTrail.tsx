@@ -9,6 +9,9 @@ import {
 import { AVAILABILITY_DISPLAY } from './availability'
 import type { Plan, PlanDay, PlanSpecial } from './types'
 import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * O TOM (cor da borda e do texto) de cada disponibilidade -- so apresentacao,
@@ -46,6 +49,7 @@ function Icon({ d, name, className }: { d: string; name: string; className: stri
 }
 
 function AvailabilityBadge({ availability }: { availability: Availability }) {
+  const t = useT()
   const { label, icon } = AVAILABILITY_DISPLAY[availability]
   const tone = AVAILABILITY_TONE[availability]
   return (
@@ -54,7 +58,7 @@ function AvailabilityBadge({ availability }: { availability: Availability }) {
       className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${tone}`}
     >
       <Icon d={icon} name={availability} className="h-3.5 w-3.5" />
-      <span>{label}</span>
+      <span>{t(label)}</span>
     </span>
   )
 }
@@ -74,27 +78,33 @@ function Chest({ children }: { children: string }) {
 
 /** O conteudo de uma missao ja revelada. So leitura: a trilha nao conclui. */
 function MissionContent({ mission }: { mission: Mission }) {
+  const t = useT()
   return (
     <div data-testid="trail-mission" className="mt-2 min-w-0 wrap-anywhere">
       <p className="text-sm font-semibold text-slate-100">{mission.instructions}</p>
       <p className="mt-1 text-sm text-slate-300">
-        <span className="text-slate-400">Critério de conclusão: </span>
+        <span className="text-slate-400">{t('campaigns.mission.criterion')}</span>{' '}
         {mission.completion_criterion}
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-300 sm:grid-cols-3">
         <div>
-          <dt className="text-slate-400">Dificuldade</dt>
+          <dt className="text-slate-400">{t('campaigns.mission.difficulty')}</dt>
           <dd data-testid="trail-difficulty">
-            {mission.difficulty} de {MAX_DIFFICULTY}
+            {t('campaigns.mission.difficultyValue', {
+              difficulty: mission.difficulty,
+              max: MAX_DIFFICULTY,
+            })}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-400">Estimativa</dt>
-          <dd data-testid="trail-estimated-minutes">{mission.estimated_minutes} min</dd>
+          <dt className="text-slate-400">{t('campaigns.mission.estimate')}</dt>
+          <dd data-testid="trail-estimated-minutes">
+            {t('campaigns.mission.minutes', { minutes: mission.estimated_minutes })}
+          </dd>
         </div>
         <div>
-          <dt className="text-slate-400">Recompensa</dt>
-          <dd data-testid="trail-xp">{mission.xp} XP</dd>
+          <dt className="text-slate-400">{t('campaigns.mission.reward')}</dt>
+          <dd data-testid="trail-xp">{t('campaigns.mission.xp', { xp: mission.xp })}</dd>
         </div>
       </dl>
     </div>
@@ -114,10 +124,11 @@ function HeadquartersHint({
   mission: Mission
   onOpenHeadquarters?: () => void
 }) {
+  const t = useT()
   if (onOpenHeadquarters === undefined) {
     return (
       <p data-testid="trail-go-headquarters" className="mt-3 text-sm text-sky-200">
-        Conclua esta missão no Quartel-General.
+        {t('campaigns.headquarters.hint')}
       </p>
     )
   }
@@ -128,7 +139,10 @@ function HeadquartersHint({
       onClick={onOpenHeadquarters}
       className="mt-3 rounded border border-sky-400/60 px-3 py-1 text-sm font-medium text-sky-100 hover:bg-sky-900/40 focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:outline-none"
     >
-      Ir ao Quartel-General <span className="sr-only">para concluir: {mission.instructions}</span>
+      {t('campaigns.headquarters.go')}{' '}
+      <span className="sr-only">
+        {t('campaigns.headquarters.which', { instructions: mission.instructions })}
+      </span>
     </button>
   )
 }
@@ -146,6 +160,8 @@ function TrailDay({
   isToday: boolean
   onOpenHeadquarters?: () => void
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   return (
     <li
       data-testid="trail-day"
@@ -155,7 +171,7 @@ function TrailDay({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-slate-100">
-          <time dateTime={day.day}>{formatCivilDate(day.day)}</time>
+          <time dateTime={day.day}>{formatCivilDate(day.day, locale)}</time>
           {isToday && (
             <>
               {' '}
@@ -163,7 +179,7 @@ function TrailDay({
                 data-testid="trail-today"
                 className="ml-1 rounded bg-emerald-900/60 px-1.5 py-0.5 text-xs font-medium text-emerald-200"
               >
-                Hoje
+                {t('campaigns.trail.today')}
               </span>
             </>
           )}
@@ -171,7 +187,7 @@ function TrailDay({
         <AvailabilityBadge availability={day.availability} />
       </div>
       {day.mission === null ? (
-        <Chest>{`Missão de ${civilWeekday(day.day)} — revelada no dia`}</Chest>
+        <Chest>{t('campaigns.trail.dayChest', { weekday: civilWeekday(day.day, locale) })}</Chest>
       ) : (
         <>
           <MissionContent mission={day.mission} />
@@ -197,6 +213,7 @@ function TrailSpecial({
   special: PlanSpecial
   onOpenHeadquarters?: () => void
 }) {
+  const t = useT()
   return (
     <section
       aria-labelledby="trail-special-heading"
@@ -205,15 +222,18 @@ function TrailSpecial({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 id="trail-special-heading" className="text-base font-semibold text-emerald-200">
-          Missão especial — bônus da sequência
+          {t('campaigns.trail.special.title')}
         </h3>
         <AvailabilityBadge availability={special.availability} />
       </div>
       {special.mission === null ? (
         <>
-          <Chest>{`Missão especial — revelada ao completar ${String(DAYS_PER_MILESTONE)} dias seguidos`}</Chest>
+          <Chest>{t('campaigns.trail.special.chest', { days: DAYS_PER_MILESTONE })}</Chest>
           <p data-testid="trail-special-progress" className="mt-2 text-sm text-slate-300">
-            Progresso até a especial: {special.progress} de {DAYS_PER_MILESTONE}
+            {t('campaigns.trail.special.progress', {
+              progress: special.progress,
+              total: DAYS_PER_MILESTONE,
+            })}
           </p>
         </>
       ) : (
@@ -239,15 +259,17 @@ function TrailLoaded({
   reload: () => void
   onOpenHeadquarters?: () => void
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   // Hoje e o ULTIMO dia revelado: a API revela hoje e os anteriores e manda
   // os futuros como bau (B3), e o plano corrente e sempre o da semana de hoje.
   const todayIndex = plan.days.findLastIndex((day) => day.mission !== null)
   return (
     <div>
       <p data-testid="trail-week" className="mb-3 text-sm text-slate-400">
-        Semana de {formatCivilDate(plan.week_start)}.
+        {t('campaigns.trail.week', { date: formatCivilDate(plan.week_start, locale) })}
       </p>
-      <ol role="list" aria-label="Dias da semana" className="flex flex-col gap-3">
+      <ol role="list" aria-label={t('campaigns.trail.days')} className="flex flex-col gap-3">
         {plan.days.map((day, index) => (
           <TrailDay
             key={day.day}
@@ -260,14 +282,14 @@ function TrailLoaded({
       <TrailSpecial special={plan.special} onOpenHeadquarters={onOpenHeadquarters} />
       {refreshFailed && (
         <div role="alert" data-testid="trail-stale" className="mt-4 text-sm text-amber-200">
-          <p>Não foi possível atualizar a trilha.</p>
+          <p>{t('campaigns.trail.refreshFailed')}</p>
           <button
             type="button"
             data-testid="trail-refresh"
             onClick={reload}
             className="mt-2 rounded border border-amber-300/60 px-3 py-1 font-medium text-amber-100 hover:bg-amber-900/40 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
           >
-            Atualizar
+            {t('campaigns.trail.refresh')}
           </button>
         </div>
       )}
@@ -294,11 +316,12 @@ function TrailContent({
   reload: () => void
   onOpenHeadquarters?: () => void
 }): ReactElement {
+  const t = useT()
   switch (state.status) {
     case 'loading':
       return (
         <p role="status" data-testid="trail-loading" className="text-sm text-slate-400">
-          Consultando a trilha…
+          {t('campaigns.trail.loading')}
         </p>
       )
     case 'error':
@@ -308,23 +331,27 @@ function TrailContent({
           data-testid="trail-error"
           className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
         >
-          <p className="font-semibold">Falha ao carregar a trilha.</p>
-          <p className="mt-1">{state.message}</p>
+          <p className="font-semibold">{t('campaigns.trail.loadFailed')}</p>
+          <p className="mt-1">
+            <LoadFailureMessage
+              failure={state.failure}
+              unexpected="campaigns.trail.unexpectedFailure"
+            />
+          </p>
           <button
             type="button"
             data-testid="trail-retry"
             onClick={reload}
             className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
           >
-            Tentar novamente
+            {t('campaigns.trail.retry')}
           </button>
         </div>
       )
     case 'no-plan':
       return (
         <p data-testid="trail-no-plan" className="text-sm text-slate-300">
-          Sem plano nesta semana. Um dia sem plano não quebra a sequência, e a trilha volta a
-          mostrar os dias assim que houver um plano para a semana atual.
+          {t('campaigns.trail.noPlan')}
         </p>
       )
     case 'loaded':
@@ -365,11 +392,12 @@ export function CampaignTrail({
 }: {
   onOpenHeadquarters?: () => void
 } = {}) {
+  const t = useT()
   const { state, reload } = useCurrentPlan()
   return (
     <section aria-labelledby="campaign-trail-heading" data-testid="campaign-trail">
       <h2 id="campaign-trail-heading" className="mb-3 text-lg font-semibold text-slate-200">
-        Trilha da semana
+        {t('campaigns.trail.title')}
       </h2>
       <TrailContent state={state} reload={reload} onOpenHeadquarters={onOpenHeadquarters} />
     </section>

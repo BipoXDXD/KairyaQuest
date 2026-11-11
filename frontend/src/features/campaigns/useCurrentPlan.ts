@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { CurrentPlan, Plan } from './types'
 
@@ -15,7 +16,7 @@ import type { CurrentPlan, Plan } from './types'
  */
 export type CurrentPlanState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'no-plan' }
   | { status: 'loaded'; plan: Plan; refreshFailed: boolean }
 
@@ -29,15 +30,6 @@ export interface UseCurrentPlanResult {
    * a ficar visivel, ou a janela que recebe foco, chama este `refresh`.
    */
   refresh: () => void
-}
-
-/**
- * O `ApiError` ja traz prosa em pt-BR escrita pelo cliente HTTP (nunca o
- * `detail`). A leitura da trilha nao tem erro de dominio com `code`: o que
- * chega aqui e rede ou servidor, e qualquer outra coisa e defeito nosso.
- */
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar a trilha.'
 }
 
 /**
@@ -89,7 +81,7 @@ export function useCurrentPlan(): UseCurrentPlanResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: loadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -122,7 +114,7 @@ export function useCurrentPlan(): UseCurrentPlanResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', message: messageFor(error) }
+              ? { status: 'error', failure: loadFailureFor(error) }
               : atual,
         )
       })

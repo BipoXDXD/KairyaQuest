@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { Progress } from './types'
 
@@ -13,7 +14,7 @@ import type { Progress } from './types'
  */
 export type ProgressState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: LoadFailure }
   | { status: 'loaded'; progress: Progress; refreshFailed: boolean }
 
 export interface UseProgressResult {
@@ -25,10 +26,6 @@ export interface UseProgressResult {
    * uma conclusao, para o progresso mudar sem desmontar o painel.
    */
   refresh: () => void
-}
-
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar o progresso.'
 }
 
 export function useProgress(): UseProgressResult {
@@ -77,7 +74,7 @@ export function useProgress(): UseProgressResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: loadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -108,7 +105,7 @@ export function useProgress(): UseProgressResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', message: messageFor(error) }
+              ? { status: 'error', failure: loadFailureFor(error) }
               : atual,
         )
       })
