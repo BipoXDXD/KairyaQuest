@@ -2,6 +2,7 @@ import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
+import { instanteRelativo, isoUtc } from './datas'
 import { definirRoteiro, liberar, reiniciar, requisicoes } from './falso'
 import { API_URL } from './servers'
 
@@ -295,7 +296,8 @@ test('(d) indisponivel: o texto da spec, o campo desabilitado e o quadro funcion
         completion_criterion: `Conferida (e2e ${EXECUCAO})`,
         difficulty: 1,
         estimated_minutes: 15,
-        deadline: '2027-04-01T12:00:00Z',
+        // Relativo a hoje (pendencia 207): a API real recusa prazo vencido.
+        deadline: isoUtc(instanteRelativo(142, 9)),
       },
     })
   ).json()) as { id: number }
@@ -460,7 +462,7 @@ for (const decision of ['executada', 'recusada', 'falhou'] as const) {
       reply_to_id: role === 'tutor' ? id - 1 : null,
       error_code: null,
       fallback_model: null,
-      created_at: '2026-10-04T12:00:00Z',
+      created_at: isoUtc(instanteRelativo(-1, 9)),
       actions: [],
     })
     const initial = [
