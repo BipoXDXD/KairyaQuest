@@ -27,7 +27,7 @@ export const test = base.extend({
             window.localStorage.setItem(chave, dia)
           }
         } catch {
-          // Sem localStorage nao ha o que pre-gravar; a saudacao sai e o spec que se vire.
+          // Sem localStorage nao ha o que pre-gravar: a saudacao aparece e o spec falha com mensagem clara.
         }
       },
       { chave: CHAVE_DA_SAUDACAO, dia: diaCivil(new Date()) },
