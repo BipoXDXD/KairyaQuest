@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { ActionErrorCode, ActionRead } from './types'
 
@@ -17,9 +18,12 @@ import type { ActionErrorCode, ActionRead } from './types'
  *   foi concluida, o prazo ja e o proposto); o backend GRAVOU a acao como
  *   `falhou`/`reagendamento_invalido` antes do 409 (F17), e o cartao passa a
  *   esse estado, como no `expired`.
+ * - `out-of-bounds`: a proposta saiu dos limites da avulsa (estimativa fora de
+ *   1 a 1440 minutos, prazo alem de 365 dias; pendencia 26); o backend GRAVOU
+ *   a acao como `falhou` com esse code antes do 422, como no `expired`.
  */
 export type DecisionAction =
-  'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated'
+  'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated' | 'out-of-bounds'
 
 /** O texto (chaves do catalogo) e a acao que decide o cartao. */
 export type ActionFailure = FailureText & { action: DecisionAction }
@@ -51,6 +55,29 @@ export const ACTION_FAILURE_BY_CODE: Readonly<Record<ActionErrorCode, ActionFail
     recovery: 'tutoring.actionFailure.askNewProposal',
     action: 'invalidated',
   },
+  estimativa_fora_do_limite: {
+    message: 'tutoring.actionFailure.estimateOutOfBounds.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'out-of-bounds',
+  },
+  prazo_fora_do_limite: {
+    message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'out-of-bounds',
+  },
+}
+
+/**
+ * Se o backend GRAVOU a acao como `falhou` antes de responder, por saida.
+ * Exaustivo: uma saida nova reprova o `tsc` ate dizer se grava.
+ */
+const RECORDS: Record<DecisionAction, boolean> = {
+  retry: false,
+  'retry-with-new-operation': false,
+  refresh: false,
+  expired: true,
+  invalidated: true,
+  'out-of-bounds': true,
 }
 
 /**
@@ -82,10 +109,23 @@ function isActionErrorCode(code: string): code is ActionErrorCode {
 }
 
 /**
+ * O `error_code` que o backend GRAVOU na acao antes de responder com este
+ * erro, ou `null` se a acao nao mudou. A tela espelha a acao gravada sem outra
+ * ida a rede.
+ */
+export function recordedErrorCode(error: unknown): ActionErrorCode | null {
+  if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
+    return RECORDS[ACTION_FAILURE_BY_CODE[error.code].action] ? error.code : null
+  }
+  return null
+}
+
+/**
  * O texto e a acao do cartao, decididos pelo `code` e so por ele. O `kind`
  * so escolhe o texto do "confirmar sem resposta", e e OBRIGATORIO: um padrao
  * esconderia do `tsc` o chamador que esquecesse o `kind` de um reagendamento,
- * e ele diria "a missao nao sera criada duas vezes".
+ * e ele diria "a missao nao sera criada duas vezes". Sem `code`, a abertura diz
+ * a causa quando ela e de transporte (`leadFor`).
  */
 export function describeActionFailure(
   error: unknown,
@@ -95,7 +135,8 @@ export function describeActionFailure(
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return ACTION_FAILURE_BY_CODE[error.code]
   }
-  return attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  const unconfirmed = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  return { ...unconfirmed, message: leadFor(error, unconfirmed.message) }
 }
 
 const FAILED_TEXT: FailureText = {
@@ -105,8 +146,8 @@ const FAILED_TEXT: FailureText = {
 
 /**
  * O texto de uma acao que o backend gravou como `falhou`, pelo `error_code`
- * gravado. So os codes que o backend GRAVA na acao (`expired`, `invalidated`)
- * tem texto proprio -- o mesmo do aviso da confirmacao, para a tela dizer a
+ * gravado. So os codes que o backend GRAVA na acao (`expired`, `invalidated`,
+ * `out-of-bounds`) tem texto proprio -- o mesmo do aviso da confirmacao, para a tela dizer a
  * mesma coisa antes e depois de uma recarga. Qualquer outro cai no generico, e
  * o code cru nunca vai para a tela.
  */
@@ -115,5 +156,5 @@ export function failedActionText(errorCode: string | null): FailureText {
     return FAILED_TEXT
   }
   const { message, recovery, action } = ACTION_FAILURE_BY_CODE[errorCode]
-  return action === 'expired' || action === 'invalidated' ? { message, recovery } : FAILED_TEXT
+  return RECORDS[action] ? { message, recovery } : FAILED_TEXT
 }

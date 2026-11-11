@@ -79,9 +79,12 @@ make check
 ```
 
 O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
-`main`), escreve o `.env` a partir do do principal com um banco de teste
-próprio (`focusquest_<nome>_test`) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre, e
-roda `make bootstrap`. O banco nasce sozinho no primeiro uso. Os hooks já
+`main`), gera o `.env` a partir do `.env.example` da `main` com um banco de
+teste próprio (`focusquest_<nome>_test`, no servidor e com a credencial e as
+opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre,
+e roda `make bootstrap`. Do `.env` do principal só a URL do banco de teste é
+lida: as chaves de segredo (`FOCUSQUEST_ANTHROPIC_API_KEY` e afins) nascem em
+branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
 PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
 container (seção 6). O nome `push` é **reservado** (o banco dele seria o
@@ -250,9 +253,10 @@ contagens) e o código de saída.
 - **Fora:** `tests/` (os próprios testes) e `alembic/` (as migrações e o
   `env.py`). `alembic/` não fica sem verificação: o Ruff e o mypy estrito o
   cobrem, e os testes de integração aplicam a migração, fazem o downgrade e
-  a aplicam de novo. O que fica sem exercício é o caminho
-  `run_migrations_offline()` do `alembic/env.py`, que o projeto não usa
-  (registrado em `docs/HANDOFF.md`).
+  a aplicam de novo. O caminho `run_migrations_offline()` é exercitado por
+  `tests/integration/test_migracoes_offline.py`, nas faixas sem leitura de
+  dados; a 0004 e as guardas de downgrade 0003/0005/0006 ficam fora
+  (`docs/HANDOFF.md`, 9/10).
 
 Esta lista segue o README §9: "Declare o denominador: testes, dependências,
 arquivos gerados, CSS e configuração de ferramentas não são código de

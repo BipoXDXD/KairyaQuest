@@ -97,6 +97,7 @@ export type RescheduleErrorCode =
   | 'prazo_expirado'
   | 'prazo_inalterado'
   | 'prazo_derivado'
+  | 'prazo_fora_do_limite'
 
 /**
  * O rascunho do reagendamento, como o formulario o entrega ao hook: a hora
@@ -108,4 +109,17 @@ export interface RescheduleDraft {
   civil: string
   reason: RescheduleReason | null
   originalDeadline?: string
+}
+
+/**
+ * O reagendamento aberto num cartao, guardado por missao no registro de
+ * conclusoes (pendencia 112): o prazo da missao quando o disclosure abriu, o
+ * instante em que abriu (a janela do prazo parte dele) e o rascunho. Mora no
+ * registro, e nao no formulario, pelo mesmo motivo do rascunho da evidencia: o
+ * reload remonta os cartoes.
+ */
+export interface OpenReschedule {
+  openedFor: string
+  openedAtMs: number
+  draft: RescheduleDraft
 }

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
-import { describeActionFailure, type ActionFailure, type DecisionAction } from './actionFailure'
-import type { ActionErrorCode, ActionRead, ConfirmRead, RejectRead } from './types'
+import { describeActionFailure, recordedErrorCode, type ActionFailure } from './actionFailure'
+import type { ActionRead, ConfirmRead, RejectRead } from './types'
 import type { ActionKeys } from './useActionKeys'
 
 export type DecisionState =
@@ -11,19 +11,6 @@ export type DecisionState =
   | { status: 'failed'; failure: ActionFailure; attempted: 'confirm' | 'reject' }
 
 /**
- * O `error_code` que o backend GRAVOU na acao antes de responder, por saida.
- * So `expired` e `invalidated` gravam (F17); nas outras a acao nao mudou.
- * Exaustivo: uma saida nova reprova o `tsc` ate dizer se grava.
- */
-const RECORDED_FAILURE: Record<DecisionAction, ActionErrorCode | null> = {
-  retry: null,
-  'retry-with-new-operation': null,
-  refresh: null,
-  expired: 'prazo_expirado',
-  invalidated: 'reagendamento_invalido',
-}
-
-/**
  * Confirma ou recusa UMA proposta.
  *
  * O clique vai direto ao backend, sem passar pelo modelo (decisao D2 da spec):
@@ -31,9 +18,11 @@ const RECORDED_FAILURE: Record<DecisionAction, ActionErrorCode | null> = {
  * primeiro clique, FICA depois de falha que se repete (rede, 5xx, sem code),
  * e SAI no sucesso e em toda falha que nao se repete com ela.
  *
- * `prazo_expirado` e `reagendamento_invalido`: o backend GRAVOU a acao como
- * `falhou` antes do 422/409 (spec do 1b, "Confirmar e recusar"; F17 do F). A
- * tela espelha isso sem outra ida a rede.
+ * `prazo_expirado`, `reagendamento_invalido` e os limites da avulsa
+ * (`estimativa_fora_do_limite`, `prazo_fora_do_limite`): o backend GRAVOU a
+ * acao como `falhou` com aquele code antes do 422/409 (spec do 1b, "Confirmar
+ * e recusar"; F17 do F; pendencia 26). A tela espelha isso sem outra ida a
+ * rede (`recordedErrorCode`).
  *
  * Os dois POSTs tem prazo (`MUTATION_TIMEOUT_MS`): um pedido pendurado vira falha
  * `retry`, e a chave da confirmacao FICA -- a confirmacao pode ter executado no
@@ -79,7 +68,7 @@ export function useDecideAction(
         if (failure.action !== 'retry') {
           keys.release(action.id)
         }
-        const recorded = RECORDED_FAILURE[failure.action]
+        const recorded = recordedErrorCode(error)
         if (recorded !== null) {
           changed({ ...action, state: 'falhou', error_code: recorded })
         }

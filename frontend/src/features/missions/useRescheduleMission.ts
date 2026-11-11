@@ -45,9 +45,13 @@ export interface UseRescheduleMissionResult {
  * (F21), e vai como UTC. Sem alterar a hora civil, conserva o ISO original,
  * incluindo segundos, fracao e offset.
  *
- * A chave (`operation_id`) mora no `registry`, por missao E por tipo
- * (`actionKeyFor(missionId, 'reschedule')`), pelo mesmo motivo do Iniciar. Quando
- * ela sai, este hook decide pelo resultado:
+ * A chave (`operation_id`) mora no `registry`, por missao E por tipo, pelo mesmo
+ * motivo do Iniciar, junto com o conteudo do ultimo envio feito com ela
+ * (`rescheduleKeyFor`). A chave retida so vale para o MESMO conteudo (F13): se o
+ * rascunho mudou desde o ultimo envio, o registro troca a chave ANTES do POST, e
+ * o pedido nao cai num `operacao_reutilizada` evitavel -- tambem depois de uma
+ * remontagem do cartao, porque o registro sobrevive a ela (pendencia 112). Quando
+ * a chave sai, este hook decide pelo resultado:
  *
  * - **falha que se repete com a mesma chave** (`action: 'retry'`): a chave
  *   FICA; nao se sabe se o prazo mudou;
@@ -55,6 +59,9 @@ export interface UseRescheduleMissionResult {
  *   `retry-with-new-operation`): a chave SAI. Em `edit` o servidor leu e recusou
  *   o pedido, nada foi gravado, e a correcao da pessoa e outro conteudo -- com a
  *   mesma chave seria `operacao_reutilizada`.
+ *
+ * So o sucesso apaga o reagendamento aberto do registro (o disclosure fecha com o
+ * prazo novo); qualquer falha o deixa, como o rascunho da evidencia.
  *
  * O POST tem prazo (`MUTATION_TIMEOUT_MS`), com o mesmo efeito do Iniciar: falha
  * `retry`, chave mantida, botao de volta.
@@ -80,7 +87,7 @@ export function useRescheduleMission(
         return
       }
       // Primeiro, e antes de qualquer mudanca de estado (ver `useStartMission`).
-      const operationId = registry.actionKeyFor(missionId, 'reschedule')
+      const operationId = registry.rescheduleKeyFor(missionId, draft)
       inFlight.current = true
       setState({ status: 'submitting' })
       registry.started()
@@ -96,6 +103,7 @@ export function useRescheduleMission(
       )
         .then((mission) => {
           registry.releaseActionKey(missionId, 'reschedule')
+          registry.discardRescheduleDraft(missionId)
           setState({ status: 'rescheduled', mission })
           setLastRescheduled(mission)
         })

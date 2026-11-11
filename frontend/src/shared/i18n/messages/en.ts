@@ -27,6 +27,8 @@ export const en = {
   'ui.sound.voice': "Kairya's voice",
   'ui.sound.sfx': 'Sound effects',
 
+  'shared.transport.timeout.lead': 'No answer arrived. It took longer than expected.',
+  'shared.transport.network.lead': "Couldn't connect. The connection to the server failed.",
   'shared.apiError.network.message': "Couldn't reach the server. The connection failed.",
   'shared.apiError.network.recovery': 'Check your connection and try again.',
   'shared.apiError.timeout.message': "The server didn't respond. It took too long to answer.",
@@ -82,6 +84,9 @@ export const en = {
   'missions.rescheduleFailure.deadlinePassed.message':
     "Couldn't reschedule. The new deadline is in the past.",
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Pick a future date and time.',
+  'missions.rescheduleFailure.beyondLimit.message':
+    "Couldn't reschedule. The new deadline is over 365 days away.",
+  'missions.rescheduleFailure.beyondLimit.recovery': 'Pick a closer date.',
   'missions.rescheduleFailure.unchanged.message':
     "Couldn't reschedule. The new deadline matches the current one.",
   'missions.rescheduleFailure.unchanged.recovery': 'Pick a different time.',
@@ -256,6 +261,7 @@ export const en = {
   'missions.reschedule.blocked.missingDeadline': 'Enter the date and time of the new deadline.',
   'missions.reschedule.blocked.nonexistentTime':
     "That time doesn't exist in Brasília time. Pick another.",
+  'missions.reschedule.blocked.beyondLimit': 'The new deadline can be 365 days from now at most.',
   'missions.reschedule.blocked.missingReason': 'Pick a reason to save the new deadline.',
 
   'missions.evaluation.modelLabel':
@@ -350,6 +356,10 @@ export const en = {
     "Couldn't confirm this proposal. Its deadline has already passed.",
   'tutoring.actionFailure.rescheduleInvalid.message':
     "Couldn't reschedule the mission. It changed after the proposal.",
+  'tutoring.actionFailure.estimateOutOfBounds.message':
+    "Couldn't confirm this proposal. The estimate must be 1 to 1440 minutes.",
+  'tutoring.actionFailure.deadlineOutOfBounds.message':
+    "Couldn't confirm this proposal. Its deadline is over 365 days away.",
   'tutoring.actionFailure.unconfirmedCreate.message':
     "Couldn't confirm the mission. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedCreate.recovery':

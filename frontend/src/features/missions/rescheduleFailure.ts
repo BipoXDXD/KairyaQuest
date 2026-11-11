@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { RescheduleErrorCode } from './types'
 
@@ -32,6 +33,11 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
       recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
       action: 'edit',
     },
+    prazo_fora_do_limite: {
+      message: 'missions.rescheduleFailure.beyondLimit.message',
+      recovery: 'missions.rescheduleFailure.beyondLimit.recovery',
+      action: 'edit',
+    },
     prazo_inalterado: {
       message: 'missions.rescheduleFailure.unchanged.message',
       recovery: 'missions.rescheduleFailure.unchanged.recovery',
@@ -59,11 +65,16 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
     },
   }
 
-/** A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo. */
-const UNCONFIRMED: RescheduleFailure = {
-  message: 'missions.rescheduleFailure.unconfirmed.message',
-  recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
-  action: 'retry',
+/**
+ * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
+ * novo. A abertura diz a causa quando ela e de transporte (`leadFor`).
+ */
+function unconfirmed(error: unknown): RescheduleFailure {
+  return {
+    message: leadFor(error, 'missions.rescheduleFailure.unconfirmed.message'),
+    recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+    action: 'retry',
+  }
 }
 
 /**
@@ -99,5 +110,5 @@ export function describeRescheduleFailure(error: unknown): RescheduleFailure {
   if (error instanceof ApiError && error.status === 422) {
     return NOT_ACCEPTED
   }
-  return UNCONFIRMED
+  return unconfirmed(error)
 }
