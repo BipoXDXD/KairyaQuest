@@ -412,40 +412,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Áudio: roteiro de gravação, nomes dos efeitos e pós-processo — 2026-11-10
-
-Tarefa 1 da Fase 8 (PR `audio-roteiro`). Nenhuma geração paga: só código,
-o roteiro e o script de pós-processo. Zero dependências novas.
-
-- `shared/audio/audioSrc.ts`: `AudioSrc` (brand) e `audioSrc(path)`, que só
-  aceita `` `/audio/${string}.mp3` ``; nenhum texto solto chega ao player.
-- `shared/audio/sfx.ts`: os 12 `SFX_NAMES` da spec §9 e `sfxSrc`.
-- `features/kairya/lineAudio.ts`: `lineSrc(locale, id)` → `/audio/<locale>/<id>.mp3`.
-- `features/kairya/recordingScript.ts`: `SFX_GUIDE` (prompt em inglês e
-  duração de cada efeito) e `buildRecordingScript()`, que lê o texto das 72
-  falas de `CATALOGS[locale][lineKey(id)]`. Só o teste importa o módulo, então
-  os prompts não entram no bundle.
-- `assets-src/audio/roteiro.json`: o roteiro gerado (72 falas, 12 efeitos).
-  O teste-golden `recordingScript.test.ts` compara o arquivo com a função e
-  reprova quando o texto de uma fala muda no catálogo. Para regerar, da raiz:
-  `mkdir -p assets-src/audio && cd frontend && KAIRYAQUEST_WRITE_ROTEIRO=1 npx vitest run src/features/kairya/recordingScript.test.ts`.
-  Sem a variável (CI), o teste só confere.
-- `frontend/src/test/readSource.ts` ganha `sourcePath`, `readSourceBytes` e
-  `isSourceFile` (com `readSource.test.ts`), para que nenhum teste leia o disco
-  por `node:fs`. A única escrita direta é a regeração do roteiro.
-- `scripts/encode-audio.sh <entrada> <saída> voice|sfx [trim]`: mp3 mono,
-  44,1 kHz, CBR 64 kbps, `loudnorm` (−18 LUFS voz, −20 LUFS efeito, −1,5 dBTP),
-  sem metadados; `trim` corta o silêncio só das pontas. Depende do `ffmpeg`
-  local do dono, não de pacote do repositório.
-- `.gitignore`: `assets-src/audio/raw/` (brutos ficam com o dono).
-
-Desvio do plano: o literal do teste de tom (`/alarm/`) reprovava o prompt
-de `soft_error`, que diz "not alarming". O teste agora remove a negação
-explícita (`not <palavra>`) e casa o radical com qualquer sufixo
-(`\b(?:scream|alarm|buzzer|siren|explo)\w*`), com dois casos que provam que o
-regex não é vácuo. O prompt ficou como no plano; a negação dele vai para o
-dono revisar antes do lote pago de efeitos (Tarefa 8.3).
-
 # Kairya: catálogo das 36 falas — 2026-11-10
 
 Tarefa 1 da Fase 6 (presença da Kairya). Cria `frontend/src/features/kairya/`
