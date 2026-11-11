@@ -5,7 +5,8 @@ Revisão-base: `8847935` (main). Branch `wt/orcamento-tempo`.
 Resolve em parte a **P-prazo-medido-1** (`2026-11-11-prazo-medido.md`) e o resíduo
 das rotas de 20 s sobre a espera do pool: o **caminho 1** (retries do SDK) e o
 **pool** ficam fechados e conferidos pelo gate. O **caminho 2** (parada no meio do
-stream) continua aberto, ver P-orcamento-tempo-1.
+stream) foi fechado depois, para o chat da tutoria: ver `2026-11-11-teto-stream.md`
+(P-orcamento-tempo-1 resolvida).
 
 ## Decisão da coordenação
 
@@ -157,13 +158,15 @@ do pior caso, que já inclui o backoff). Os casos `500-inicial` de
 
 ## Pendências
 
-- **P-orcamento-tempo-1 — parada no meio do stream (caminho 2 do
+- ~~**P-orcamento-tempo-1 — parada no meio do stream (caminho 2 do
   P-prazo-medido-1).** O timeout do SDK é por leitura (54 s desde o último
   chunk) e o total só é conferido quando um evento chega
   (`tutoring/service.py`, `evaluation/service.py`). Uma parada que começa depois
   de ~36 s do pedido sai depois dos 90 s do nginx, sem `code`. Só um limite TOTAL
   de parede, conferido sem depender de evento (por exemplo `deadline` no laço de
   leitura ou um timer que feche o stream), cobre. Exige mexer em `service.py`,
-  fora do escopo; decisão do dono.
+  fora do escopo; decisão do dono.~~ **Resolvida** para o chat da tutoria em
+  `2026-11-11-teto-stream.md` (teto de parede por thread leitora); a avaliação
+  segue aberta como P-teto-stream-1 lá.
 - **Mesma pendência, aviso:** um 5xx lento em cabeçalhos e a parada em stream já
   eram o pior caso; o que mudou é que não há mais segunda chamada paga.

@@ -12,11 +12,13 @@ O fechamento do stream do provedor e sempre da thread que o le. Um `close()`
 vindo de outra thread em cima de um gerador que esta executando levanta
 `ValueError`, e fechar o socket por fora nao acorda uma leitura bloqueada de
 forma portavel. Estourado o teto (ou fechado o consumidor), o leitor ve o
-cancelamento na proxima volta da leitura e fecha o stream; se o provedor
-calou, essa volta e o timeout por leitura do SDK, no maximo `timeout` depois,
-e a thread termina sozinha. O que o teto garante e o consumidor liberado no
-instante certo; o stream do provedor fecha por conta do leitor, em tempo
-limitado.
+cancelamento na proxima volta da leitura e fecha o stream. Essa volta e o
+proximo evento REAL do provedor ou o fim do stream pelo servidor: o timeout por
+leitura do SDK NAO a limita, porque o SDK descarta os `ping` e eles reiniciam o
+timer de leitura do socket (um modelo lento que manda pings mantem a thread e a
+conexao vivas). O que o teto garante e o consumidor liberado no instante certo;
+o stream do provedor fecha por conta do leitor, sem prazo proprio (pendencia
+P-teto-stream-2, `docs/handoff/2026-11-11-teto-stream.md`).
 """
 
 import logging
@@ -117,8 +119,13 @@ def ler_com_prazo[E](
             restante = teto_segundos - (espera.monotonic() - inicio)
             try:
                 if restante <= 0:
-                    raise queue.Empty
-                item = espera.esperar(fila, restante)
+                    # O tempo acabou, mas o que o leitor JA enfileirou e
+                    # aproveitado: uma resposta completa nao vira `falhou` so
+                    # porque o relogio passou entre dois itens. Fila vazia e
+                    # tempo esgotado: sem espera nenhuma.
+                    item = fila.get_nowait()
+                else:
+                    item = espera.esperar(fila, restante)
             except queue.Empty:
                 _LOG.warning(
                     "stream da tutoria passou do teto: "

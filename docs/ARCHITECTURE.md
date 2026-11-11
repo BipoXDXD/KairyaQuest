@@ -1820,7 +1820,9 @@ consumidor sai com `TempoEsgotadoError`, o mesmo caminho de sempre
 (`RespostaFalhou(tempo_esgotado)`, a resposta `falhou` com o texto parcial), e o
 log registra `decorrido_ms`, `teto_ms` e `eventos`, nunca o texto. Quem fecha o
 stream do provedor é a thread leitora, ao ver o cancelamento na próxima volta
-da leitura: se o provedor calou, no máximo o timeout por leitura depois. O
+da leitura: no próximo evento real ou no fim do stream pelo servidor (o SDK
+descarta os `ping`, que reiniciam o timer de leitura, então o timeout por
+leitura não limita essa volta; P-teto-stream-2). O
 teto, somado às fases que não são leitura, cabe em `proxy_read_timeout` menos
 `FOLGA_DO_ORFAO`, conferido por `tests/unit/test_prazos_coerentes.py`. A
 avaliação (`avaliar`) não tem esse teto: ver

@@ -269,7 +269,13 @@ def test_com_o_teto_ja_gasto_o_servico_nem_espera_o_proximo_evento(
 ) -> None:
     # O segundo evento chega exatamente em 54 s: o orcamento acabou, e o
     # terceiro nao ganha nem uma espera de 0 s.
-    provedor = ProvedorRoteirizado((Delta("a"), Delta("b"), Delta("c"), Fim()))
+    # O provedor trava depois de `b`: nada esta na fila quando o orcamento acaba
+    # (um evento JA enfileirado e aproveitado, ver o teste da drenagem).
+    provedor = ProvedorRoteirizado(
+        (Delta("a"), Delta("b")),
+        travar_no_fim=True,
+        depois_de_liberado=(Delta("c"), Fim()),
+    )
     espera = EsperaFalsa(atrasos=(27.0, 27.0, 27.0))
     tutoria = replace(tutoria, provedor=provedor, limite=TETO)
     preparo = _preparar(fabrica, tutoria, conversa.id("teto-esgotado"))
@@ -286,6 +292,7 @@ def test_com_o_teto_ja_gasto_o_servico_nem_espera_o_proximo_evento(
         RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO),
     ]
     assert espera.esperas_pedidas == [54.0, 27.0]
+    provedor.liberar.set()
     provedor.fechado.wait(ESPERA_DO_LEITOR)
     _esperar_o_leitor_terminar()
 
@@ -377,3 +384,68 @@ def test_fechar_o_gerador_cancela_o_leitor_do_stream(
     assert (vista.status, vista.content) == (StatusDaMensagem.INTERROMPIDA, "meio")
     # Parou no primeiro evento tardio: nem o `Fim` foi lido.
     assert provedor.entregues_depois_de_liberado == 1
+
+
+def test_a_espera_real_pela_fila_estoura_no_teto_com_o_provedor_travado(
+    fabrica: sessionmaker[Session], tutoria: Tutoria, conversa: Conversa
+) -> None:
+    # Sem `Espera` injetada: o `Queue.get(timeout=...)` e o `time.monotonic`
+    # reais. Um `fila.get()` sem timeout deixaria este teste preso para sempre
+    # (o provedor so e liberado no fim), e os testes de relogio falso nao
+    # perceberiam: eles substituem a propria espera.
+    provedor = ProvedorRoteirizado(
+        (Delta("meio"),),
+        travar_no_fim=True,
+        depois_de_liberado=(Delta("tarde"), Fim()),
+    )
+    tutoria = replace(tutoria, provedor=provedor, limite=timedelta(milliseconds=50))
+    preparo = _preparar(fabrica, tutoria, conversa.id("teto-real"))
+
+    try:
+        eventos = list(transmitir(fabrica, preparo, tutoria, clock=lambda: AGORA))
+        assert provedor.travou.wait(ESPERA_DO_LEITOR)
+    finally:
+        provedor.liberar.set()
+
+    assert eventos[-1] == RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        CodigoDoStream.TEMPO_ESGOTADO,
+    )
+    assert provedor.fechado.wait(ESPERA_DO_LEITOR)
+    _esperar_o_leitor_terminar()
+
+
+def test_evento_ja_enfileirado_quando_o_tempo_acaba_e_aproveitado(
+    fabrica: sessionmaker[Session], tutoria: Tutoria, conversa: Conversa
+) -> None:
+    # O leitor ja entregou o `Fim` quando o relogio passa do teto: a resposta
+    # esta completa e nao pode virar `falhou`. O falso anda o relogio 60 s depois
+    # do primeiro evento, e so depois de o leitor terminar (join: sem sleep).
+    provedor = ProvedorRoteirizado((Delta("a"), Fim()))
+    relogio = {"agora": 1000.0}
+
+    def esperar(fila: queue.Queue[object], segundos: float) -> object:
+        item = fila.get(timeout=ESPERA_DO_LEITOR)
+        for leitor in _leitores_vivos():
+            leitor.join(timeout=ESPERA_DO_LEITOR)
+        relogio["agora"] += 60.0
+        return item
+
+    espera = Espera(monotonic=lambda: relogio["agora"], esperar=esperar)
+    tutoria = replace(tutoria, provedor=provedor, limite=TETO)
+    preparo = _preparar(fabrica, tutoria, conversa.id("teto-drenagem"))
+
+    eventos = list(
+        transmitir(fabrica, preparo, tutoria, clock=lambda: AGORA, espera=espera)
+    )
+
+    assert eventos[1] == Trecho("a")
+    final = eventos[-1]
+    assert isinstance(final, RespostaConcluida)
+    assert (final.mensagem.status, final.mensagem.content) == (
+        StatusDaMensagem.COMPLETA,
+        "a",
+    )
+    _esperar_o_leitor_terminar()

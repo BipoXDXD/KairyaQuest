@@ -104,9 +104,9 @@ def test_os_leitores_acham_numeros_de_verdade() -> None:
 def test_o_proxy_espera_o_modelo_mais_a_folga_do_orfao() -> None:
     # O `tempo_esgotado` que o backend grava deveria sair em torno de
     # `tutor_timeout_seconds`; o proxy so pode cortar depois, ou o 504 do nginx
-    # (sem `code`) venceria o do backend (com `code`). Pode sair DEPOIS disso: o
-    # timeout do SDK e por leitura e o total so e conferido quando um evento
-    # chega (a docstring do modulo e o handoff da pendencia P-prazo-medido-1).
+    # (sem `code`) venceria o do backend (com `code`). O teto TOTAL do stream da
+    # tutoria vale sem evento chegando (`tutoring/leitura.py`, handoff
+    # 2026-11-11-teto-stream); a avaliacao ainda so o confere na volta da chamada.
     # A folga e a mesma do corte do orfao: ate la a avaliacao ainda pode estar
     # em curso, e o reenvio recebe 409.
     folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)

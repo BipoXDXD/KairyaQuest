@@ -41,18 +41,26 @@ Recusadas:
   depende de detalhe interno do transporte.
 
 **Trade-off visível:** estourado o teto, o consumidor sai na hora, mas o stream
-do provedor só fecha quando a thread leitora volta da leitura: se o provedor
-calou, no máximo o timeout por leitura (54 s) depois, e a thread (daemon,
-nomeada `tutoria-leitor`) termina sozinha. Também vale na desconexão do cliente:
-antes o `close()` fechava o SDK na hora; agora fecha no próximo evento (ms, com
-o modelo emitindo). Não medido em produção.
+do provedor só fecha quando a thread leitora volta da leitura: no próximo
+evento real ou no fim do stream pelo servidor. O timeout por leitura do SDK
+**não** limita essa espera: o SDK descarta os `ping` e eles reiniciam o timer de
+leitura do socket, então um modelo lento que manda pings mantém a thread
+(daemon, nomeada `tutoria-leitor`) e a conexão vivas. Também vale na
+desconexão do cliente: antes o `close()` fechava o SDK na hora; agora fecha no
+próximo evento (ms, com o modelo emitindo). Não medido em produção.
+
+**Evento já enfileirado.** Com o tempo esgotado, o serviço ainda drena o que o
+leitor já enfileirou (`get_nowait`) antes de estourar: uma resposta completa
+não vira `falhou` porque o relógio passou entre dois itens. Fila vazia e tempo
+esgotado: estouro sem nenhuma espera.
 
 ## Alterações
 
 - `src/focusquest/modules/tutoring/leitura.py` (novo): `ler_com_prazo`, `Espera`.
 - `src/focusquest/modules/tutoring/service.py`: `transmitir` lê por
   `ler_com_prazo` (parâmetro `espera`); comentário de `FOLGA_DO_ORFAO`.
-- `tests/integration/test_tutoring_teto_do_stream.py` (novo, 7 testes).
+- `tests/integration/test_tutoring_teto_do_stream.py` (novo, 9 testes: inclui a
+  espera real com provedor travado e a drenagem do evento já enfileirado).
 - `tests/unit/test_prazos_coerentes.py`: docstring e o teste do teto contra
   `proxy_read_timeout − FOLGA_DO_ORFAO`, das constantes reais.
 - `docs/ARCHITECTURE.md`: só a passagem do órfão (~951) e um parágrafo em
@@ -84,3 +92,8 @@ o modelo emitindo). Não medido em produção.
   (`evaluation/service.py`): uma parada no meio ainda sai em `t + 54 s`. Fechar
   exige o mesmo mecanismo numa chamada, não num gerador, e mexer no serviço de
   avaliação; fora do escopo deste item.
+- **P-teto-stream-2 — leitores vivos além do teto.** Com `ping` o leitor e a
+  conexão do provedor podem passar do teto e do limiter de 40 threads do anyio
+  (que atende a `transmitir` síncrona) até o próximo evento real ou o fim do
+  stream pelo servidor. Falta uma métrica ou log de leitores vivos
+  (`tutoria-leitor`) para medir; não implementada.
