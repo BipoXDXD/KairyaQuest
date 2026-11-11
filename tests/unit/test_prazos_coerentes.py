@@ -14,12 +14,14 @@ A cadeia da avaliacao, do menor para o maior:
     tutor_timeout_seconds  <  proxy_read_timeout  <  EVALUATION_TIMEOUT_MS
     (backend, o modelo)       (nginx, producao)       (navegador)
 
-O que NAO esta aqui: a retentativa do SDK. Com demora nos cabecalhos o SDK
-chama de novo ate `TENTATIVAS` vezes, entao o pior caso do provedor e
-`(1 + TENTATIVAS) * tutor_timeout_seconds`, acima do corte do proxy. Esse
-caminho nao tem garantia de `code` (o nginx responde antes, sem ele), e esta
-registrado como pendencia nova em `docs/handoff/2026-11-11-prazo-medido.md`, nao
-escondido por um teste que o aprovasse.
+O que NAO esta aqui: dois caminhos em que o `tempo_esgotado` do backend sai
+depois do corte do proxy. (1) Com demora nos cabecalhos o SDK chama de novo ate
+`TENTATIVAS` vezes, e o pior caso e `(1 + TENTATIVAS) * tutor_timeout_seconds`.
+(2) O timeout do SDK e por leitura e o total so e conferido quando um evento
+chega, entao uma parada no meio do stream sai em `t + tutor_timeout_seconds`.
+Nos dois o nginx responde antes, sem `code`; ficam registrados como pendencia
+nova em `docs/handoff/2026-11-11-prazo-medido.md`, nao escondidos por um teste
+que os aprovasse.
 """
 
 import re
@@ -81,10 +83,13 @@ def test_os_leitores_acham_numeros_de_verdade() -> None:
 
 
 def test_o_proxy_espera_o_modelo_mais_a_folga_do_orfao() -> None:
-    # O `tempo_esgotado` que o backend grava sai em `tutor_timeout_seconds`; o
-    # proxy so pode cortar depois, ou o 504 do nginx (sem `code`) venceria o do
-    # backend (com `code`). A folga e a mesma do corte do orfao: ate la a
-    # avaliacao ainda pode estar em curso, e o reenvio recebe 409.
+    # O `tempo_esgotado` que o backend grava deveria sair em torno de
+    # `tutor_timeout_seconds`; o proxy so pode cortar depois, ou o 504 do nginx
+    # (sem `code`) venceria o do backend (com `code`). Pode sair DEPOIS disso: o
+    # timeout do SDK e por leitura e o total so e conferido quando um evento
+    # chega (a docstring do modulo e o handoff da pendencia P-prazo-medido-1).
+    # A folga e a mesma do corte do orfao: ate la a avaliacao ainda pode estar
+    # em curso, e o reenvio recebe 409.
     folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
 
     assert _proxy_read_timeout_ms() >= _tutor_timeout_ms() + folga_ms

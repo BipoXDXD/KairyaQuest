@@ -293,8 +293,9 @@ export const MUTATION_TIMEOUT_MS = 20_000
  * relacao `tutor_timeout_seconds + folga <= proxy_read_timeout` e
  * `proxy_read_timeout + margem <= EVALUATION_TIMEOUT_MS` e conferida por
  * `tests/unit/test_prazos_coerentes.py`: mudar um lado sem o outro reprova o
- * gate. Ela NAO cobre a retentativa do SDK com demora nos cabecalhos, que passa
- * do corte do proxy (pendencia nova, `docs/handoff/2026-11-11-prazo-medido.md`).
+ * gate. Ela NAO cobre a retentativa do SDK com demora nos cabecalhos nem a
+ * parada no meio do stream, que passam do corte do proxy (pendencia nova,
+ * `docs/handoff/2026-11-11-prazo-medido.md`).
  */
 export const EVALUATION_TIMEOUT_MS = 105_000
 

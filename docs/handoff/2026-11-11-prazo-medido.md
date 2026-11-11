@@ -53,11 +53,11 @@ Recusadas:
   gargalo; não mede o navegador, o proxy nem o banco real**.
 - **Prazos de servidor e proxy**: uvicorn sem timeout configurado (`api.Dockerfile`);
   nginx `proxy_read_timeout 90s` só no `location ^~ /api`; `tutor_timeout_seconds`
-  60 s (SDK, por leitura; total conferido depois do retorno em
+  60 s (SDK, por leitura; total só conferido quando chega um evento, em
   `evaluation/service.py`); `FOLGA_DO_ORFAO` 30 s. Pool do SQLAlchemy sem
   `pool_timeout` explícito (padrão 30 s): numa piscina esgotada uma rota sem modelo
-  esperaria até 30 s e responderia 500 sem `code`, depois dos 20 s do navegador;
-  nas duas saídas a tela mostra falha, e nenhum `code` se perde.
+  esperaria até 30 s e responderia 500 sem `code`, depois dos 20 s do navegador
+  (detalhe na pendência do pool, abaixo).
 
 ## Alterações
 
@@ -83,25 +83,45 @@ Recusadas:
 
 ## Pendências
 
-- **P-prazo-medido-1 — a retentativa do SDK passa do corte do proxy (decisão do
-  dono).** Com demora nos cabeçalhos o SDK chama de novo até `TENTATIVAS` (2)
-  vezes (`tests/integration/test_anthropic_provider.py`, "depois das tentativas",
-  medido: 1 + `TENTATIVAS` chamadas). O pior caso até o `tempo_esgotado` do
-  backend é `(1 + 2) * 60 s` mais o backoff (~1,5 s), cerca de 181 s, contra
-  90 s do nginx e 105 s do navegador. Nesse caminho a avaliação que o usuário
-  vê é o 504 do nginx, **sem `code`** (texto genérico, reenvio seguro), enquanto
-  o backend segue até gravar a falha; o reenvio depois do corte do órfão (90 s)
-  pode abrir uma segunda chamada paga com a primeira ainda viva (inferido da
-  leitura de `evaluation_records.py`, não reproduzido). A parada no meio do
-  stream (sem retentativa) fica em 60 s e entrega o `code` normalmente. Subir o
-  prazo do navegador não resolve (o nginx corta antes, em produção); a saída é
-  de backend ou infra e tem custo de produto, por isso não foi adivinhada:
-  (a) `max_retries=0` na avaliação, trocando resiliência por previsibilidade;
+- **P-prazo-medido-1 — o `tempo_esgotado` do backend pode sair depois do corte
+  do proxy (decisão do dono).** Dois caminhos, os dois por conta aritmética a
+  partir dos números do código; o que foi **medido** é só o número de chamadas
+  do SDK (`tests/integration/test_anthropic_provider.py`, "depois das
+  tentativas": 1 + `TENTATIVAS` chamadas), não os tempos.
+  1. *Demora nos cabeçalhos:* o SDK chama de novo até `TENTATIVAS` (2) vezes, então
+     o pior caso até o `tempo_esgotado` é `(1 + 2) * 60 s` mais o backoff
+     (~1,5 s), cerca de 181 s.
+  2. *Parada no meio do stream:* o timeout do SDK conta **por leitura** (60 s desde
+     o último chunk), e o limite total só é conferido quando um evento chega
+     (`tutoring/service.py:90-95`, `evaluation/service.py:115`). Uma parada que
+     começa em `t` estoura em `t + 60 s`: depois de `t = 30 s` já passa dos 90 s
+     do nginx, e em `t = 50 s` sai em ~110 s. Portanto os 60 s só valem para a
+     espera pelos cabeçalhos ou pelo primeiro evento, não para o stream inteiro.
+
+  Nos dois, contra 90 s do nginx e 105 s do navegador, a tela recebe o 504 do
+  nginx, **sem `code`** (texto genérico, reenvio seguro), enquanto o backend
+  segue até gravar a falha; o reenvio depois do corte do órfão (90 s) pode abrir
+  uma segunda chamada paga com a primeira ainda viva (inferido da leitura de
+  `evaluation_records.py`, não reproduzido). Subir o prazo do navegador não
+  resolve (o nginx corta antes, em produção); a saída é de backend ou infra e tem
+  custo de produto, por isso não foi adivinhada: (a) `max_retries=0` na
+  avaliação, trocando resiliência por previsibilidade (resolve o caminho 1);
   (b) dividir o orçamento (timeout por tentativa = `tutor_timeout_seconds /
-  (1 + TENTATIVAS)`), mantendo as três; (c) subir o nginx e o navegador para
-  ~190 s e ~205 s, com o usuário esperando mais de 3 min. Recomendação: (b),
-  porque preserva a retentativa e faz o `tempo_esgotado` caber nos 90 s. Toca
-  `anthropic_provider.py` e `core/config.py`, fora do escopo mínimo deste PR.
+  (1 + TENTATIVAS)`), mantendo as três (também só o caminho 1); (c) um limite
+  TOTAL de parede na avaliação, conferido sem depender de evento (único que
+  cobre o caminho 2); (d) subir o nginx e o navegador para ~190 s e ~205 s, com
+  o usuário esperando mais de 3 min. Recomendação: (b) para o caminho 1 e (c)
+  para o 2. Tocam `anthropic_provider.py`, `core/config.py` e o serviço da
+  avaliação, fora do escopo mínimo deste PR.
+- **Resíduo das rotas de 20 s: a espera do pool do SQLAlchemy.** O engine não
+  define `pool_timeout`. O padrão do SQLAlchemy 2.1.3, lido do pool criado por
+  `create_engine_from_url` (`QueuePool`, tamanho 5, overflow 10), é de **30 s**.
+  Com o pool esgotado, uma rota sem modelo espera até 30 s e falha com um 500 sem
+  `code` (`main.py` não tem handler para o erro do pool; o 500 é esperado, não
+  reproduzido), **depois** dos 20 s do navegador, que aborta antes como
+  `ApiTimeoutError`. As duas saídas viram falha de tela e nenhum `code` útil se
+  perde, mas o caso real de uma rota de 20 s é de até 30 s no servidor, e o
+  navegador desiste antes. Fica como limitação declarada; o gate não confere.
 - **Rede real:** continua exigindo a produção (telemetria de latência real, por
   exemplo `Server-Timing`/RUM). Sem isso os 20 s, 5 s e 15 s ficam como
   julgamento justificado pela relação com o backend.

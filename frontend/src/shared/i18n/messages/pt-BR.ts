@@ -369,6 +369,8 @@ export const ptBR = {
   'tutoring.messageFailure.refused.message':
     'A Kairya não pôde responder a esta pergunta. O conteúdo foi recusado.',
   'tutoring.messageFailure.refused.recovery': 'Pergunte de outro jeito.',
+  'tutoring.messageFailure.unrecognizedFailure.message':
+    'A Kairya não conseguiu responder a esta pergunta.',
   'tutoring.messageFailure.rejectedBody.message': 'A pergunta não foi aceita.',
   'tutoring.messageFailure.rejectedBody.recovery': 'Confira o texto e envie de novo.',
 
@@ -416,6 +418,12 @@ export const ptBR = {
   'progression.panel.refresh': 'Atualizar',
   'progression.level': 'Nível {level}',
   'progression.xpTotal': '{xp} XP no total',
+  'progression.rank.label': 'Faixa: {name}',
+  'progression.rank.rank_seed': 'Semente',
+  'progression.rank.rank_sprout': 'Broto',
+  'progression.rank.rank_blade': 'Lâmina',
+  'progression.rank.rank_flame': 'Chama',
+  'progression.rank.rank_star': 'Estrela',
   'progression.bar.label': 'Progresso até o nível {level}',
   'progression.bar.valueText': '{into} de {span} XP',
   'progression.bar.text': '{into} de {span} XP até o nível {level}',

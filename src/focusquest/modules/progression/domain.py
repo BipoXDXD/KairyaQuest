@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from math import isqrt
+from typing import Literal
 
 from focusquest.modules.missions.cycle_domain import Historico, sequencia_ate
 from focusquest.modules.missions.domain import Veredito
@@ -51,6 +52,28 @@ class FaixaDoNivel:
 def faixa_do_nivel(xp: int) -> FaixaDoNivel:
     nivel = nivel_do_saldo(xp)
     return FaixaDoNivel(nivel, xp_para_o_nivel(nivel), xp_para_o_nivel(nivel + 1))
+
+
+Rank = Literal["rank_seed", "rank_sprout", "rank_blade", "rank_flame", "rank_star"]
+
+# Do maior piso para o menor: o primeiro que couber vence. Os codigos sao
+# contrato da API, em ingles; os nomes de interface moram no catalogo do front.
+_PISOS_DE_RANK: tuple[tuple[int, Rank], ...] = (
+    (35, "rank_star"),
+    (20, "rank_flame"),
+    (10, "rank_blade"),
+    (5, "rank_sprout"),
+)
+
+
+def rank_do_nivel(nivel: int) -> Rank:
+    """A faixa (rank) do nivel: 1-4, 5-9, 10-19, 20-34 e 35 ou mais.
+
+    Nao confundir com `faixa_do_nivel(xp)`, que devolve nivel e pisos de XP.
+    """
+    if nivel < 1:
+        raise ValueError(f"nivel precisa ser >= 1, recebido {nivel}")
+    return next((r for piso, r in _PISOS_DE_RANK if nivel >= piso), "rank_seed")
 
 
 class Codigo(StrEnum):

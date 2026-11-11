@@ -48,6 +48,7 @@ AGORA = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 SEM_PROGRESSO = Progresso(
     xp_total=0,
     faixa=FaixaDoNivel(1, 0, 100),
+    rank="rank_seed",
     conquistas=tuple(ConquistaNoPainel(c, None) for c in CATALOGO),
 )
 
@@ -471,6 +472,7 @@ def test_o_contexto_traz_o_progresso() -> None:
     progresso = Progresso(
         xp_total=1340,
         faixa=FaixaDoNivel(5, 1000, 1500),
+        rank="rank_sprout",
         conquistas=tuple(
             ConquistaNoPainel(
                 c,
