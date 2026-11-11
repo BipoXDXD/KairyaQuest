@@ -5,12 +5,16 @@ produto em pt-BR com acento. A evidencia vai como DADO: um JSON na mensagem do
 usuario, nunca interpolado no prompt de sistema (spec, "O pedido ao modelo").
 """
 
-import json
 from typing import Any
 
 from focusquest.modules.evaluation.schemas import EvaluationOutput
 from focusquest.modules.missions.evaluation_records import Tentativa
-from focusquest.modules.tutoring.provider import Ferramenta, MensagemDoTurno, Turno
+from focusquest.modules.tutoring.provider import (
+    Ferramenta,
+    MensagemDoTurno,
+    Turno,
+    como_dado,
+)
 
 NOME_DA_FERRAMENTA = "record_evaluation"
 
@@ -88,9 +92,14 @@ FERRAMENTA_DA_AVALIACAO = Ferramenta(
 def montar_turno_da_avaliacao(tentativa: Tentativa) -> Turno:
     """O turno da avaliacao: o prompt fixo e UMA mensagem, sem historico.
 
-    `json.dumps` e o delimitador: aspas, chaves e tags na evidencia saem
+    O JSON e o delimitador: aspas, chaves e tags na evidencia saem
     escapadas dentro de uma string, e nao ha texto que feche o campo `text`.
-    `ensure_ascii=False` so poupa tokens; o escape nao depende dele.
+    A serializacao e a `como_dado` da tutoria (`tutoring/provider.py`), a
+    mesma do contexto da Kairya: `ensure_ascii=False` so poupa tokens, e
+    U+2028, U+2029 e U+0085, que o `json.dumps` deixa crus e o
+    `str.splitlines()` trata como quebra de linha, saem como `\\uXXXX`
+    (pendencia 205). A mensagem e uma linha so, e o `json.loads` devolve o
+    texto exato que a pessoa escreveu.
     `link_opened` repete ao modelo, no dado, o que o prompt diz (E3).
     """
     dados = {
@@ -106,5 +115,5 @@ def montar_turno_da_avaliacao(tentativa: Tentativa) -> Turno:
     }
     return Turno(
         sistema=SISTEMA_DA_AVALIACAO,
-        mensagens=(MensagemDoTurno("user", json.dumps(dados, ensure_ascii=False)),),
+        mensagens=(MensagemDoTurno("user", como_dado(dados)),),
     )

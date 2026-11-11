@@ -24,7 +24,11 @@ import httpx
 import pytest
 
 from integration import provedor_falso
-from integration.falso_do_e2e import TratadorComControle, roteiro_do_json
+from integration.falso_do_e2e import (
+    LINHA_DE_PRONTO,
+    TratadorComControle,
+    roteiro_do_json,
+)
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
@@ -488,27 +492,50 @@ def _porta_livre() -> int:
         return int(s.getsockname()[1])
 
 
+# So um teto contra travamento, o mesmo do `webServer` do Playwright: quem
+# sincroniza e a linha de pronto, e nao o relogio. O import do SDK leva
+# segundos com a maquina livre e passava dos 15 s antigos com ela carregada.
+TETO_DA_SUBIDA_SEGUNDOS = 120
+
+
+def _primeira_linha(processo: subprocess.Popen[str]) -> str:
+    """A primeira linha do stdout, ou `""` se o processo morrer antes dela."""
+    linhas: queue.Queue[str] = queue.Queue()
+    assert processo.stdout is not None
+    saida = processo.stdout
+    threading.Thread(target=lambda: linhas.put(saida.readline()), daemon=True).start()
+    try:
+        return linhas.get(timeout=TETO_DA_SUBIDA_SEGUNDOS)
+    except queue.Empty:
+        pytest.fail(f"o falso nao disse que subiu em {TETO_DA_SUBIDA_SEGUNDOS} s")
+
+
 def test_o_processo_sobe_na_porta_pedida_e_responde_o_controle() -> None:
     """A MESMA linha de comando do `playwright.config.ts`, numa porta livre."""
     porta = _porta_livre()
-    processo = subprocess.Popen(
+    # O `with` fecha o pipe do stdout na saida; sem ele o descritor ficava
+    # aberto ate a coleta de lixo, que o acusava com `ResourceWarning`.
+    with subprocess.Popen(
         [sys.executable, "-m", "integration.falso_do_e2e", "--porta", str(porta)],
         cwd=RAIZ,
         env={"PYTHONPATH": str(RAIZ / "tests"), "PATH": ""},
-    )
-    try:
-        prazo = time.monotonic() + 15
-        while True:
+        stdout=subprocess.PIPE,
+        text=True,
+    ) as processo:
+        try:
+            url = f"http://127.0.0.1:{porta}"
+            assert _primeira_linha(processo) == f"{LINHA_DE_PRONTO} {url}\n"
+            resposta = httpx.get(f"{url}/_control/requests")
+            assert resposta.json() == {"requests": []}
+        finally:
+            processo.terminate()
             try:
-                resposta = httpx.get(f"http://127.0.0.1:{porta}/_control/requests")
-                break
-            except httpx.TransportError:
-                assert time.monotonic() < prazo, "o falso nao subiu em 15 s"
-                time.sleep(0.1)
-        assert resposta.json() == {"requests": []}
-    finally:
-        processo.terminate()
-        processo.wait(timeout=10)
+                processo.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Sem o kill, o `__exit__` do `Popen` chamaria `wait()` sem
+                # prazo e a suite travaria em vez de reprovar.
+                processo.kill()
+                raise
 
 
 def test_o_processo_exige_a_porta() -> None:
