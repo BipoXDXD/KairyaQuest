@@ -7,6 +7,7 @@ import {
   PRE_STREAM_FAILURE_BY_CODE,
   STREAM_FAILURE_BY_CODE,
   UNKNOWN_RESULT,
+  UNRECOGNIZED_FAILURE,
 } from './messageFailure'
 
 describe('describePreStreamFailure', () => {
@@ -141,7 +142,23 @@ describe('describeStreamFailure', () => {
     },
   )
 
-  it.each(['code_novo', 'constructor'])('%s cai no resultado desconhecido', (code) => {
-    expect(describeStreamFailure(code)).toBe(UNKNOWN_RESULT)
+  // O evento `error` so chega com a falha JA gravada pelo backend: um code que
+  // a tela nao conhece e falha de verdade, nao "resultado desconhecido".
+  it.each(['code_novo', 'constructor'])(
+    '%s cai na falha generica, nao no resultado desconhecido',
+    (code) => {
+      const failure = describeStreamFailure(code)
+      expect(failure).toBe(UNRECOGNIZED_FAILURE)
+      expect(failure).not.toBe(UNKNOWN_RESULT)
+    },
+  )
+
+  it('a falha generica diz que a pergunta nao foi respondida e permite reenviar pelo mesmo id', () => {
+    expect(UNRECOGNIZED_FAILURE).toEqual({
+      message: 'tutoring.messageFailure.unrecognizedFailure.message',
+      recovery: 'tutoring.messageFailure.safeRetry',
+      action: 'retry',
+    })
+    expect(Object.hasOwn(ptBR, UNRECOGNIZED_FAILURE.message)).toBe(true)
   })
 })
