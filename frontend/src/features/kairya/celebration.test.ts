@@ -120,7 +120,9 @@ describe('evaluationEvents', () => {
   })
 
   it('sem veredito mas com bônus, só a recompensa', () => {
-    expect(evaluationEvents({ verdict: null, reward: SO_NIVEL })).toHaveLength(1)
+    expect(evaluationEvents({ verdict: null, reward: SO_NIVEL })).toEqual([
+      { type: 'celebrate', reason: 'levelUp', detail: { kind: 'level', level: 4 } },
+    ])
   })
 
   it('a celebração vence o say no reducer', () => {

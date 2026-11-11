@@ -1,6 +1,7 @@
+import { createElement, type ReactNode } from 'react'
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { INITIAL_PRESENCE, presenceReducer, type PresenceState } from '../kairya/useKairyaMood'
-import type { KairyaEvent } from '../kairya'
+import { KairyaPresenceProvider, useKairya, type KairyaEvent } from '../kairya'
 import { PRE_STREAM_FAILURE_BY_CODE, UNKNOWN_RESULT, type MessageFailure } from './messageFailure'
 import { presenceEvents, type PresenceInput } from './tutorPresence'
 import type { MessageRead } from './types'
@@ -46,9 +47,29 @@ const FAILURE_OF = (action: MessageFailure['action']): MessageFailure => ({
   action,
 })
 
-/** Dobra os eventos no reducer, com a semente 0 (a primeira fala do grupo). */
-function fold(events: readonly KairyaEvent[], from: PresenceState = INITIAL_PRESENCE) {
-  return events.reduce((state, event) => presenceReducer(state, { event, seed: 0 }), from)
+/** Dobra os eventos pela API pública da Kairya, com a semente 0 (a primeira fala do grupo). */
+function fold(events: readonly KairyaEvent[]) {
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(KairyaPresenceProvider, {
+      greeting: false,
+      random: () => 0,
+      scheduler: () => () => undefined,
+      children,
+    })
+  const { result } = renderHook(() => useKairya(), { wrapper })
+  act(() => result.current.dispatchAll(events))
+  return result.current.state
+}
+
+/** Pares [anterior, próximo] de uma sequência, para comparar cada passo com o anterior. */
+function pares<T>(lista: readonly T[]): [T, T][] {
+  const out: [T, T][] = []
+  let anterior: { valor: T } | null = null
+  for (const next of lista) {
+    if (anterior !== null) out.push([anterior.valor, next])
+    anterior = { valor: next }
+  }
+  return out
 }
 
 describe('presenceEvents: rascunho', () => {
@@ -72,7 +93,7 @@ describe('presenceEvents: rascunho', () => {
       input(IDLE, 'b'),
       input(SENDING, ''),
     ]
-    const events = steps.slice(1).flatMap((next, i) => presenceEvents(steps[i]!, next))
+    const events = pares(steps).flatMap(([prev, next]) => presenceEvents(prev, next))
     expect(events).toEqual([
       { type: 'userTyped' },
       { type: 'draftCleared' },
@@ -123,7 +144,7 @@ describe('presenceEvents: resposta', () => {
 
   it('partial crescendo dispara firstToken uma vez so', () => {
     const states = [SENDING, writing('O'), writing('Ol'), writing('Olá')]
-    const events = states.slice(1).flatMap((s, i) => presenceEvents(input(states[i]!), input(s)))
+    const events = pares(states).flatMap(([prev, next]) => presenceEvents(input(prev), input(next)))
     expect(events).toEqual([{ type: 'firstToken' }])
   })
 
@@ -150,7 +171,7 @@ describe('presenceEvents: resposta', () => {
 
   it('Review Focus 4: resposta vazia passa por thinking e termina em idle', () => {
     const states = [IDLE, SENDING, writing(''), IDLE_ANSWERED]
-    const events = states.slice(1).flatMap((s, i) => presenceEvents(input(states[i]!), input(s)))
+    const events = pares(states).flatMap(([prev, next]) => presenceEvents(input(prev), input(next)))
     expect(events).toEqual([{ type: 'questionSent' }, { type: 'answerFinished' }])
     expect(fold(events.slice(0, 1)).mood).toBe('thinking')
     expect(fold(events).mood).toBe('idle')

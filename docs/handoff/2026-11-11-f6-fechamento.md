@@ -41,3 +41,36 @@ Revisão-base: `c12cfc1`.
   a F8 faz um efeito `playVoice(lineSrc(locale, cue.line))` com `prefs.voice` ligado (~10 linhas).
 - (c) P-f6-humor-1 (saudação perdida na janela de milissegundos) continua aberta, não tocada aqui.
 - (d) `portrait.webp` está fora de uso no painel e fica como fonte do avatar (R12).
+- (e) O layout do composer foi medido com `layoutData`, sem as dez missões do `layout.spec`
+  (rodapé em 837,6 px contra 1029 px antes); o cenário com as dez missões segue sem teste.
+- (f) Débitos que seguem abertos ao fechar a fase (revisão final; sem código agora):
+  - **N1**: o rosto volta a `idle` com rascunho não vazio ao fim da resposta ou da celebração; a
+    próxima tecla não reemite `userTyped`. Correção: emitir `userTyped` após `answerFinished`
+    quando `next.draft !== ''` e, no fim da celebração, um efeito no `TutorPanel`. Muda comportamento.
+  - **N2**: toda troca de presença re-renderiza todos os consumidores do contexto; separar ações
+    (estável) de estado, só com medida.
+  - **N3**: `tutorFailed({ offline: false })` e `questionSent` apagam uma saudação ou celebração
+    aberta (`cue: null`, `useKairyaMood.ts`). Comportamento coerente do reducer da 6.1, sem teste de
+    página.
+  - **N4**: comentários sem acento em `faceArt.ts`, `KairyaFace.tsx`, `tutorPresence.ts`,
+    `useTutorPresence.ts` (cosmético).
+  - Review Focus sem teste: reanúncio na troca de idioma (6.3d M1); saudação com o `main` oculto
+    por deep link em Campanhas (6.3d M7); N1; cenário de layout com as dez missões.
+  - 6.3a M1, M2: assert redundante por título e assert sem mensagem nos testes da persona.
+  - 6.3a M3: o plano viajou no PR da 6.3a (já aceito).
+  - 6.3b M2, M3: a regex do `noMathRandom` não pega `Math['random']` nem a referência sem chamada,
+    e não varre `src/test/*.ts` nem o E2E.
+  - 6.3c M2: o teste "sem classe de transição" não vê CSS externo.
+  - 6.3d M3: 400 ms/`ease-out` duplicados com `RewardAnnouncement` (catraca `PENDING_MIGRATION`).
+  - 6.3e M3: `dispatchAll` que lança pula `onCompleted` (reducer puro).
+  - 6.3e M4: página só com `nao_atende`.
+  - 6.3e M5: ordem dos imports (cosmético).
+  - 6.3f M2, M3, M4: "uma vez por sessão" já coberto no provider, virada do dia com o app
+    montado, acentos no E2E.
+  - 6.3g M1, M2, M3: ordem ref/dispatch não observável, proposta só pelo texto, corrida residual do
+    helper de animações.
+  - 6.3h M2: atomicidade alt/src em um só `evaluate`.
+  - 6.3h M3: controle positivo de `semTransicao`, hoje vácuo porque o `<img>` nunca tem transição.
+  - 6.3h M4 (parte não aplicada): relógio por teste no axe.
+- (g) Fitness function nova `src/test/noCrossFeatureInternals.test.ts`: reprova import de interno
+  de outra feature (R3, ARCHITECTURE §5 regra 1).
