@@ -1264,8 +1264,11 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   (163(d)). O POST continua com somente `operation_id`, `new_deadline` e
   `reason`. Não há editor de segundos nem política nova de horário repetido:
   original intacto mantém seu instante; edição conserva a escolha do conversor.
-  O rascunho do reagendamento mora no formulário do cartão e **não** sobrevive
-  à recarga do quadro (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
+  O rascunho do reagendamento mora, por missão, no registro do quadro
+  (`useCompletionRegistry`, no `MissionList`), junto com a chave e o conteúdo do
+  último envio (`sentRescheduleFor`): sobrevive à remontagem do cartão, inclusive
+  na recarga do quadro. Como o registro vive na memória da página, a recarga do
+  navegador o perde (pendência 112). O cartão mostra "Iniciada em…", o "Reagendada N vezes"
   e o `<details>` "Histórico de prazos" (`RescheduleHistory.tsx`), e fica num
   envio de cada vez: Iniciar, Reagendar e Concluir se desabilitam entre si
   enquanto um deles está em voo.
