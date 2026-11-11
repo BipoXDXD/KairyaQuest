@@ -1,4 +1,5 @@
-import type { ReactElement } from 'react'
+import { useEffect, useRef, type ReactElement } from 'react'
+import { useAudio } from '../../shared/audio/useAudio'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useLocale } from '../../shared/i18n/useLocale'
@@ -100,6 +101,16 @@ function DayItem({ lantern, isToday }: { lantern: DayLantern; isToday: boolean }
  */
 function SpecialItem({ lantern, progress }: { lantern: SpecialLantern; progress: number }) {
   const t = useT()
+  const { playSfx } = useAudio()
+  const announced = useRef(false)
+  const ready = lantern.availability === 'disponivel'
+  // Uma vez por montagem: a trilha recarregada em silencio nao repete o aviso.
+  useEffect(() => {
+    if (ready && !announced.current) {
+      announced.current = true
+      playSfx('weekly_trial_unlocked')
+    }
+  }, [ready, playSfx])
   return (
     <li
       data-testid="trail-special"
@@ -107,7 +118,7 @@ function SpecialItem({ lantern, progress }: { lantern: SpecialLantern; progress:
       data-state={lantern.state}
       className={`${ITEM_BASE} ${ITEM_TONE[lantern.state]}`}
     >
-      <span className="flex w-16 shrink-0 justify-center">
+      <span data-testid="trail-special-art" className="flex w-16 shrink-0 justify-center">
         <LanternGlyph state={lantern.state} size="grand" />
       </span>
       <div className="flex min-w-0 flex-col gap-1">
@@ -130,6 +141,7 @@ function SpecialItem({ lantern, progress }: { lantern: SpecialLantern; progress:
  */
 function HeadquartersPath({ onOpenHeadquarters }: { onOpenHeadquarters?: () => void }) {
   const t = useT()
+  const { playSfx } = useAudio()
   if (onOpenHeadquarters === undefined) {
     return (
       <p data-testid="trail-go-headquarters" className="text-base text-text-muted">
@@ -139,7 +151,13 @@ function HeadquartersPath({ onOpenHeadquarters }: { onOpenHeadquarters?: () => v
   }
   return (
     <div>
-      <Button data-testid="trail-go-headquarters" onClick={onOpenHeadquarters}>
+      <Button
+        data-testid="trail-go-headquarters"
+        onClick={() => {
+          playSfx('trail_step')
+          onOpenHeadquarters()
+        }}
+      >
         {t('campaigns.headquarters.go')}
       </Button>
     </div>

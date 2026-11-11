@@ -28,6 +28,14 @@ interface CicloDaApi {
   today: string
 }
 
+/** O seletor de idioma, sem o grupo dos botoes de som (que tambem e um `role=group` do menu). */
+function seletorDeIdioma(page: Page) {
+  return page
+    .getByTestId('side-nav')
+    .locator('[role="group"]:not([data-testid="sound-controls"])')
+    .getByRole('button')
+}
+
 /**
  * Os dois botoes do seletor de idioma (PT/EN) tem alvo de toque de pelo menos
  * 44x44 px (WCAG 2.5.5). O teste unitario so ve a classe `min-h-11 min-w-11`;
@@ -35,7 +43,7 @@ interface CicloDaApi {
  * rotulo ("Idioma"/"Language") depende do idioma em que o navegador sobe.
  */
 async function afirmarAlvosDoSeletorDeIdioma(page: Page): Promise<void> {
-  const botoes = await page.getByTestId('side-nav').getByRole('group').getByRole('button').all()
+  const botoes = await seletorDeIdioma(page).all()
   expect(botoes.length).toBe(2)
   for (const botao of botoes) {
     const caixa = await botao.boundingBox()
@@ -292,17 +300,23 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   expect(resultadoQuartel.violations).toEqual([])
 })
 
-test('Campanhas abre pelo teclado: Tab pelo seletor de idioma ate a navegacao, Enter, e o foco vai para o titulo', async ({
+test('Campanhas abre pelo teclado: Tab pelo idioma e pelo som ate a navegacao, Enter, e o foco vai para o titulo', async ({
   page,
 }) => {
   await page.goto('/')
 
   // O seletor de idioma (PT, EN) fica no bloco da marca, antes das areas.
-  const idiomas = page.getByTestId('side-nav').getByRole('group').getByRole('button')
+  const idiomas = seletorDeIdioma(page)
   await page.keyboard.press('Tab')
   await expect(idiomas.nth(0)).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(idiomas.nth(1)).toBeFocused()
+  // Os botoes de som vem logo depois do idioma, ainda no bloco da marca.
+  const sons = page.getByTestId('sound-controls').getByRole('button')
+  await page.keyboard.press('Tab')
+  await expect(sons.nth(0)).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(sons.nth(1)).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByTestId('nav-headquarters')).toBeFocused()
   await page.keyboard.press('Tab')
@@ -331,10 +345,11 @@ test.describe('celular', () => {
     const kairya = page.getByTestId('tutor-sheet-open')
     await expect(kairya).toBeVisible()
     const caixaKairya = await kairya.boundingBox()
-    // Os dois botoes das areas e os dois do seletor de idioma (PT/EN), que
-    // fica no bloco da marca, dentro da mesma nav: nenhum cobre a Kairya.
+    // Os dois botoes das areas, os dois do seletor de idioma (PT/EN) e os dois
+    // de som, que ficam no bloco da marca, dentro da mesma nav: nenhum cobre a
+    // Kairya.
     const botoesNav = await nav.getByRole('button').all()
-    expect(botoesNav.length).toBe(4)
+    expect(botoesNav.length).toBe(6)
     for (const botao of botoesNav) {
       const caixaBotao = await botao.boundingBox()
       expect(caixasSeSobrepoem(caixaKairya, caixaBotao)).toBe(false)

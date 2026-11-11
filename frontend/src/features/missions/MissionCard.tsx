@@ -10,7 +10,7 @@ import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft, OpenReschedule } from './types'
-import { completionEvents, useKairya } from '../kairya'
+import { completionEvents, sfxForCompletion, useKairya } from '../kairya'
 import {
   useCompleteMission,
   type CompletionOutcome,
@@ -19,6 +19,7 @@ import {
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
 import { useStartMission, type StartState } from './useStartMission'
+import { useAudio } from '../../shared/audio/useAudio'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { MessageKey } from '../../shared/i18n/catalog'
@@ -444,12 +445,15 @@ export function MissionCard({
   const t = useT()
   const { locale } = useLocale()
   const { dispatchAll } = useKairya()
+  const { playSfx } = useAudio()
   const handleCompleted = useCallback(
     (outcome: CompletionOutcome) => {
-      dispatchAll(completionEvents({ type: outcome.mission.mission_type, reward: outcome.reward }))
+      const done = { type: outcome.mission.mission_type, reward: outcome.reward }
+      dispatchAll(completionEvents(done))
+      playSfx(sfxForCompletion(done))
       onCompleted?.()
     },
-    [dispatchAll, onCompleted],
+    [dispatchAll, playSfx, onCompleted],
   )
   const { state: completion, complete } = useCompleteMission(listed.id, registry, handleCompleted)
   const { state: start, start: startMission } = useStartMission(listed.id, registry)

@@ -6,7 +6,7 @@
        `evaluateAll` recebe elementos do documento, e sem `DOM` os tipos do
        Playwright e do axe-core nao resolvem `Element`. */
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "skipLibCheck": true,
 
     /* Bundler mode: o Playwright resolve os imports do cenario com o proprio
@@ -19,6 +19,10 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    /* O spec do audio importa constantes de `src/shared/audio`, que importa o
+       TIPO de um `.tsx`: o `tsc` precisa do `jsx` para resolver o modulo, e do
+       `vite/client` para o `import.meta.env` que esse caminho alcanca. */
+    "jsx": "react-jsx",
 
     /* Linting */
     "strict": true,
