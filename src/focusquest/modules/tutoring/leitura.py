@@ -42,11 +42,15 @@ from focusquest.modules.tutoring.provider import (
 _LOG = logging.getLogger(__name__)
 
 
-# O limiter padrao de threads do anyio, que atende a `transmitir` sincrona (cada
-# `next()` roda numa thread do threadpool do Starlette): 40 fichas. O teste
-# `test_o_teto_e_o_do_limiter_padrao_de_threads_do_anyio` amarra o numero a
-# premissa. Mais leitores presos que isso, e o servidor ja nao teria thread
-# para atender o proximo stream, quer o leitor seja daemon, quer nao.
+# O recurso protegido e o do processo: cada leitor orfao ocupa uma thread, um
+# socket/FD e uma conexao ao provedor. O leitor e `threading.Thread` daemon e
+# NAO consome ficha do limiter do anyio; so o `next()` do consumidor consome (e
+# e liberado no teto de 54 s). O 40 e uma escolha de DIMENSIONAMENTO: igual ao
+# total do limiter padrao do anyio (40), para que consumidores ativos mais
+# leitores orfaos fiquem na mesma ordem de grandeza do que o servidor ja admite
+# por processo. Nao e prova de esgotamento do limiter. O teste
+# `test_o_teto_acompanha_o_numero_do_limiter_padrao_do_anyio` amarra o NUMERO,
+# nao a premissa.
 TETO_DE_LEITORES_VIVOS = 40
 
 
@@ -55,7 +59,8 @@ class LeitoresVivos:
 
     `reservar` confere e incrementa sob o MESMO lock (nada de checa-e-depois-
     age): N threads disputando a ultima vaga, so uma vence. Quem reserva deve
-    `liberar` exatamente uma vez, aconteca o que acontecer.
+    `liberar` exatamente uma vez, aconteca o que acontecer: `_Vaga` garante isso
+    por leitor.
     """
 
     def __init__(self, teto: int = TETO_DE_LEITORES_VIVOS) -> None:
@@ -90,6 +95,33 @@ class LeitoresVivos:
 
 
 LEITORES_VIVOS = LeitoresVivos()
+
+
+class _Vaga:
+    """A vaga de UM leitor: liberacao idempotente, sob lock.
+
+    Duas saidas podem devolver a mesma vaga (a thread do leitor ao terminar e
+    `ler_com_prazo` se `start()` lancar depois de a thread ter nascido). Sem
+    este objeto, a segunda liberacao decrementaria a vaga de OUTRO leitor.
+    """
+
+    def __init__(self, leitores: LeitoresVivos) -> None:
+        self._leitores = leitores
+        self._trava = threading.Lock()
+        self._tomada = False
+
+    def reservar(self) -> bool:
+        with self._trava:
+            self._tomada = self._leitores.reservar()
+            return self._tomada
+
+    def liberar(self) -> int:
+        """Devolve a vaga uma unica vez; leitores vivos depois da chamada."""
+        with self._trava:
+            if not self._tomada:
+                return self._leitores.vivos
+            self._tomada = False
+            return self._leitores.liberar()
 
 
 def _esperar_na_fila(fila: queue.Queue[object], segundos: float) -> object:
@@ -130,12 +162,12 @@ def _ler(
     eventos: Generator[object],
     fila: queue.Queue[object],
     cancelado: threading.Event,
-    leitores: LeitoresVivos,
+    vaga: _Vaga,
     espera: Espera,
 ) -> None:
     """A thread do leitor: dona da leitura, do fechamento do stream e da vaga."""
-    inicio = espera.monotonic()
     try:
+        inicio = espera.monotonic()
         try:
             for evento in eventos:
                 if cancelado.is_set():
@@ -149,7 +181,7 @@ def _ler(
         finally:
             eventos.close()
     finally:
-        vivos = leitores.liberar()
+        vivos = vaga.liberar()
         if cancelado.is_set():
             # Sobreviveu ao consumidor: e o que o gauge existe para medir.
             _LOG.info(
@@ -180,7 +212,21 @@ def ler_com_prazo[E](
     paga nunca abre); o leitor devolve a vaga ao terminar, de qualquer forma.
     """
     leitores = LEITORES_VIVOS if leitores is None else leitores
-    if not leitores.reservar():
+    # Tudo o que pode lancar (Queue, Event, Thread) nasce ANTES da reserva: entre
+    # `reservar()` e o `try` do `start()` nao ha nada que possa deixar a vaga presa.
+    # Fila sem limite de proposito: o leitor so empilha o que o provedor emite, e
+    # uma resposta tem o teto de `max_tokens` (centenas de eventos).
+    fila: queue.Queue[object] = queue.Queue()
+    cancelado = threading.Event()
+    vaga = _Vaga(leitores)
+    leitor = threading.Thread(
+        target=_ler,
+        args=(eventos, fila, cancelado, vaga, espera),
+        name="tutoria-leitor",
+        daemon=True,
+    )
+    inicio = espera.monotonic()
+    if not vaga.reservar():
         eventos.close()
         _LOG.warning(
             "stream da tutoria recusado: leitores_vivos=%d teto=%d",
@@ -188,24 +234,15 @@ def ler_com_prazo[E](
             leitores.teto,
         )
         raise ProvedorIndisponivelError("leitores do provedor acima do teto")
-    # Fila sem limite de proposito: o leitor so empilha o que o provedor emite, e
-    # uma resposta tem o teto de `max_tokens` (centenas de eventos).
-    fila: queue.Queue[object] = queue.Queue()
-    cancelado = threading.Event()
-    leitor = threading.Thread(
-        target=_ler,
-        args=(eventos, fila, cancelado, leitores, espera),
-        name="tutoria-leitor",
-        daemon=True,
-    )
-    inicio = espera.monotonic()
-    entregues = 0
     try:
         leitor.start()
     except BaseException:
-        # A thread nem nasceu: a vaga que o leitor devolveria volta daqui.
-        leitores.liberar()
+        # Se a thread chegou a nascer, que pare; a vaga volta uma unica vez (a
+        # liberacao do leitor e a daqui sao idempotentes por vaga).
+        cancelado.set()
+        vaga.liberar()
         raise
+    entregues = 0
     try:
         while True:
             restante = teto_segundos - (espera.monotonic() - inicio)

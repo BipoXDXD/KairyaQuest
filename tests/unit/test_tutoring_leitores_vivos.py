@@ -2,7 +2,7 @@
 
 O leitor do stream (`tutoria-leitor`) e uma thread daemon que o consumidor
 abandona ao estourar o teto de parede; com `ping` do provedor ela pode seguir
-viva ate o proximo evento real. Estes testes provam quatro coisas:
+viva ate o proximo evento real. Estes testes provam cinco coisas:
 
 1. o contador de vivos e exato: sobe ao reservar, desce ao liberar, e a vaga
    volta em TODO fim do leitor (normal, erro, cancelado) e se a thread nem
@@ -10,7 +10,10 @@ viva ate o proximo evento real. Estes testes provam quatro coisas:
 2. a reserva e atomica: N threads disputando a ultima vaga, so uma vence;
 3. acima do teto o stream e recusado ANTES de abrir a chamada ao provedor, com
    o erro que um provedor indisponivel ja produz;
-4. o teto vale a premissa que o motiva: o limiter padrao de threads do anyio.
+4. o teto acompanha o numero do limiter padrao de threads do anyio (escolha de
+   dimensionamento, nao prova de esgotamento do limiter);
+5. cada leitor devolve a sua vaga uma unica vez, mesmo se `start()` lancar
+   depois de a thread ter iniciado.
 
 Sem `sleep`: o que precisa esperar espera por `Event` ou por `join` da thread,
 e o relogio do leitor e o falso de `Espera`.
@@ -100,10 +103,12 @@ class _Stream:
             self.fechado.set()
 
 
-def test_o_teto_e_o_do_limiter_padrao_de_threads_do_anyio() -> None:
-    # A premissa do 40: `transmitir` sincrona roda no threadpool do anyio, cujo
-    # limiter padrao vale 40. Se o anyio mudar o padrao, este teste pede que o
-    # teto seja revisto junto, em vez de divergir calado.
+def test_o_teto_acompanha_o_numero_do_limiter_padrao_do_anyio() -> None:
+    # Amarra o NUMERO, nao a premissa: o 40 foi escolhido igual ao limiter
+    # padrao do anyio (dimensionamento: consumidores ativos e leitores orfaos na
+    # mesma ordem de grandeza do que o servidor admite por processo). O leitor
+    # e thread daemon e nao consome ficha do limiter. Se o anyio mudar o padrao,
+    # este teste pede que o teto seja revisto junto, em vez de divergir calado.
     async def total_de_tokens() -> float:
         return anyio.to_thread.current_default_thread_limiter().total_tokens
 
@@ -376,19 +381,30 @@ def test_o_leitor_que_termina_com_o_consumidor_presente_nao_gera_log(
     assert caplog.records == []
 
 
-def test_a_vaga_volta_se_a_thread_do_leitor_nao_consegue_iniciar(
-    monkeypatch: pytest.MonkeyPatch,
+def _com_thread(
+    monkeypatch: pytest.MonkeyPatch, thread: type[threading.Thread]
 ) -> None:
-    class ThreadQueNaoInicia(threading.Thread):
-        def start(self) -> None:
-            raise RuntimeError("can't start new thread")
-
-    leitores = LeitoresVivos(teto=2)
     monkeypatch.setattr(
         leitura,
         "threading",
-        types.SimpleNamespace(Thread=ThreadQueNaoInicia, Event=threading.Event),
+        types.SimpleNamespace(
+            Thread=thread, Event=threading.Event, Lock=threading.Lock
+        ),
     )
+
+
+def test_a_vaga_e_reservada_antes_do_start_e_volta_se_o_start_falha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    leitores = LeitoresVivos(teto=2)
+    vivos_no_start: list[int] = []
+
+    class ThreadQueNaoInicia(threading.Thread):
+        def start(self) -> None:
+            vivos_no_start.append(leitores.vivos)
+            raise RuntimeError("can't start new thread")
+
+    _com_thread(monkeypatch, ThreadQueNaoInicia)
 
     with pytest.raises(RuntimeError, match="can't start new thread"):
         list(
@@ -400,7 +416,37 @@ def test_a_vaga_volta_se_a_thread_do_leitor_nao_consegue_iniciar(
             )
         )
 
-    assert leitores.vivos == 0
+    assert vivos_no_start == [1]  # reservada antes de o start ser tentado
+    assert leitores.vivos == 0  # e devolvida quando ele falhou
+
+
+def test_start_que_falha_depois_de_a_thread_iniciar_nao_libera_a_vaga_duas_vezes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Teorico, mas barato de provar: a thread nasce e roda, e o `start()` ainda
+    # assim lanca. A vaga deste leitor volta UMA vez; a do outro nao e tocada.
+    leitores = LeitoresVivos(teto=3)
+    assert leitores.reservar()  # a vaga de outro leitor, que deve sobreviver
+
+    class ThreadQueIniciaELanca(threading.Thread):
+        def start(self) -> None:
+            super().start()
+            self.join(ESPERA_DO_TESTE)  # o leitor ja terminou e liberou
+            raise RuntimeError("falhou depois de iniciar")
+
+    _com_thread(monkeypatch, ThreadQueIniciaELanca)
+
+    with pytest.raises(RuntimeError, match="falhou depois de iniciar"):
+        list(
+            ler_com_prazo(
+                _Stream(("a",)).gerar(),
+                teto_segundos=TETO_DO_STREAM,
+                espera=_Relogio().injetavel,
+                leitores=leitores,
+            )
+        )
+
+    assert leitores.vivos == 1  # so a do outro leitor
 
 
 def test_o_gauge_global_e_o_que_o_stream_usa_por_padrao(

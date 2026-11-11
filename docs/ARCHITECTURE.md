@@ -1824,12 +1824,17 @@ da leitura: no próximo evento real ou no fim do stream pelo servidor (o SDK
 descarta os `ping`, que reiniciam o timer de leitura, então o timeout por
 leitura não limita essa volta). Esses leitores que sobrevivem ao consumidor
 são contados (`LeitoresVivos`, gauge em processo, sem endpoint nem dependência
-nova) e limitados a 40, o total de threads do limiter padrão do anyio que atende
-a `transmitir`: acima disso o stream **novo** é recusado antes de abrir a
+nova) e limitados a 40: o recurso protegido é o do processo (thread, socket/FD e
+conexão ao provedor de cada leitor órfão). O leitor é thread daemon e **não**
+consome ficha do limiter do anyio; só o `next()` do consumidor consome, e ele é
+liberado no teto de 54 s. O 40 é escolha de dimensionamento, igual ao limiter
+padrão, para que consumidores ativos e leitores órfãos fiquem na mesma ordem de
+grandeza do que o servidor já admite por processo (não é prova de esgotamento do
+limiter). Acima do teto o stream **novo** é recusado antes de abrir a
 chamada ao provedor, com `ProvedorIndisponivelError` (`RespostaFalhou(
 provedor_indisponivel)`, a resposta `falhou` sem texto), sem chamada paga e sem
 código novo. Recusa em vez de cancelar, porque não há como cancelar uma thread
-presa numa leitura de socket. A reserva é atômica e a vaga volta quando o leitor
+presa numa leitura de socket. A reserva é atômica e a vaga, por leitor e idempotente, volta quando o leitor
 termina, de qualquer forma; o log registra a recusa (`leitores_vivos`, `teto`) e
 o leitor que termina depois do consumidor (`vida_ms`, `leitores_vivos`), nunca o
 texto (`docs/handoff/2026-11-11-leitores-vivos.md`). O

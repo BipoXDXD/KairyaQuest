@@ -19,17 +19,25 @@ teto, o stream NOVO é recusado antes de abrir a chamada ao provedor.**
   `LEITORES_VIVOS`. Sem dependência, sem endpoint: o projeto não tem registro
   de métricas (`grep` por prometheus/gauge/metrics em `src`: nada), então é
   gauge em processo + log.
-- **Ciclo da vaga:** reservada em `ler_com_prazo` ANTES de `leitor.start()`
-  (a vaga existe desde antes de a thread nascer: sem janela em que o leitor
-  vive e não é contado); devolvida no `finally` externo de `_ler`, depois de
-  `eventos.close()`, por qualquer saída (normal, exceção, cancelado). Se
-  `start()` falhar (sem thread disponível), a vaga volta ali mesmo e a exceção
-  sobe.
-- **Teto 40 = `TETO_DE_LEITORES_VIVOS`.** É o total de fichas do limiter padrão
-  de threads do anyio, que atende a `transmitir` síncrona (cada `next()` roda
-  numa thread do threadpool do Starlette). Um teste amarra o 40 à premissa:
-  `anyio.run` lê `current_default_thread_limiter().total_tokens` e compara com a
-  constante (anyio 4.15.1: 40).
+- **Ciclo da vaga:** `Queue`/`Event`/`Thread` nascem antes da reserva; a vaga
+  (`_Vaga`, por leitor) é reservada imediatamente antes do `try` que envolve
+  `leitor.start()` (a vaga existe desde antes de a thread nascer: sem janela em
+  que o leitor vive e não é contado); devolvida no `finally` externo de `_ler`,
+  depois de `eventos.close()`, por qualquer saída. Se `start()` falhar, o
+  consumidor cancela o leitor e devolve a vaga. A liberação é idempotente por
+  vaga (flag sob lock): mesmo que `start()` lance depois de a thread ter
+  iniciado e as duas saídas liberem, o gauge decrementa uma vez só, sem
+  depender do guard de zero (testado).
+- **Teto 40 = `TETO_DE_LEITORES_VIVOS`.** O recurso protegido é o do processo:
+  cada leitor órfão ocupa uma thread, um socket/FD e uma conexão ao provedor. O
+  leitor é `threading.Thread` daemon e **não** consome ficha do limiter do
+  anyio; só o `next()` do consumidor consome (e é liberado no teto de 54 s). O
+  40 é escolha de dimensionamento: igual ao limiter padrão do anyio (que atende
+  a `transmitir` síncrona), para que consumidores ativos + leitores órfãos
+  fiquem na mesma ordem de grandeza do que o servidor já admite por processo.
+  **Não** é prova de esgotamento do limiter. Um teste amarra o NÚMERO, não a
+  premissa: `anyio.run` lê `current_default_thread_limiter().total_tokens` e
+  compara com a constante (anyio 4.15.1: 40).
 - **Código de falha reaproveitado: `provedor_indisponivel`.** A recusa levanta
   `ProvedorIndisponivelError`, que `transmitir` já traduz em
   `RespostaFalhou(provedor_indisponivel)` e na mensagem `falhou` sem texto e sem
