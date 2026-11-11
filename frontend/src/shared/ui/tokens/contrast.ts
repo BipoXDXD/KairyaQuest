@@ -112,7 +112,7 @@ function describeFailure(
 
 // Trunca em vez de arredondar: 2,996 arredondado viraria "3.00 < 3", uma
 // mensagem que contradiz a própria reprovação.
-function truncateToHundredths(ratio: number): string {
+export function truncateToHundredths(ratio: number): string {
   return (Math.floor(ratio * 100) / 100).toFixed(2)
 }
 

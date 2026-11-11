@@ -453,6 +453,24 @@ mesmos criaram.
   pelo cenário semeado do E2E, que sempre tem um plano carregado com
   sucesso (pendência, `docs/HANDOFF.md`).
 
+**Contraste sobre os quatro painéis com gradiente não é do axe: é do
+Vitest.** Sobre `linear-gradient` o axe não decide contraste (devolve
+`color-contrast` em `incomplete`, nunca em `violations`), então
+`frontend/src/styles/gradientContrast.test.ts` mede cada cor de texto (4,5:1,
+WCAG 1.4.3), de borda de campo e de anel de foco (3:1, WCAG 1.4.11) dos
+componentes de `.rpg-mission-card`, `.rpg-cycle`, `.rpg-progress` e `.rpg-tutor`
+contra os **dois extremos** de cada gradiente. Os extremos vêm do
+`index.css`, as cores dos tokens e do tema do Tailwind, nada copiado; o
+cálculo está em `shared/ui/tokens/gradientPanels.ts`. Limites declarados:
+mede os extremos, não os pontos intermediários nem imagens; o app só tem o
+tema escuro (um teste reprova se um tema claro aparecer, para forçar a
+revisão); bordas decorativas escapam por lista escrita no teste, e borda ou
+texto novo é medido. **Não medidos:** a cor herdada sem classe
+(`--color-text-primary` em `dd`, `p`, `h2` e `h3`, que tem folga grande) e as
+bordas translúcidas (`border-*/NN`, puladas de propósito); e o
+`gradientStops` lê só o primeiro `background:` da regra, então um override
+dentro de `@media` seria ignorado.
+
 **Limitação registrada do Incremento D: a mutação `xp_awarded` ↔ `xp_total`
 em `RewardAnnouncement` só é provada morta no teste de unidade, não no
 E2E.** `RewardAnnouncement.test.tsx` (Task 7) usa uma fixture em que o saldo
