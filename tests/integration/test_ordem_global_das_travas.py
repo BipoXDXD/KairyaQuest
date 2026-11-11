@@ -228,6 +228,7 @@ class AvaliacaoControlada:
             historico=20,
             limite=timedelta(seconds=60),
             modelo=MODELO,
+            turnos_por_dia=60,
         )
 
     def iniciar(

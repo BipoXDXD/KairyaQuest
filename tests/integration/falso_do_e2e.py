@@ -244,11 +244,19 @@ class TratadorComControle(TratadorDoFalso):
             self._responder(404)
 
 
+LINHA_DE_PRONTO = "falso do E2E escutando em"
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--porta", type=int, required=True)
     argumentos = parser.parse_args(argv)
-    with ServidorAnthropicFalso(porta=argumentos.porta, tratador=TratadorComControle):
+    with ServidorAnthropicFalso(
+        porta=argumentos.porta, tratador=TratadorComControle
+    ) as falso:
+        # A porta ja esta escutando aqui: quem sobe o processo espera esta
+        # linha em vez de adivinhar quanto o import do SDK demora.
+        print(f"{LINHA_DE_PRONTO} {falso.url}", flush=True)
         # O Playwright encerra o processo ao fim da suite (SIGTERM).
         threading.Event().wait()
 

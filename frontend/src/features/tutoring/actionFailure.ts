@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { ActionErrorCode, ActionRead } from './types'
 
 /**
@@ -76,26 +77,37 @@ const RECORDS: Record<ActionRecovery, boolean> = {
 }
 
 /**
+ * O texto de uma decisao sem resposta, em duas partes: a abertura (`lead`), que
+ * nomeia a acao e a causa quando ela e de transporte (`leadFor`), e o fim que
+ * diz que repetir e seguro.
+ */
+interface UnconfirmedText {
+  lead: FailureLead
+  tail: string
+}
+
+/**
  * O aviso de confirmar sem resposta, por `kind`: o que "nao acontece duas
  * vezes" depende do que a proposta faz. Exaustivo: um `kind` novo reprova o
  * `tsc` ate ganhar texto.
  */
-const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], ActionFailure> = {
+const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], UnconfirmedText> = {
   create_mission: {
-    message:
-      'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
-    recovery: 'retry',
+    lead: { action: 'confirmar a missão', fallback: 'Não foi possível confirmar a missão.' },
+    tail: 'Tentar de novo é seguro: a missão não será criada duas vezes.',
   },
   reschedule_mission: {
-    message:
-      'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-    recovery: 'retry',
+    lead: {
+      action: 'confirmar o reagendamento',
+      fallback: 'Não foi possível confirmar o reagendamento.',
+    },
+    tail: 'Tentar de novo é seguro: o prazo não mudará duas vezes.',
   },
 }
 
-const UNCONFIRMED_REJECT: ActionFailure = {
-  message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
-  recovery: 'retry',
+const UNCONFIRMED_REJECT: UnconfirmedText = {
+  lead: { action: 'recusar a proposta', fallback: 'Não foi possível recusar a proposta.' },
+  tail: 'Tentar de novo é seguro.',
 }
 
 function isActionErrorCode(code: string): code is ActionErrorCode {
@@ -128,7 +140,8 @@ export function describeActionFailure(
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return BY_CODE[error.code]
   }
-  return attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  const text = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  return { message: `${leadFor(error, text.lead)} ${text.tail}`, recovery: 'retry' }
 }
 
 const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'

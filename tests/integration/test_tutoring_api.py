@@ -504,8 +504,11 @@ def test_a_chave_nao_aparece_na_resposta_nem_no_log(
                 max_tokens=8,
                 timeout_segundos=1,
                 fallback=True,
+                esforco="low",
+                esforco_da_avaliacao="medium",
             ),
             historico=20,
+            turnos_por_dia=60,
             limite=timedelta(seconds=60),
             modelo="claude-opus-5",
         ),
@@ -520,133 +523,81 @@ def test_a_chave_nao_aparece_na_resposta_nem_no_log(
 # --- A dependencia real ----------------------------------------------------
 
 
-@pytest.fixture
-def configuracao_groq(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+def test_get_tutoria_sem_chave_devolve_none(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.delenv("FOCUSQUEST_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    assert dependencias.get_tutoria() is None
+
+
+def test_get_tutoria_com_chave_monta_e_reaproveita(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
     import focusquest.modules.tutoring.dependencies as dependencias
 
     monkeypatch.setattr(dependencias, "_tutoria", None)
     monkeypatch.chdir(tmp_path)
-    for chave in list(__import__("os").environ):
-        if chave.startswith("FOCUSQUEST_"):
-            monkeypatch.delenv(chave)
     monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
     monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
-
-
-@pytest.mark.parametrize("chave", [None, "", "   "])
-def test_get_tutoria_sem_groq_nunca_usa_anthropic(
-    monkeypatch: pytest.MonkeyPatch, configuracao_groq: None, chave: str | None
-) -> None:
-    import focusquest.modules.tutoring.dependencies as dependencias
-
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
-    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", "true")
-    if chave is not None:
-        monkeypatch.setenv("FOCUSQUEST_GROQ_API_KEY", chave)
-    assert dependencias.get_tutoria() is None
-
-
-def test_get_tutoria_com_chave_groq_monta_e_reaproveita(
-    monkeypatch: pytest.MonkeyPatch, configuracao_groq: None
-) -> None:
-    import focusquest.modules.tutoring.dependencies as dependencias
-    from focusquest.modules.tutoring.groq_provider import ProvedorGroq
-
-    monkeypatch.setenv("FOCUSQUEST_GROQ_API_KEY", "groq-chave-ficticia")
     monkeypatch.setenv("FOCUSQUEST_TUTOR_HISTORY_MESSAGES", "7")
     monkeypatch.setenv("FOCUSQUEST_TUTOR_TIMEOUT_SECONDS", "12")
     primeira = dependencias.get_tutoria()
     assert primeira is not None
-    assert isinstance(primeira.provedor, ProvedorGroq)
+    assert isinstance(primeira.provedor, ProvedorAnthropic)
     assert (primeira.historico, primeira.limite) == (7, timedelta(seconds=12))
-    assert primeira.modelo == "openai/gpt-oss-20b"
     assert dependencias.get_tutoria() is primeira
 
 
-@pytest.mark.parametrize("valor", ["false", "true"])
-def test_configuracao_legada_nao_habilita_fallback_pago(
-    monkeypatch: pytest.MonkeyPatch, configuracao_groq: None, valor: str
+def test_get_tutoria_leva_o_modelo_configurado(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:
-    import httpx2
-
+    """O modelo que interpreta vai gravado em cada avaliacao (spec, `model`):
+    a tutoria o carrega do `Settings`, o mesmo que o adaptador usa."""
     import focusquest.modules.tutoring.dependencies as dependencias
-    from focusquest.modules.tutoring.provider import ProvedorIndisponivelError
 
-    monkeypatch.setenv("FOCUSQUEST_GROQ_API_KEY", "groq-chave-ficticia")
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
-    monkeypatch.setenv("FOCUSQUEST_TUTOR_MODEL", "claude-opus-5")
-    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", valor)
-    recebidas: list[httpx2.Request] = []
-    cliente_original = httpx2.Client
-
-    def tratar(r: httpx2.Request) -> httpx2.Response:
-        recebidas.append(r)
-        return httpx2.Response(429)
-
-    def cliente(**kwargs: Any) -> httpx2.Client:
-        kwargs["transport"] = httpx2.MockTransport(tratar)
-        assert kwargs["trust_env"] is False
-        assert kwargs["follow_redirects"] is False
-        return cliente_original(**kwargs)
-
-    monkeypatch.setattr(httpx2, "Client", cliente)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_MODEL", "modelo-de-teste")
     tutoria = dependencias.get_tutoria()
     assert tutoria is not None
-    assert tutoria.modelo == "openai/gpt-oss-20b"
-    with pytest.raises(ProvedorIndisponivelError):
-        list(tutoria.provedor.responder(Turno("S", (MensagemDoTurno("user", "oi"),))))
-    assert len(recebidas) == 1
-    assert recebidas[0].url.host == "api.groq.com"
-    assert "fallbacks" not in json.loads(recebidas[0].content)
+    assert tutoria.modelo == "modelo-de-teste"
 
 
-def test_conversa_groq_persiste_proposta_sem_criar_missao_e_nao_repete(
-    cliente: TestClient, conversa: Conversa, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(("valor", "pede"), [("false", False), ("true", True)])
+def test_get_tutoria_leva_o_fallback_configurado(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    falso: ServidorAnthropicFalso,
+    valor: str,
+    pede: bool,
 ) -> None:
-    import httpx2
+    """`FOCUSQUEST_TUTOR_FALLBACK` chega a requisicao de verdade (pendencia
+    174): sem isto, o `false` de emergencia existiria so no `Settings`."""
+    import focusquest.modules.tutoring.dependencies as dependencias
 
-    from focusquest.modules.tutoring.groq_provider import ProvedorGroq
-    from integration.test_groq_provider import chamada, fragmento, sse
-
-    recebidas: list[httpx2.Request] = []
-
-    def tratar(r: httpx2.Request) -> httpx2.Response:
-        recebidas.append(r)
-        return httpx2.Response(
-            200,
-            content=sse(
-                fragmento({"content": "Vamos estudar!"}),
-                fragmento(chamada("create_mission", json.dumps(PROPOSTA))),
-                fragmento(motivo="tool_calls"),
-                "[DONE]",
-            ),
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_BASE_URL", falso.url)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", valor)
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    list(
+        tutoria.provedor.responder(
+            Turno(sistema="S", mensagens=(MensagemDoTurno("user", "oi"),))
         )
-
-    tutoria_groq = Tutoria(
-        ProvedorGroq(
-            chave="ficticia",
-            max_tokens=1024,
-            timeout_segundos=2,
-            transporte=httpx2.MockTransport(tratar),
-        ),
-        20,
-        timedelta(seconds=10),
-        "openai/gpt-oss-20b",
     )
-    monkeypatch.setitem(app.dependency_overrides, get_tutoria, lambda: tutoria_groq)
-    antes = cliente.get("/api/missions").json()
-    cid = conversa.id("groq-proposta")
-    resposta = _enviar(cliente, cid)
-    assert resposta.status_code == 200
-    eventos = _eventos(resposta.text)
-    assert [nome for nome, _ in eventos] == ["user_message", "delta", "done"]
-    gravada = eventos[-1][1]
-    assert gravada["status"] == "completa"
-    assert gravada["content"] == "Vamos estudar!"
-    assert gravada["fallback_model"] is None
-    assert gravada["actions"][0]["state"] == "proposta"
-    assert gravada["actions"][0]["kind"] == "create_mission"
-    assert cliente.get("/api/missions").json() == antes
-    repetida = _eventos(_enviar(cliente, cid).text)[-1][1]
-    assert repetida["id"] == gravada["id"]
-    assert len(recebidas) == 1
+    assert ("fallbacks" in falso.recebidas[0].corpo) is pede

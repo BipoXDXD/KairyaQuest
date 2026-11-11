@@ -12,6 +12,7 @@ import {
   type PlaywrightWorkerArgs,
 } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
+import { instanteRelativo, isoSaoPaulo, isoUtc, prazoNaTela } from './datas'
 import { API_URL } from './servers'
 
 /**
@@ -39,6 +40,14 @@ import { API_URL } from './servers'
  * `id`, e e por `id` que o cenario localiza a linha dela.
  */
 const EXECUCAO = randomUUID().slice(0, 8)
+
+/**
+ * Os prazos dos dois pedidos, relativos a hoje (pendencia 207): o backend so
+ * aceita prazo em `(agora, agora + 365 d]`, e um literal venceria. O primeiro
+ * e as 21:00 de Sao Paulo -- ja o dia seguinte em UTC --, o segundo vence
+ * ANTES dele.
+ */
+const PRAZOS: readonly Date[] = [instanteRelativo(60, 21), instanteRelativo(30, 10)]
 
 /** O que o cenario manda para `POST /api/missions`. */
 interface PedidoDeMissao {
@@ -90,30 +99,31 @@ const PEDIDOS: readonly PedidoDeMissao[] = [
     // sessao do PostgreSQL em UTC). Sao duas grafias do mesmo instante, e e a
     // igualdade de INSTANTES -- nao de strings -- que a conferencia do
     // `dateTime` abaixo comprova.
-    deadline: '2027-02-15T21:00:00-03:00',
+    deadline: isoSaoPaulo(PRAZOS[0]),
   },
   {
     instructions: `Ler o capitulo 3 de algoritmos (e2e ${EXECUCAO})`,
     completion_criterion: `Resumo de uma pagina entregue (e2e ${EXECUCAO})`,
     difficulty: 3,
     estimated_minutes: 45,
-    deadline: '2027-01-10T13:00:00Z',
+    deadline: isoUtc(PRAZOS[1]),
   },
 ]
 
 /**
  * O TEXTO do prazo que a tela tem de mostrar para cada pedido, na mesma ordem
- * de `PEDIDOS` -- escrito por extenso, em `America/Sao_Paulo`, pela mesma razao
- * de nao importar os rotulos da aplicacao.
+ * de `PEDIDOS` -- calculado do mesmo instante em `America/Sao_Paulo` por
+ * `datas.ts`, com aritmetica propria, pela mesma razao de nao importar os
+ * rotulos nem os formatadores da aplicacao.
  *
  * Os dois fusos que importam aqui produzem textos diferentes: o navegador do
  * cenario roda em `Asia/Tokyo` (ver `playwright.config.ts`), onde o primeiro
- * prazo seria `16/02/2027 09:00`. Conferir so o atributo `dateTime` nao pegava
+ * prazo cairia no dia seguinte, as 09:00. Conferir so o atributo `dateTime` nao pegava
  * um defeito de APRESENTACAO -- o instante estava certo e o texto, no fuso
  * errado. Regex e nao texto exato: o separador entre data e hora muda entre
  * versoes do ICU.
  */
-const PRAZO_NA_TELA: readonly RegExp[] = [/15\/02\/2027.*21:00/, /10\/01\/2027.*10:00/]
+const PRAZO_NA_TELA: readonly RegExp[] = PRAZOS.map(prazoNaTela)
 
 /** As missoes criadas, como a API as devolveu, na ordem de criacao. */
 const criadas: MissaoCriada[] = []
@@ -158,7 +168,7 @@ async function missaoDoCenario(
       completion_criterion: `Entrega conferida (e2e ${EXECUCAO})`,
       difficulty: 2,
       estimated_minutes: 30,
-      deadline: '2027-03-01T12:00:00Z',
+      deadline: isoUtc(instanteRelativo(90, 9)),
     })
   } finally {
     await api.dispose()
@@ -226,9 +236,9 @@ test('o quadro mostra as missoes que esta execucao criou', async ({ page }) => {
 
     // O prazo: o atributo `dateTime` carrega o instante, e a comparacao e
     // entre INSTANTES. Comparar as strings reprovaria por formatacao --
-    // `2027-02-15T21:00:00-03:00` (o 201, que ecoa o pedido) e
-    // `2027-02-16T00:00:00Z` (a listagem, lida do banco em UTC) sao o mesmo
-    // momento escrito de dois jeitos.
+    // `...T21:00:00-03:00` (o 201, que ecoa o pedido) e `...T00:00:00Z` do
+    // dia seguinte (a listagem, lida do banco em UTC) sao o mesmo momento
+    // escrito de dois jeitos.
     const prazo = await item.getByTestId('mission-deadline').getAttribute('dateTime')
     expect(prazo).not.toBeNull()
     expect(Date.parse(prazo ?? '')).toBe(Date.parse(criada.deadline))
@@ -415,7 +425,11 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   await item.getByRole('button', { name: `Concluir a missão: ${alvo.instructions}` }).click()
 
   // A tela nao sabe se concluiu, e diz isso -- num alerta que o axe audita.
-  await expect(item.getByRole('alert')).toContainText('Tentar de novo é seguro')
+  // O texto inteiro: a acao que falhou, a causa (o `route.abort()` e falha de
+  // rede) e o porque de repetir ser seguro.
+  await expect(item.getByRole('alert')).toHaveText(
+    'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+  )
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])
 

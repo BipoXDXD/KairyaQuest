@@ -88,7 +88,9 @@ def turno(agora: datetime) -> Turno:
         historico=[],
     )
     return Turno(
-        sistema=base.sistema, mensagens=(MensagemDoTurno("user", camada3._PEDIDO),)
+        sistema=base.sistema,
+        contexto=base.contexto,
+        mensagens=(MensagemDoTurno("user", camada3._PEDIDO),),
     )
 
 
@@ -109,6 +111,8 @@ def capturar(
         max_tokens=max_tokens,
         timeout_segundos=timeout_segundos,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     eventos = list(provedor.responder(turno(agora)))
     captura = Captura(
