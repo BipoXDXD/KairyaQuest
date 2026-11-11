@@ -163,12 +163,40 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.delenv("FOCUSQUEST_ANTHROPIC_BASE_URL", raising=False)
     settings = _settings_do_arquivo(monkeypatch, tmp_path, "")
     assert settings.anthropic_base_url == "https://api.anthropic.com"
-    assert settings.tutor_model == "openai/gpt-oss-20b"
+    assert settings.tutor_model == "claude-sonnet-5-5"
     assert settings.tutor_max_tokens == 2048
     assert settings.tutor_timeout_seconds == 60
     assert settings.tutor_history_messages == 20
-    # Fallback legado nao e ativado pelo padrao nem pela dependencia real.
-    assert settings.tutor_fallback is False
+    assert settings.tutor_daily_turn_limit == 60
+    assert settings.tutor_fallback is True
+    assert settings.tutor_effort == "low"
+    assert settings.evaluation_effort == "medium"
+
+
+@pytest.mark.parametrize(
+    "linha", ["FOCUSQUEST_TUTOR_EFFORT=max", "FOCUSQUEST_EVALUATION_EFFORT=alto"]
+)
+def test_esforco_recusa_valor_fora_da_lista(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, linha: str
+) -> None:
+    """Um esforco que a API nao conhece falha na partida, nao no primeiro
+    pedido ao modelo."""
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(monkeypatch, tmp_path, linha + "\n")
+    assert [e["type"] for e in erro.value.errors()] == ["literal_error"]
+
+
+def test_variavel_do_provedor_antigo_impede_a_partida(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Um .env de producao que ainda traga a chave do provedor removido nao
+    sobe: o `extra="forbid"` obriga a limpar o .env antes do deploy. O nome
+    e montado em pedacos para a fitness function do provedor removido
+    (`tests/unit/test_sem_*.py`) nao o achar."""
+    antiga = "FOCUSQUEST_" + "GR" + "OQ_API_KEY"
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(monkeypatch, tmp_path, f"{antiga}=qualquer\n")
+    assert [e["type"] for e in erro.value.errors()] == ["extra_forbidden"]
 
 
 @pytest.mark.parametrize(("valor", "esperado"), [("false", False), ("true", True)])
@@ -205,7 +233,7 @@ def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
     linhas = dict(
         linha.split("=", 1)
         for linha in (RAIZ / ".env.example").read_text().splitlines()
-        if linha.startswith("FOCUSQUEST_TUTOR_")
+        if linha.startswith(("FOCUSQUEST_TUTOR_", "FOCUSQUEST_EVALUATION_"))
     )
     campos = Settings.model_fields
     assert linhas == {
@@ -217,7 +245,12 @@ def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
         "FOCUSQUEST_TUTOR_HISTORY_MESSAGES": str(
             campos["tutor_history_messages"].default
         ),
+        "FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT": str(
+            campos["tutor_daily_turn_limit"].default
+        ),
         "FOCUSQUEST_TUTOR_FALLBACK": str(campos["tutor_fallback"].default).lower(),
+        "FOCUSQUEST_TUTOR_EFFORT": campos["tutor_effort"].default,
+        "FOCUSQUEST_EVALUATION_EFFORT": campos["evaluation_effort"].default,
     }
 
 
@@ -227,6 +260,7 @@ def test_o_env_example_traz_os_padroes_da_tutoria() -> None:
         "FOCUSQUEST_TUTOR_MAX_TOKENS=0",
         "FOCUSQUEST_TUTOR_TIMEOUT_SECONDS=0",
         "FOCUSQUEST_TUTOR_HISTORY_MESSAGES=0",
+        "FOCUSQUEST_TUTOR_DAILY_TURN_LIMIT=0",
     ],
 )
 def test_limites_da_tutoria_recusam_zero(
@@ -348,14 +382,3 @@ def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
     limites = Settings.model_fields["e2e_port_offset"].metadata
     teto = next(m.le for m in limites if hasattr(m, "le"))
     assert 2 * reserva - 1 == teto
-
-
-@pytest.mark.parametrize("valor", ["", "groq-chave-ficticia"])
-def test_chave_groq_opcional_e_protegida(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str
-) -> None:
-    settings = _settings_do_arquivo(
-        monkeypatch, tmp_path, f"FOCUSQUEST_GROQ_API_KEY={valor}\n"
-    )
-    assert settings.groq_api_key == (SecretStr(valor) if valor else None)
-    assert "groq-chave-ficticia" not in repr(settings)

@@ -73,6 +73,8 @@ def test_o_provedor_espionado_nao_tenta_de_novo(
         max_tokens=16,
         timeout_segundos=TIMEOUT_DE_TESTE,
         fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
     )
     with pytest.raises(ProvedorIndisponivelError):
         list(provedor.responder(Turno(sistema="s", mensagens=())))

@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import type { CurrentPlan } from '../../src/features/campaigns/types'
 import type { MessageRead } from '../../src/features/tutoring/types'
 import type { Mission } from '../../src/shared/types/mission'
+import { diaRelativo } from './datas'
 
 // Respostas GET determinísticas para os cenários de apresentação (layout e
 // fontes): o conteúdo não depende da ordem dos cenários do banco. O resto das
@@ -18,7 +19,7 @@ export async function layoutData(
     '/api/tutoring/messages': history,
     '/api/plans/current': plan,
     '/api/cycle': {
-      today: '2026-10-04',
+      today: diaRelativo(0),
       mission: null,
       streak: 0,
       days_to_milestone: 7,

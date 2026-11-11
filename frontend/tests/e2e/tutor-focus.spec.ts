@@ -1,5 +1,11 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { diaRelativo, instanteRelativo, isoUtc } from './datas'
+
+// Datas relativas a hoje (pendencia 207): o prazo da missao de fundo e o
+// instante, ja passado, das mensagens do historico.
+const PRAZO = isoUtc(instanteRelativo(83, 9))
+const ONTEM = isoUtc(instanteRelativo(-1, 9))
 
 // Cada requisição é local: nenhum POST destes cenários chega à API/banco.
 async function fixtures(page: Page, available = true, history: unknown[] = []) {
@@ -14,7 +20,7 @@ async function fixtures(page: Page, available = true, history: unknown[] = []) {
         estimated_minutes: 10,
         mission_type: 'avulsa',
         day: null,
-        deadline: '2027-01-01T12:00:00Z',
+        deadline: PRAZO,
         state: 'pendente',
         availability: 'disponivel',
         started_at: null,
@@ -31,7 +37,7 @@ async function fixtures(page: Page, available = true, history: unknown[] = []) {
     '/api/tutoring/messages': history,
     '/api/plans/current': { plan: null },
     '/api/cycle': {
-      today: '2026-10-04',
+      today: diaRelativo(0),
       mission: null,
       streak: 0,
       days_to_milestone: 7,
@@ -194,7 +200,9 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
   await page.getByTestId('tutor-send').focus()
   await page.keyboard.press('Enter')
   await expect.poll(() => page.evaluate(() => (window as StreamWindow).focusStream.posts)).toBe(1)
-  await page.evaluate(() => {
+  // O instante entra como argumento: o corpo do `evaluate` roda no navegador,
+  // onde as constantes deste modulo nao existem.
+  await page.evaluate((createdAt) => {
     const state = (window as StreamWindow).focusStream
     state.emit('user_message', {
       id: 801,
@@ -204,11 +212,11 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
       client_message_id: state.request.client_message_id,
       reply_to_id: null,
       error_code: null,
-      created_at: '2026-10-04T12:00:00Z',
+      created_at: createdAt,
       actions: [],
     })
     state.emit('delta', { text: 'Prefixo local' })
-  })
+  }, ONTEM)
   await expect(page.getByTestId('tutor-partial')).toHaveText(/Prefixo local/)
   // O campo continua editável durante SSE; só o envio está desabilitado.
   await page.getByTestId('tutor-input').fill('Rascunho seguinte')
@@ -236,7 +244,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
   await insideSheet(page)
   await page.keyboard.press('Tab')
   await insideSheet(page)
-  await page.evaluate(() => {
+  await page.evaluate((createdAt) => {
     const state = (window as StreamWindow).focusStream
     const user = {
       id: 801,
@@ -246,7 +254,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
       client_message_id: state.request.client_message_id,
       reply_to_id: null,
       error_code: null,
-      created_at: '2026-10-04T12:00:00Z',
+      created_at: createdAt,
       actions: [],
     }
     state.emit('done', {
@@ -258,7 +266,7 @@ test('SSE local em voo e rascunho sobrevivem aos dois breakpoints sem aborto ou 
       reply_to_id: 801,
     })
     state.finish()
-  })
+  }, ONTEM)
   await expect(page.getByTestId('tutor-live')).toHaveText('Kairya terminou de responder.')
   await expect(page.getByText('Resposta local completa')).toBeVisible()
   await page.keyboard.press('Escape')
@@ -284,7 +292,7 @@ test('fechar, backdrop e link do quadro liberam o teclado do fundo', async ({ pa
       client_message_id: null,
       reply_to_id: 9299,
       error_code: null,
-      created_at: '2026-10-04T12:00:00Z',
+      created_at: ONTEM,
       actions: [
         {
           id: 9200,
@@ -295,7 +303,7 @@ test('fechar, backdrop e link do quadro liberam o teclado do fundo', async ({ pa
             completion_criterion: 'Resumo',
             difficulty: 1,
             estimated_minutes: 10,
-            deadline: '2027-01-01T12:00:00Z',
+            deadline: PRAZO,
           },
           mission_id: 901,
           error_code: null,
