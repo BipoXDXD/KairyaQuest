@@ -397,3 +397,50 @@ def test_check_push_recusa_pelo_isolamento(tmp_path: Path) -> None:
     assert resultado.returncode == 1
     assert "de 0 a 24" in resultado.stderr
     assert "nada foi validado" not in resultado.stderr
+
+
+# ---------------------------------------------------------------------------
+# Branch julgada pelo check-handoff no push: o gate roda num worktree
+# destacado, entao o nome vem da ref enviada, nao do HEAD.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("ref", "esperado"),
+    [
+        (
+            "refs/heads/wt/consolidar-handoff-2026-11-11",
+            "wt/consolidar-handoff-2026-11-11",
+        ),
+        ("refs/heads/wt/um-pr", "wt/um-pr"),
+        ("wt/um-pr", "wt/um-pr"),
+        ("(ref-sem-nome)", "(ref-sem-nome)"),
+    ],
+)
+def test_branch_do_handoff_tira_o_prefixo_refs_heads(ref: str, esperado: str) -> None:
+    resultado = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'set -euo pipefail; . "$1"; branch_do_handoff "$2"',
+            "_",
+            str(BIBLIOTECA),
+            ref,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=_ambiente_sem_focusquest(),
+    )
+
+    assert resultado.stdout == esperado
+
+
+def test_check_push_passa_a_branch_do_push_ao_gate() -> None:
+    """Sem isto, o check-handoff veria "HEAD" no worktree destacado do push."""
+    texto = CHECK_PUSH.read_text()
+
+    assert (
+        'FQ_HANDOFF_BRANCH="$(branch_do_handoff "$ref_local")" make -C "$work" check'
+        in texto
+    )

@@ -120,9 +120,11 @@ export function useCompleteMission(
         { timeoutMs: MUTATION_TIMEOUT_MS },
       )
         .then((completion) => {
-          // So o sucesso apaga o rascunho: a entrega foi feita.
+          // So o sucesso apaga o rascunho: a entrega foi feita. O reagendamento
+          // aberto vai junto -- missao concluida nao se reagenda.
           registry.release(missionId)
           registry.discardDraft(missionId)
+          registry.discardRescheduleDraft(missionId)
           const { reward, ...mission } = completion
           setState({ status: 'completed', mission, reward })
           // A conclusao ja esta gravada no servidor e no estado: um callback do

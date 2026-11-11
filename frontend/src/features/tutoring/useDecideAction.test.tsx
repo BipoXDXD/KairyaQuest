@@ -90,12 +90,14 @@ describe('useDecideAction', () => {
       result.current.decision.confirm()
     })
 
+    // O estado entra no `waitFor`: o `then` do hook chama os callbacks fora de
+    // `act`, e o render com `idle` pode chegar depois deles.
     await waitFor(() => {
-      expect(missionCreated).toHaveBeenCalledTimes(1)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(missionCreated).toHaveBeenCalledTimes(1)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it('D2 a falha de rede mantem a chave para o reenvio', async () => {
@@ -112,7 +114,7 @@ describe('useDecideAction', () => {
       status: 'failed',
       failure: {
         message:
-          'Não foi possível conectar. Tentar de novo é seguro: a missão não será criada duas vezes.',
+          'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
         recovery: 'retry',
       },
       attempted: 'confirm',
@@ -240,13 +242,13 @@ describe('useDecideAction', () => {
     act(() => {
       result.current.decision.reject()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
-
+    expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
     expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual([{}])
     expect(missionCreated).not.toHaveBeenCalled()
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
     // Recusar nao gasta chave nenhuma.
     expect(crypto.randomUUID).not.toHaveBeenCalled()
   })
@@ -265,7 +267,8 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'Não foi possível conectar. Tentar de novo é seguro.',
+        message:
+          'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
         recovery: 'retry',
       },
       attempted: 'reject',
@@ -469,12 +472,13 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
     act(() => {
       result.current.decision.confirm()
     })
+    // O estado entra no `waitFor` pelo mesmo motivo do D1.
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(missionCreated).toHaveBeenCalledTimes(1)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it.each(['confirm', 'reject'] as const)(
