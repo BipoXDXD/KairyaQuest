@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
+.PHONY: help bootstrap check check-handoff check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -33,7 +33,7 @@ bootstrap: ## Instala as dependencias dos dois ecossistemas
 	uv sync --locked
 	./scripts/install-gitleaks.sh
 
-check: check-web check-api check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
+check: check-handoff check-web check-api check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
 
 check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run lint
@@ -99,6 +99,9 @@ check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-co
 reset-test-db: ## DESTRUTIVO: cria se faltar, recria o banco de TESTE do zero e migra
 	PYTHONPATH=tests uv run python -m integration.banco_de_teste
 	uv run alembic -x test=true upgrade head
+
+check-handoff: ## Reprova a branch que edita docs/HANDOFF.md fora da consolidacao
+	./scripts/check-handoff.sh
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh

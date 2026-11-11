@@ -47,6 +47,20 @@ export function somarDias(dia: string, dias: number): string {
   return new Date(meiaNoite + dias * MS_POR_DIA).toISOString().slice(0, 10)
 }
 
+/** Quantos dias civis vao de `inicio` ate `fim` (negativo, se `fim` vem antes). */
+export function diasEntre(inicio: string, fim: string): number {
+  return (Date.parse(`${fim}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / MS_POR_DIA
+}
+
+/**
+ * A segunda-feira da semana de `dia`: o `week_start` que o backend gera para
+ * o plano semanal. `getUTCDay` conta domingo como 0, por isso o `+ 6`.
+ */
+export function segundaDaSemana(dia: string): string {
+  const diaDaSemana = new Date(`${dia}T00:00:00Z`).getUTCDay()
+  return somarDias(dia, -((diaDaSemana + 6) % 7))
+}
+
 /** O dia civil `dias` depois de hoje em Sao Paulo (antes, se negativo). */
 export function diaRelativo(dias: number, agora: Date = new Date()): string {
   return somarDias(diaCivil(agora), dias)

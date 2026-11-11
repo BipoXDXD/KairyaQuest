@@ -206,6 +206,131 @@ describe('client', () => {
     })
   })
 
+  // O Safari 17.0-17.3 nao tem `AbortSignal.any`. Os mesmos casos rodam com e
+  // sem ela: o que o chamador ve -- o tipo da falha e nenhum timer pendurado --
+  // nao pode depender do navegador.
+  describe.each([
+    { modo: 'com AbortSignal.any', semAny: false },
+    { modo: 'sem AbortSignal.any (Safari 17.0-17.3)', semAny: true },
+  ])('requestJson com signal do chamador, $modo', ({ semAny }) => {
+    let original: PropertyDescriptor | undefined
+
+    /**
+     * Um `fetch` que obedece ao `signal` como o real: rejeita na hora se ele
+     * ja chegou abortado, e senao so o abort o destrava.
+     */
+    function fetchUntilAborted() {
+      return vi.fn((_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          const abortError = new DOMException('The operation was aborted.', 'AbortError')
+          if (init?.signal?.aborted === true) {
+            reject(abortError)
+            return
+          }
+          init?.signal?.addEventListener('abort', () => {
+            reject(abortError)
+          })
+        })
+      })
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      original = Object.getOwnPropertyDescriptor(AbortSignal, 'any')
+      if (semAny) {
+        Reflect.deleteProperty(AbortSignal, 'any')
+      }
+    })
+
+    afterEach(() => {
+      if (original !== undefined) {
+        Object.defineProperty(AbortSignal, 'any', original)
+      }
+      vi.useRealTimers()
+    })
+
+    it('o aborto do chamador sai como falha de rede, sem prazo e sem timer pendurado', async () => {
+      const controller = new AbortController()
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+      expect(init.signal?.aborted).toBe(false)
+      controller.abort()
+      const erro = await pending
+
+      expect(init.signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect((erro as Error).message).toBe('Não foi possível falar com o servidor.')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('o fim do prazo sai como ApiTimeoutError, sem abortar o chamador e sem timer pendurado', async () => {
+      const controller = new AbortController()
+      vi.stubGlobal('fetch', fetchUntilAborted())
+      const { ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/cycle', controller.signal))
+      await vi.advanceTimersByTimeAsync(20_000)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiTimeoutError)
+      expect(controller.signal.aborted).toBe(false)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('o signal que ja chega abortado sai como falha de rede, nunca como prazo', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      const fetchMock = fetchUntilAborted()
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const erro = await failureOf(requestJson('/cycle', controller.signal))
+
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
+  describe('requestJson sem AbortSignal.any: o vinculo com o chamador', () => {
+    let original: PropertyDescriptor | undefined
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      original = Object.getOwnPropertyDescriptor(AbortSignal, 'any')
+      Reflect.deleteProperty(AbortSignal, 'any')
+    })
+
+    afterEach(() => {
+      if (original !== undefined) {
+        Object.defineProperty(AbortSignal, 'any', original)
+      }
+      vi.useRealTimers()
+    })
+
+    it('depois da resposta, abortar o chamador nao alcanca mais o pedido encerrado', async () => {
+      const controller = new AbortController()
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 1 }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { requestJson } = await loadClient()
+
+      await expect(requestJson('/cycle', controller.signal)).resolves.toEqual({ id: 1 })
+      controller.abort()
+
+      // O pedido ja terminou: o vinculo com o signal do chamador foi desfeito.
+      expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('postJson', () => {
     it('envia POST com o corpo em JSON e devolve a resposta desserializada', async () => {
       const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 7 }))
