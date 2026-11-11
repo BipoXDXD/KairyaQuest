@@ -71,12 +71,14 @@ describe('Campaigns', () => {
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 
-  it('compoe a trilha da semana', async () => {
+  it('compoe a trilha de lanternas da semana, abaixo do titulo da area', async () => {
     routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
     renderWithI18n(<Campaigns />)
 
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+    const trilha = screen.getByRole('region', { name: 'Trilha de lanternas da semana' })
+    expect(within(screen.getByRole('main')).getByTestId('campaign-trail')).toBe(trilha)
   })
 
   it('em ingles, o cabecalho sai do catalogo', async () => {

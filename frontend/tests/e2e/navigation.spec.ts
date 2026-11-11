@@ -129,7 +129,7 @@ async function setup(page: Page, next: () => Promise<'success' | 'failure'>) {
 
 async function sameTabReturn(page: Page, advanceServerDay: () => void) {
   await page.getByTestId('nav-campaigns').click()
-  await expect(page.getByTestId('trail-mission')).toBeVisible()
+  await expect(page.getByTestId('trail-week')).toBeVisible()
   advanceServerDay()
   await page.getByTestId('nav-headquarters').click()
   await expect(
