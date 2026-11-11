@@ -134,6 +134,88 @@ def test_main_que_consolidou_depois_da_saida_da_branch_nao_reprova(repo: Path) -
     assert resultado.returncode == 0
 
 
+def _main_consolida_o_handoff(repo: Path, texto: str) -> None:
+    """A main consolida o HANDOFF depois que a branch saiu dela."""
+    _git(repo, "switch", "-q", "main")
+    _commitar(repo, "docs/HANDOFF.md", texto)
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _git(repo, "switch", "-q", "wt/um-pr")
+
+
+def _mesclar_a_main_sem_commitar(repo: Path, handoff_resolvido: str) -> None:
+    """Merge em andamento, como o pre-commit o ve: MERGE_HEAD e indice resolvido."""
+    subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", "origin/main"],
+        cwd=repo,
+        env=_ambiente_isolado(),
+        capture_output=True,
+    )
+    assert (repo / ".git" / "MERGE_HEAD").exists()
+    (repo / "docs" / "HANDOFF.md").write_text(handoff_resolvido)
+    _git(repo, "add", "docs/HANDOFF.md")
+
+
+def test_merge_que_devolve_o_handoff_da_main_aprova_no_estado_staged(
+    repo: Path,
+) -> None:
+    """Branch antiga que editou o HANDOFF mescla a main e fica com a versao dela.
+
+    No pre-commit do merge o HEAD ainda e o commit velho, que edita o HANDOFF;
+    o que vai ser commitado, nao.
+    """
+    _commitar(repo, "docs/HANDOFF.md", "# Handoff\n\nseção da fase\n")
+    da_main = "# Handoff\n\nseção da fase\n\nconsolidado na main\n"
+    _main_consolida_o_handoff(repo, da_main)
+    _mesclar_a_main_sem_commitar(repo, da_main)
+
+    resultado = _rodar(repo, "wt/um-pr")
+
+    assert resultado.returncode == 0, resultado.stderr
+
+
+def test_merge_que_mantem_a_edicao_da_branch_no_handoff_reprova(repo: Path) -> None:
+    _commitar(repo, "docs/HANDOFF.md", "# Handoff\n\nseção da fase\n")
+    _main_consolida_o_handoff(repo, "# Handoff\n\nconsolidado na main\n")
+    _mesclar_a_main_sem_commitar(
+        repo, "# Handoff\n\nconsolidado na main\n\nseção da fase\n"
+    )
+
+    resultado = _rodar(repo, "wt/um-pr")
+
+    assert resultado.returncode == 1
+    assert "docs/handoff/" in resultado.stderr
+
+
+def test_edicao_staged_do_handoff_reprova(repo: Path) -> None:
+    (repo / "docs" / "HANDOFF.md").write_text("# Handoff\n\nseção nova\n")
+    _git(repo, "add", "docs/HANDOFF.md")
+
+    resultado = _rodar(repo, "wt/um-pr")
+
+    assert resultado.returncode == 1
+    assert "docs/handoff/" in resultado.stderr
+
+
+def test_staged_que_reverte_a_edicao_commitada_aprova(repo: Path) -> None:
+    _commitar(repo, "docs/HANDOFF.md", "# Handoff\n\nseção nova\n")
+    (repo / "docs" / "HANDOFF.md").write_text("# Handoff\n")
+    _git(repo, "add", "docs/HANDOFF.md")
+
+    resultado = _rodar(repo, "wt/um-pr")
+
+    assert resultado.returncode == 0, resultado.stderr
+
+
+def test_edicao_do_handoff_fora_do_indice_nao_conta(repo: Path) -> None:
+    """So o que vai ser commitado conta: mudanca nao staged fica de fora."""
+    _commitar(repo, "docs/handoff/2026-11-10-um-pr.md", "# Um PR\n")
+    (repo / "docs" / "HANDOFF.md").write_text("# Handoff\n\nrascunho\n")
+
+    resultado = _rodar(repo, "wt/um-pr")
+
+    assert resultado.returncode == 0, resultado.stderr
+
+
 def test_sem_a_base_o_alvo_reprova(repo: Path) -> None:
     _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
 
