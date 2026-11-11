@@ -4,6 +4,7 @@ O servico depende deste `Protocol`, e nao do SDK: ele grava e emite, e nao
 sabe que existe Anthropic. O adaptador e a unica peca que importa o SDK.
 """
 
+import json
 from collections.abc import Generator
 from dataclasses import dataclass
 from enum import StrEnum
@@ -93,6 +94,32 @@ class Turno:
     sistema: str
     mensagens: tuple[MensagemDoTurno, ...]
     contexto: str = ""
+
+
+# `json.dumps(..., ensure_ascii=False)` deixa estes tres crus, e
+# `str.splitlines()` (e varios renderizadores) os tratam como quebra de linha.
+# Fora de uma string JSON eles nao aparecem, entao a troca so toca strings.
+_SEPARADORES_QUE_O_JSON_NAO_ESCAPA = {
+    "\u2028": "\\u2028",
+    "\u2029": "\\u2029",
+    "\x85": "\\u0085",
+}
+
+
+def como_dado(valor: object) -> str:
+    """`valor` como JSON numa linha so, com todo texto livre dentro de strings.
+
+    E o jeito de por texto livre num `Turno` como dado, e nao como instrucao:
+    a tutoria o usa no contexto e no historico (`context.py`), a avaliacao na
+    mensagem da entrega (`evaluation/rubric.py`). `ensure_ascii=False` so poupa
+    tokens: o modelo le os acentos. Alem do que o `json.dumps` escapa, U+2028,
+    U+2029 e U+0085 viram `\\uXXXX`: o `json.dumps` os deixa crus e eles
+    quebram linha.
+    """
+    texto = json.dumps(valor, ensure_ascii=False)
+    for cru, escapado in _SEPARADORES_QUE_O_JSON_NAO_ESCAPA.items():
+        texto = texto.replace(cru, escapado)
+    return texto
 
 
 @dataclass(frozen=True)

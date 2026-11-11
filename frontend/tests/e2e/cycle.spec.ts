@@ -1,6 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
+import { segundaDaSemana } from './datas'
 import { API_URL } from './servers'
 
 /**
@@ -23,13 +24,6 @@ const EXECUCAO = randomUUID().slice(0, 8)
 
 interface CicloDaApi {
   today: string
-}
-
-/** A segunda-feira da semana de uma data civil, em aritmetica UTC pura. */
-function segundaDe(civil: string): string {
-  const dia = new Date(`${civil}T12:00:00Z`)
-  dia.setUTCDate(dia.getUTCDate() - ((dia.getUTCDay() + 6) % 7))
-  return dia.toISOString().slice(0, 10)
 }
 
 /** "23/09", escrito por extenso: o E2E nao importa o formatador da aplicacao. */
@@ -94,7 +88,7 @@ test.beforeAll(async ({ playwright }) => {
   hoje = ciclo.today
   const resposta = await api.post('/api/plans', {
     data: {
-      week_start: segundaDe(hoje),
+      week_start: segundaDaSemana(hoje),
       days: DIAS,
       bonus: {
         instructions: `Especial (e2e ${EXECUCAO})`,
@@ -266,7 +260,7 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
 
   // Os dias depois de hoje, dentro da mesma semana: bau fechado, "revelada
   // no dia" -- nunca a missao (B3/C11 da spec do ciclo).
-  const segunda = segundaDe(hoje)
+  const segunda = segundaDaSemana(hoje)
   for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
     const dia = diaCivil(segunda, deslocamento)
     if (dia > hoje) {

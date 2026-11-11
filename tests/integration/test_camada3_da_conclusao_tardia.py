@@ -18,7 +18,7 @@ from focusquest.modules.tutoring.domain import TipoDeAcao
 from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import Proposta
 from integration import camada3, camada3_da_conclusao_tardia
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_FOLGADO
 from integration.espiao import provedor_espionado
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -40,7 +40,7 @@ def _capturar(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",

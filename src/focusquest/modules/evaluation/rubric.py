@@ -7,7 +7,6 @@ DADO: um JSON na mensagem do usuario, nunca interpolado no prompt de sistema
 (spec, "O pedido ao modelo").
 """
 
-import json
 from collections.abc import Mapping
 from functools import cache
 from importlib.resources import files
@@ -17,7 +16,12 @@ from focusquest.core.idioma import Idioma
 from focusquest.core.prompts import carregar_prompts
 from focusquest.modules.evaluation.schemas import EvaluationOutput
 from focusquest.modules.missions.evaluation_records import Tentativa
-from focusquest.modules.tutoring.provider import Ferramenta, MensagemDoTurno, Turno
+from focusquest.modules.tutoring.provider import (
+    Ferramenta,
+    MensagemDoTurno,
+    Turno,
+    como_dado,
+)
 
 NOME_DA_FERRAMENTA = "record_evaluation"
 
@@ -100,9 +104,14 @@ def montar_turno_da_avaliacao(tentativa: Tentativa, idioma: Idioma) -> Turno:
     O `idioma` chega pronto, lido na transacao que abriu a tentativa: esta
     funcao nao recebe sessao e nao rele o banco depois do commit.
 
-    `json.dumps` e o delimitador: aspas, chaves e tags na evidencia saem
+    O JSON e o delimitador: aspas, chaves e tags na evidencia saem
     escapadas dentro de uma string, e nao ha texto que feche o campo `text`.
-    `ensure_ascii=False` so poupa tokens; o escape nao depende dele.
+    A serializacao e a `como_dado` da tutoria (`tutoring/provider.py`), a
+    mesma do contexto da Kairya: `ensure_ascii=False` so poupa tokens, e
+    U+2028, U+2029 e U+0085, que o `json.dumps` deixa crus e o
+    `str.splitlines()` trata como quebra de linha, saem como `\\uXXXX`
+    (pendencia 205). A mensagem e uma linha so, e o `json.loads` devolve o
+    texto exato que a pessoa escreveu.
     `link_opened` repete ao modelo, no dado, o que o prompt diz (E3).
     """
     dados = {
@@ -118,5 +127,5 @@ def montar_turno_da_avaliacao(tentativa: Tentativa, idioma: Idioma) -> Turno:
     }
     return Turno(
         sistema=rubrica_do_idioma(idioma),
-        mensagens=(MensagemDoTurno("user", json.dumps(dados, ensure_ascii=False)),),
+        mensagens=(MensagemDoTurno("user", como_dado(dados)),),
     )
