@@ -32,12 +32,24 @@ export type MessageFailure = FailureText & {
 }
 
 /**
- * O resultado desconhecido: o stream acabou sem `done` nem `error`, a conexao
- * caiu no meio, ou a falha nao tem `code` conhecido. Nao se sabe se a resposta
- * chegou; o que se sabe e que repetir nao duplica.
+ * O resultado desconhecido: o stream acabou sem `done` nem `error`, ou a
+ * conexao caiu no meio. Nao se sabe se a resposta chegou; o que se sabe e que
+ * repetir nao duplica.
  */
 export const UNKNOWN_RESULT: MessageFailure = {
   message: 'tutoring.messageFailure.unknownResult.message',
+  recovery: 'tutoring.messageFailure.safeRetry',
+  action: 'retry',
+}
+
+/**
+ * O evento `error` com um `code` que a tela nao conhece (pendencia 49). O
+ * servidor so o emite com a falha JA gravada, entao nao e resultado
+ * desconhecido: a pergunta nao foi respondida. O texto nao inventa causa, e
+ * repetir com o mesmo id segue permitido.
+ */
+export const UNRECOGNIZED_FAILURE: MessageFailure = {
+  message: 'tutoring.messageFailure.unrecognizedFailure.message',
   recovery: 'tutoring.messageFailure.safeRetry',
   action: 'retry',
 }
@@ -128,8 +140,9 @@ export function describePreStreamFailure(error: unknown): MessageFailure {
 
 /**
  * A falha que chegou no evento `error`, JA encerrada pelo backend (`falhou`,
- * ou `interrompida` se recolhida como orfa, que emite `tempo_esgotado`).
+ * ou `interrompida` se recolhida como orfa, que emite `tempo_esgotado`). Um
+ * `code` desconhecido e falha generica, nunca resultado desconhecido.
  */
 export function describeStreamFailure(code: string): MessageFailure {
-  return isStreamCode(code) ? STREAM_FAILURE_BY_CODE[code] : UNKNOWN_RESULT
+  return isStreamCode(code) ? STREAM_FAILURE_BY_CODE[code] : UNRECOGNIZED_FAILURE
 }
