@@ -145,7 +145,7 @@ function retryTargetOf(send: SendState, history: HistoryState): PendingQuestion 
   }
   if (send.status === 'failed') {
     const repeatable =
-      send.failure.recovery === 'retry' || send.failure.recovery === 'retry-with-new-id'
+      send.failure.action === 'retry' || send.failure.action === 'retry-with-new-id'
     return repeatable ? send.pending : null
   }
   if (send.status === 'idle' && history.status === 'loaded') {
@@ -386,7 +386,7 @@ export function useTutorConversation(): UseTutorConversationResult {
   const length = describeQuestionLength(draft)
   const busy = send.status === 'sending' || send.status === 'writing'
   const canSubmit = length.sendable && !busy && history.status === 'loaded'
-  const needsNewId = send.status === 'failed' && send.failure.recovery === 'retry-with-new-id'
+  const needsNewId = send.status === 'failed' && send.failure.action === 'retry-with-new-id'
 
   const submit = useCallback(() => {
     if (!canSubmit) {

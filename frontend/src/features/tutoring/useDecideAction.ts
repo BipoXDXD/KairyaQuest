@@ -65,7 +65,7 @@ export function useDecideAction(
       })
       .catch((error: unknown) => {
         const failure = describeActionFailure(error, 'confirm', action.kind)
-        if (failure.recovery !== 'retry') {
+        if (failure.action !== 'retry') {
           keys.release(action.id)
         }
         const recorded = recordedErrorCode(error)

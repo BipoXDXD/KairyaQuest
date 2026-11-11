@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import type { EvaluationSummary, Mission } from '../../shared/types/mission'
@@ -66,7 +67,7 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('autodeclarada: selo "Autodeclarada" e NENHUM botao de avaliacao', () => {
     const fetchMock = routeFetch({})
 
-    render(<EvaluationPanel mission={concluida} />)
+    renderWithI18n(<EvaluationPanel mission={concluida} />)
 
     const painel = screen.getByTestId('evaluation-panel')
     expect(within(painel).getByTestId('evaluation-verification')).toHaveTextContent('Autodeclarada')
@@ -77,7 +78,7 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('sem verification (API anterior ao E) nao mostra painel nenhum', () => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={{ ...concluida, verification: null }} />)
+    renderWithI18n(<EvaluationPanel mission={{ ...concluida, verification: null }} />)
 
     expect(screen.queryByTestId('evaluation-panel')).not.toBeInTheDocument()
   })
@@ -85,7 +86,7 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('com evidencia e sem avaliacao: selo, texto, link em aba nova e o botao', () => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     expect(screen.getByTestId('evaluation-verification')).toHaveTextContent('Com evidência')
     expect(screen.getByTestId('evaluation-evidence-text')).toHaveTextContent(
@@ -106,7 +107,7 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('link em maiusculas (EM2) tambem vira ancora', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{ ...comEvidencia, evidence: { text: 'Fiz', link: 'HTTPS://x.dev/a' } }}
       />,
@@ -118,7 +119,7 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('link fora de http(s) (API defasada) aparece como texto, SEM ancora', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{ ...comEvidencia, evidence: { text: 'Fiz', link: 'javascript:alert(1)' } }}
       />,
@@ -138,7 +139,9 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   ])('link %s (API defasada) aparece como texto, SEM ancora', (_nome, link) => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={{ ...comEvidencia, evidence: { text: 'Fiz', link } }} />)
+    renderWithI18n(
+      <EvaluationPanel mission={{ ...comEvidencia, evidence: { text: 'Fiz', link } }} />,
+    )
 
     expect(screen.getByTestId('evaluation-evidence-link')).toHaveTextContent(link.trim())
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
@@ -148,7 +151,9 @@ describe('EvaluationPanel -- o que a missao concluida mostra', () => {
   it('evidencia sem link nao mostra linha de link', () => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={{ ...comEvidencia, evidence: { text: 'Fiz', link: null } }} />)
+    renderWithI18n(
+      <EvaluationPanel mission={{ ...comEvidencia, evidence: { text: 'Fiz', link: null } }} />,
+    )
 
     expect(screen.queryByTestId('evaluation-evidence-link')).not.toBeInTheDocument()
   })
@@ -168,7 +173,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
         }),
     })
     const onRewarded = vi.fn()
-    render(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
     const status = screen.getByTestId('evaluation-status')
 
     fireEvent.click(botaoPedir())
@@ -217,7 +222,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
       [KEY]: () => Response.json({ evaluation: avaliacao({ verdict }), reward: null }),
     })
     const onRewarded = vi.fn()
-    render(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
 
     fireEvent.click(botaoPedir())
 
@@ -241,7 +246,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
           ? Response.json({ detail: 'x', code: 'provedor_nao_configurado' }, { status: 503 })
           : Response.json({ evaluation: avaliacao(), reward: null }),
     })
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
@@ -264,7 +269,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
   ])('resposta %s mostra o veredito e nao derruba o cartao', async (_nome, corpo) => {
     const onRewarded = vi.fn()
     routeFetch({ [KEY]: () => Response.json(corpo) })
-    render(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} onRewarded={onRewarded} />)
 
     fireEvent.click(botaoPedir())
 
@@ -275,7 +280,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
 
   it('falha 422: o id fora da faixa e missao inexistente, entao manda atualizar, sem "tente de novo"', async () => {
     routeFetch({ [KEY]: () => Response.json({ detail: [{ msg: 'x' }] }, { status: 422 }) })
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
@@ -297,7 +302,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
           ? Response.json({ detail: 'x', code: 'provedor_indisponivel' }, { status: 502 })
           : Response.json({ evaluation: avaliacao(), reward: null }),
     })
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
@@ -315,7 +320,7 @@ describe('EvaluationPanel -- pedir a avaliacao', () => {
     routeFetch({
       [KEY]: () => Response.json({ detail: 'x', code: 'sem_evidencia' }, { status: 409 }),
     })
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
@@ -338,7 +343,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
       [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
     })
     const onReload = vi.fn()
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={comEvidencia}
         onReload={onReload}
@@ -363,7 +368,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
       [KEY]: () => Response.json({ detail: 'x', code: 'missao_nao_encontrada' }, { status: 404 }),
     })
     const onReload = vi.fn()
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={comEvidencia}
         onReload={onReload}
@@ -388,14 +393,14 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
   it('o botao de recarga nao aparece fora da falha refresh', () => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={comEvidencia} onReload={() => undefined} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} onReload={() => undefined} />)
 
     expect(screen.queryByRole('button', { name: /^Atualizar o quadro/ })).not.toBeInTheDocument()
   })
 
   it('resposta fresca atende com reward null (idempotente): diz que o bonus ja foi creditado', async () => {
     routeFetch({ [KEY]: () => Response.json({ evaluation: avaliacao(), reward: null }) })
-    render(<EvaluationPanel mission={comEvidencia} />)
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />)
 
     fireEvent.click(botaoPedir())
 
@@ -408,7 +413,7 @@ describe('EvaluationPanel -- acessibilidade e recuperacao da falha', () => {
   it('o botao de pedir mantem o nome exato e ganha a missao como descricao', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <>
         <h3 id="titulo-7">Resolver a lista 3</h3>
         <EvaluationPanel mission={comEvidencia} describedBy="titulo-7" />
@@ -427,7 +432,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('concluida com atende: veredito, comentario, rotulo e "Bônus de XP creditado" sem numero', () => {
     routeFetch({})
 
-    render(<EvaluationPanel mission={{ ...comEvidencia, evaluation: avaliacao() }} />)
+    renderWithI18n(<EvaluationPanel mission={{ ...comEvidencia, evaluation: avaliacao() }} />)
 
     expect(screen.getByTestId('evaluation-verdict')).toHaveTextContent('Critério atendido')
     expect(screen.getByTestId('evaluation-feedback')).toHaveTextContent(
@@ -445,7 +450,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('concluida com parcial: sem o texto do bonus', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{ ...comEvidencia, evaluation: avaliacao({ verdict: 'parcial' }) }}
       />,
@@ -459,7 +464,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('concluida sem veredito (contrato violado) nao quebra e deixa pedir de novo', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel mission={{ ...comEvidencia, evaluation: avaliacao({ verdict: null }) }} />,
     )
 
@@ -470,7 +475,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('avaliando: "Avaliação em andamento" e o botao de pedir de novo HABILITADO', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{
           ...comEvidencia,
@@ -487,7 +492,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('falhou: a mensagem do error_code pelo mesmo mapa, e o botao', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{
           ...comEvidencia,
@@ -511,7 +516,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
   it('falhou LIDA da API nao e um alert: cada cartao gritaria ao carregar a pagina', () => {
     routeFetch({})
 
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{
           ...comEvidencia,
@@ -535,7 +540,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
     routeFetch({
       [KEY]: () => Response.json({ detail: 'x', code: 'tempo_esgotado' }, { status: 504 }),
     })
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{
           ...comEvidencia,
@@ -556,7 +561,7 @@ describe('EvaluationPanel -- a avaliacao que vem da API (a pagina recarregou)', 
       [KEY]: () =>
         Response.json({ evaluation: avaliacao({ verdict: 'nao_atende' }), reward: null }),
     })
-    render(
+    renderWithI18n(
       <EvaluationPanel
         mission={{
           ...comEvidencia,

@@ -160,8 +160,9 @@ describe('useStartMission', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'Esta missão já foi iniciada ou concluída. Atualize para ver o estado atual.',
-          recovery: 'refresh',
+          message: 'missions.startFailure.alreadyStarted.message',
+          recovery: 'missions.failure.refresh',
+          action: 'refresh',
         },
       })
     })
@@ -380,7 +381,7 @@ describe('useStartMission', () => {
 
     expect(result.current.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { action: 'retry' },
     })
     expect(reload).toHaveBeenCalledTimes(1)
   })

@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
 import { routeFetch } from '../../test/fetchRoutes'
@@ -112,9 +113,16 @@ describe('CampaignTrail', () => {
 
   it('anuncia o carregamento numa regiao viva', () => {
     routeFetch({ 'GET /api/plans/current': () => new Promise<Response>(() => undefined) })
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Trilha da semana')
     expect(screen.getByRole('status')).toHaveTextContent('Consultando a trilha…')
+  })
+
+  it('em ingles, o erro de carga sai do catalogo', async () => {
+    routeFetch({ 'GET /api/plans/current': () => new Response(null, { status: 503 }) })
+    renderWithI18n(<CampaignTrail />, { locale: 'en' })
+
+    expect(await screen.findByTestId('trail-error')).toHaveTextContent(HTTP_FAILURE_TEXT.en)
   })
 
   it('no erro, avisa com a mensagem e o Tentar novamente busca de novo', async () => {
@@ -122,11 +130,11 @@ describe('CampaignTrail', () => {
       'GET /api/plans/current': (_init, call) =>
         call === 1 ? new Response(null, { status: 503 }) : Response.json({ plan: plano() }),
     })
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const alerta = await screen.findByRole('alert')
     expect(alerta).toHaveTextContent('Falha ao carregar a trilha.')
-    expect(alerta).toHaveTextContent('O servidor respondeu 503.')
+    expect(alerta).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
 
     fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar novamente' }))
 
@@ -146,7 +154,7 @@ describe('CampaignTrail', () => {
         return Response.json({ plan: plano() })
       },
     })
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     expect(screen.getByTestId('trail-loading')).toBeInTheDocument()
 
     act(() => {
@@ -154,7 +162,7 @@ describe('CampaignTrail', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     const alerta = await screen.findByTestId('trail-error')
-    expect(alerta).toHaveTextContent('O servidor respondeu 503.')
+    expect(alerta).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
 
     // A carga inicial assenta DEPOIS, e e descartada por ser mais velha: o
     // erro continua, com a saida pelo botao.
@@ -171,7 +179,7 @@ describe('CampaignTrail', () => {
 
   it('sem plano na semana e um estado proprio, sem trilha, e diz que a sequencia nao quebra', async () => {
     servir(null)
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     const semPlano = await screen.findByTestId('trail-no-plan')
     expect(semPlano).toHaveTextContent('Sem plano nesta semana.')
     // Mesma garantia do Quartel-General (`CycleSection`, "sem plano"): um dia
@@ -183,7 +191,7 @@ describe('CampaignTrail', () => {
 
   it('mostra os sete dias da semana atual, em ordem, com a data civil sem conversao de fuso', async () => {
     const fetchMock = servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const lista = await screen.findByRole('list', { name: 'Dias da semana' })
     const itens = within(lista).getAllByTestId('trail-day')
@@ -210,7 +218,7 @@ describe('CampaignTrail', () => {
 
   it('a disponibilidade de cada dia vem em texto e icone, nunca so em cor', async () => {
     servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const esperado: [string, string, string][] = [
       ['2026-09-21', 'Fora do plano', 'fora_do_plano'],
@@ -231,7 +239,7 @@ describe('CampaignTrail', () => {
 
   it('os dias revelados mostram instrucao, criterio, dificuldade e o estado', async () => {
     servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const quarta = await diaDaTrilha('2026-09-23')
     const missao = within(quarta).getByTestId('trail-mission')
@@ -270,7 +278,7 @@ describe('CampaignTrail', () => {
 
   it('os dias futuros sao bau fechado: sem conteudo, com o texto de quando se revelam', async () => {
     servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     for (const [day, weekday] of [
       ['2026-09-25', 'sexta-feira'],
@@ -296,7 +304,7 @@ describe('CampaignTrail', () => {
 
   it('marca como hoje so o ultimo dia revelado', async () => {
     servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const hoje = await screen.findAllByTestId('trail-today')
     expect(hoje).toHaveLength(1)
@@ -314,7 +322,7 @@ describe('CampaignTrail', () => {
       revelado(diaria(17, '2026-09-27', { availability: 'disponivel' })),
     ]
     servir({ week_start: '2026-09-21', days: semanaCompleta, special: especialBloqueada })
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const hoje = await screen.findAllByTestId('trail-today')
     expect(hoje).toHaveLength(1)
@@ -323,7 +331,7 @@ describe('CampaignTrail', () => {
 
   it('a missao de hoje nao e concluida na trilha: orienta ir ao Quartel-General', async () => {
     const fetchMock = servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const quinta = await diaDaTrilha('2026-09-24')
     expect(within(quinta).getByTestId('trail-go-headquarters')).toHaveTextContent(
@@ -338,7 +346,7 @@ describe('CampaignTrail', () => {
   it('com a acao de navegacao, o dia de hoje oferece ir ao Quartel-General', async () => {
     servir(plano())
     const irAoQuartel = vi.fn()
-    render(<CampaignTrail onOpenHeadquarters={irAoQuartel} />)
+    renderWithI18n(<CampaignTrail onOpenHeadquarters={irAoQuartel} />)
 
     const quinta = await diaDaTrilha('2026-09-24')
     const botao = within(quinta).getByRole('button', {
@@ -350,7 +358,7 @@ describe('CampaignTrail', () => {
 
   it('a especial bloqueada e bau fechado, com o progresso N de 7 e sem conteudo', async () => {
     servir(plano(especialBloqueada))
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const secao = await screen.findByTestId('trail-special')
     expect(within(secao).getByRole('heading', { level: 3 })).toHaveTextContent(
@@ -368,7 +376,7 @@ describe('CampaignTrail', () => {
 
   it('a especial desbloqueada e disponivel mostra o conteudo e orienta ir ao Quartel-General', async () => {
     servir(plano(especial({ availability: 'disponivel' })))
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
 
     const secao = await screen.findByTestId('trail-special')
     expect(within(secao).getByTestId('trail-availability')).toHaveTextContent('Disponível')
@@ -383,7 +391,7 @@ describe('CampaignTrail', () => {
 
   it('a especial concluida ou expirada mostra o conteudo e o estado, sem mandar concluir', async () => {
     servir(plano(especial({ availability: 'concluida', state: 'concluida' })))
-    const { unmount } = render(<CampaignTrail />)
+    const { unmount } = renderWithI18n(<CampaignTrail />)
     let secao = await screen.findByTestId('trail-special')
     expect(within(secao).getByTestId('trail-availability')).toHaveTextContent('Concluída')
     expect(within(secao).getByTestId('trail-mission')).toBeInTheDocument()
@@ -391,7 +399,7 @@ describe('CampaignTrail', () => {
     unmount()
 
     servir(plano(especial({ availability: 'expirada' })))
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     secao = await screen.findByTestId('trail-special')
     const selo = within(secao).getByTestId('trail-availability')
     expect(selo).toHaveTextContent('Expirada')
@@ -402,7 +410,7 @@ describe('CampaignTrail', () => {
 
   it('sem falha na atualizacao, o aviso de trilha desatualizada nao aparece', async () => {
     servir(plano())
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     await screen.findAllByTestId('trail-day')
     expect(screen.queryByTestId('trail-stale')).not.toBeInTheDocument()
   })
@@ -420,7 +428,7 @@ describe('CampaignTrail', () => {
         return Response.json({ plan: plano() })
       },
     })
-    render(<CampaignTrail />)
+    renderWithI18n(<CampaignTrail />)
     expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
     expect(screen.queryByTestId('trail-stale')).not.toBeInTheDocument()
 
