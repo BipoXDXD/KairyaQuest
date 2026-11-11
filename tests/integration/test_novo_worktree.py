@@ -168,7 +168,7 @@ def test_o_env_do_worktree_nao_herda_segredo_do_principal(
     assert "FOCUSQUEST_ANTHROPIC_API_KEY" in chaves
     canarios = {
         chave: f"CANARY-{uuid.uuid4()}"
-        for chave in [*chaves, "FOCUSQUEST_CHAVE_QUE_O_EXEMPLO_NAO_CONHECE"]
+        for chave in [*chaves, "FOCUSQUEST_SEGREDO_FORA_DO_EXEMPLO"]
     }
     (repo.principal / ".env").write_text(
         ENV_PRINCIPAL

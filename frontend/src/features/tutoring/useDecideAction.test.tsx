@@ -111,7 +111,7 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'tutoring.actionFailure.unconfirmedCreate.message',
+        message: 'shared.transportFailure.network',
         recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
         action: 'retry',
       },
@@ -265,7 +265,7 @@ describe('useDecideAction', () => {
     expect(result.current.decision.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'tutoring.actionFailure.unconfirmedReject.message',
+        message: 'shared.transportFailure.network',
         recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
         action: 'retry',
       },

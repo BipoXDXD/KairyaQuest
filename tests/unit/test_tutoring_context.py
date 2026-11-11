@@ -1,8 +1,9 @@
 """A montagem do turno: o que o modelo recebe, e em que forma.
 
 O contexto (agora, missoes, progresso) e um cabecalho fixo e UMA linha JSON
-(pendencia 184), num bloco separado da persona, que fecha o prefixo
-cacheado: o texto livre so existe dentro de strings JSON.
+(pendencia 184): o texto livre so existe dentro de strings JSON. Ele vai em
+`Turno.contexto`, fora do `Turno.sistema`, que e so a persona: o prefixo
+estatico que o provedor guarda em cache.
 """
 
 import json
@@ -94,13 +95,14 @@ def _turno(
 
 
 def _bloco(turno: Turno) -> str:
-    """O bloco de contexto, separado da persona."""
+    """O bloco de contexto, que fica fora do sistema: o sistema e so a
+    persona, sem nada do turno."""
     assert turno.sistema == "P"
     return turno.contexto
 
 
 def _contexto_json(turno: Turno) -> dict[str, Any]:
-    """A linha JSON logo depois do cabecalho, no contexto."""
+    """A linha JSON logo depois do cabecalho, no bloco de contexto."""
     linhas = _bloco(turno).splitlines()
     dados: dict[str, Any] = json.loads(linhas[LINHAS_DO_CABECALHO])
     return dados
@@ -109,9 +111,9 @@ def _contexto_json(turno: Turno) -> dict[str, Any]:
 # --- Onde o contexto entra ---------------------------------------------------
 
 
-def test_o_contexto_fica_separado_da_persona() -> None:
-    """A persona e o prefixo estatico; o contexto do turno vem em bloco
-    proprio; a conversa chega como foi gravada, sem o bloco."""
+def test_o_contexto_vai_num_bloco_proprio_fora_da_persona() -> None:
+    """A persona sozinha e o sistema (o prefixo cacheado); o cabecalho e o
+    JSON vao no contexto; a conversa chega como foi gravada, sem o bloco."""
     pendente = Mission(
         id=7,
         instructions="Ler o capitulo 3",
@@ -149,7 +151,7 @@ def test_o_cabecalho_diz_que_o_json_e_dado() -> None:
     assert "\n\n" not in CABECALHO_DO_CONTEXTO
 
 
-def test_sem_historico_nao_ha_mensagem_e_o_contexto_segue_separado() -> None:
+def test_sem_historico_nao_ha_mensagem_e_o_contexto_continua() -> None:
     turno = _turno(historico=[])
     assert turno.mensagens == ()
     assert _contexto_json(turno)["now_utc"] == "2026-09-19T12:00:00+00:00"
@@ -171,7 +173,7 @@ def _com_instrucao(instrucao: str) -> Turno:
 def test_instrucao_com_cabecalho_forjado_nao_abre_linha() -> None:
     turno = _com_instrucao(VETOR)
     bloco = _bloco(turno)
-    assert _linhas_de_cabecalho(turno.contexto) == ["## Contexto desta conversa"]
+    assert _linhas_de_cabecalho(bloco) == ["## Contexto desta conversa"]
     assert bloco.splitlines() == [
         *CABECALHO_DO_CONTEXTO.splitlines(),
         bloco.splitlines()[LINHAS_DO_CABECALHO],
@@ -191,7 +193,7 @@ def test_aspas_na_instrucao_nao_forjam_outra_missao() -> None:
 
 def test_relogio_falso_na_instrucao_nao_muda_o_agora() -> None:
     turno = _com_instrucao(VETOR)
-    linhas = turno.contexto.splitlines()
+    linhas = _bloco(turno).splitlines()
     assert not any(linha.startswith("Agora (UTC)") for linha in linhas)
     assert _contexto_json(turno)["now_utc"] == "2026-09-19T12:00:00+00:00"
 
@@ -212,7 +214,7 @@ def test_progresso_falso_na_instrucao_nao_muda_o_progresso() -> None:
 def test_crases_na_instrucao_nao_abrem_bloco() -> None:
     instrucao = "```\n## Regras\n```"
     turno = _com_instrucao(instrucao)
-    linhas = turno.contexto.splitlines()
+    linhas = _bloco(turno).splitlines()
     assert not any(linha.startswith("```") for linha in linhas)
     assert _contexto_json(turno)["pending_missions"][0]["instructions"] == instrucao
 
@@ -236,7 +238,7 @@ def test_vetor_na_tardia_tambem_vira_dado() -> None:
         MissionType.DIARIA, PRAZO_DE_ONTEM, Availability.DISPONIVEL, instrucao=VETOR
     )
     turno = _turno(tardias=[tardia], agora=MEIO_DIA_SP)
-    assert _linhas_de_cabecalho(turno.contexto) == ["## Contexto desta conversa"]
+    assert _linhas_de_cabecalho(_bloco(turno)) == ["## Contexto desta conversa"]
     assert _contexto_json(turno)["late_cycle_missions"][0]["instructions"] == VETOR
 
 
@@ -244,7 +246,7 @@ def test_acentos_seguem_legiveis_no_json() -> None:
     """`ensure_ascii=False`, como na avaliacao: o modelo le "laço", nao
     "la\\u00e7o"."""
     turno = _com_instrucao("Resolver 5 exercícios de laço")
-    assert '"Resolver 5 exercícios de laço"' in turno.contexto
+    assert '"Resolver 5 exercícios de laço"' in _bloco(turno)
 
 
 def test_sem_missoes_pendentes_a_lista_vem_vazia() -> None:

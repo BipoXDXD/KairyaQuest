@@ -59,8 +59,7 @@ def test_o_contexto_mostra_a_missao_avulsa_pendente_pelo_id(
     falso.roteiro = Roteiro(blocos=(Texto(("Certo.",)),))
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
-    contexto = falso.recebidas[-1].contexto_do_turno
-    pendentes = json.loads(contexto.splitlines()[-1])["pending_missions"]
+    pendentes = falso.recebidas[-1].dados_do_contexto["pending_missions"]
     assert [m["id"] for m in pendentes] == [camada3_do_reagendamento.ID_DA_MISSAO]
     assert (
         f"#{camada3_do_reagendamento.ID_DA_MISSAO}" in (corpo["messages"][0]["content"])

@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { ActionErrorCode, ActionRead } from './types'
 
@@ -133,7 +134,10 @@ export function describeActionFailure(
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return ACTION_FAILURE_BY_CODE[error.code]
   }
-  return attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  // A abertura propria e trocada pela causa quando ela e de transporte
+  // (`leadFor`); o `recovery` segue dizendo que repetir e seguro.
+  const unconfirmed = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  return { ...unconfirmed, message: leadFor(error, unconfirmed.message) }
 }
 
 const FAILED_TEXT: FailureText = {
