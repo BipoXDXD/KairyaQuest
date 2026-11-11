@@ -11,6 +11,7 @@ import {
   segundaDaSemana,
   somarDias,
 } from './datas'
+import { layoutData } from './layoutData'
 
 // Datas relativas a hoje (pendencia 207): o dia do ciclo, a semana do plano
 // que o contem (comecando na segunda-feira, como o backend gera), um instante
@@ -69,42 +70,6 @@ const message: MessageRead = {
   fallback_model: null,
   created_at: ONTEM,
   actions: [],
-}
-
-async function layoutData(
-  page: Page,
-  missions: Mission[] = [],
-  history: MessageRead[] = [],
-  plan: CurrentPlan = { plan: null },
-) {
-  const responses: Record<string, unknown> = {
-    '/api/missions': missions,
-    '/api/tutoring/status': { available: true },
-    '/api/tutoring/messages': history,
-    '/api/plans/current': plan,
-    '/api/cycle': {
-      today: HOJE,
-      mission: null,
-      streak: 0,
-      days_to_milestone: 7,
-      special: null,
-      late_daily: null,
-    },
-    '/api/progress': {
-      xp_total: 0,
-      level: 1,
-      level_floor_xp: 0,
-      next_level_xp: 100,
-      achievements: [],
-    },
-  }
-  await page.route('**/api/**', (route) => {
-    const pathname = new URL(route.request().url()).pathname
-    if (route.request().method() === 'GET' && pathname in responses) {
-      return route.fulfill({ json: responses[pathname] })
-    }
-    return route.continue()
-  })
 }
 
 async function noHorizontalOverflow(page: Page) {

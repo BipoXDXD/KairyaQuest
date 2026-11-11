@@ -44,6 +44,26 @@
   --color-feedback-danger: var(--ember-400);
   --color-focus-ring: var(--dusk-400);
 
+  /* Tipografia. Os resets apagam as famílias e a escala padrão do Tailwind,
+     para só existirem as da spec: font-display, font-body e text-xs a
+     text-4xl. O namespace --font-weight-* é outro e continua inteiro. */
+  --font-*: initial;
+  --font-display: 'Alegreya', Georgia, serif;
+  --font-body: 'Alegreya Sans', system-ui, sans-serif;
+
+  --text-*: initial;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+
+  --leading-body: 1.6;
+  --leading-heading: 1.15;
+
   --radius-ui: 10px;
   --radius-pill: 999px;
   --shadow-glow-lantern: 0 0 24px 4px var(--glow-lantern-color);

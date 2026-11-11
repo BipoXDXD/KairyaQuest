@@ -1,0 +1,20 @@
+/* Base tipográfica: corpo em Alegreya Sans e títulos em Alegreya.
+   Fica em @layer base para que as utilities (font-semibold, text-lg etc.)
+   num título continuem vencendo; uma regra fora de layer ganharia delas. */
+@layer base {
+  body {
+    font-family: var(--font-body);
+    line-height: var(--leading-body);
+    background: var(--color-bg-canvas);
+    color: var(--color-text-primary);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    line-height: var(--leading-heading);
+    font-weight: 500;
+  }
+}
