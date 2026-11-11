@@ -183,7 +183,11 @@ async function readCode(response: Response): Promise<string | null> {
  * ler o corpo: os erros antes do stream (503, 409, 422) tem de sair iguais aos
  * de qualquer outro pedido, e o corpo de um 200 e lido em pedacos.
  */
-async function open(path: string, init: RequestInit): Promise<Response> {
+async function open(
+  path: string,
+  init: RequestInit,
+  onErrorStatus?: () => void,
+): Promise<Response> {
   let response: Response
   try {
     response = await fetch(`${BASE_URL}${path}`, init)
@@ -197,6 +201,7 @@ async function open(path: string, init: RequestInit): Promise<Response> {
   if (!response.ok) {
     // O instante e lido ANTES do corpo: e o da chegada da resposta.
     const receivedAt = new Date()
+    onErrorStatus?.()
     const code = await readCode(response)
     throw new ApiError(`O servidor respondeu ${String(response.status)}.`, response.status, code, {
       kind: 'http',
@@ -210,14 +215,14 @@ async function open(path: string, init: RequestInit): Promise<Response> {
 
 /**
  * Faz o pedido e devolve o JSON do corpo, com as falhas ja traduzidas em
- * `ApiError` pelo `open`.
+ * `ApiError` pelo `open`. `onErrorStatus` e repassado ao `open`.
  *
  * O tipo `T` e uma afirmacao de quem chama, nao uma validacao: o cliente nao
  * valida o formato do corpo. Validar aqui exigiria um schema por endpoint, e o
  * contrato ja e verificado do outro lado, pelos testes do backend.
  */
-async function send<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await open(path, init)
+async function send<T>(path: string, init: RequestInit, onErrorStatus?: () => void): Promise<T> {
+  const response = await open(path, init, onErrorStatus)
   return (await response.json()) as T
 }
 
@@ -283,6 +288,20 @@ export const MUTATION_TIMEOUT_MS = 20_000
  */
 export const EVALUATION_TIMEOUT_MS = 105_000
 
+/**
+ * O prazo, em milissegundos, que o CORPO de uma resposta de erro tem para
+ * chegar, contado a partir dos cabecalhos (pendencia 193).
+ *
+ * Existe porque o prazo global (`READ_TIMEOUT_MS`, `MUTATION_TIMEOUT_MS`,
+ * `EVALUATION_TIMEOUT_MS`) cobre cabecalhos E corpo: um erro cujos cabecalhos
+ * chegavam perto do fim dele ficava sem tempo para o corpo, e o `code` -- unico
+ * jeito de distinguir o 409 do 504 `tempo_esgotado` do resto -- se perdia, com
+ * o texto generico no lugar. Chegados os cabecalhos de erro, o prazo global
+ * sai de cena e este assume; ele e curto de proposito, o corpo de erro e um
+ * JSON de poucos bytes. Sem medida real de rede, como os demais.
+ */
+export const ERROR_BODY_TIMEOUT_MS = 5_000
+
 /** As opcoes do `postJson`. */
 export interface PostOptions {
   /**
@@ -308,8 +327,10 @@ export interface PostOptions {
  * cabecalhos E corpo: uma resposta que comecou e nao termina prende o botao do
  * mesmo jeito, e um 200 cujo corpo nao chegou tambem e resultado desconhecido.
  * Um status de ERRO que ja chegou, porem, e fato e nao e apagado: a falha sai
- * como `ApiError` com esse status, e o `code` sai nulo se o corpo de erro nao
- * chegou no prazo.
+ * como `ApiError` com esse status. Alem disso, ao chegarem os cabecalhos de
+ * erro o prazo global e substituido por `ERROR_BODY_TIMEOUT_MS`, para que o
+ * `code` nao se perca por o erro ter chegado no limite do prazo; o `code` sai
+ * nulo so se o corpo de erro nao chegou nem nesse prazo curto.
  *
  * O prazo mora em `sendWithin`, o mesmo do `requestJson`.
  */
@@ -357,7 +378,9 @@ async function sendWithBody<T>(
 /**
  * O `send` com prazo: aborta o pedido ao fim de `timeoutMs` e traduz esse
  * aborto em `ApiTimeoutError`, salvo quando o status de erro ja tinha chegado
- * (ver `postJson`).
+ * (ver `postJson`). Quando os cabecalhos de um erro chegam, o timer e rearmado
+ * com `ERROR_BODY_TIMEOUT_MS` para o corpo de erro; o prazo total de um pedido
+ * que falha com status e, no maximo, `timeoutMs + ERROR_BODY_TIMEOUT_MS`.
  *
  * `signal`, quando vem, e o cancelamento de quem chama, combinado com o do
  * prazo: qualquer um dos dois aborta o pedido, mas so o do prazo vira
@@ -378,11 +401,17 @@ async function sendWithin<T>(
   const deadline = new AbortController()
   const combined =
     signal === undefined ? unlinked(deadline.signal) : linkSignals(signal, deadline.signal)
-  const timer = setTimeout(() => {
-    deadline.abort()
-  }, timeoutMs)
+  const abortAfter = (ms: number) =>
+    setTimeout(() => {
+      deadline.abort()
+    }, ms)
+  let timer = abortAfter(timeoutMs)
+  const rearmForErrorBody = () => {
+    clearTimeout(timer)
+    timer = abortAfter(ERROR_BODY_TIMEOUT_MS)
+  }
   try {
-    return await send<T>(path, { ...init, signal: combined.signal })
+    return await send<T>(path, { ...init, signal: combined.signal }, rearmForErrorBody)
   } catch (cause) {
     if (deadline.signal.aborted && !hasResponseStatus(cause)) {
       throw new ApiTimeoutError({ cause })

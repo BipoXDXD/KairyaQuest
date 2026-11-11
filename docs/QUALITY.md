@@ -206,9 +206,9 @@ excluído deliberadamente, nunca por dificuldade de testar.
 | Exclusão | Justificativa |
 |---|---|
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
-| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes cinco arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. `readSource.ts` (`readSource`, `listSources`) lê arquivos-fonte de verdade com `node:fs`, relativos a `frontend/`, e trata arquivo vazio como erro; existe porque o `?raw` de CSS não serve no Vitest 5.0.1: ele passa pelo plugin `vitest:css-empty-post` e devolve `""`, o que deixaria vácuo todo teste que inspeciona CSS (o `vite.config.ts` não define `test.css`, e mudá-lo mexeria na fonte de verdade da config). A raiz sai de `fileURLToPath(import.meta.url)` + `node:path`, porque o Vite reescreve a forma literal `new URL('../../', import.meta.url)` como URL `http://localhost:3000/@fs/...` e o `fileURLToPath` a recusa. Todo teste que lê CSS tem a sentinela `o CSS lido não está vazio`. |
+| `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. `readSource.ts` (`readSource`, `sourceExists`, `sourceSize`, `listSources`) lê arquivos-fonte de verdade com `node:fs`, relativos a `frontend/`, e trata arquivo vazio como erro (o `sourceSize`, coberto por `readSource.test.ts`, mede binários como a arte de `public/art/`); existe porque o `?raw` de CSS não serve no Vitest 5.0.1: ele passa pelo plugin `vitest:css-empty-post` e devolve `""`, o que deixaria vácuo todo teste que inspeciona CSS (o `vite.config.ts` não define `test.css`, e mudá-lo mexeria na fonte de verdade da config). A raiz sai de `fileURLToPath(import.meta.url)` + `node:path`, porque o Vite reescreve a forma literal `new URL('../../', import.meta.url)` como URL `http://localhost:3000/@fs/...` e o `fileURLToPath` a recusa. Todo teste que lê CSS tem a sentinela `o CSS lido não está vazio`. `dialog.ts` preenche `HTMLDialogElement.prototype.showModal` e `close`, que o jsdom 30 não implementa (medido: os dois são `undefined`), e só quando ausentes; não simula o `inert` nem o Esc do navegador, que o projeto `ui-states` do Playwright verifica. `gallery/` (`caseIds.ts`, `cases.tsx`, `caseComponents.tsx`, `main.tsx`) é a galeria de estados servida por `frontend/ui-gallery.html` só ao projeto `ui-states`: monta um caso de `shared/ui/` por página para o axe; o `ui-gallery.html` fica fora do build de produção (o `vite build` só lê o `index.html`). |
 | `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
-| `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. |
+| `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. Inclui o `ui-states.spec.ts` (Tarefa 4.3): axe e alvo de 44px por estado de cada componente de `shared/ui/`, no projeto `ui-states`, com servidor `vite` próprio na porta da galeria (`GALERIA_URL` em `servers.ts`, deslocada pelo `FOCUSQUEST_E2E_PORT_OFFSET` como as demais); o projeto `chromium` o ignora. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
 | Artefatos gerados (`frontend/dist/`, `frontend/coverage/`, `.tools/`) | Saída de build/instalação, recriada a cada execução; não é código-fonte. |
 | CSS e configuração de ferramentas (`vite.config.ts`, `playwright.config.ts`, `eslint.config.js`, `.prettierrc.json`, `tsconfig*.json`) | Configuração declarativa, não lógica de aplicação testável por unidade. |
@@ -351,22 +351,33 @@ mesmos criaram.
   `frontend/.env` não existe num clone novo nem no CI.
 - **`npx playwright test`**, com as regras de `frontend/playwright.config.ts`:
   `forbidOnly: true` em qualquer ambiente, `retries: 0`, `workers: 1`,
-  projeto único em Chromium.
+  dois projetos em Chromium: `chromium` (os cenários ponta a ponta, que
+  ignoram o `ui-states.spec.ts`) e `ui-states` (Tarefa 4.3: axe e alvo de
+  44px por estado de cada componente de `shared/ui/`, na galeria
+  `ui-gallery.html`).
 - **Servidores dedicados, subidos pelo próprio Playwright**, com
-  `reuseExistingServer: false`: desde o 1b-2 são **três**. O servidor falso
+  `reuseExistingServer: false`: desde a Tarefa 4.3 são **quatro**. O servidor falso
   da Anthropic sobe primeiro, na porta **8150**
   (`PYTHONPATH=tests uv run python -m integration.falso_do_e2e --porta 8150`,
   `frontend/tests/e2e/servers.ts`); a API sobe na porta **8100**
   (`scripts/e2e-env.sh uv run uvicorn ...`, esperada pelo `/ready`, que
   consulta o banco) com `FOCUSQUEST_ANTHROPIC_BASE_URL` apontada para o
-  falso; e o frontend na **5273** (`vite preview` do build). As portas de
+  falso; o frontend na **5273** (`vite preview` do build); e a galeria de
+  estados da UI na **5373** (`vite` de **desenvolvimento**, porque o
+  `ui-gallery.html` fica fora do build de produção; recebe
+  `VITE_API_URL=/api` no `env`, que o `vite` de desenvolvimento lê ao servir
+  e o CI não tem em `frontend/.env`). O Playwright não sobe `webServer` por
+  projeto: a galeria sobe em todo `npx playwright test`, mesmo quando só o
+  projeto `chromium` roda (alguns segundos e uma porta a mais). As portas de
   desenvolvimento são 8000 e 5173; nenhuma é reaproveitada (README §10).
 - **Deslocamento das portas por worktree (Frente 0).**
-  `FOCUSQUEST_E2E_PORT_OFFSET` (inteiro, padrão 0) soma o mesmo valor às três
-  portas. `frontend/tests/e2e/servers.ts` é a fonte única: lê e valida a
+  `FOCUSQUEST_E2E_PORT_OFFSET` (inteiro, padrão 0) soma o mesmo valor às
+  quatro portas. `frontend/tests/e2e/servers.ts` é a fonte única: lê e valida a
   variável (só dígitos, de 0 a 49 — o vão entre a API e o falso, menos um,
   derivado das portas-base; com 0 a 49 as faixas ficam disjuntas: API
-  8100–8149, falso 8150–8199, frontend 5273–5322), e o
+  8100–8149, falso 8150–8199, frontend 5273–5322, galeria 5373–5422; a
+  galeria começa acima do topo do frontend para nenhum deslocamento válido
+  pôr as duas na mesma porta), e o
   `playwright.config.ts` deriva **todas** as portas dele. O valor chega ao
   Playwright pelo `Makefile`, e só ele: o `Settings` (campo
   `e2e_port_offset`, mesma faixa, ambiente acima do `.env`) o resolve, e a

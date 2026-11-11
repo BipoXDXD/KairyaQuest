@@ -53,15 +53,20 @@ export const en = {
   'kairya.lines.farewell_2': "That's enough for today. We'll pick it up tomorrow.",
 
   'shell.nav.label': 'Areas',
-  'shell.nav.caption': 'Explore',
   'shell.brand.name': 'KairyaQuest',
   'shell.brand.tagline': 'Your study journey',
   'shell.area.headquarters': 'Headquarters',
   'shell.area.campaigns': 'Campaigns',
 
-  'headquarters.header.eyebrow': "Adventurer's library",
   'headquarters.header.title': 'Headquarters — your study dashboard',
   'headquarters.header.subtitle': "What's open, with its deadline and reward.",
+
+  'ui.dialog.cancel': 'Cancel',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
+  'ui.loading': 'Loading…',
+  'ui.sound.voice': "Kairya's voice",
+  'ui.sound.sfx': 'Sound effects',
 
   'shared.apiError.network.message': "Couldn't reach the server. The connection failed.",
   'shared.apiError.network.recovery': 'Check your connection and try again.',
@@ -465,7 +470,6 @@ export const en = {
   'progression.achievement.kairya_partnership.title': 'Partnership with Kairya',
   'progression.achievement.kairya_partnership.description': 'Complete a mission Kairya proposed.',
 
-  'campaigns.page.eyebrow': 'The next chapter',
   'campaigns.page.title': 'Campaigns — study plans',
   'campaigns.page.subtitle': 'The whole week, day by day, and the special mission.',
   'campaigns.trail.title': "This week's trail",

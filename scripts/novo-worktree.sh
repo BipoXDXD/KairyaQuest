@@ -260,7 +260,7 @@ make -C "$destino" bootstrap
 cat <<FIM
 ==> worktree pronto: ${destino} (branch ${branch})
     banco de teste:  ${banco} (nasce sozinho no primeiro uso)
-    portas do E2E:   API $((8100 + deslocamento)), frontend $((5273 + deslocamento)), falso $((8150 + deslocamento)) (deslocamento ${deslocamento})
+    portas do E2E:   API $((8100 + deslocamento)), frontend $((5273 + deslocamento)), falso $((8150 + deslocamento)), galeria $((5373 + deslocamento)) (deslocamento ${deslocamento})
 proximos passos:
     cd ${destino}
     make check

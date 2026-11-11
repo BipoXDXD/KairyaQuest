@@ -11,9 +11,9 @@ export type TransportFailure = 'timeout' | 'network'
 /**
  * A abertura do texto de falha de um tradutor, como chaves do catalogo.
  * `timeout` e `network` nomeiam a acao e a causa numa frase so ("Não foi
- * possível concluir a missão: sem conexão com o servidor."): falam do servidor,
- * e nao da rede da pessoa, porque o servidor fora tambem deixa o pedido sem
- * conexao. `fallback` e a frase propria para o resto (5xx, `code` desconhecido).
+ * possível concluir a missão: sem conexão."), em 12 a 18 palavras com o
+ * `recovery`. A causa diz "sem conexao", e nao "a sua conexao": o servidor fora
+ * tambem deixa o pedido sem conexao, e o que a pessoa faz e o mesmo. `fallback` e a frase propria para o resto (5xx, `code` desconhecido).
  * Uma chave por acao e por idioma, e nao uma frase montada aqui: a ordem das
  * palavras muda de idioma para idioma.
  */

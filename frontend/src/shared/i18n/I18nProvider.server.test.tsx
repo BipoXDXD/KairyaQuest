@@ -4,7 +4,7 @@ import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { renderWithI18n } from '../../test/i18n'
 import { I18nProvider } from './I18nProvider'
 import { LOCALE_STORAGE_KEY } from './locale'
-import { LocaleSwitcher } from './LocaleSwitcher'
+import { LanguageSwitcher } from '../ui/LanguageSwitcher'
 import { en } from './messages/en'
 import { ptBR } from './messages/pt-BR'
 import { useLocale } from './useLocale'
@@ -41,7 +41,7 @@ async function settle() {
 function renderSwitcher() {
   return render(
     <I18nProvider initialLocale="pt-BR">
-      <LocaleSwitcher />
+      <LanguageSwitcher />
     </I18nProvider>,
   )
 }
@@ -107,7 +107,7 @@ describe('I18nProvider com o servidor', () => {
     routeFetch({ [PATCH_ME]: () => new Response(null, { status: 503 }) })
     render(
       <I18nProvider initialLocale="en">
-        <LocaleSwitcher />
+        <LanguageSwitcher />
       </I18nProvider>,
     )
 
@@ -147,7 +147,7 @@ describe('I18nProvider com o servidor', () => {
     ])
     expect(document.documentElement.lang).toBe('pt-BR')
     expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('pt-BR')
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByRole('status').textContent).toBe('')
   })
 
   it('troca para o idioma atual não chama o servidor', async () => {
@@ -173,19 +173,19 @@ describe('I18nProvider com o servidor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
     await waitFor(() => {
-      expect(screen.getByRole('status')).not.toBeEmptyDOMElement()
+      expect(screen.getByRole('status').textContent).not.toBe('')
     })
     fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
     await settle()
 
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByRole('status').textContent).toBe('')
     expect(document.documentElement.lang).toBe('en')
   })
 
   it('renderWithI18n não chama o servidor', async () => {
     const mock = routeFetch({})
 
-    renderWithI18n(<LocaleSwitcher />)
+    renderWithI18n(<LanguageSwitcher />)
     await settle()
 
     expect(mock).not.toHaveBeenCalled()

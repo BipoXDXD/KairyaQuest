@@ -6,7 +6,7 @@
  * pela API). Repetir a porta nos dois lados e o tipo de duplicacao que
  * silencia: o dia em que uma das duas mudasse, o cenario continuaria passando
  * contra o servidor antigo, se ele por acaso estivesse no ar. Este arquivo e a
- * FONTE UNICA das tres portas: o `playwright.config.ts` deriva todas daqui.
+ * FONTE UNICA das portas: o `playwright.config.ts` deriva todas daqui.
  *
  * Portas proprias -- 8100 para a API e 5273 para o frontend -- porque o
  * README §10 proibe reutilizar servidor pessoal: as de desenvolvimento sao
@@ -18,7 +18,7 @@
  * alguem escolheria por reflexo para outro servidor.
  *
  * **Deslocamento por worktree (pendencia 19).** `FOCUSQUEST_E2E_PORT_OFFSET`
- * soma o mesmo inteiro as tres portas, para dois gates rodarem ao mesmo tempo
+ * soma o mesmo inteiro a todas as portas, para dois gates rodarem ao mesmo tempo
  * em worktrees diferentes. Sem a variavel, ou com ela vazia, o deslocamento e
  * zero e as portas sao as de sempre.
  */
@@ -26,6 +26,7 @@
 const PORTA_DA_API = 8100
 const PORTA_DO_WEB = 5273
 const PORTA_DO_FALSO = 8150
+const PORTA_DA_GALERIA = 5373
 
 /**
  * O maior deslocamento seguro: o vao entre a API e o falso, menos um (49).
@@ -60,10 +61,20 @@ export function lerDeslocamento(valor: string | undefined): number {
   return Number(valor)
 }
 
-/** Os tres enderecos com as portas deslocadas. */
-export function enderecos(deslocamento: number): { api: string; web: string; falso: string } {
+/** Os quatro enderecos com as portas deslocadas. */
+export function enderecos(deslocamento: number): {
+  api: string
+  web: string
+  falso: string
+  galeria: string
+} {
   const em = (porta: number): string => `http://127.0.0.1:${String(porta + deslocamento)}`
-  return { api: em(PORTA_DA_API), web: em(PORTA_DO_WEB), falso: em(PORTA_DO_FALSO) }
+  return {
+    api: em(PORTA_DA_API),
+    web: em(PORTA_DO_WEB),
+    falso: em(PORTA_DO_FALSO),
+    galeria: em(PORTA_DA_GALERIA),
+  }
 }
 
 const ENDERECOS = enderecos(lerDeslocamento(process.env.FOCUSQUEST_E2E_PORT_OFFSET))
@@ -76,3 +87,11 @@ export const WEB_URL = ENDERECOS.web
 
 /** O servidor falso da Anthropic, como processo (`tests/integration/falso_do_e2e.py`). */
 export const FALSO_URL = ENDERECOS.falso
+
+/**
+ * A galeria de estados da UI (`ui-gallery.html`), servida pelo `vite` de
+ * desenvolvimento para o projeto `ui-states`. 5373: fora da faixa do frontend
+ * do E2E (5273-5322) com qualquer deslocamento valido, e longe da 5173 de
+ * desenvolvimento.
+ */
+export const GALERIA_URL = ENDERECOS.galeria

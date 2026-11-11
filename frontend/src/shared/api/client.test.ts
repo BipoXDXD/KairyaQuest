@@ -570,6 +570,165 @@ describe('client', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
+    describe('corpo de erro com prazo proprio', () => {
+      /**
+       * Um `fetch` cujos cabecalhos de erro chegam em `headersAtMs` e cujo
+       * corpo (JSON com `code`) chega `bodyDelayMs` depois dos cabecalhos, ou
+       * nunca (`null`). O `json()` obedece ao `signal`, como o de verdade.
+       */
+      function errorAfter(
+        status: number,
+        code: string,
+        headersAtMs: number,
+        bodyDelayMs: number | null,
+      ) {
+        return vi.fn((_input: string, init?: RequestInit) => {
+          return new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              const response = new Response(null, { status })
+              vi.spyOn(response, 'json').mockImplementation(
+                () =>
+                  new Promise((resolveBody, rejectBody) => {
+                    const timer =
+                      bodyDelayMs === null
+                        ? undefined
+                        : setTimeout(() => {
+                            resolveBody({ detail: 'sem acento', code })
+                          }, bodyDelayMs)
+                    init?.signal?.addEventListener('abort', () => {
+                      clearTimeout(timer)
+                      rejectBody(new DOMException('The operation was aborted.', 'AbortError'))
+                    })
+                  }),
+              )
+              resolve(response)
+            }, headersAtMs)
+          })
+        })
+      }
+
+      it('o prazo do corpo de erro e de 5 s', async () => {
+        const { ERROR_BODY_TIMEOUT_MS } = await loadClient()
+
+        expect(ERROR_BODY_TIMEOUT_MS).toBe(5000)
+      })
+
+      it('um 409 cujos cabecalhos chegam no limite do prazo ainda entrega o code', async () => {
+        vi.stubGlobal('fetch', errorAfter(409, 'avaliacao_em_andamento', 4900, 2000))
+        const { ApiError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+        await vi.advanceTimersByTimeAsync(4900 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('avaliacao_em_andamento')
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('o 504 tempo_esgotado da avaliacao que chega no limite do prazo ainda entrega o code', async () => {
+        const { ApiError, EVALUATION_TIMEOUT_MS, postJson } = await loadClient()
+        vi.stubGlobal('fetch', errorAfter(504, 'tempo_esgotado', EVALUATION_TIMEOUT_MS - 100, 2000))
+
+        const pending = failureOf(
+          postJson('/missions/7/evaluate', {}, { timeoutMs: EVALUATION_TIMEOUT_MS }),
+        )
+        await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS - 100 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(504)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('tempo_esgotado')
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('o mesmo vale para o GET: um 409 no limite do prazo de leitura entrega o code', async () => {
+        const { ApiError, READ_TIMEOUT_MS, requestJson } = await loadClient()
+        vi.stubGlobal(
+          'fetch',
+          errorAfter(409, 'avaliacao_em_andamento', READ_TIMEOUT_MS - 100, 2000),
+        )
+
+        const pending = failureOf(requestJson('/cycle'))
+        await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 100 + 2000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBe('avaliacao_em_andamento')
+      })
+
+      it('o corpo de erro que nunca chega acaba 5 s depois dos cabecalhos, com o status e sem code', async () => {
+        vi.stubGlobal('fetch', errorAfter(409, 'avaliacao_em_andamento', 4900, null))
+        const { ApiError, ApiTimeoutError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 5000 }))
+        // Passou o prazo global (5000), mas o corpo de erro ainda tem a sua folga.
+        await vi.advanceTimersByTimeAsync(4900 + 4999)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+        expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
+        expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('um 200 cujo corpo passa dos 5 s do corpo de erro, mas chega dentro do prazo, chega intacto', async () => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(() => {
+            const response = new Response(null, { status: 200 })
+            vi.spyOn(response, 'json').mockImplementation(
+              () =>
+                new Promise((resolve) => {
+                  setTimeout(() => {
+                    resolve({ id: 7 })
+                  }, 6000)
+                }),
+            )
+            return Promise.resolve(response)
+          }),
+        )
+        const { postJson } = await loadClient()
+
+        const pending = postJson('/missions/7/start', {}, { timeoutMs: 8000 })
+        await vi.advanceTimersByTimeAsync(6000)
+
+        await expect(pending).resolves.toEqual({ id: 7 })
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('um 200 cujo corpo nunca chega continua falhando no prazo global, como prazo', async () => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn((_input: string, init?: RequestInit) => {
+            const response = new Response(null, { status: 200 })
+            vi.spyOn(response, 'json').mockImplementation(
+              () =>
+                new Promise((_resolve, reject) => {
+                  init?.signal?.addEventListener('abort', () => {
+                    reject(new DOMException('The operation was aborted.', 'AbortError'))
+                  })
+                }),
+            )
+            return Promise.resolve(response)
+          }),
+        )
+        const { ApiTimeoutError, postJson } = await loadClient()
+
+        const pending = failureOf(postJson('/missions/7/start', {}, { timeoutMs: 8000 }))
+        await vi.advanceTimersByTimeAsync(7999)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1)
+
+        expect(await pending).toBeInstanceOf(ApiTimeoutError)
+      })
+    })
+
     it('uma resposta a tempo desarma o timer e chega intacta', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ id: 7 })))
       const { postJson } = await loadClient()

@@ -297,7 +297,7 @@ describe('RescheduleProposalCard', () => {
     fireEvent.click(confirmButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível confirmar o reagendamento: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
     expect(confirmButton()).toHaveAccessibleName(`Tentar de novo o reagendamento: ${INSTRUCTIONS}`)
     expect(confirmButton()).toBeEnabled()
@@ -340,7 +340,7 @@ describe('RescheduleProposalCard', () => {
     fireEvent.click(rejectButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: sem conexão. Tentar de novo é seguro.',
     )
     expect(rejectButton()).toHaveAccessibleName(`Tentar de novo o reagendamento: ${INSTRUCTIONS}`)
     expect(rejectButton()).toBeEnabled()
