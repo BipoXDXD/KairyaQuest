@@ -1220,11 +1220,11 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   enquanto Campanhas está aberta — desmontá-lo abortaria um stream da Kairya
   em curso (decisão K2); Campanhas, ao contrário, desmonta ao sair, e cada
   abertura busca a trilha de novo. `Campaigns.tsx` tem o `<main>`, o `h1`
-  "Campanhas — planos de estudo" e compõe `<CampaignTrail />` — o
+  "Campanhas — planos de estudo" e compõe `<LanternTrail />` — o
   componente começa no `h2` e não tem `<main>` próprio. A única prop,
   `onOpenHeadquarters`, é opcional e só atravessa a página até a trilha
   (decisão K11, "Campanhas sem props", relaxada pela Ruling R5; ver
-  `CampaignTrail.tsx`, abaixo).
+  `LanternTrail.tsx`, abaixo).
 - **`src/features/<feature>/`** *(existe para `missions`, `tutoring` e,
   desde o C, `campaigns`; contrato para `rewards`)* — a feature é a unidade
   real de organização:
@@ -1323,7 +1323,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   visível contextual. `RefreshNotice` recebe somente `instructions: string`
   dos dois consumidores, usando a missão atual do cartão. O sufixo permanece
   no estado de espera; disabled, callbacks e regiões vivas não mudam.
-  `CampaignTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
+  `LanternTrail` recarrega o plano inteiro e não usa `MissionCard`; seu
   botão global não recebe identificação de uma missão.
 
   **Foco após reagendar sem deslocar a leitura (163(c)):**
@@ -1380,19 +1380,29 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   **erro**, com o "Tentar novamente" — ele invalidou a carga inicial, e nada
   mais tiraria a tela de "carregando" (achado I1 da revisão final do C,
   Ruling R12).
-  `CampaignTrail.tsx` desenha os 7 dias (`<ol>`, `data-testid="trail-day"`)
-  e a especial: um dia/especial `bloqueada` chega com `mission: null` e vira
-  baú fechado, sem instrução, dificuldade nem XP (C11 — o que não foi
-  revelado não existe para a tela); o marcador "Hoje" é o **último dia não
-  `bloqueada`** (decisão K9, sem segunda requisição); a disponibilidade
-  sempre em texto **e** ícone (`availability.ts`, `AVAILABILITY_DISPLAY`,
-  exaustivo sobre `Availability`, ícones SVG inline com `aria-hidden` —
-  decisão K8 relaxa a restrição de "só glifo Unicode" do plano, Ruling R8).
-  A trilha **só mostra**: nenhum botão Concluir — o dia de hoje disponível
-  aponta para o Quartel-General (decisão K8); com a prop opcional
-  `onOpenHeadquarters`, isso vira um botão (`trail-go-headquarters`,
-  Ruling R5), sem ela um texto. Quando `refreshFailed`, o
-  `data-testid="trail-stale"` avisa, com "Atualizar" chamando `reload`.
+  `LanternTrail.tsx` (F5, Tarefa 5.3, no lugar do antigo `CampaignTrail`)
+  desenha a semana como lanternas: um `<ol>` com uma `<li>` por dia
+  (`data-testid="trail-day"`, com `data-day`, `data-availability` e
+  `data-state`) e, por último, a lanterna grande, que é a especial
+  (`trail-special`). A fonte continua sendo `GET /api/plans/current`, e não
+  `GET /api/cycle`, que não traz o estado dos sete dias (R9 do plano da F5).
+  `lanterns.ts` guarda a regra pura: `LANTERN_STATE`, exaustivo sobre
+  `Availability` (`concluida` → acesa; `perdida` e `expirada` → apagada;
+  `disponivel`, `bloqueada` e `fora_do_plano` → futura), `lanternsOf` e
+  `todayIndexOf`; `fora_do_plano` nunca aparece como apagada, para o dia
+  anterior à criação do plano não parecer falha. O marcador "Hoje" segue a
+  decisão K9 (o **último dia revelado**, sem segunda requisição).
+  `LanternGlyph.tsx` desenha o SVG (`aria-hidden`): chama só na acesa, pavio
+  na apagada, contorno tracejado na futura — a forma muda com o estado e a
+  cor só reforça. O estado de cada lanterna vem **sempre em texto visível**
+  (`lantern-status`, do catálogo `campaigns.lantern.*`, com a ética da F5
+  varrida por `gamificationCopy.test.ts`). `AVAILABILITY_DISPLAY` saiu junto
+  com o `availability.ts`. A trilha **não mostra o texto das missões** (R10):
+  quem lista e conclui é o Quartel-General (decisão K8); com uma lanterna
+  `disponivel` e a prop opcional `onOpenHeadquarters`, aparece um botão
+  `trail-go-headquarters` (Ruling R5), sem ela um texto. Quando
+  `refreshFailed`, o `data-testid="trail-stale"` avisa, com "Atualizar"
+  chamando `reload`. Nada anima: o brilho da lanterna acesa é estático.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
   `requestJson` (GET), `postJson` (POST) e, desde o 1b-2, `postStream`
   (`fetch` + `ReadableStream` + `TextDecoder`, sem biblioteca de SSE, com
@@ -1416,7 +1426,7 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   de que nenhum fuso IANA cruzava a virada a partir do meio-dia, estava
   errada). Dois
   usuários reais: `missions` (o cartão de hoje) e `campaigns` (os 7 dias da
-  trilha).
+  trilha de lanternas).
 - **`src/shared/hooks/`** *(existe, desde o C)* — hooks genéricos com mais
   de um usuário entre features (§5 regra 3). Nasceu com
   `useRefreshOnReturn.ts` (Task 5, decisão K7): ouve `visibilitychange` (só
