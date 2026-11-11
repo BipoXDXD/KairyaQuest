@@ -383,6 +383,38 @@ describe('RescheduleForm: o rascunho mora no registro (pendencia 112)', () => {
     expect(document.activeElement).toBe(document.body)
   })
 
+  it('guardado com outro prazo, a montagem o descarta do registro, uma vez so', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(null)
+    rerender({ disabled: true })
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('o descarte da montagem nao apaga o reagendamento aberto depois dela', () => {
+    const { onSave, rerender } = renderForm({
+      saved: { ...guardado, openedFor: '2026-09-30T21:00:00Z' },
+    })
+    abrir()
+    const novoOnSave = vi.fn<(open: OpenReschedule | null) => void>()
+    rerender({ onSave: novoOnSave })
+
+    expect(novoOnSave).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenCalledTimes(2)
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ openedFor: missao.deadline }))
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('guardado com o prazo atual, a montagem nao descarta nada', () => {
+    expect(renderForm({ saved: guardado }).onSave).not.toHaveBeenCalled()
+  })
+
+  it('sem nada guardado, a montagem nao descarta nada', () => {
+    expect(renderForm().onSave).not.toHaveBeenCalled()
+  })
+
   it('abrir e cada mudanca guardam o reagendamento aberto; fechar o descarta', () => {
     vi.spyOn(Date, 'now').mockReturnValue(5_000)
     const { onSave } = renderForm()

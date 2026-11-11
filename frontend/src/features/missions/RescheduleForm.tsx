@@ -143,6 +143,17 @@ export function RescheduleForm({
     setOpen(next)
     onSave(next)
   }
+  // Um `saved` de outro prazo tambem sai do registro, uma vez, na montagem: o
+  // prazo mudou fora deste formulario, e se ele voltasse ao de antes o rascunho
+  // velho reabriria. A ref garante a vez unica -- `onSave` muda a cada render
+  // do cartao, e um descarte repetido apagaria o que a pessoa abriu depois.
+  const staleOnMount = useRef(saved !== null && saved.openedFor !== mission.deadline)
+  useEffect(() => {
+    if (staleOnMount.current) {
+      staleOnMount.current = false
+      onSave(null)
+    }
+  }, [onSave])
   const toggleRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const regionId = `${id}-region`
