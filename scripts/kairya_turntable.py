@@ -1,11 +1,17 @@
 """Turntable da Kairya: GLB -> 72 PNGs, rodado pelo Blender (nao pelo Python).
 
 Uso:
-    blender -b -P scripts/kairya_turntable.py -- --input <glb> --frames-dir <dir>
+    blender -b --python-exit-code 1 -P scripts/kairya_turntable.py -- \
+        --input <glb> --frames-dir <dir>
 
-Importa o GLB, junta as malhas, decima, escala para a altura-alvo, centraliza,
-orbita a camera com luz de tres pontos em Eevee e grava `frame_0000.png`....
-Os numeros vêm de `turntable_params.py`. O `bpy` so existe dentro do Blender,
+O `--python-exit-code 1` faz o Blender sair com erro se o script falhar.
+
+Limpa os `frame_*.png` antigos do --frames-dir, importa o GLB, junta as
+malhas, decima, escala para a altura-alvo, centraliza, orbita a camera com
+luz de tres pontos em Eevee e grava `frame_0000.png`....
+Contagem, tamanho, teto de faces, altura, fundo e enquadramento da camera
+vem de `turntable_params.py`; as luzes (energia e posicao, relativas a altura
+do modelo) sao constantes deste arquivo. O `bpy` so existe dentro do Blender,
 por isso este arquivo fica fora do mypy e do pytest.
 """
 
@@ -20,6 +26,13 @@ from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 params = importlib.import_module("turntable_params")
+
+
+# Luz de tres pontos: (posicao em metros com z como fracao da altura, energia W).
+LIGHT_SIZE_M = 3.0
+KEY_LIGHT = ((2.5, -3.0, 1.0), 300)
+FILL_LIGHT = ((-3.0, -2.0, 0.3), 100)
+RIM_LIGHT = ((0.0, 3.5, 1.0), 200)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -47,7 +60,9 @@ def _import_and_join(path: Path) -> bpy.types.Object:
     for obj in bpy.context.scene.objects:
         obj.select_set(False)
     for obj in meshes:
+        world_matrix = obj.matrix_world.copy()
         obj.parent = None
+        obj.matrix_world = world_matrix
         obj.select_set(True)
     bpy.context.view_layer.objects.active = meshes[0]
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
@@ -75,11 +90,16 @@ def _scale_and_center(obj: bpy.types.Object) -> float:
     return obj.dimensions.z
 
 
-def _add_light(name: str, location: tuple[float, float, float], energy: float) -> None:
+def _add_light(
+    name: str,
+    spec: tuple[tuple[float, float, float], float],
+    height: float,
+) -> None:
+    (x, y, z_fraction), energy = spec
     light = bpy.data.objects.new(name, bpy.data.lights.new(name, "AREA"))
     light.data.energy = energy
-    light.data.size = 3.0
-    light.location = location
+    light.data.size = LIGHT_SIZE_M
+    light.location = (x, y, height * z_fraction)
     bpy.context.scene.collection.objects.link(light)
     track = light.constraints.new("TRACK_TO")
     track.target = bpy.data.objects["target"]
@@ -101,9 +121,9 @@ def _setup_scene(height: float) -> bpy.types.Object:
     track.up_axis = "UP_Y"
 
     # Tres pontos: principal, preenchimento e contraluz.
-    _add_light("key", (2.5, -3.0, height), 300)
-    _add_light("fill", (-3.0, -2.0, height * 0.3), 100)
-    _add_light("rim", (0.0, 3.5, height), 200)
+    _add_light("key", KEY_LIGHT, height)
+    _add_light("fill", FILL_LIGHT, height)
+    _add_light("rim", RIM_LIGHT, height)
 
     scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x, scene.render.resolution_y = params.RENDER_SIZE
@@ -121,17 +141,21 @@ def _setup_scene(height: float) -> bpy.types.Object:
 def main() -> None:
     args = _parse_args()
     args.frames_dir.mkdir(parents=True, exist_ok=True)
+    for old in args.frames_dir.glob("frame_*.png"):
+        old.unlink()
     obj = _import_and_join(args.input)
     _decimate(obj)
     height = _scale_and_center(obj)
     cam = _setup_scene(height)
-    radius = max(obj.dimensions.x, obj.dimensions.y, height) * 1.9
+    radius = (
+        max(obj.dimensions.x, obj.dimensions.y, height) * params.CAMERA_DISTANCE_FACTOR
+    )
     scene = bpy.context.scene
     for i, angle in enumerate(params.camera_angles(params.FRAMES)):
         cam.location = (
             radius * math.sin(angle),
             -radius * math.cos(angle),
-            height * 0.15,
+            height * params.CAMERA_HEIGHT_FRACTION,
         )
         scene.render.filepath = str(args.frames_dir / f"frame_{i:04d}.png")
         bpy.ops.render.render(write_still=True)

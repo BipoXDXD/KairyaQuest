@@ -13,6 +13,10 @@ MAX_FACES = 80_000
 TARGET_HEIGHT_M = 1.7
 # ink-900 da superficie do painel. O fundo vai embutido no video porque o
 # Safari nao toca VP9 com alfa.
+# Camera: distancia = fator x maior dimensao do modelo; altura = fracao da
+# altura do modelo (leve olhar de cima).
+CAMERA_DISTANCE_FACTOR = 1.9
+CAMERA_HEIGHT_FRACTION = 0.15
 BACKGROUND_HEX = "#142030"
 
 

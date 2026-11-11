@@ -5,10 +5,16 @@
 #
 # Uso: scripts/encode-turntable.sh <frames-dir> <out.webm> <out-poster.webp>
 #
-# Grava em temporários, confere os tetos de tamanho e só então move.
+# Gera os dois arquivos em temporários no mesmo diretório de cada destino (mesmo
+# filesystem, então o `mv` é atômico), confere quadros e tetos de tamanho dos
+# dois e só então move; um erro não deixa um par inconsistente.
 # Depende de `ffmpeg` e `magick` locais do dono.
 set -euo pipefail
 
+# FRAMES e FPS espelham turntable_params.FRAMES e turntable_params.FPS.
+readonly FRAMES=72
+readonly FPS=24
+readonly CRF=36
 readonly MAX_WEBM_BYTES=1572864
 readonly MAX_POSTER_BYTES=204800
 
@@ -25,22 +31,28 @@ out_poster=$3
 
 command -v ffmpeg >/dev/null 2>&1 || die "ffmpeg não encontrado no PATH"
 command -v magick >/dev/null 2>&1 || die "magick não encontrado no PATH"
+
+shopt -s nullglob
+frames=("$frames_dir"/frame_*.png)
+(( ${#frames[@]} == FRAMES )) \
+  || die "esperava $FRAMES quadros frame_*.png em $frames_dir, achei ${#frames[@]}"
 [[ -f "$frames_dir/frame_0000.png" ]] || die "sem $frames_dir/frame_0000.png"
 
 mkdir -p "$(dirname "$out_webm")" "$(dirname "$out_poster")"
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+tmp_webm_dir=$(mktemp -d "$(dirname "$out_webm")/.turntable-tmp.XXXXXX")
+tmp_poster_dir=$(mktemp -d "$(dirname "$out_poster")/.turntable-tmp.XXXXXX")
+trap 'rm -rf "$tmp_webm_dir" "$tmp_poster_dir"' EXIT
 
-ffmpeg -nostdin -y -loglevel error -framerate 24 -i "$frames_dir/frame_%04d.png" \
-  -c:v libvpx-vp9 -b:v 0 -crf 36 -pix_fmt yuv420p -an -r 24 \
-  "$tmp/out.webm"
-magick "$frames_dir/frame_0000.png" -quality 82 "$tmp/poster.webp"
+ffmpeg -nostdin -y -loglevel error -framerate "$FPS" -i "$frames_dir/frame_%04d.png" \
+  -c:v libvpx-vp9 -b:v 0 -crf "$CRF" -pix_fmt yuv420p -an -r "$FPS" \
+  "$tmp_webm_dir/out.webm"
+magick "$frames_dir/frame_0000.png" -quality 82 "$tmp_poster_dir/poster.webp"
 
-webm_bytes=$(wc -c <"$tmp/out.webm" | tr -d ' ')
-poster_bytes=$(wc -c <"$tmp/poster.webp" | tr -d ' ')
+webm_bytes=$(wc -c <"$tmp_webm_dir/out.webm" | tr -d ' ')
+poster_bytes=$(wc -c <"$tmp_poster_dir/poster.webp" | tr -d ' ')
 (( webm_bytes <= MAX_WEBM_BYTES )) || die "webm com $webm_bytes bytes, teto $MAX_WEBM_BYTES"
 (( poster_bytes <= MAX_POSTER_BYTES )) || die "poster com $poster_bytes bytes, teto $MAX_POSTER_BYTES"
 
-mv "$tmp/out.webm" "$out_webm"
-mv "$tmp/poster.webp" "$out_poster"
+mv "$tmp_webm_dir/out.webm" "$out_webm"
+mv "$tmp_poster_dir/poster.webp" "$out_poster"
 echo "webm: $webm_bytes bytes; poster: $poster_bytes bytes"
