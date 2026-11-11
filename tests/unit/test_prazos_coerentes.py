@@ -21,14 +21,14 @@ pior caso de UMA chamada ao modelo, calculado do cliente real do SDK
 banco (`pool_timeout`) cabe na metade da janela de uma rota de leitura ou
 mutacao do navegador.
 
-O que NAO esta aqui: a parada no meio do stream. O timeout do SDK e por
-leitura e o total so e conferido quando um evento chega
-(`tutoring/service.py`), entao uma parada que comeca em `t` sai em
-`t + tutor_timeout_seconds`, depois do corte do proxy se `t` passar de ~36 s.
-So um limite TOTAL de parede, conferido sem depender de evento, cobre esse
-caminho; fica registrado como pendencia em
-`docs/handoff/2026-11-11-orcamento-tempo.md`, nao escondido por um teste que o
-aprovasse.
+A parada no meio do stream (pendencia P-orcamento-tempo-1, resolvida): o
+timeout do SDK e por leitura, entao o stream da tutoria ganhou um teto TOTAL de
+parede (`tutoring/leitura.py`) igual a `tutor_timeout_seconds`, contado do
+inicio da chamada e conferido sem depender de evento. O teto, mais as fases que
+nao sao leitura (que entram na contagem), cabe em `proxy_read_timeout -
+FOLGA_DO_ORFAO`: e o que o teste do teto prova abaixo, a partir das constantes
+reais. A avaliacao NAO tem esse teto (ela le o stream inteiro por dentro do
+adaptador); fica registrado em `docs/handoff/2026-11-11-teto-stream.md`.
 """
 
 import re
@@ -190,6 +190,28 @@ def test_o_pior_caso_do_provedor_sai_antes_do_corte_do_proxy_com_folga() -> None
     pior_caso = _pior_caso_do_cliente_ms(_provedor_com_os_padroes())
 
     assert pior_caso <= _proxy_read_timeout_ms() - folga_ms
+
+
+def test_o_teto_de_parede_do_stream_cabe_no_corte_do_proxy_com_folga() -> None:
+    # O teto e o `limite` da tutoria (`tutor_timeout_seconds`), conferido por um
+    # relogio de parede que anda MESMO SEM evento: sem ele, uma parada depois de
+    # ~36 s do pedido saia depois dos 90 s do nginx (timeout por leitura de 54 s
+    # contado do ultimo evento). A conta e CONSERVADORA: a conexao, a escrita e
+    # a fila do pool ja estao dentro do teto (ele conta do inicio da chamada), e
+    # mesmo assim sao somadas de novo.
+    cliente = _provedor_com_os_padroes()._cliente
+    prazo = cliente.timeout
+    assert not isinstance(prazo, int | float | None), "o cliente tem fases nomeadas"
+    assert prazo.connect is not None
+    assert prazo.write is not None
+    assert prazo.pool is not None
+    fases_fora_da_leitura_ms = round((prazo.connect + prazo.write + prazo.pool) * 1000)
+    folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
+
+    assert (
+        _tutor_timeout_ms() + fases_fora_da_leitura_ms
+        <= _proxy_read_timeout_ms() - folga_ms
+    )
 
 
 def test_o_cliente_do_provedor_nao_repete_a_chamada() -> None:

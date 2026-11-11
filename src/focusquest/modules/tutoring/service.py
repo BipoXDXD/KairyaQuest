@@ -69,6 +69,7 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
     validar_transicao_da_acao,
 )
+from focusquest.modules.tutoring.leitura import ESPERA_REAL, Espera, ler_com_prazo
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import (
@@ -88,10 +89,9 @@ from focusquest.modules.tutoring.schemas import (
 from focusquest.modules.users.service import ler_idioma
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
-# limite total so e conferido quando um evento chega: um
-# provedor que nao emite nada fica preso ao timeout POR ESPERA do SDK, nao a
-# este numero. A folga cobre a gravacao final e o relogio de maquinas
-# diferentes.
+# limite total vale mesmo sem evento chegando (`leitura.py`): o stream sai do ar
+# em `limite` depois de comecar, e a folga cobre a gravacao final e o relogio de
+# maquinas diferentes.
 FOLGA_DO_ORFAO = timedelta(seconds=30)
 
 # Quantas mensagens o GET devolve. Sem paginacao no 1b (spec, "Fora").
@@ -312,6 +312,7 @@ def transmitir(
     tutoria: Tutoria,
     *,
     clock: Clock,
+    espera: Espera = ESPERA_REAL,
 ) -> Generator[EventoDoTurno]:
     """Os eventos do turno, gravando o final ANTES de emiti-lo.
 
@@ -347,7 +348,13 @@ def transmitir(
     codigo: CodigoDoStream | None = None
     try:
         yield PerguntaGravada(preparo.pergunta)
-        eventos = tutoria.provedor.responder(preparo.turno)
+        # O teto TOTAL de parede vale tambem SEM evento chegando (a leitura do
+        # SDK e bloqueante e o timeout dele e por leitura): ver `leitura.py`.
+        eventos = ler_com_prazo(
+            tutoria.provedor.responder(preparo.turno),
+            teto_segundos=tutoria.limite.total_seconds(),
+            espera=espera,
+        )
         inicio = clock()
         try:
             for evento in eventos:
