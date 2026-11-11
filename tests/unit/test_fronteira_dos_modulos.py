@@ -48,6 +48,7 @@ def nomes_importados(no: ast.Import | ast.ImportFrom, pacote: str) -> set[str]:
     """Nomes absolutos que o `import` alcanca; `pacote` resolve o relativo.
 
     Em `from a import b`, o `b` pode ser um submodulo, entao `a.b` tambem conta.
+    O `*` de `from a import *` nao e submodulo: so `a` conta.
     """
     if isinstance(no, ast.Import):
         return {a.name for a in no.names}
@@ -56,7 +57,7 @@ def nomes_importados(no: ast.Import | ast.ImportFrom, pacote: str) -> set[str]:
         partes = pacote.split(".")
         raiz = ".".join(partes[: len(partes) - (no.level - 1)])
         base = f"{raiz}.{base}" if base else raiz
-    return {base, *(f"{base}.{a.name}" for a in no.names)}
+    return {base, *(f"{base}.{a.name}" for a in no.names if a.name != "*")}
 
 
 def arestas_entre_pacotes(raiz: Path) -> Arestas:
@@ -71,9 +72,18 @@ def arestas_entre_pacotes(raiz: Path) -> Arestas:
             continue
         origem = relativo.parts[0]
         pacote = ".".join((PREFIXO, *relativo.parent.parts))
-        for no in ast.walk(ast.parse(arquivo.read_text())):
-            if not isinstance(no, ast.Import | ast.ImportFrom):
-                continue
+        # Os bytes, e nao o texto: `ast.parse` respeita o `coding:` do arquivo.
+        imports = sorted(
+            (
+                no
+                for no in ast.walk(ast.parse(arquivo.read_bytes()))
+                if isinstance(no, ast.Import | ast.ImportFrom)
+            ),
+            # `ast.walk` desce em largura: sem ordenar, um import dentro de
+            # funcao sairia depois de um de mais abaixo no arquivo.
+            key=lambda no: no.lineno,
+        )
+        for no in imports:
             destinos = {pacote_alvo(n) for n in nomes_importados(no, pacote)}
             for destino in sorted(d for d in destinos if d and d != origem):
                 arestas[(origem, destino)].append(f"{relativo}:{no.lineno}")
@@ -140,6 +150,8 @@ def _arvore(tmp_path: Path, arquivos: dict[str, str]) -> Path:
         ("from focusquest.core import errors", "focusquest.modules.x", set()),
         ("import focusquest.modulesx.missions", "focusquest.modules.x", set()),
         ("import focusquest.modules", "focusquest.modules.x", set()),
+        ("from focusquest.modules import *", "focusquest.modules.x", set()),
+        ("from .. import *", "focusquest.modules.x", set()),
     ],
 )
 def test_resolve_o_pacote_alvo_de_cada_forma_de_import(
@@ -170,6 +182,34 @@ def test_aresta_guarda_arquivo_e_linha_e_ignora_o_proprio_pacote(
     assert arestas_entre_pacotes(raiz) == {
         ("a", "b"): ["a/sub/w.py:2", "a/x.py:4"],
     }
+
+
+def test_locais_de_um_arquivo_saem_na_ordem_das_linhas(tmp_path: Path) -> None:
+    """O import dentro de funcao (mais fundo na arvore) vem antes do de baixo."""
+    raiz = _arvore(
+        tmp_path,
+        {
+            "a/x.py": (
+                "def f() -> None:\n"
+                "    from focusquest.modules.b import q\n"
+                "\n"
+                "from focusquest.modules.b import z\n"
+            ),
+        },
+    )
+    assert arestas_entre_pacotes(raiz) == {("a", "b"): ["a/x.py:2", "a/x.py:4"]}
+
+
+def test_le_o_arquivo_pela_declaracao_de_encoding(tmp_path: Path) -> None:
+    """`ast.parse` dos bytes respeita o `coding:` do arquivo, e nao o do sistema."""
+    arquivo = tmp_path / "a" / "x.py"
+    arquivo.parent.mkdir()
+    arquivo.write_bytes(
+        "# -*- coding: latin-1 -*-\n"
+        "# missão\n"
+        "from focusquest.modules.b import y\n".encode("latin-1")
+    )
+    assert arestas_entre_pacotes(tmp_path) == {("a", "b"): ["a/x.py:3"]}
 
 
 def test_par_mutuo_novo_reprova_com_par_e_arquivo_linha(tmp_path: Path) -> None:

@@ -3,13 +3,15 @@ import { expect, test, type Page } from '@playwright/test'
 import type { Cycle } from '../../src/features/missions/types'
 import type { Progress } from '../../src/features/progression/types'
 import type { Mission } from '../../src/shared/types/mission'
-import { diaEMes, diaRelativo, somarDias } from './datas'
+import { diaEMes, diaRelativo, diasEntre, segundaDaSemana, somarDias } from './datas'
 
 // O dia do ciclo antigo e o do novo, relativos a hoje (pendencia 207); a
-// semana do plano antigo termina no dia do ciclo antigo.
+// semana do plano antigo e a que contem o dia do ciclo antigo, comecando na
+// segunda-feira, como o backend gera.
 const DIA_ANTIGO = diaRelativo(-1)
 const DIA_NOVO = diaRelativo(0)
-const INICIO_DA_SEMANA = somarDias(DIA_ANTIGO, -6)
+const INICIO_DA_SEMANA = segundaDaSemana(DIA_ANTIGO)
+const INDICE_DO_DIA_ANTIGO = diasEntre(INICIO_DA_SEMANA, DIA_ANTIGO)
 
 const daily = (id: number, day: string): Mission => ({
   id,
@@ -52,8 +54,8 @@ const oldPlan = {
     week_start: INICIO_DA_SEMANA,
     days: Array.from({ length: 7 }, (_, index) => ({
       day: somarDias(INICIO_DA_SEMANA, index),
-      availability: index === 6 ? 'disponivel' : 'fora_do_plano',
-      mission: index === 6 ? oldCycle.mission : null,
+      availability: index === INDICE_DO_DIA_ANTIGO ? 'disponivel' : 'fora_do_plano',
+      mission: index === INDICE_DO_DIA_ANTIGO ? oldCycle.mission : null,
     })),
     special: { availability: 'bloqueada', progress: 3, mission: null },
   },
