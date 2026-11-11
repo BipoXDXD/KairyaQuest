@@ -47,8 +47,10 @@ SUFIXOS_BINARIOS = frozenset(
 )
 
 # Registro historico: specs, planos e o handoff antigo descrevem o que existia
-# quando foram escritos, e o historico nao e reescrito.
-EXCLUSOES = ("docs/HANDOFF.md", "docs/superpowers/")
+# quando foram escritos, e o historico nao e reescrito. Os arquivos datados de
+# docs/handoff/ sao secoes do HANDOFF guardadas a parte ate a consolidacao
+# (docs/handoff/README.md); o README da pasta e documento vivo e e varrido.
+EXCLUSOES = ("docs/HANDOFF.md", "docs/superpowers/", "docs/handoff/2")
 
 # Temporaria. O tolerant reader da migracao 0008 precisa do valor antigo para
 # ler linhas legadas. A Tarefa 2.2 (migracao 0010_contract_tifa) remove o
@@ -118,6 +120,21 @@ def test_predicado_acusa_citacao(texto: str) -> None:
 @pytest.mark.parametrize("texto", ["artifacts", "#ff7a00", "0xff7", "stiff7"])
 def test_predicado_ignora_falso_positivo(texto: str) -> None:
     assert not _cita_franquia(texto)
+
+
+@pytest.mark.parametrize(
+    ("caminho", "excluido"),
+    [
+        ("docs/HANDOFF.md", True),
+        ("docs/handoff/2026-11-10-f2-sem-franquia.md", True),
+        ("docs/handoff/README.md", False),
+        ("docs/ARCHITECTURE.md", False),
+    ],
+)
+def test_registro_historico_fica_fora_da_varredura(
+    caminho: str, excluido: bool
+) -> None:
+    assert _excluido(caminho) is excluido
 
 
 def test_termo_de_duas_palavras_quebrado_entre_linhas_e_acusado() -> None:
