@@ -17,6 +17,19 @@ describe('SideNav', () => {
     expect(buttons[1]).toHaveAccessibleName('Campanhas')
   })
 
+  it('em ingles, o landmark, a marca e as areas vem do catalogo', () => {
+    renderWithI18n(<SideNav active="headquarters" onNavigate={vi.fn()} />, { locale: 'en' })
+
+    const nav = screen.getByRole('navigation', { name: 'Areas' })
+    const buttons = within(within(nav).getByRole('list')).getAllByRole('button')
+    expect(buttons[0]).toHaveAccessibleName('Headquarters')
+    expect(buttons[1]).toHaveAccessibleName('Campaigns')
+    // Cada texto preso ao seu elemento: trocar duas chaves irmas reprova.
+    expect(within(nav).getByText('KairyaQuest')).toHaveClass('rpg-wordmark')
+    expect(within(nav).getByText('Your study journey')).toHaveClass('rpg-brand-note')
+    expect(within(nav).getByText('Explore')).toHaveClass('rpg-nav-caption')
+  })
+
   it.each<[Area, string, string]>([
     ['headquarters', 'Quartel-General', 'Campanhas'],
     ['campaigns', 'Campanhas', 'Quartel-General'],

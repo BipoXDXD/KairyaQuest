@@ -9,6 +9,7 @@ import {
 import { AVAILABILITY_DISPLAY } from './availability'
 import type { Plan, PlanDay, PlanSpecial } from './types'
 import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 
 /**
  * O TOM (cor da borda e do texto) de cada disponibilidade -- so apresentacao,
@@ -309,7 +310,9 @@ function TrailContent({
           className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
         >
           <p className="font-semibold">Falha ao carregar a trilha.</p>
-          <p className="mt-1">{state.message}</p>
+          <p className="mt-1">
+            <LoadFailureMessage failure={state.failure} />
+          </p>
           <button
             type="button"
             data-testid="trail-retry"

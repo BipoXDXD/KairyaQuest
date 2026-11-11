@@ -168,8 +168,9 @@ describe('useRequestEvaluation', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'A Kairya não conseguiu avaliar agora. Tente de novo.',
-          recovery: 'retry',
+          message: 'missions.evaluationFailure.providerUnavailable.message',
+          recovery: 'missions.failure.tryAgain',
+          action: 'retry',
         },
       })
     })
@@ -189,8 +190,9 @@ describe('useRequestEvaluation', () => {
       expect(result.current.state).toEqual({
         status: 'failed',
         failure: {
-          message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
-          recovery: 'refresh',
+          message: 'missions.failure.notAvailable',
+          recovery: 'missions.failure.refresh',
+          action: 'refresh',
         },
       })
     })
@@ -267,7 +269,7 @@ describe('useRequestEvaluation', () => {
     })
     expect(result.current.state).toMatchObject({
       status: 'failed',
-      failure: { recovery: 'retry' },
+      failure: { message: 'missions.evaluationFailure.generic.timeout', action: 'retry' },
     })
   })
 
@@ -297,8 +299,9 @@ describe('useRequestEvaluation', () => {
     expect(result.current.state).toEqual({
       status: 'failed',
       failure: {
-        message: 'A Kairya já está avaliando esta entrega. Tente de novo em instantes.',
-        recovery: 'retry',
+        message: 'missions.evaluationFailure.inProgress.message',
+        recovery: 'missions.evaluationFailure.inProgress.recovery',
+        action: 'retry',
       },
     })
   })
@@ -336,7 +339,11 @@ describe('useRequestEvaluation', () => {
 
     expect(result.current.state).toEqual({
       status: 'failed',
-      failure: { message: 'A avaliação demorou demais. Tente de novo.', recovery: 'retry' },
+      failure: {
+        message: 'missions.evaluationFailure.timeout.message',
+        recovery: 'missions.failure.tryAgain',
+        action: 'retry',
+      },
     })
     expect(vi.getTimerCount()).toBe(0)
   })

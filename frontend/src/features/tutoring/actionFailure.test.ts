@@ -1,55 +1,86 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, ApiTimeoutError } from '../../shared/api/client'
-import { describeActionFailure, failedActionText } from './actionFailure'
+import { ptBR } from '../../shared/i18n/messages/pt-BR'
+import { ACTION_FAILURE_BY_CODE, describeActionFailure, failedActionText } from './actionFailure'
+
+const FAILED = {
+  message: 'tutoring.actionFailure.failed.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const EXPIRED = {
+  message: 'tutoring.actionFailure.expired.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const INVALIDATED = {
+  message: 'tutoring.actionFailure.rescheduleInvalid.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const ESTIMATE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.estimateOutOfBounds.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const DEADLINE_OUT_OF_BOUNDS = {
+  message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
+
+const ALREADY_DECIDED = {
+  message: 'tutoring.actionFailure.alreadyDecided.message',
+  recovery: 'tutoring.actionFailure.refreshConversation',
+  action: 'refresh',
+}
+
+const UNCONFIRMED_REJECT = {
+  message: 'tutoring.actionFailure.unconfirmedReject.message',
+  recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
+  action: 'retry',
+}
 
 describe('describeActionFailure', () => {
   it.each([
     [
       'operacao_reutilizada',
       409,
-      'retry-with-new-operation',
-      'Não foi possível registrar esta tentativa. Tente de novo.',
+      {
+        message: 'tutoring.actionFailure.reusedOperation.message',
+        recovery: 'tutoring.actionFailure.reusedOperation.recovery',
+        action: 'retry-with-new-operation',
+      },
     ],
-    [
-      'transicao_ilegal',
-      409,
-      'refresh',
-      'Esta proposta já foi decidida. Atualize a conversa para ver o estado atual.',
-    ],
+    ['transicao_ilegal', 409, ALREADY_DECIDED],
     [
       'acao_nao_encontrada',
       404,
-      'refresh',
-      'Esta proposta não existe mais. Atualize a conversa para ver o estado atual.',
+      {
+        message: 'tutoring.actionFailure.notFound.message',
+        recovery: 'tutoring.actionFailure.refreshConversation',
+        action: 'refresh',
+      },
     ],
-    [
-      'prazo_expirado',
-      422,
-      'expired',
-      'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
-    ],
-    [
-      'estimativa_fora_do_limite',
-      422,
-      'out-of-bounds',
-      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
-    ],
-    [
-      'prazo_fora_do_limite',
-      422,
-      'out-of-bounds',
-      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
-    ],
-  ])('traduz %s', (code, status, recovery, message) => {
+    ['prazo_expirado', 422, { ...EXPIRED, action: 'expired' }],
+    ['estimativa_fora_do_limite', 422, { ...ESTIMATE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
+    ['prazo_fora_do_limite', 422, { ...DEADLINE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
+  ])('traduz %s', (code, status, esperado) => {
     for (const attempted of ['confirm', 'reject'] as const) {
       for (const kind of ['create_mission', 'reschedule_mission'] as const) {
-        expect(describeActionFailure(new ApiError('x', status, code), attempted, kind)).toEqual({
-          message,
-          recovery,
-        })
+        expect(describeActionFailure(new ApiError('x', status, code), attempted, kind)).toEqual(
+          esperado,
+        )
       }
     }
   })
+
+  it.each(Object.entries(ACTION_FAILURE_BY_CODE))(
+    'as chaves de %s existem no catalogo',
+    (_code, failure) => {
+      expect(Object.hasOwn(ptBR, failure.message)).toBe(true)
+      expect(Object.hasOwn(ptBR, failure.recovery)).toBe(true)
+    },
+  )
 
   it.each([
     ['5xx sem code', new ApiError('x', 500, null)],
@@ -59,9 +90,9 @@ describe('describeActionFailure', () => {
     ['erro que nao e ApiError', new Error('x')],
   ])('%s: confirmar diz que repetir nao cria duas missoes', (_caso, error) => {
     expect(describeActionFailure(error, 'confirm', 'create_mission')).toEqual({
-      message:
-        'Não foi possível confirmar a missão. Tentar de novo é seguro: a missão não será criada duas vezes.',
-      recovery: 'retry',
+      message: 'tutoring.actionFailure.unconfirmedCreate.message',
+      recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+      action: 'retry',
     })
   })
 
@@ -69,29 +100,31 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedCreate.network',
       'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedCreate.timeout',
       'Não foi possível confirmar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será criada duas vezes.',
     ],
   ])(
-    '%s: confirmar abre com a causa e diz que repetir nao cria duas missoes',
-    (_caso, error, message) => {
-      expect(describeActionFailure(error, 'confirm', 'create_mission')).toEqual({
+    '%s: confirmar abre com a acao e a causa e diz que repetir nao cria duas missoes',
+    (_caso, error, message, textoPt) => {
+      const failure = describeActionFailure(error, 'confirm', 'create_mission')
+      expect(failure).toEqual({
         message,
-        recovery: 'retry',
+        recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+        action: 'retry',
       })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
     },
   )
 
   it('recusar tem o proprio texto generico', () => {
     expect(describeActionFailure(new ApiError('x', 500, null), 'reject', 'create_mission')).toEqual(
-      {
-        message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
-        recovery: 'retry',
-      },
+      UNCONFIRMED_REJECT,
     )
   })
 
@@ -99,16 +132,23 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedReject.network',
       'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedReject.timeout',
       'Não foi possível recusar a proposta: o servidor demorou demais para responder. Tentar de novo é seguro.',
     ],
-  ])('%s: recusar abre com a causa', (_caso, error, message) => {
+  ])('%s: recusar abre com a acao e a causa', (_caso, error, message, textoPt) => {
     for (const kind of ['create_mission', 'reschedule_mission'] as const) {
-      expect(describeActionFailure(error, 'reject', kind)).toEqual({ message, recovery: 'retry' })
+      const failure = describeActionFailure(error, 'reject', kind)
+      expect(failure).toEqual({
+        ...UNCONFIRMED_REJECT,
+        message,
+      })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
     }
   })
 
@@ -120,11 +160,7 @@ describe('describeActionFailure', () => {
           attempted,
           'reschedule_mission',
         ),
-      ).toEqual({
-        message:
-          'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
-        recovery: 'invalidated',
-      })
+      ).toEqual({ ...INVALIDATED, action: 'invalidated' })
     }
   })
 
@@ -132,9 +168,9 @@ describe('describeActionFailure', () => {
     expect(
       describeActionFailure(new ApiError('x', 500, null), 'confirm', 'reschedule_mission'),
     ).toEqual({
-      message:
-        'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-      recovery: 'retry',
+      message: 'tutoring.actionFailure.unconfirmedReschedule.message',
+      recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
+      action: 'retry',
     })
   })
 
@@ -142,27 +178,32 @@ describe('describeActionFailure', () => {
     [
       'rede fora',
       new ApiError('x', null, null),
+      'tutoring.actionFailure.unconfirmedReschedule.network',
       'Não foi possível confirmar o reagendamento: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
+      'tutoring.actionFailure.unconfirmedReschedule.timeout',
       'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
     ],
-  ])('%s: confirmar um reagendamento abre com a causa', (_caso, error, message) => {
-    expect(describeActionFailure(error, 'confirm', 'reschedule_mission')).toEqual({
-      message,
-      recovery: 'retry',
-    })
-  })
+  ])(
+    '%s: confirmar um reagendamento abre com a acao e a causa',
+    (_caso, error, message, textoPt) => {
+      const failure = describeActionFailure(error, 'confirm', 'reschedule_mission')
+      expect(failure).toEqual({
+        message,
+        recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
+        action: 'retry',
+      })
+      expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(textoPt)
+    },
+  )
 
   it('recusar um reagendamento tem o mesmo texto generico da criacao', () => {
     expect(
       describeActionFailure(new ApiError('x', 500, null), 'reject', 'reschedule_mission'),
-    ).toEqual({
-      message: 'Não foi possível recusar a proposta. Tentar de novo é seguro.',
-      recovery: 'retry',
-    })
+    ).toEqual(UNCONFIRMED_REJECT)
   })
 
   it('o code conhecido vale para os dois tipos de acao', () => {
@@ -172,34 +213,27 @@ describe('describeActionFailure', () => {
         'confirm',
         'reschedule_mission',
       ),
-    ).toEqual({
-      message: 'Esta proposta já foi decidida. Atualize a conversa para ver o estado atual.',
-      recovery: 'refresh',
-    })
+    ).toEqual(ALREADY_DECIDED)
   })
 })
 
 describe('failedActionText', () => {
   it.each([
-    ['prazo_expirado', 'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.'],
-    [
-      'reagendamento_invalido',
-      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
-    ],
-    [
-      'estimativa_fora_do_limite',
-      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
-    ],
-    [
-      'prazo_fora_do_limite',
-      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
-    ],
-    ['proposta_invalida', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
+    ['prazo_expirado', EXPIRED],
+    ['reagendamento_invalido', INVALIDATED],
+    ['estimativa_fora_do_limite', ESTIMATE_OUT_OF_BOUNDS],
+    ['prazo_fora_do_limite', DEADLINE_OUT_OF_BOUNDS],
+    ['proposta_invalida', FAILED],
     // Um code que existe no mapa mas nao e gravado na acao cai no generico.
-    ['transicao_ilegal', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
-    ['toString', 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
-    [null, 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'],
+    ['transicao_ilegal', FAILED],
+    ['toString', FAILED],
+    [null, FAILED],
   ])('a acao gravada falhou com %s', (code, text) => {
-    expect(failedActionText(code)).toBe(text)
+    expect(failedActionText(code)).toEqual(text)
+  })
+
+  it('o texto generico tem as chaves no catalogo', () => {
+    expect(Object.hasOwn(ptBR, FAILED.message)).toBe(true)
+    expect(Object.hasOwn(ptBR, FAILED.recovery)).toBe(true)
   })
 })

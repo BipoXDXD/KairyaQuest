@@ -4,6 +4,7 @@ import {
   type Reschedule,
   type RescheduleOrigin,
 } from '../../shared/types/mission'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * Quem reagendou, como a pessoa le. `Record` pelo mesmo motivo dos outros
@@ -36,6 +37,7 @@ function countLabel(count: number): string {
  * vem: a tolerancia e so deste leitor.
  */
 export function RescheduleHistory({ reschedules }: { reschedules: Reschedule[] | undefined }) {
+  const t = useT()
   if (reschedules === undefined || reschedules.length === 0) {
     return null
   }
@@ -61,7 +63,7 @@ export function RescheduleHistory({ reschedules }: { reschedules: Reschedule[] |
               </time>
               {' → '}
               <time dateTime={entry.new_deadline}>{formatDeadline(entry.new_deadline)}</time>
-              {` · ${RESCHEDULE_REASON_LABELS[entry.reason]} · ${ORIGIN_LABELS[entry.origin]}`}
+              {` · ${t(RESCHEDULE_REASON_LABELS[entry.reason])} · ${ORIGIN_LABELS[entry.origin]}`}
             </li>
           ))}
         </ol>
