@@ -233,8 +233,13 @@ async function send<T>(path: string, init: RequestInit, onErrorStatus?: () => vo
  * tela no estado anterior, ou em "carregando" (pendencia 213 do HANDOFF): a
  * guarda "o pedido mais recente decide" descarta as respostas velhas, entao
  * so a falha do mais recente tira a tela dali. Mesma ordem de grandeza do
- * `MUTATION_TIMEOUT_MS` -- uma leitura de banco, sem modelo no caminho --, e
- * tambem sem medida real de rede (pendencia 193).
+ * `MUTATION_TIMEOUT_MS` -- uma leitura de banco, sem modelo no caminho.
+ *
+ * O numero e julgamento, nao medida de rede: a producao esta fora de alcance de
+ * quem desenvolve (pendencia 193). O que esta medido e que, localmente e sem
+ * rede, essas rotas respondem em ~1 ms (p95 de 300 chamadas), e o que esta
+ * conferido pelo gate (`tests/unit/test_prazos_coerentes.py`) e a RELACAO: este
+ * prazo fica abaixo do da avaliacao, a unica rota que espera o modelo.
  */
 export const READ_TIMEOUT_MS = 20_000
 
@@ -284,7 +289,12 @@ export const MUTATION_TIMEOUT_MS = 20_000
  *   responde (proxy de fora, conexao meio-aberta).
  *
  * 90 s + 15 s de margem para a gravacao final e a volta pela rede. A margem e
- * julgamento, sem medida real de latencia (HANDOFF, pendencias 192/37).
+ * julgamento, sem medida real de latencia (HANDOFF, pendencias 192/37). A
+ * relacao `tutor_timeout_seconds + folga <= proxy_read_timeout` e
+ * `proxy_read_timeout + margem <= EVALUATION_TIMEOUT_MS` e conferida por
+ * `tests/unit/test_prazos_coerentes.py`: mudar um lado sem o outro reprova o
+ * gate. Ela NAO cobre a retentativa do SDK com demora nos cabecalhos, que passa
+ * do corte do proxy (pendencia nova, `docs/handoff/2026-11-11-prazo-medido.md`).
  */
 export const EVALUATION_TIMEOUT_MS = 105_000
 
@@ -298,7 +308,8 @@ export const EVALUATION_TIMEOUT_MS = 105_000
  * jeito de distinguir o 409 do 504 `tempo_esgotado` do resto -- se perdia, com
  * o texto generico no lugar. Chegados os cabecalhos de erro, o prazo global
  * sai de cena e este assume; ele e curto de proposito, o corpo de erro e um
- * JSON de poucos bytes. Sem medida real de rede, como os demais.
+ * JSON de poucos bytes. Sem medida real de rede, como os demais; o gate so
+ * confere que ele e menor que o prazo de leitura.
  */
 export const ERROR_BODY_TIMEOUT_MS = 5_000
 
