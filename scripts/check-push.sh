@@ -248,7 +248,7 @@ while read -r ref_local sha_local; do
   if ! make -C "$work" bootstrap </dev/null; then
     echo "!! falha ao preparar o ambiente de validacao para ${ref_local} (${sha_local:0:8}) -- rede? dependencia ausente? isto nao e necessariamente um defeito do codigo enviado" >&2
     status=1
-  elif ! make -C "$work" check </dev/null; then
+  elif ! FQ_HANDOFF_BRANCH="$(branch_do_handoff "$ref_local")" make -C "$work" check </dev/null; then
     echo "!! gate reprovou em ${ref_local} (${sha_local:0:8})" >&2
     status=1
   else
