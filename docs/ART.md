@@ -214,3 +214,37 @@ Os quatro vieram da ferramenta integrada image_gen, em 2026-10-05; os dois
 retratos eram placeholders até a arte própria da Kairya. A procedência
 histórica, com prompts e hashes dos originais, está no
 [registro anterior](https://github.com/BipoXDXD/KairyaQuest/blob/49c79af13557ded9ef37332084b060d9c6220dae/docs/ART.md).
+
+## Fontes
+
+Tipografia do design system, servida localmente de `frontend/public/fonts/`
+(sem CDN, sem requisição a terceiro). Declaração em
+`frontend/src/styles/fonts.css`; tokens `--font-display` e `--font-body` em
+`frontend/src/styles/tokens.css`.
+
+| Família | Uso | Pesos | Autor | Licença |
+|---|---|---|---|---|
+| Alegreya | títulos (`font-display`) | 500 a 700 (arquivo variável) | Juan Pablo del Peral, Huerta Tipográfica | SIL OFL 1.1 (`OFL-Alegreya.txt`) |
+| Alegreya Sans | texto (`font-body`) | 400 e 700 (arquivos estáticos) | Juan Pablo del Peral, Huerta Tipográfica | SIL OFL 1.1 (`OFL-AlegreyaSans.txt`) |
+
+Procedência: CSS da Google Fonts CSS API v2,
+`https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=Alegreya+Sans:wght@400;700&display=swap`,
+pedido com User-Agent de navegador moderno em 2026-11-10. Só os blocos
+`latin` e `latin-ext` foram usados; os woff2 vieram das URLs
+`fonts.gstatic.com` desses blocos (Alegreya `v41`, Alegreya Sans `v28`), com
+o mesmo `unicode-range`. Na Alegreya, 500 e 700 apontavam para a mesma URL
+(fonte variável), por isso há um arquivo por subset. As licenças vieram de
+`https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/OFL.txt` e
+`.../ofl/alegreyasans/OFL.txt`. Cada woff2 foi conferido pela assinatura
+`wOF2` antes de entrar no repositório.
+
+| Arquivo (`frontend/public/fonts/`) | Bytes | SHA-256 |
+|---|---:|---|
+| `alegreya-latin.woff2` | 43.420 | `34d902fd33b23ea3205daf8dd7696e6c49b50165e70165655e361f243dd3e083` |
+| `alegreya-latin-ext.woff2` | 38.028 | `aab1eaa177d60b215b4dfa6cbe75316c2b8d27fd785f9c3604a58b3c0166aac9` |
+| `alegreya-sans-400-latin.woff2` | 17.136 | `624ea7e85a53f6bcb15f862179386546d3182ec8edde32c512662d31e1bfde18` |
+| `alegreya-sans-400-latin-ext.woff2` | 15.568 | `d8bf25eb11d09b785172d8f207dfd53f36ec969aa54c34d34aacc0c807e42be7` |
+| `alegreya-sans-700-latin.woff2` | 17.172 | `1a2f3006ecc704345bd35be43341c07b2bc33ff25955d70f47980cffb3099c48` |
+| `alegreya-sans-700-latin-ext.woff2` | 15.572 | `5c1cb227aa5a8f3ddfdb3164a3eb9092e7e041bd8d8ab8374f8dd6586d77545f` |
+| `OFL-Alegreya.txt` | 4.395 | `f6f60d5d4cf4f4b1fc4e41353c897a2f5a16e6396c0cd8fa8bdfd2f4586a9a68` |
+| `OFL-AlegreyaSans.txt` | 4.405 | `0677891e6a143f297350d260ad766ad33bfc18ed5fa4f213acf648d6b597ec1a` |
