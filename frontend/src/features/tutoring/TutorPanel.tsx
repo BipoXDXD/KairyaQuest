@@ -22,22 +22,36 @@ function liveText(send: SendState): string {
   return send.status === 'idle' && send.answer !== null ? announceAnswer(send.answer) : ''
 }
 
-/** Arte original decorativa; dimensões reservadas antes do download. */
+/**
+ * As duas versões do retrato, com as dimensões reais de cada arquivo para
+ * reservar o espaço antes do download (procedência em docs/ART.md).
+ *
+ * Só o retrato aberto tem nome acessível. O avatar compacto aparece no
+ * painel recolhido (rotulado "Kairya"), ao lado do título da folha ou dentro
+ * do botão "Falar com a Kairya": um texto alternativo ali repetiria o nome e
+ * mudaria o nome acessível do botão.
+ */
+const PORTRAITS = {
+  scene: {
+    src: '/art/kairya/portrait.webp',
+    alt: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
+    width: 864,
+    height: 1152,
+  },
+  compact: { src: '/art/kairya/avatar.webp', alt: '', width: 128, height: 160 },
+} as const
+
 function Portrait({ scene }: { scene: boolean }) {
+  const size = scene ? 'scene' : 'compact'
+  const art = PORTRAITS[size]
   return (
     <span
       data-testid="tutor-portrait"
-      aria-hidden="true"
-      data-size={scene ? 'scene' : 'compact'}
+      aria-hidden={scene ? undefined : true}
+      data-size={size}
       className="tutor-portrait"
     >
-      <img
-        src={scene ? '/art/kairya-mentor.webp' : '/art/kairya-avatar.webp'}
-        alt=""
-        width="1122"
-        height="1402"
-        decoding="async"
-      />
+      <img src={art.src} alt={art.alt} width={art.width} height={art.height} decoding="async" />
     </span>
   )
 }
