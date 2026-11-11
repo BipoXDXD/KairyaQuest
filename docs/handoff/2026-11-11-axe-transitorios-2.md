@@ -11,7 +11,8 @@ resultado desconhecido e o viewport de celular, que a primeira parte listava em
 riscada: ver "Limitação medida" abaixo.
 
 **Nenhum componente mudou.** O axe (conjunto de regras padrão) não achou
-violação em nenhum dos estados novos nem em nenhum dos 15 antigos no celular.
+violação em nenhum dos estados novos nem em nenhum dos 15 antigos no celular
+(com a ressalva do contraste sobre gradiente, abaixo).
 Só o spec `frontend/tests/e2e/axe-transitorios.spec.ts` foi alterado.
 
 ## Decisão da coordenação
@@ -39,7 +40,7 @@ Recusadas e por quê:
 
 | Estado | Mecanismo |
 |---|---|
-| Reagendando em voo (`reschedule-submit` desabilitado) | POST segurado, API real |
+| Reagendando em voo (pedido observado e segurado; botão, campo do prazo e grupo dos motivos desabilitados) | POST segurado, API real |
 | Reagendamento recusado (`reschedule-error`, 422 `prazo_expirado`) | `route.fulfill` |
 | Decisão recusada por já decidida (`proposal-failure` + `proposal-refresh`, 409 `transicao_ilegal`) | `route.fulfill`; depois atualiza e recusa de verdade |
 | Decisão que falha, variantes rede e servidor (`proposal-failure`, botão vira "Tentar de novo") | `route.abort()` e 503; depois recusa de verdade |
@@ -57,29 +58,50 @@ da página e o Escape não fecha a folha).
 
 Total: 48 cenários (24 × 2).
 
-## Limitação medida: o axe não audita o contraste dentro do cartão de missão
+## Limitação medida: o axe não decide contraste sobre os quatro painéis com gradiente
 
-O cartão de missão (`<li>`) tem `background-image: linear-gradient(...)`. Sobre
-gradiente o axe não decide contraste: devolve a regra `color-contrast` em
-`incomplete`, nunca em `violations`. Medido num cenário descartável (não está
-na branch): com a cor do `reschedule-error` trocada por `#0f172a` (quase preto,
-sobre fundo escuro), `violations` continuou `[]` e `incomplete` trouxe
-`color-contrast`. Troca de classe de cor em `RescheduleForm` e `EvaluationPanel`
-(`text-slate-900`) também passou nos 48 cenários.
+Quatro classes de `frontend/src/index.css` têm fundo em `linear-gradient`:
+`.rpg-mission-card`, `.rpg-cycle`, `.rpg-progress` (os três em `150deg`,
+`#172433` a `#111d2b`, linhas 23-27) e `.rpg-tutor` (`160deg`, `#142231` a
+`#0d1825`, ~linha 124). Sobre gradiente o axe não decide contraste: devolve a
+regra `color-contrast` em `incomplete`, nunca em `violations`. Medido num
+cenário descartável (não está na branch): com a cor do `reschedule-error`
+trocada por `#0f172a` (quase preto, sobre fundo escuro), `violations` continuou
+`[]` e `incomplete` trouxe `color-contrast`. Trocar a classe de cor em
+`RescheduleForm` e `EvaluationPanel` por `text-slate-900` também passou nos 48
+cenários. (A `.rpg-trail-card` tem o mesmo gradiente mas não é usada por nenhum
+`.tsx`; a trilha de Campanhas usa `Panel`, de cor sólida, e por isso o contraste
+do `trail-stale` **é** decidido: a sabotagem abaixo o provou.)
 
-Consequência: **todo texto dentro do cartão de missão, inclusive os alertas
-`reschedule-error`, `evaluation-error` e `proposal-*` que moram ali, tem o resto
-das regras do axe auditado, mas o contraste não**. É a mesma ressalva "contraste
-em gradientes (`incomplete`)" da linha 21/61, agora com o alcance medido. Não
-foi corrigida: exigiria decidir o fundo do cartão (um tom sólido por trás do
-texto) ou um cálculo de contraste fora do axe, decisão de UX/arte.
-**Pendência P-axe-transitorios-2-1.** Opções: (A) fundo sólido atrás de cada
-alerta do cartão, o axe passa a decidir; (B) teste que calcula o contraste dos
-tokens do alerta contra a cor do gradiente nos dois extremos; (C) aceitar e
-manter o registro. Recomendo B (não muda a arte e é determinístico).
+Onde moram os alertas deste spec cujo contraste o axe **não** prova (pelo
+`className` lido nos componentes; o que o axe devolve em `incomplete` por estado
+não foi listado um a um):
 
-O contraste do `trail-stale` (painel de cor sólida) **é** auditado: a sabotagem
-abaixo o provou.
+| Painel (classe, componente) | Estados auditados aqui |
+|---|---|
+| Cartão de missão (`.rpg-mission-card`, `MissionCard.tsx`) | `reschedule-error`, reagendando em voo, `evaluation-error` e `evaluation-reload`, iniciando, concluindo e avaliando em voo |
+| Painel da Kairya (`.rpg-tutor`, `TutorPanel.tsx:244`) | `tutor-failure` (falha, limite diário, resultado desconhecido), `tutor-history-error`, `tutor-status-error`, `tutor-history-loading`, enviando, `proposal-failure`, `proposal-refresh` e decidindo |
+| Ciclo (`.rpg-cycle`, `CycleSection.tsx:347`) | `cycle-error`, `cycle-loading` e `cycle-stale` (este, no `navigation.spec.ts`) |
+| Progresso (`.rpg-progress`, `ProgressPanel.tsx:176`) | `progress-error`, `progress-loading` e `progress-stale` (idem) |
+
+Fora dos quatro, pela leitura do código e sem medição: a lista do quadro
+(`missions-loading`, `missions-empty`, `missions-error`, em `MissionList.tsx`) e
+a trilha de Campanhas. **Correção em relação à primeira versão deste handoff e
+do corpo do PR:** elas diziam que os `proposal-*` viviam no cartão de missão;
+vivem no painel da Kairya.
+
+Nada disso foi corrigido neste PR. **Pendência P-axe-transitorios-2-1.**
+Opções, com a classificação:
+
+- **(B) Teste que calcula o contraste dos tokens do alerta contra os dois
+  extremos de cada gradiente.** Técnica e reversível: não muda a arte, é
+  determinística e roda no vitest. Cobre os quatro painéis de uma vez.
+- **(A) Fundo sólido atrás do texto dos alertas.** O axe passa a decidir sozinho,
+  mas é **decisão de UX/arte** (muda a aparência dos painéis); não cabe a quem
+  implementa.
+- **(C) Aceitar e manter o registro.**
+
+Nenhuma foi implementada aqui.
 
 ## Ficou de fora (registrado)
 
@@ -122,6 +144,18 @@ Comandos executados e resultados lidos nesta sessão, no worktree, sob
   `make reset-test-db`, reprova por colisão de seletor (strict mode), com
   aparência de defeito de outro cenário. O `make check` zera o banco no começo;
   rodando o spec à mão depois de uma falha, zere antes.
+- **Revisão do #124 (mesmo PR).** (1) A seção "Limitação medida" foi reescrita
+  com a lista correta de painéis com gradiente e a classificação das opções
+  (B técnica, A decisão de UX). (2) O cenário "reagendando em voo" agora observa
+  o pedido saindo (`waitForRequest`) e afirma o botão, o campo do prazo e o
+  `fieldset` dos motivos travados; a primeira versão do `fieldset` com
+  `toBeDisabled` reprovou os 2 cenários nas 3 rodadas (o Playwright não
+  reconhece `fieldset` como controle), e passou a ser conferido pelo atributo
+  `disabled`. (3) `propor()` põe o nome do ambiente no rótulo, para o cartão do
+  desktop não casar com o filtro do celular. (4) O cabeçalho do spec cita o
+  celular e a limitação de contraste. Spec rodado 3 vezes seguidas sob a trava,
+  banco zerado antes: **48 passed** nas três (31,6 s, 41,1 s e 50,1 s). Os
+  fontes de componente não mudaram.
 - `make check`: ver a linha lida no corpo do PR.
 
 ## Limitações

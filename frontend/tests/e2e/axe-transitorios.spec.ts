@@ -40,6 +40,19 @@ import { definirRoteiro, reiniciar } from './falso'
  * Em cada cenario, o estado e CONFIRMADO na tela (o testid e o texto dele)
  * ANTES do axe: um axe sobre a tela errada passaria por acidente.
  *
+ * **Dois ambientes.** Cada cenario e registrado uma vez (`AMBIENTES`) e roda no
+ * desktop e no celular de 390 px; no celular a Kairya mora numa folha que
+ * cobre o quadro, entao os estados do quadro e os da Kairya sao auditados em
+ * dois momentos (`abrirFolha`).
+ *
+ * **O que este spec NAO prova: contraste sobre gradiente.** `.rpg-mission-card`,
+ * `.rpg-cycle`, `.rpg-progress` e `.rpg-tutor` (src/index.css) tem fundo em
+ * `linear-gradient`, e sobre gradiente o axe devolve `color-contrast` em
+ * `incomplete`, nunca em `violations`. Os alertas que vivem nesses quatro
+ * paineis passam neste spec SEM ter o contraste decidido (medido: trocar a cor
+ * de um deles por quase preto nao reprova nada). Ver P-axe-transitorios-2-1 em
+ * docs/handoff/2026-11-11-axe-transitorios-2.md.
+ *
  * O banco e compartilhado e nao e limpo entre execucoes: as missoes semeadas
  * carregam o sufixo `EXECUCAO` e sao achadas pelo `id`, nunca por posicao.
  */
@@ -488,8 +501,11 @@ for (const ambiente of AMBIENTES) {
 
       /** Uma proposta de missao no painel, pronta para decidir. */
       async function propor(page: Page, rotulo: string): Promise<Locator> {
+        // O ambiente entra no rotulo: o historico da Kairya e compartilhado, e a
+        // proposta do desktop continuaria no quadro quando o celular filtra o
+        // cartao pelo texto.
         const pedido = {
-          instructions: `${rotulo} (e2e ${EXECUCAO})`,
+          instructions: `${rotulo} [${ambiente.nome}] (e2e ${EXECUCAO})`,
           completion_criterion: `Resumo entregue (e2e ${EXECUCAO})`,
           difficulty: 2,
           estimated_minutes: 30,
@@ -775,11 +791,26 @@ for (const ambiente of AMBIENTES) {
           caminhosExatos(`/api/missions/${String(missao.id)}/reschedule`),
           'POST',
           async (soltar) => {
+            const saiu = page.waitForRequest(
+              (pedido) =>
+                pedido.method() === 'POST' &&
+                new URL(pedido.url()).pathname === `/api/missions/${String(missao.id)}/reschedule`,
+            )
             await cartao.getByTestId('reschedule-submit').click()
 
-            // O botao desabilitado e o marcador do pedido em voo (o formulario
-            // nao troca o texto dele): a guarda contra o envio duplo.
+            // O pedido saiu (e esta segurado na rota) e o formulario inteiro
+            // esta travado: o botao, o campo do prazo e o grupo dos motivos. O
+            // formulario nao troca o texto do botao, entao o travamento e o
+            // marcador do estado em voo, e a guarda contra o envio duplo.
+            await saiu
             await expect(cartao.getByTestId('reschedule-submit')).toBeDisabled()
+            await expect(cartao.getByTestId('reschedule-deadline')).toBeDisabled()
+            // `fieldset`: o `toBeDisabled` do Playwright nao o reconhece; o atributo
+            // e o que trava os motivos dentro dele.
+            await expect(cartao.getByRole('group', { name: 'Por que reagendar?' })).toHaveAttribute(
+              'disabled',
+              '',
+            )
             await semViolacoes(page)
 
             soltar()
