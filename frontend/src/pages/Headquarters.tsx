@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { KairyaBubble } from '../features/kairya'
 import { CycleSection, type CycleSectionHandle } from '../features/missions/CycleSection'
 import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
 import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
@@ -77,6 +78,7 @@ export function Headquarters({ hidden = false }: { hidden?: boolean }) {
           title={t('headquarters.header.title')}
           note={t('headquarters.header.subtitle')}
         />
+        <KairyaBubble />
         <ProgressPanel ref={progress} />
         <CycleSection ref={cycle} onMissionCompleted={refreshProgress} />
         <MissionList ref={board} onMissionCompleted={refreshProgress} />
