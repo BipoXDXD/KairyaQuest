@@ -9,8 +9,10 @@ export const en = {
   'shell.locale.label': 'Language',
   'shell.locale.ptBR': 'PT, Português (Brasil)',
   'shell.locale.en': 'EN, English',
+  'shell.locale.ptBR.endonym': 'Português (Brasil)',
+  'shell.locale.en.endonym': 'English',
   'shell.locale.saveFailed':
-    "Couldn't save {language} as your language. The connection to the server failed. Try again.",
+    "Couldn't save {language} as your language. The server didn't confirm the change. Please try again.",
   // Falas gravadas da Kairya (F6): fonte da legenda e do roteiro da F8.
   // Sem número, nome nem placeholder: o específico vai só na legenda.
   'kairya.lines.greet_morning_1': "Good morning. What's today's first step?",

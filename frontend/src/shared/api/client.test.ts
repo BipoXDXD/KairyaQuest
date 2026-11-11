@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { requestsTo } from '../../test/fetchRoutes'
 import { bytesOf, controlledStream, sseFrame, streamResponse } from '../../test/sse'
 
 // O cliente resolve a URL base no CARREGAMENTO do modulo e lanca quando a
@@ -350,6 +351,68 @@ describe('client', () => {
       const headers = new Headers(init.headers)
       expect(headers.get('Content-Type')).toBe('application/json')
       expect(headers.get('Accept')).toBe('application/json')
+    })
+  })
+
+  describe('patchJson', () => {
+    it('envia PATCH com o corpo em JSON e devolve a resposta desserializada', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ locale: 'en' }))
+      vi.stubGlobal('fetch', fetchMock)
+      const { patchJson } = await loadClient()
+
+      const resposta = await patchJson<{ locale: string }>('/me', { locale: 'en' })
+
+      expect(resposta).toEqual({ locale: 'en' })
+      const pedidos = requestsTo(fetchMock, 'PATCH /api/me')
+      expect(pedidos).toHaveLength(1)
+      expect(pedidos[0]?.body).toBe('{"locale":"en"}')
+      const headers = new Headers(pedidos[0]?.headers)
+      expect(headers.get('Content-Type')).toBe('application/json')
+      expect(headers.get('Accept')).toBe('application/json')
+    })
+
+    it('status de erro vira ApiError com o status e o code, como no postJson', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ code: 'campo_desconhecido' }, { status: 400 })),
+      )
+      const { ApiError, patchJson } = await loadClient()
+
+      const erro = await failureOf(patchJson('/me', { locale: 'en', role: 'admin' }))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).toMatchObject({ status: 400, code: 'campo_desconhecido' })
+    })
+
+    it('com timeoutMs, aborta o pedido pendurado e falha como rede fora', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(
+            (_input: string, init?: RequestInit) =>
+              new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => {
+                  reject(new DOMException('The operation was aborted.', 'AbortError'))
+                })
+              }),
+          ),
+        )
+        const { ApiError, patchJson } = await loadClient()
+
+        const pending = failureOf(patchJson('/me', { locale: 'en' }, { timeoutMs: 5000 }))
+        await vi.advanceTimersByTimeAsync(5000)
+        const erro = await pending
+
+        expect(erro).toBeInstanceOf(ApiError)
+        expect(erro).toMatchObject({
+          status: null,
+          code: null,
+          message: 'O servidor demorou demais para responder.',
+        })
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

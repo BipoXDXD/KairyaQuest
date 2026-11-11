@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { routeFetch } from '../../test/fetchRoutes'
 import { renderWithI18n } from '../../test/i18n'
 import { LOCALE_STORAGE_KEY } from './locale'
 import { LocaleSwitcher } from './LocaleSwitcher'
@@ -48,6 +49,9 @@ describe('LocaleSwitcher', () => {
   })
 
   it('clicar no outro idioma troca o idioma, o estado dos botões e o rótulo', () => {
+    routeFetch({
+      'PATCH /api/me': () => Response.json({ display_name: 'Aventureira', locale: 'en' }),
+    })
     renderWithI18n(<LocaleSwitcher />, { locale: 'pt-BR' })
 
     fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))

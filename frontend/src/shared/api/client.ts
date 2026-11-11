@@ -318,8 +318,32 @@ export async function postJson<T>(
   body: unknown,
   options: PostOptions = {},
 ): Promise<T> {
+  return sendWithBody<T>('POST', path, body, options)
+}
+
+/**
+ * Faz um PATCH em `path` com `body` serializado em JSON, e devolve a resposta.
+ *
+ * Mesmo tratamento de erro e de prazo do `postJson`, e pelo mesmo motivo nao
+ * recebe `AbortSignal` do chamador: cancelar nao desfaz a gravacao.
+ */
+export async function patchJson<T>(
+  path: string,
+  body: unknown,
+  options: PostOptions = {},
+): Promise<T> {
+  return sendWithBody<T>('PATCH', path, body, options)
+}
+
+/** O corpo comum de `postJson` e `patchJson`: JSON, cabecalhos e prazo. */
+async function sendWithBody<T>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  body: unknown,
+  options: PostOptions,
+): Promise<T> {
   const init: RequestInit = {
-    method: 'POST',
+    method,
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }

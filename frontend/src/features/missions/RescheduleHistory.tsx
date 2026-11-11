@@ -12,7 +12,7 @@ import { useT } from '../../shared/i18n/useT'
  */
 const ORIGIN_LABELS: Record<RescheduleOrigin, string> = {
   usuario: 'por você',
-  tifa: 'proposto pela Kairya',
+  kairya: 'proposto pela Kairya',
 }
 
 /** "Reagendada 1 vez" / "Reagendada 3 vezes". */

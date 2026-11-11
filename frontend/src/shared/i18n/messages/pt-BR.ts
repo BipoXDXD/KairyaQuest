@@ -12,8 +12,10 @@ export const ptBR = {
   'shell.locale.label': 'Idioma',
   'shell.locale.ptBR': 'PT, Português (Brasil)',
   'shell.locale.en': 'EN, English',
+  'shell.locale.ptBR.endonym': 'Português (Brasil)',
+  'shell.locale.en.endonym': 'English',
   'shell.locale.saveFailed':
-    'Não foi possível salvar o idioma {language}. A conexão falhou. Tente de novo.',
+    'Não foi possível salvar o idioma {language}. O servidor não confirmou a troca. Tente de novo.',
   // Falas gravadas da Kairya (F6): fonte da legenda e do roteiro da F8.
   // Sem número, nome nem placeholder: o específico vai só na legenda.
   'kairya.lines.greet_morning_1': 'Bom dia. Qual é o primeiro passo de hoje?',
