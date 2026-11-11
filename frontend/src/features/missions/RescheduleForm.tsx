@@ -88,10 +88,15 @@ function blockedReason(draft: RescheduleDraft, maxMs: number): string | null {
  *   prazo ATUAL, sem motivo marcado.
  * - **Aberto e derivado do prazo**: o disclosure fica aberto enquanto o prazo
  *   da missao e o mesmo de quando foi aberto. Um `saved` de outro prazo monta
- *   fechado (e sem mexer no foco). O sucesso muda o prazo (o
- *   servidor recusa o prazo igual com `prazo_inalterado`), e o disclosure fecha
- *   sozinho -- sem efeito que muda estado ao ver a prop mudar. A falha nao muda
- *   o prazo: o formulario fica com o que foi digitado.
+ *   fechado e sai do registro: o prazo mudou fora deste formulario (outra aba,
+ *   outro dispositivo), e o rascunho foi escrito contra um prazo que ja nao
+ *   vale -- reabri-lo mostraria um novo prazo e uma janela calculados sobre o
+ *   antigo. Montar fechado nao mexe no foco, porque ninguem fechou nada: a
+ *   devolucao do foco ao disclosure e so para o fechamento pelo sucesso, logo
+ *   abaixo. O sucesso muda o prazo (o servidor recusa o prazo igual com
+ *   `prazo_inalterado`), e o disclosure fecha sozinho -- sem efeito que muda
+ *   estado ao ver a prop mudar. A falha nao muda o prazo: o formulario fica com
+ *   o que foi digitado.
  * - **Salvar desabilitado com o porque em texto**, ligado por
  *   `aria-describedby`, como o motivo do Concluir bloqueado.
  * - **Janela do prazo de agora a agora+365 dias** (pendencia 26), contada do
