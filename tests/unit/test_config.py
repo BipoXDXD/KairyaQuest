@@ -165,7 +165,7 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     assert settings.anthropic_base_url == "https://api.anthropic.com"
     assert settings.tutor_model == "claude-sonnet-5-5"
     assert settings.tutor_max_tokens == 2048
-    assert settings.tutor_timeout_seconds == 60
+    assert settings.tutor_timeout_seconds == 54
     assert settings.tutor_history_messages == 20
     assert settings.tutor_daily_turn_limit == 60
     assert settings.tutor_fallback is True

@@ -59,6 +59,16 @@ def _fixar_sessao_em_utc(conexao_dbapi: Any, _registro: ConnectionPoolEntry) -> 
         conexao_dbapi.autocommit = autocommit_anterior
 
 
+# Quanto uma rota espera por uma conexao quando o pool (5 + 10 de overflow) esta
+# esgotado, antes de falhar. O padrao do SQLAlchemy e 30 s, acima dos 20 s que
+# o navegador da as rotas de leitura e mutacao: ele desistiria primeiro, e a
+# rota ainda esperaria. 10 s deixa metade dessa janela para a consulta e a volta
+# pela rede depois que a conexao chega. Julgamento, sem medida;
+# `tests/unit/test_prazos_coerentes.py` confere a relacao com os prazos do
+# frontend.
+POOL_TIMEOUT_SEGUNDOS = 10
+
+
 def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Engine:
     """Cria a engine -- e e o UNICO lugar onde uma engine desta base nasce: a
     aplicacao, a suite de testes e o Alembic passam por aqui, e por isso
@@ -70,12 +80,19 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
     reaproveita uma que morreu quando o banco reiniciou, o que acontece com
     frequencia em desenvolvimento. `poolclass` existe para o Alembic, que usa
     `NullPool` -- um processo de migracao nao tem por que manter conexao
-    aberta; `None` fica com o pool padrao do dialeto.
+    aberta; `None` fica com o pool padrao do dialeto, com o `pool_timeout` de
+    `POOL_TIMEOUT_SEGUNDOS`.
 
     O listener nao abre conexao: roda so quando o pool cria uma. A engine
     continua preguicosa, e os testes que dependem disso (a guarda do banco de
     teste so le `engine.url`) continuam valendo."""
-    engine = create_engine(url, pool_pre_ping=True, poolclass=poolclass)
+    # `pool_timeout` e argumento do QueuePool: o NullPool do Alembic o recusa.
+    argumentos_do_pool = (
+        {"pool_timeout": POOL_TIMEOUT_SEGUNDOS} if poolclass is None else {}
+    )
+    engine = create_engine(
+        url, pool_pre_ping=True, poolclass=poolclass, **argumentos_do_pool
+    )
     event.listen(engine, "connect", _fixar_sessao_em_utc)
     return engine
 

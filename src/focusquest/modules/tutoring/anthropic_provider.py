@@ -67,10 +67,29 @@ _TAMANHO_MAXIMO_DO_VALOR = 64
 # Espaco, "=", quebra de linha e controle forjariam campos ou linhas no log.
 _FORA_DO_SEGURO = re.compile(r"[^A-Za-z0-9._:,+-]")
 
-# Tentativas do proprio SDK, alem da primeira chamada. Elas so acontecem antes
-# do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
-# (medido: 3 chamadas com demora nos cabecalhos ou 500; 1 com o corte no meio).
-TENTATIVAS = 2
+# Tentativas do proprio SDK, alem da primeira chamada: NENHUMA. O SDK so repete
+# antes do primeiro evento, e repetir custa o orcamento de tempo que a tela
+# espera: com 2 tentativas e 60 s por fase o pior caso era de ~181 s por
+# `(1 + 2) * 60 s` mais o backoff, contra os 90 s do nginx (pendencia
+# P-prazo-medido-1). Alem disso o SDK obedece ao `Retry-After` da resposta SEM
+# teto (`_calculate_retry_timeout`, SDK 1.11), entao so `max_retries=0` torna o
+# pior caso calculavel pelo que este cliente configura. O preco: um 429, 5xx ou
+# erro de conexao passageiro aparece na tela como `provedor_indisponivel` na
+# primeira ocorrencia, em vez de ser mascarado por uma segunda chamada; o
+# estudante reenvia a pergunta (o reenvio ja e o caminho previsto).
+# `tests/unit/test_prazos_coerentes.py` confere o teto a partir destes numeros.
+TENTATIVAS = 0
+
+# As fases da chamada que NAO sao a espera pelo modelo, cada uma com o seu
+# relogio no httpx. Pequenas de proposito: o pior caso de uma chamada e a SOMA
+# das quatro fases (`connect + write + read + pool`), e o que sobra do
+# orcamento (`Settings.tutor_timeout_seconds`) e a espera pelo modelo. Julgamento,
+# sem medida de rede: conectar e escrever um corpo de poucos KB num provedor
+# saudavel leva milissegundos; 3 s e 2 s ja sao folgados. O pool de conexoes do
+# SDK tem 1000 vagas, entao a fila e teorica.
+CONEXAO_SEGUNDOS = 3.0
+ESCRITA_SEGUNDOS = 2.0
+FILA_DO_POOL_SEGUNDOS = 1.0
 
 # O beta do fallback do lado do servidor (pendencia 174). A data e EXATA: o
 # `fallbacks="default"` so e aceito com `2026-07-01`; o `2026-06-01` aceita so a
@@ -216,7 +235,14 @@ class ProvedorAnthropic:
         self._cliente = anthropic.Anthropic(
             api_key=chave,
             base_url=base_url,
-            timeout=timeout_segundos,
+            # `timeout_segundos` e a espera por leitura (pelos cabecalhos e entre
+            # chunks); as outras fases tem prazo proprio, somado no pior caso.
+            timeout=anthropic.Timeout(
+                connect=CONEXAO_SEGUNDOS,
+                read=timeout_segundos,
+                write=ESCRITA_SEGUNDOS,
+                pool=FILA_DO_POOL_SEGUNDOS,
+            ),
             max_retries=TENTATIVAS,
         )
         self._modelo = modelo

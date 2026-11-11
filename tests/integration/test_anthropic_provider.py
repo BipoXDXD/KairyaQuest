@@ -1,5 +1,6 @@
 """O adaptador de producao, inteiro, contra o servidor falso."""
 
+import time
 from typing import Any
 
 import pytest
@@ -196,7 +197,7 @@ def test_demora_no_meio_vira_tempo_esgotado(falso: ServidorAnthropicFalso) -> No
     assert eventos == [Delta("meio")]
 
 
-def test_demora_antes_de_responder_vira_tempo_esgotado_depois_das_tentativas(
+def test_demora_antes_de_responder_vira_tempo_esgotado_numa_chamada_so(
     falso: ServidorAnthropicFalso,
 ) -> None:
     falso.roteiro = Roteiro(atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 4)
@@ -205,13 +206,27 @@ def test_demora_antes_de_responder_vira_tempo_esgotado_depois_das_tentativas(
     assert len(falso.recebidas) == 1 + TENTATIVAS
 
 
-def test_erro_do_servidor_vira_indisponivel_depois_das_tentativas(
+def test_erro_do_servidor_vira_indisponivel_numa_chamada_so(
     falso: ServidorAnthropicFalso,
 ) -> None:
     falso.roteiro = Roteiro(status_http=500)
     with pytest.raises(ProvedorIndisponivelError):
         _todos(falso)
     assert len(falso.recebidas) == 1 + TENTATIVAS
+
+
+def test_limite_de_taxa_com_retry_after_nao_faz_o_adaptador_dormir_e_repetir(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    # Com retentativas o SDK dorme o que o `Retry-After` mandar, sem teto, e o
+    # adaptador passaria do corte do proxy (pendencia P-prazo-medido-1). Sem
+    # elas, a primeira resposta ja e a ultima: uma chamada, e erro na hora.
+    falso.roteiro = Roteiro(status_http=429, retry_after=1.0)
+    inicio = time.monotonic()
+    with pytest.raises(ProvedorIndisponivelError):
+        list(_provedor(falso).responder(TURNO))
+    assert len(falso.recebidas) == 1
+    assert time.monotonic() - inicio < 1.0
 
 
 def test_chave_recusada_vira_indisponivel_sem_nova_tentativa(

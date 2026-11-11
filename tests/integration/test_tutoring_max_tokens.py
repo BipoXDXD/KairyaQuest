@@ -53,13 +53,11 @@ from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     MotivoDeParada,
-    Recebida,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
     TratadorDoFalso,
     eventos_do_roteiro,
-    falso_do_tratador,
 )
 
 AGORA = datetime(2026, 9, 21, 15, tzinfo=UTC)
@@ -101,34 +99,9 @@ class ProvedorObservado:
         return self.provedor.avaliar(turno, ferramenta)
 
 
-class TratadorComFalhaInicial(TratadorDoFalso):
-    """500 imediato na tentativa zero; o SDK faz a retentativa real."""
-
-    def do_POST(self) -> None:
-        if self.headers["x-stainless-retry-count"] != "0":
-            super().do_POST()
-            return
-        falso = falso_do_tratador(self)
-        corpo = json.loads(self.rfile.read(int(self.headers["content-length"])))
-        falso.recebidas.append(
-            Recebida(
-                corpo=corpo, cabecalhos={k.lower(): v for k, v in self.headers.items()}
-            )
-        )
-        erro = b'{"type":"error","error":{"type":"api_error","message":"falso"}}'
-        self.send_response(500)
-        self.send_header("content-type", "application/json")
-        self.send_header("content-length", str(len(erro)))
-        self.end_headers()
-        self.wfile.write(erro)
-
-
 @pytest.fixture
-def falso(request: pytest.FixtureRequest) -> Iterator[ServidorAnthropicFalso]:
-    tratador = (
-        TratadorComFalhaInicial if getattr(request, "param", False) else TratadorDoFalso
-    )
-    with ServidorAnthropicFalso(tratador=tratador) as servidor:
+def falso() -> Iterator[ServidorAnthropicFalso]:
+    with ServidorAnthropicFalso(tratador=TratadorDoFalso) as servidor:
         yield servidor
 
 
@@ -209,10 +182,10 @@ def _fechado(observado: ProvedorObservado) -> None:
 
 
 def _uma_geracao(falso: ServidorAnthropicFalso, *, inicio: int = 0) -> None:
-    """Uma chamada logica aceita retries SDK, mas nao uma chamada manual extra."""
+    """Uma chamada logica: o cliente nao repete (`TENTATIVAS`), e nenhuma
+    chamada manual extra sai."""
     recebidas = falso.recebidas[inicio:]
-    minimo = 2 if falso.tratador is TratadorComFalhaInicial else 1
-    assert minimo <= len(recebidas) <= 1 + TENTATIVAS
+    assert len(recebidas) == 1 + TENTATIVAS
     assert [chamada.cabecalhos["x-stainless-retry-count"] for chamada in recebidas] == [
         str(indice) for indice in range(len(recebidas))
     ]
@@ -220,9 +193,6 @@ def _uma_geracao(falso: ServidorAnthropicFalso, *, inicio: int = 0) -> None:
 
 
 @pytest.mark.parametrize("prefixo", [PREFIXO, ""], ids=["com-prefixo", "sem-prefixo"])
-@pytest.mark.parametrize(
-    "falso", [False, True], indirect=True, ids=["sem-retentativa", "500-inicial"]
-)
 def test_max_tokens_termina_sse_interrompida_sem_gravar_proposta(
     cliente: TestClient,
     fabrica: sessionmaker[Session],
@@ -303,9 +273,6 @@ def test_max_tokens_so_e_emitido_depois_de_interrupcao_commitada_e_provedor_fech
     assert isinstance(eventos[-1], RespostaConcluida)
 
 
-@pytest.mark.parametrize(
-    "falso", [False, True], indirect=True, ids=["sem-retentativa", "500-inicial"]
-)
 def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_interrupcao(
     cliente: TestClient,
     fabrica: sessionmaker[Session],
@@ -355,9 +322,6 @@ def test_reenviar_apos_max_tokens_cria_so_resposta_nova_e_preserva_interrupcao(
 
 
 @pytest.mark.parametrize("motivo", ["end_turn", "tool_use", "stop_sequence"])
-@pytest.mark.parametrize(
-    "falso", [False, True], indirect=True, ids=["sem-retentativa", "500-inicial"]
-)
 def test_encerramentos_validos_continuam_completos_e_propoem_acao(
     cliente: TestClient,
     fabrica: sessionmaker[Session],
@@ -431,9 +395,6 @@ def test_sdk_enriquece_message_stop_com_motivo_e_proposta_completa(
     assert len(falso.recebidas) == 1
 
 
-@pytest.mark.parametrize(
-    "falso", [False, True], indirect=True, ids=["sem-retentativa", "500-inicial"]
-)
 def test_adaptador_classifica_max_tokens_depois_da_proposta_como_corte(
     falso: ServidorAnthropicFalso,
 ) -> None:

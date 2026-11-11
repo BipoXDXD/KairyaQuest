@@ -14,20 +14,32 @@ A cadeia da avaliacao, do menor para o maior:
     tutor_timeout_seconds  <  proxy_read_timeout  <  EVALUATION_TIMEOUT_MS
     (backend, o modelo)       (nginx, producao)       (navegador)
 
-O que NAO esta aqui: dois caminhos em que o `tempo_esgotado` do backend sai
-depois do corte do proxy. (1) Com demora nos cabecalhos o SDK chama de novo ate
-`TENTATIVAS` vezes, e o pior caso e `(1 + TENTATIVAS) * tutor_timeout_seconds`.
-(2) O timeout do SDK e por leitura e o total so e conferido quando um evento
-chega, entao uma parada no meio do stream sai em `t + tutor_timeout_seconds`.
-Nos dois o nginx responde antes, sem `code`; ficam registrados como pendencia
-nova em `docs/handoff/2026-11-11-prazo-medido.md`, nao escondidos por um teste
-que os aprovasse.
+O orcamento do provedor (pendencia P-prazo-medido-1, resolvida em parte): o
+pior caso de UMA chamada ao modelo, calculado do cliente real do SDK
+(`max_retries`, as quatro fases do timeout e o backoff), cabe em
+`proxy_read_timeout - FOLGA_DO_ORFAO`; e a espera por uma conexao do pool do
+banco (`pool_timeout`) cabe na metade da janela de uma rota de leitura ou
+mutacao do navegador.
+
+O que NAO esta aqui: a parada no meio do stream. O timeout do SDK e por
+leitura e o total so e conferido quando um evento chega
+(`tutoring/service.py`), entao uma parada que comeca em `t` sai em
+`t + tutor_timeout_seconds`, depois do corte do proxy se `t` passar de ~36 s.
+So um limite TOTAL de parede, conferido sem depender de evento, cobre esse
+caminho; fica registrado como pendencia em
+`docs/handoff/2026-11-11-orcamento-tempo.md`, nao escondido por um teste que o
+aprovasse.
 """
 
 import re
 from pathlib import Path
 
+from anthropic import _constants as constantes_do_sdk
+from sqlalchemy.pool import NullPool, QueuePool
+
 from focusquest.core.config import Settings
+from focusquest.core.database import create_engine_from_url
+from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -39,6 +51,13 @@ NGINX = RAIZ / "docker/nginx.conf"
 # comentario de `EVALUATION_TIMEOUT_MS` ja justificava (90 s + 15 s); o teste a
 # promove de prosa a numero conferido. Mudar a margem e decisao, nao ajuste.
 MARGEM_DE_VOLTA_MS = 15_000
+
+# Julgamento, sem medida: da janela de uma rota de leitura ou de mutacao, a
+# parte que a espera por uma conexao do pool pode gastar. O resto fica para a
+# consulta, a gravacao e a volta pela rede depois que a conexao chega.
+PARTE_DO_PRAZO_DA_ROTA_PARA_O_POOL = 0.5
+
+_URL_SEM_BANCO = "postgresql+psycopg://u:p@127.0.0.1:1/orcamento_de_tempo"
 
 _CONSTANTE_DO_FRONT = r"export const {nome} = ([\d_]+)\b"
 _LOCATION_DA_API = re.compile(r"location \^~ /api \{(.*?)\n    \}", re.DOTALL)
@@ -114,3 +133,90 @@ def test_so_a_avaliacao_espera_o_modelo() -> None:
     assert _prazo_do_front("READ_TIMEOUT_MS") < maior
     assert _prazo_do_front("MUTATION_TIMEOUT_MS") < maior
     assert _prazo_do_front("ERROR_BODY_TIMEOUT_MS") < _prazo_do_front("READ_TIMEOUT_MS")
+
+
+def _provedor_com_os_padroes() -> ProvedorAnthropic:
+    """O adaptador montado como `dependencies.py` o monta, so que sem rede e
+    sem chave de verdade: o cliente do SDK nao conecta ao nascer."""
+    padroes = Settings.model_fields
+    return ProvedorAnthropic(
+        chave="sk-ant-ficticia",
+        base_url="http://127.0.0.1:9",
+        modelo="claude-sonnet-5-5",
+        max_tokens=256,
+        timeout_segundos=float(padroes["tutor_timeout_seconds"].default),
+        fallback=True,
+        esforco="low",
+        esforco_da_avaliacao="medium",
+    )
+
+
+def _pior_caso_do_cliente_ms(provedor: ProvedorAnthropic) -> int:
+    """O pior caso de UMA chamada ao provedor, so do que o cliente configura.
+
+    Uma tentativa gasta no maximo `connect + write + read + pool` (cada fase
+    tem o seu relogio, e as quatro podem esgotar em sequencia). Entre uma
+    tentativa e a seguinte o SDK dorme o backoff exponencial, no maximo
+    (jitter so diminui). Tudo lido do cliente real e das constantes do SDK,
+    nada copiado.
+    """
+    cliente = provedor._cliente
+    prazo = cliente.timeout
+    assert prazo is not None, "sem timeout nao ha pior caso"
+    fases = (
+        (prazo, prazo, prazo, prazo)
+        if isinstance(prazo, int | float)
+        else (prazo.connect, prazo.read, prazo.write, prazo.pool)
+    )
+    assert None not in fases, "uma fase sem prazo nao tem pior caso"
+    por_tentativa = sum(float(fase) for fase in fases if fase is not None)
+    backoff = sum(
+        min(
+            constantes_do_sdk.INITIAL_RETRY_DELAY * 2.0**n,
+            constantes_do_sdk.MAX_RETRY_DELAY,
+        )
+        for n in range(cliente.max_retries)
+    )
+    return round((por_tentativa * (1 + cliente.max_retries) + backoff) * 1000)
+
+
+def test_o_pior_caso_do_provedor_sai_antes_do_corte_do_proxy_com_folga() -> None:
+    # Com os retries do SDK e um timeout igual para as quatro fases, o pior caso
+    # era de ~181 s (pendencia P-prazo-medido-1), acima dos 90 s do nginx: o
+    # navegador via o 504 do proxy, sem `code`, enquanto o backend seguia pago.
+    # A folga e a do orfao: a mesma que o teste do proxy ja exige acima.
+    folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
+
+    pior_caso = _pior_caso_do_cliente_ms(_provedor_com_os_padroes())
+
+    assert pior_caso <= _proxy_read_timeout_ms() - folga_ms
+
+
+def test_o_cliente_do_provedor_nao_repete_a_chamada() -> None:
+    # O teto acima so e uma prova com `max_retries == 0`: a partir da primeira
+    # retentativa o SDK 1.x obedece ao `Retry-After` da resposta SEM limite
+    # (`_calculate_retry_timeout`), e o pior caso deixa de ser calculavel pelo
+    # que o cliente configura. A retentativa, se um dia voltar, e do chamador.
+    assert _provedor_com_os_padroes()._cliente.max_retries == 0
+
+
+def test_o_pool_desiste_antes_de_a_rota_de_leitura_ou_mutacao_estourar() -> None:
+    # `pool_timeout` padrao do SQLAlchemy: 30 s, acima dos 20 s do navegador.
+    # Com o pool esgotado a rota esperaria depois de o navegador desistir.
+    pool = create_engine_from_url(_URL_SEM_BANCO).pool
+    assert isinstance(pool, QueuePool)
+    rota_mais_curta_ms = min(
+        _prazo_do_front("READ_TIMEOUT_MS"), _prazo_do_front("MUTATION_TIMEOUT_MS")
+    )
+
+    assert (
+        pool.timeout() * 1000 <= rota_mais_curta_ms * PARTE_DO_PRAZO_DA_ROTA_PARA_O_POOL
+    )
+
+
+def test_o_pool_do_alembic_continua_sem_pool_nenhum() -> None:
+    # `pool_timeout` so existe no QueuePool: passado ao NullPool do Alembic, o
+    # `create_engine` recusaria o argumento.
+    engine = create_engine_from_url(_URL_SEM_BANCO, poolclass=NullPool)
+
+    assert isinstance(engine.pool, NullPool)
