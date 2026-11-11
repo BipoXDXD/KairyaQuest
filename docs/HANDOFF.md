@@ -412,49 +412,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Kairya: humor, presença e abertura do dia — 2026-11-10
-
-Tarefas 2, 3 e 4 da Fase 6 (PR 2, `kairya-humor`). Lógica pura, sem tela e
-zero dependências novas. Em `frontend/src/features/kairya/`:
-
-- `useKairyaMood.ts`: `nextMood` (tabela de transições da expressão),
-  `presenceReducer` (humor, fala e celebração; evento ignorado devolve a
-  mesma referência), `acceptsEvent` e o hook `useKairyaMood`, que encerra a
-  celebração em `CELEBRATION_MS` (3 s) com um `Scheduler` injetável. Uma
-  celebração por vez; a de prioridade maior troca a fala sem reiniciar o
-  timer (D2). A fala fica na bolha depois dos 3 s até ser fechada (D3).
-- `dailyOpening.ts`: dia civil e período no fuso `America/Sao_Paulo`,
-  `storageMemory`, `decideOpening` e `useDailyOpening`.
-
-Chaves novas de `localStorage`:
-
-- `kairyaquest.lastGreeting`: o último dia saudado, `'YYYY-MM-DD'` no dia
-  civil de São Paulo.
-- `kairyaquest.lastStreak`: a última sequência vista, inteiro ≥ 0.
-
-Valor inválido nessas chaves vira `null`. Com `localStorage` bloqueado
-(modo privado, cota, `SecurityError`, ou a própria propriedade lançando),
-nada lança: a saudação sai uma vez por sessão (o dia saudado fica num `ref`)
-e a detecção de sequência zerada não dispara.
-
-Abertura pendente (D4): a leitura do ciclo decide a abertura (saudação do
-período ou `comeback` quando a sequência caiu de mais que zero para zero),
-mas ela só é despachada quando `acceptsEvent` permite. Enquanto a presença
-estiver em `thinking`, `speaking` ou `celebrating`, a abertura espera e nada
-é gravado; ao ser despachada, grava o dia e a sequência. Uma pendente de
-outro dia (consumida depois da meia-noite de São Paulo) é descartada sem
-despachar nem gravar, e a próxima leitura do ciclo decide de novo. Leitura
-de dia já saudado só atualiza `kairyaquest.lastStreak` e descarta a
-pendente (outra aba pode ter saudado antes).
-
-Pendência (revisão do PR 2, M1): `useDailyOpening` decide com o estado da
-presença do último commit. Se um evento for enfileirado entre o commit e o
-efeito que consome a pendente (por exemplo, o clique de enviar uma pergunta),
-a saudação é despachada, o reducer a ignora em `thinking` e o dia já fica
-gravado como saudado: a saudação se perde até o dia seguinte. A janela é de
-milissegundos e o dano é cosmético. Correção possível: gravar só depois de
-confirmar no estado seguinte que a fala da abertura entrou na presença.
-
 # Kairya: catálogo das 36 falas — 2026-11-10
 
 Tarefa 1 da Fase 6 (presença da Kairya). Cria `frontend/src/features/kairya/`
