@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MissionErrorCode } from './types'
 
 /**
@@ -54,7 +54,10 @@ const FAILURE_BY_CODE: Record<MissionErrorCode, CompletionFailure> = {
   },
 }
 
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar a conclusão.'
+const UNCONFIRMED_LEAD: FailureLead = {
+  action: 'concluir a missão',
+  fallback: 'Não foi possível confirmar a conclusão.',
+}
 const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será concluída duas vezes.'
 
 /**

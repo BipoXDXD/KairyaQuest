@@ -68,7 +68,7 @@ describe('describeEvaluationFailure', () => {
   it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual({
       message:
-        'Não foi possível conectar. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+        'Não foi possível pedir a avaliação: sem conexão com o servidor. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
       recovery: 'retry',
     })
   })
@@ -76,7 +76,7 @@ describe('describeEvaluationFailure', () => {
   it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
     expect(describeEvaluationFailure(new ApiTimeoutError())).toEqual({
       message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+        'Não foi possível pedir a avaliação: o servidor demorou demais para responder. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
       recovery: 'retry',
     })
   })
