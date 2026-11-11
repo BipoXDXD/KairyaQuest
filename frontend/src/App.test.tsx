@@ -225,7 +225,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
     const botao = await screen.findByRole('button', {
-      name: 'Ir ao Quartel-General para concluir: Revisar recursao',
+      name: 'Ir ao Quartel-General',
     })
 
     await act(async () => {
@@ -341,7 +341,7 @@ describe('App: retorno ao Quartel-General', () => {
     const card = screen.getByTestId('cycle').querySelector('[data-mission-id="700"]')
     fireEvent.change(input, { target: { value: 'Quero continuar meu estudo.' } })
     fireEvent.click(screen.getByTestId('nav-campaigns'))
-    await screen.findByTestId('trail-mission')
+    await screen.findAllByTestId('trail-day')
     // Nenhum evento de foco ou visibilitychange é emitido: só navegação no app.
     fireEvent.click(screen.getByTestId('nav-headquarters'))
     expect(requestsTo(fetchMock, 'GET /api/cycle')).toHaveLength(2)
@@ -377,7 +377,7 @@ describe('App: retorno ao Quartel-General', () => {
     renderWithI18n(<App />)
     await initialDaily()
     fireEvent.click(screen.getByTestId('nav-campaigns'))
-    await screen.findByTestId('trail-mission')
+    await screen.findAllByTestId('trail-day')
     fireEvent.click(screen.getByTestId('nav-headquarters'))
     expect(await screen.findByTestId('cycle-stale')).toHaveTextContent(
       'Não foi possível atualizar a sequência.',
@@ -433,7 +433,7 @@ describe('App: retorno ao Quartel-General', () => {
     })
     expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Prefixo')
     fireEvent.click(screen.getByTestId('nav-campaigns'))
-    await screen.findByTestId('trail-mission')
+    await screen.findAllByTestId('trail-day')
     await act(async () => {
       stream.push(
         sseFrame('done', {
