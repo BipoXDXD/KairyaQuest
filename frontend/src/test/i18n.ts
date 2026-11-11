@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react'
 import { createElement, type ReactElement, type ReactNode } from 'react'
+import { KairyaPresenceProvider, type KairyaPresenceProviderProps } from '../features/kairya'
 import { AudioProvider, type AudioProviderProps } from '../shared/audio/AudioProvider'
 import { I18nProvider } from '../shared/i18n/I18nProvider'
 import type { Locale } from '../shared/i18n/locale'
@@ -15,6 +16,12 @@ import { memoryStorage } from './audioDoubles'
  * convite mudaria as consultas dos testes de pagina. Os testes de audio
  * passam `audio` para ver o convite e controlar o player.
  *
+ * Sem `presence`, a Kairya monta com `greeting: false` e `random: () => 0`
+ * (semente fixa: a primeira fala do grupo). Sem o `greeting: false`, toda
+ * pagina de teste ganharia uma bolha e o `localStorage` do jsdom vazaria entre
+ * testes. Quem testa a saudacao passa `presence: { greeting: true, clock,
+ * storage, random }`.
+ *
  * `strict` liga o StrictMode pela opcao do Testing Library, que o poe na RAIZ,
  * por fora do provider. Um `<StrictMode>` dentro da arvore ficaria abaixo do
  * `wrapper`, e ali o React nao repete os efeitos da montagem -- o teste que
@@ -26,14 +33,23 @@ import { memoryStorage } from './audioDoubles'
  */
 export function renderWithI18n(
   ui: ReactElement,
-  opts: { locale?: Locale; strict?: boolean; audio?: Omit<AudioProviderProps, 'children'> } = {},
+  opts: {
+    locale?: Locale
+    strict?: boolean
+    audio?: Omit<AudioProviderProps, 'children'>
+    presence?: Omit<KairyaPresenceProviderProps, 'children'>
+  } = {},
 ) {
   const locale = opts.locale ?? 'pt-BR'
   const audio = opts.audio ?? { storage: memoryStorage({ 'kairyaquest.soundInvite': '1' }) }
+  const presence = opts.presence ?? { greeting: false, random: () => 0 }
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(I18nProvider, {
       initialLocale: locale,
-      children: createElement(AudioProvider, { ...audio, children }),
+      children: createElement(AudioProvider, {
+        ...audio,
+        children: createElement(KairyaPresenceProvider, { ...presence, children }),
+      }),
     })
   return render(ui, { wrapper, reactStrictMode: opts.strict ?? false })
 }
