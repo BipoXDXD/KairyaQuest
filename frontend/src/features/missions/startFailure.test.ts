@@ -76,7 +76,7 @@ describe('describeStartFailure', () => {
       message: 'missions.startFailure.unconfirmed.network',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível iniciar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+      'Não foi possível iniciar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 
@@ -87,7 +87,7 @@ describe('describeStartFailure', () => {
       message: 'missions.startFailure.unconfirmed.timeout',
     })
     expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
-      'Não foi possível iniciar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será iniciada duas vezes.',
+      'Não foi possível iniciar a missão: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     )
   })
 

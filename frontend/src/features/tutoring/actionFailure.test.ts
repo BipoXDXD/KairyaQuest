@@ -101,13 +101,13 @@ describe('describeActionFailure', () => {
       'rede fora',
       new ApiError('x', null, null),
       'tutoring.actionFailure.unconfirmedCreate.network',
-      'Não foi possível confirmar a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
       'tutoring.actionFailure.unconfirmedCreate.timeout',
-      'Não foi possível confirmar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será criada duas vezes.',
+      'Não foi possível confirmar a missão: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     ],
   ])(
     '%s: confirmar abre com a acao e a causa e diz que repetir nao cria duas missoes',
@@ -133,13 +133,13 @@ describe('describeActionFailure', () => {
       'rede fora',
       new ApiError('x', null, null),
       'tutoring.actionFailure.unconfirmedReject.network',
-      'Não foi possível recusar a proposta: sem conexão com o servidor. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: sem conexão. Tentar de novo é seguro.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
       'tutoring.actionFailure.unconfirmedReject.timeout',
-      'Não foi possível recusar a proposta: o servidor demorou demais para responder. Tentar de novo é seguro.',
+      'Não foi possível recusar a proposta: o servidor demorou demais. Tentar de novo é seguro.',
     ],
   ])('%s: recusar abre com a acao e a causa', (_caso, error, message, textoPt) => {
     for (const kind of ['create_mission', 'reschedule_mission'] as const) {
@@ -179,13 +179,13 @@ describe('describeActionFailure', () => {
       'rede fora',
       new ApiError('x', null, null),
       'tutoring.actionFailure.unconfirmedReschedule.network',
-      'Não foi possível confirmar o reagendamento: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento: sem conexão. Tentar de novo é seguro: nada será duplicado.',
     ],
     [
       'prazo',
       new ApiTimeoutError(),
       'tutoring.actionFailure.unconfirmedReschedule.timeout',
-      'Não foi possível confirmar o reagendamento: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+      'Não foi possível confirmar o reagendamento: o servidor demorou demais. Tentar de novo é seguro: nada será duplicado.',
     ],
   ])(
     '%s: confirmar um reagendamento abre com a acao e a causa',

@@ -117,3 +117,50 @@ describe('mensagens de erro em ingles com a frase de causa', () => {
     expect(englishText(failure)).toBe(expected)
   })
 })
+
+/**
+ * Em portugues, o contrato de 12 a 18 palavras vale para os textos de falha de
+ * transporte (rede fora, prazo esgotado), que o ingles ja cumpria: "[a acao que
+ * falhou]: [a causa]. [o que fazer]." Os demais textos em portugues ainda nao
+ * sao medidos.
+ */
+const TRANSPORT_FAILURES: readonly unknown[] = [
+  new ApiError('x', null, null, { kind: 'network' }),
+  new ApiTimeoutError(),
+]
+
+function transportTexts(): FailureText[] {
+  return TRANSPORT_FAILURES.flatMap((error) => [
+    describeCompletionFailure(error),
+    describeStartFailure(error),
+    describeRescheduleFailure(error),
+    describeEvaluationFailure(error),
+    describeActionFailure(error, 'confirm', 'create_mission'),
+    describeActionFailure(error, 'confirm', 'reschedule_mission'),
+    describeActionFailure(error, 'reject', 'create_mission'),
+  ])
+}
+
+function portugueseText({ message, recovery }: FailureText): string {
+  return `${translate('pt-BR', message)} ${translate('pt-BR', recovery)}`
+}
+
+const TRANSPORT_TEXTS_PT = [...new Set(transportTexts().map(portugueseText))]
+
+describe('mensagens de falha de transporte em portugues', () => {
+  it('cobre as sete acoes nas duas causas', () => {
+    expect(TRANSPORT_TEXTS_PT).toHaveLength(14)
+  })
+
+  it.each(TRANSPORT_TEXTS_PT)('%s', (text) => {
+    expect(wordCount(text)).toBeGreaterThanOrEqual(MIN_WORDS)
+    expect(wordCount(text)).toBeLessThanOrEqual(MAX_WORDS)
+  })
+
+  it.each(TRANSPORT_TEXTS_PT)(
+    'abre com a acao e fecha com "Tentar de novo é seguro": %s',
+    (text) => {
+      expect(text).toMatch(/^Não foi possível .+: .+\. Tentar de novo é seguro/)
+    },
+  )
+})
