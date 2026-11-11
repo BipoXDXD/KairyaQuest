@@ -35,3 +35,11 @@ Decisões:
 - E2E: `playwright.config.ts` com o comentário da main sobre o locale (o
   `locale: 'pt-BR'` já era igual nos dois lados); `cycle.spec.ts` e
   `layout.spec.ts` com a união dos imports.
+
+## Sync 2: main em 3226b18 (#62, i18n das missões)
+
+Único conflito: `pages/Campaigns.tsx`. Fica o `AreaHero` da pilha, com as
+chaves `campaigns.page.title/subtitle` da main (as `campaigns.header.*` da
+pilha, de texto idêntico, saíram). O eyebrow "O próximo capítulo" sai com o
+desenho do hero, junto com a chave `campaigns.page.eyebrow` e a asserção dele
+em `Campaigns.test.tsx`. As chaves de pt-BR e en continuam iguais (377).

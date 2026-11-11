@@ -78,4 +78,17 @@ describe('Campaigns', () => {
 
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
+
+  it('em ingles, o cabecalho sai do catalogo', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />, { locale: 'en' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Campaigns — study plans',
+    )
+    expect(main).toHaveTextContent('The whole week, day by day, and the special mission.')
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+  })
 })

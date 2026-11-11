@@ -61,13 +61,13 @@ describe('useCycle', () => {
     })
   })
 
-  it('uma falha que nao e ApiError tem mensagem propria', async () => {
+  it('uma falha que nao e ApiError vira falha inesperada, sem texto: a tela o traduz', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nao e json', { status: 200 })))
     const { result } = renderHook(() => useCycle())
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        failure: { kind: 'unexpected', message: 'Falha inesperada ao carregar o ciclo.' },
+        failure: { kind: 'unexpected' },
       })
     })
   })
