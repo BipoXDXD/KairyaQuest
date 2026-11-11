@@ -356,6 +356,11 @@ class MissionOperation(Base):
     # por ele que um `DROP CONSTRAINT` futuro vai chamar a restricao.
     __table_args__ = (
         UniqueConstraint("operation_id", name="uq_mission_operations_operation_id"),
+        # Alvo da FK composta de `mission_reschedules` (pendencia 165): o
+        # PostgreSQL exige um UNIQUE sobre exatamente as colunas referenciadas.
+        UniqueConstraint(
+            "operation_id", "mission_id", "kind", name="uq_mission_operations_vinculo"
+        ),
         CheckConstraint(
             f"kind IN ({_TIPOS_DE_OPERACAO_SQL})", name="ck_mission_operations_kind"
         ),
@@ -373,8 +378,13 @@ class MissionReschedule(Base):
         Integer, ForeignKey("missions.id", ondelete="CASCADE")
     )
     # A operacao que o gravou (F13): o reenvio acha a linha por aqui.
-    operation_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("mission_operations.operation_id", ondelete="CASCADE")
+    operation_id: Mapped[str] = mapped_column(Text)
+    # Parte do elo composto: o banco so aceita a operacao DESTA missao e do tipo
+    # `reschedule` (pendencia 165). O servico nunca precisa informa-lo.
+    operation_kind: Mapped[str] = mapped_column(
+        Text,
+        default=TipoDeOperacao.REAGENDAMENTO.value,
+        server_default=TipoDeOperacao.REAGENDAMENTO.value,
     )
     previous_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     new_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -384,6 +394,20 @@ class MissionReschedule(Base):
 
     __table_args__ = (
         UniqueConstraint("operation_id", name="uq_mission_reschedules_operation_id"),
+        ForeignKeyConstraint(
+            ["operation_id", "mission_id", "operation_kind"],
+            [
+                "mission_operations.operation_id",
+                "mission_operations.mission_id",
+                "mission_operations.kind",
+            ],
+            name="fk_mission_reschedules_operacao",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            f"operation_kind = '{TipoDeOperacao.REAGENDAMENTO.value}'",
+            name="ck_mission_reschedules_operation_kind",
+        ),
         CheckConstraint(
             f"reason IN ({_MOTIVOS_SQL})", name="ck_mission_reschedules_reason"
         ),
