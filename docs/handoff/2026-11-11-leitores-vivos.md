@@ -66,10 +66,10 @@ próximo evento real ou fecha o stream.
 
 **Trade-off visível:** no pior caso (40 leitores presos por `ping` lento) os
 streams novos falham com `provedor_indisponivel` até alguma vaga voltar, em vez
-de disputar threads do servidor. O limite é por processo (o gauge não é
-compartilhado entre réplicas, como o limiter do anyio). O 40 é por processo
-mesmo com o threadpool servindo também outras rotas síncronas: o teto não
-reserva fichas para elas, só impede que os leitores sozinhos as esgotem
+de acumular mais threads, sockets/FDs e conexões órfãs no processo. O limite é
+por processo (o gauge não é compartilhado entre réplicas). Os leitores não
+ocupam fichas do limiter do anyio, que continua servindo as rotas síncronas
+como antes; o teto limita só o custo de recursos do processo com órfãos
 (não medido em produção).
 
 ## Alterações
