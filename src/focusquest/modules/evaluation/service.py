@@ -1,7 +1,8 @@
 """O processo de avaliar uma entrega: duas transacoes e o modelo entre elas.
 
 Direcao unica (E11): este modulo escreve por `missions.evaluation_records` e
-`progression.service`, e fala com o modelo pelo `Protocol` de `tutoring`.
+`progression.service`, fala com o modelo pelo `Protocol` de `tutoring` e le o
+idioma do estudante por `users.service`.
 Ninguem alem de `main.py` (pelo router) importa `evaluation`.
 
 Por que duas transacoes, e nao uma: a chamada ao modelo leva segundos, e uma
@@ -44,6 +45,7 @@ from focusquest.modules.tutoring.provider import (
     TempoEsgotadoError,
 )
 from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO, Tutoria
+from focusquest.modules.users.service import ler_idioma
 
 _log = logging.getLogger(__name__)
 
@@ -83,6 +85,9 @@ def avaliar_missao(
             modelo=tutoria.modelo,
             limite_do_orfao=tutoria.limite + FOLGA_DO_ORFAO,
         )
+        # Lido na transacao que abre a tentativa, antes do commit: o turno e
+        # montado depois, sem sessao, com este valor.
+        idioma = ler_idioma(session, user_id)
         session.commit()
     if isinstance(aberta, MissionEvaluation):
         return _reconstruir(fabrica, mission_id)
@@ -90,7 +95,7 @@ def avaliar_missao(
     falha: FalhaDaAvaliacao | None = None
     saida: EvaluationOutput | None = None
     inesperada: Exception | None = None
-    turno = montar_turno_da_avaliacao(aberta)
+    turno = montar_turno_da_avaliacao(aberta, idioma)
     inicio = clock()
     try:
         entrada = tutoria.provedor.avaliar(turno, FERRAMENTA_DA_AVALIACAO)
