@@ -23,7 +23,7 @@ import {
   describePreStreamFailure,
   describeStreamFailure,
 } from '../../features/tutoring/messageFailure'
-import { ApiError, type ApiErrorKind } from '../api/client'
+import { ApiError, ApiTimeoutError, type ApiErrorKind } from '../api/client'
 import { translate } from './catalog'
 import { apiErrorText, dailyLimitText, type FailureText } from './failureText'
 
@@ -43,6 +43,7 @@ const KINDS: readonly ApiErrorKind[] = ['network', 'timeout', 'http', 'format', 
 
 const UNCODED: readonly unknown[] = [
   new ApiError('x', null, null, { kind: 'network' }),
+  new ApiTimeoutError(),
   new ApiError('x', 404, null),
   new ApiError('x', 422, null),
   new ApiError('x', 500, null),

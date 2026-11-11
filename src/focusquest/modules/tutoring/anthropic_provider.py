@@ -1,6 +1,7 @@
 """O adaptador Anthropic: a unica peca da aplicacao que importa o SDK."""
 
 import logging
+import re
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from typing import Any, Literal
@@ -45,6 +46,26 @@ from focusquest.modules.tutoring.tool_definitions import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+# Cabecalhos de limite da documentacao "Rate limits" da Anthropic; qualquer
+# outro (location, set-cookie, request-id...) fica fora do log.
+_CABECALHOS_DE_LIMITE = (
+    "retry-after",
+    "anthropic-ratelimit-requests-limit",
+    "anthropic-ratelimit-requests-remaining",
+    "anthropic-ratelimit-requests-reset",
+    "anthropic-ratelimit-tokens-limit",
+    "anthropic-ratelimit-tokens-remaining",
+    "anthropic-ratelimit-tokens-reset",
+    "anthropic-ratelimit-input-tokens-limit",
+    "anthropic-ratelimit-input-tokens-remaining",
+    "anthropic-ratelimit-input-tokens-reset",
+    "anthropic-ratelimit-output-tokens-limit",
+    "anthropic-ratelimit-output-tokens-remaining",
+    "anthropic-ratelimit-output-tokens-reset",
+)
+_TAMANHO_MAXIMO_DO_VALOR = 64
+# Espaco, "=", quebra de linha e controle forjariam campos ou linhas no log.
+_FORA_DO_SEGURO = re.compile(r"[^A-Za-z0-9._:,+-]")
 
 # Tentativas do proprio SDK, alem da primeira chamada. Elas so acontecem antes
 # do primeiro evento: depois que o stream comecou, o SDK nao tenta de novo
@@ -82,6 +103,18 @@ _PARADAS: dict[str | None, Parada] = {
 }
 
 
+def _valor_seguro(valor: str) -> str:
+    return _FORA_DO_SEGURO.sub("?", valor[:_TAMANHO_MAXIMO_DO_VALOR])
+
+
+def _descrever_limites(cabecalhos: httpx2.Headers) -> str:
+    return "".join(
+        f" {nome}={_valor_seguro(cabecalhos[nome])}"
+        for nome in _CABECALHOS_DE_LIMITE
+        if nome in cabecalhos
+    )
+
+
 @contextmanager
 def _traduzir_erros() -> Iterator[None]:
     """Traduz as excecoes do SDK e do transporte para as do provedor.
@@ -100,9 +133,10 @@ def _traduzir_erros() -> Iterator[None]:
     except (anthropic.APIError, httpx2.TransportError) as erro:
         if isinstance(erro, anthropic.APIStatusError):
             _LOGGER.warning(
-                "Falha HTTP do provedor: status=%d tipo=%s",
+                "Falha HTTP do provedor: status=%d tipo=%s%s",
                 erro.status_code,
                 type(erro).__name__,
+                _descrever_limites(erro.response.headers),
             )
         raise ProvedorIndisponivelError(
             f"o provedor falhou: {type(erro).__name__}"

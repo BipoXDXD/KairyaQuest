@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { postJson } from '../../shared/api/client'
+import { MUTATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { describeCompletionFailure, type CompletionFailure } from './completionFailure'
@@ -75,6 +75,11 @@ export interface UseCompleteMissionResult {
  * O hook tambem avisa o registro de que um POST saiu e terminou: e isso que
  * faz o "Atualizar o quadro" esperar a conclusao em andamento.
  *
+ * O POST tem prazo (`MUTATION_TIMEOUT_MS`): um pedido que o navegador manteve
+ * aberto sem resposta vira falha `retry` -- resultado desconhecido, chave e
+ * rascunho mantidos --, o cartao volta a oferecer o Concluir em vez de ficar
+ * em "Concluindo..." para sempre, e a recarga que esperava o voo acontece.
+ *
  * Quem precisa reagir ao sucesso -- a secao do ciclo atualiza a sequencia --
  * passa `onCompleted`; o quadro de avulsas nao passa nada.
  */
@@ -106,10 +111,14 @@ export function useCompleteMission(
       // ja encontra esta conclusao em voo.
       registry.started()
 
-      postJson<MissionCompletion>(`/missions/${String(missionId)}/complete`, {
-        operation_id: operationId,
-        ...(described === undefined ? {} : { evidence: described.body }),
-      })
+      postJson<MissionCompletion>(
+        `/missions/${String(missionId)}/complete`,
+        {
+          operation_id: operationId,
+          ...(described === undefined ? {} : { evidence: described.body }),
+        },
+        { timeoutMs: MUTATION_TIMEOUT_MS },
+      )
         .then((completion) => {
           // So o sucesso apaga o rascunho: a entrega foi feita.
           registry.release(missionId)

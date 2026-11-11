@@ -35,6 +35,8 @@ export const en = {
   'shared.apiError.interrupted.message':
     "The response didn't arrive in full. The connection dropped midway.",
   'shared.apiError.interrupted.recovery': 'Try again.',
+  'shared.transportFailure.timeout': "The response didn't arrive. It took longer than expected.",
+  'shared.transportFailure.network': "Couldn't connect. The server couldn't be reached.",
 
   'missions.state.pending': 'Pending',
   'missions.state.inProgress': 'In progress',
@@ -78,6 +80,9 @@ export const en = {
   'missions.rescheduleFailure.deadlinePassed.message':
     "Couldn't reschedule. The new deadline is in the past.",
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Pick a future date and time.',
+  'missions.rescheduleFailure.tooFar.message':
+    "Couldn't reschedule. The new deadline is more than 365 days away.",
+  'missions.rescheduleFailure.tooFar.recovery': 'Pick an earlier date.',
   'missions.rescheduleFailure.unchanged.message':
     "Couldn't reschedule. The new deadline matches the current one.",
   'missions.rescheduleFailure.unchanged.recovery': 'Pick a different time.',
@@ -252,6 +257,7 @@ export const en = {
   'missions.reschedule.blocked.missingDeadline': 'Enter the date and time of the new deadline.',
   'missions.reschedule.blocked.nonexistentTime':
     "That time doesn't exist in Brasília time. Pick another.",
+  'missions.reschedule.blocked.tooFar': 'The new deadline can be at most 365 days from now.',
   'missions.reschedule.blocked.missingReason': 'Pick a reason to save the new deadline.',
 
   'missions.evaluation.modelLabel':
@@ -346,6 +352,10 @@ export const en = {
     "Couldn't confirm this proposal. Its deadline has already passed.",
   'tutoring.actionFailure.rescheduleInvalid.message':
     "Couldn't reschedule the mission. It changed after the proposal.",
+  'tutoring.actionFailure.estimateOutOfBounds.message':
+    "Couldn't confirm this proposal. Its estimate must be 1 to 1440 minutes.",
+  'tutoring.actionFailure.deadlineOutOfBounds.message':
+    "Couldn't confirm this proposal. Its deadline is over 365 days away.",
   'tutoring.actionFailure.unconfirmedCreate.message':
     "Couldn't confirm the mission. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedCreate.recovery':

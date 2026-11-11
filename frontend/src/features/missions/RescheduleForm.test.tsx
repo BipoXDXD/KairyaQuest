@@ -1,5 +1,5 @@
 import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
 import { en } from '../../shared/i18n/messages/en'
 import type { Mission } from '../../shared/types/mission'
@@ -374,5 +374,61 @@ describe('RescheduleForm', () => {
       en['missions.reschedule.retryNotice'],
     )
     expect(salvar()).toHaveTextContent(en['missions.action.retry'])
+  })
+})
+
+describe('RescheduleForm: a janela do prazo (pendencia 26)', () => {
+  // So o `Date` e falso: os timers do React seguem reais. 15:00Z e 12:00 em SP.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-10T15:00:00Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function escolher(civil: string) {
+    abrir()
+    fireEvent.change(campo(), { target: { value: civil } })
+    fireEvent.click(screen.getByTestId('reschedule-reason-dificuldade'))
+  }
+
+  it('o campo vai de agora a agora+365 dias, na hora civil de Sao Paulo', () => {
+    renderForm()
+    abrir()
+    expect(campo()).toHaveAttribute('min', '2026-11-10T12:00')
+    expect(campo()).toHaveAttribute('max', '2027-11-10T12:00')
+  })
+
+  it('o ultimo minuto da janela (agora+365 dias) sai', () => {
+    const { onSubmit } = renderForm()
+    escolher('2027-11-10T12:00')
+    expect(salvar()).toBeEnabled()
+    expect(screen.queryByTestId('reschedule-blocked')).not.toBeInTheDocument()
+    fireEvent.click(salvar())
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ civil: '2027-11-10T12:00', reason: 'dificuldade' }),
+    )
+  })
+
+  it('um minuto depois da janela fica desabilitado, com o porque em texto', () => {
+    const { onSubmit } = renderForm()
+    escolher('2027-11-10T12:01')
+    expect(salvar()).toBeDisabled()
+    expect(screen.getByTestId('reschedule-blocked')).toHaveTextContent(
+      'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+    )
+    fireEvent.click(salvar())
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('a janela parte de quando o disclosure abriu: reabrir um dia depois a desloca', () => {
+    renderForm()
+    abrir()
+    fireEvent.click(toggle())
+    vi.setSystemTime(new Date('2026-11-11T15:00:00Z'))
+    abrir()
+    expect(campo()).toHaveAttribute('min', '2026-11-11T12:00')
+    expect(campo()).toHaveAttribute('max', '2027-11-11T12:00')
   })
 })

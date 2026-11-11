@@ -13,6 +13,7 @@ dependencia de sessao E a fronteira da transacao da requisicao, e a fronteira
 pertence a camada que abre a conexao, nao a cada modulo que a usa.
 """
 
+import threading
 from collections.abc import Iterator
 from typing import Annotated, Any
 
@@ -80,6 +81,7 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
 
 
 _engine: Engine | None = None
+_trava_da_criacao = threading.Lock()
 
 
 def get_engine() -> Engine:
@@ -87,10 +89,20 @@ def get_engine() -> Engine:
 
     Os testes substituem esta dependencia; por isso ela e uma funcao e nao
     uma variavel de modulo lida diretamente.
+
+    A trava existe porque o FastAPI roda dependencias sincronas no
+    threadpool: sem ela, duas requisicoes na partida viam `_engine is None`
+    juntas e criavam duas engines, com dois pools, e a perdedora ficava orfa
+    com as conexoes que abrisse (pendencia 14). A primeira leitura e sem
+    trava para o caminho comum -- engine ja criada -- nao disputar lock; a
+    segunda, ja com a trava, decide quem cria. O `with` solta a trava tambem
+    quando o `Settings` levanta, e a proxima chamada tenta de novo.
     """
     global _engine
     if _engine is None:
-        _engine = create_engine_from_url(Settings().database_url)
+        with _trava_da_criacao:
+            if _engine is None:
+                _engine = create_engine_from_url(Settings().database_url)
     return _engine
 
 
