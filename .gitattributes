@@ -1,3 +1,0 @@
-# Vários PRs acrescentam seções ao HANDOFF em paralelo. Num merge local, a
-# união mantém as seções dos dois lados em vez de parar em conflito.
-docs/HANDOFF.md merge=union

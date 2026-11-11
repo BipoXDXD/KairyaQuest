@@ -145,7 +145,7 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   certa.
 - **Justifique dependência, contrato e infraestrutura.** Nenhuma biblioteca,
   nenhum endpoint e nenhum serviço entram sem um motivo escrito no
-  `docs/HANDOFF.md`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
+  arquivo de handoff do PR, em `docs/handoff/`. Adie Kubernetes, Redis, Celery, RabbitMQ, Kafka,
   Terraform e cloud até haver necessidade real (README §3).
 - **Registre o handoff em `docs/handoff/`, um arquivo por PR** (regras em
   `docs/handoff/README.md`); só o PR de consolidação edita o
