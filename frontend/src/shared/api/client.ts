@@ -258,6 +258,10 @@ export async function postJson<T>(
  * `ApiTimeoutError`. `setTimeout` com `AbortController`, e nao
  * `AbortSignal.timeout`: o timer do segundo e interno ao navegador, e os
  * testes com timers falsos nao o alcancam.
+ *
+ * O sinal combinado nasce ANTES do timer: assim nada entre os dois pode lancar
+ * e deixar o timer pendurado, e o `finally` limpa o timer e o vinculo em todo
+ * caminho.
  */
 async function sendWithin<T>(
   path: string,
@@ -266,13 +270,13 @@ async function sendWithin<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const deadline = new AbortController()
+  const combined =
+    signal === undefined ? unlinked(deadline.signal) : linkSignals(signal, deadline.signal)
   const timer = setTimeout(() => {
     deadline.abort()
   }, timeoutMs)
-  const combined =
-    signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal])
   try {
-    return await send<T>(path, { ...init, signal: combined })
+    return await send<T>(path, { ...init, signal: combined.signal })
   } catch (cause) {
     if (deadline.signal.aborted && !hasResponseStatus(cause)) {
       throw new ApiTimeoutError({ cause })
@@ -280,6 +284,49 @@ async function sendWithin<T>(
     throw cause
   } finally {
     clearTimeout(timer)
+    combined.release()
+  }
+}
+
+/** Um sinal que aborta quando qualquer das fontes aborta, e como desfazer o vinculo. */
+interface LinkedSignal {
+  signal: AbortSignal
+  release: () => void
+}
+
+/** O sinal do prazo sozinho: nao ha vinculo a desfazer. */
+function unlinked(signal: AbortSignal): LinkedSignal {
+  return { signal, release: () => undefined }
+}
+
+/**
+ * Combina o cancelamento do chamador com o prazo.
+ *
+ * `AbortSignal.any` quando existe. O Safari 17.0-17.3 nao a tem, e ali o
+ * vinculo e feito a mao: um controller proprio que aborta quando qualquer das
+ * fontes aborta, com os listeners removidos em `release` para o signal do
+ * chamador -- que vive mais que o pedido -- nao segurar este pedido encerrado.
+ * Um polyfill de pacote faria o mesmo com uma dependencia a mais.
+ */
+function linkSignals(caller: AbortSignal, deadline: AbortSignal): LinkedSignal {
+  if (typeof AbortSignal.any === 'function') {
+    return unlinked(AbortSignal.any([caller, deadline]))
+  }
+  const linked = new AbortController()
+  const abort = () => {
+    linked.abort()
+  }
+  if (caller.aborted) {
+    abort()
+  }
+  caller.addEventListener('abort', abort)
+  deadline.addEventListener('abort', abort)
+  return {
+    signal: linked.signal,
+    release: () => {
+      caller.removeEventListener('abort', abort)
+      deadline.removeEventListener('abort', abort)
+    },
   }
 }
 
