@@ -141,7 +141,23 @@ imita voz real.
 
 ### 6.2 Descrição PT
 
-> Voz feminina adulta calorosa e doce, cerca de trinta anos, sotaque brasileiro neutro, timbre médio-grave, ritmo calmo e natural, leve sorriso na fala, firme e acolhedora como uma treinadora de confiança, gravação de estúdio próxima ao microfone.
+> Mulher brasileira de cerca de vinte e oito anos, voz feminina charmosa e sedutora de um jeito leve, timbre médio-grave, quente e um pouco aerado, fala próxima e íntima como quem conversa com alguém de quem gosta, ritmo natural de conversa do dia a dia, nem lento nem acelerado, muita expressividade e sorriso na voz, vibra de verdade e se empolga quando comemora, espontânea e nada ensaiada, sotaque brasileiro neutro, gravação de estúdio muito próxima ao microfone.
+
+Modelo de voice design `eleven_ttv_v3`, guidance 7. O dono escolheu a prévia
+v6-2 depois de seis rodadas de descrição. A voz está salva como "Kairya PT"
+e o `voice_id` está em `docs/AUDIO.md`.
+
+O que o dono pediu ao longo das rodadas, e que a descrição acima resolve:
+
+- mais madura que uma voz de uns vinte anos;
+- feminina, natural e sexy sem exagero;
+- sem lentidão;
+- empolgação de verdade nas comemorações.
+
+Por causa do último ponto, as falas de comemoração levam tag de empolgação no
+TTS. A fala "Isso é treino de verdade" (`mission_done_1`) é o caso de
+referência. As outras falas usam a mesma tag de calor da voz EN (§5,
+`docs/AUDIO.md` §2).
 
 ### 6.3 Frase de teste
 

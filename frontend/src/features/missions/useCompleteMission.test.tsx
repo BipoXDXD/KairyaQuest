@@ -543,7 +543,7 @@ describe('useCompleteMission', () => {
 
         expect(result.current.state).toMatchObject({
           status: 'failed',
-          failure: { message: 'shared.transportFailure.timeout', action: 'retry' },
+          failure: { message: 'missions.completionFailure.unconfirmed.timeout', action: 'retry' },
         })
         expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
         expect(result.current.registry.isRetryPending(7)).toBe(true)
@@ -694,7 +694,7 @@ describe('useCompleteMission', () => {
       })
       expect(result.current.state).toMatchObject({
         status: 'failed',
-        failure: { message: 'shared.transportFailure.timeout', action: 'retry' },
+        failure: { message: 'missions.completionFailure.unconfirmed.timeout', action: 'retry' },
       })
     })
 

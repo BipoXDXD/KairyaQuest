@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { StartErrorCode } from './types'
 
@@ -51,6 +51,12 @@ export const START_FAILURE_BY_CODE: Readonly<Record<StartErrorCode, StartFailure
   },
 }
 
+const UNCONFIRMED_LEAD: FailureLead = {
+  fallback: 'missions.startFailure.unconfirmed.message',
+  timeout: 'missions.startFailure.unconfirmed.timeout',
+  network: 'missions.startFailure.unconfirmed.network',
+}
+
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
  * novo. A abertura diz a causa quando ela e de transporte (`leadFor`); o fim
@@ -58,7 +64,7 @@ export const START_FAILURE_BY_CODE: Readonly<Record<StartErrorCode, StartFailure
  */
 function unconfirmed(error: unknown): StartFailure {
   return {
-    message: leadFor(error, 'missions.startFailure.unconfirmed.message'),
+    message: leadFor(error, UNCONFIRMED_LEAD),
     recovery: 'missions.startFailure.unconfirmed.recovery',
     action: 'retry',
   }

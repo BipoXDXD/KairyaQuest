@@ -15,7 +15,7 @@ import { useT } from '../../shared/i18n/useT'
  */
 const ORIGIN_LABELS: Readonly<Record<RescheduleOrigin, MessageKey>> = {
   usuario: 'missions.history.origin.user',
-  tifa: 'missions.history.origin.kairya',
+  kairya: 'missions.history.origin.kairya',
 }
 
 /**

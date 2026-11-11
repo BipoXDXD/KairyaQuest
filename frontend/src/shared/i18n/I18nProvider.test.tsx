@@ -1,5 +1,6 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { routeFetch } from '../../test/fetchRoutes'
 import { renderWithI18n } from '../../test/i18n'
 import type { MessageKey } from './catalog'
 import { I18nProvider } from './I18nProvider'
@@ -32,8 +33,20 @@ function Label({ k, vars }: { k: MessageKey; vars?: Readonly<Record<string, stri
   return <p>{t(k, vars)}</p>
 }
 
+/** A troca grava no servidor; a rota responde como o back (`PATCH /api/me`). */
+function acceptLocalePatch() {
+  routeFetch({
+    'PATCH /api/me': () => Response.json({ display_name: 'Aventureira', locale: 'en' }),
+  })
+}
+
 describe('I18nProvider', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('atualiza <html lang> no boot e na troca, e grava o cache', () => {
+    acceptLocalePatch()
     renderWithI18n(<Probe />, { locale: 'pt-BR' })
     expect(document.documentElement.lang).toBe('pt-BR')
 
@@ -45,6 +58,7 @@ describe('I18nProvider', () => {
   })
 
   it('setLocale resolve depois de aplicar o idioma: <html lang>, cache e seletor', async () => {
+    acceptLocalePatch()
     const { result } = renderHook(() => useLocale(), {
       wrapper: ({ children }) => (
         <I18nProvider initialLocale="pt-BR">
@@ -76,7 +90,7 @@ describe('I18nProvider', () => {
     renderWithI18n(<Label k="shell.locale.saveFailed" vars={{ language: 'English' }} />)
     expect(
       screen.getByText(
-        'Não foi possível salvar o idioma English. A conexão falhou. Tente de novo.',
+        'Não foi possível salvar o idioma English. O servidor não confirmou a troca. Tente de novo.',
       ),
     ).toBeInTheDocument()
   })

@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { RescheduleErrorCode } from './types'
 
@@ -65,6 +65,12 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
     },
   }
 
+const UNCONFIRMED_LEAD: FailureLead = {
+  fallback: 'missions.rescheduleFailure.unconfirmed.message',
+  timeout: 'missions.rescheduleFailure.unconfirmed.timeout',
+  network: 'missions.rescheduleFailure.unconfirmed.network',
+}
+
 /**
  * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
  * novo. A abertura diz a causa quando ela e de transporte (`leadFor`); o fim
@@ -72,7 +78,7 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
  */
 function unconfirmed(error: unknown): RescheduleFailure {
   return {
-    message: leadFor(error, 'missions.rescheduleFailure.unconfirmed.message'),
+    message: leadFor(error, UNCONFIRMED_LEAD),
     recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
     action: 'retry',
   }

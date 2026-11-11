@@ -91,18 +91,26 @@ describe('describeEvaluationFailure', () => {
     expect(describeEvaluationFailure(new ApiError('x', 500, null))).toEqual(GENERIC)
   })
 
-  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
-    expect(describeEvaluationFailure(new ApiError('x', null, null))).toEqual({
+  it('a rede fora nomeia a acao e diz que nao conectou, e repetir e seguro', () => {
+    const failure = describeEvaluationFailure(new ApiError('x', null, null))
+    expect(failure).toEqual({
       ...GENERIC,
-      message: 'shared.transportFailure.network',
+      message: 'missions.evaluationFailure.generic.network',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível pedir a avaliação: sem conexão com o servidor. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+    )
   })
 
-  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
-    expect(describeEvaluationFailure(new ApiTimeoutError())).toEqual({
+  it('o prazo nomeia a acao e diz que a resposta demorou, e repetir e seguro', () => {
+    const failure = describeEvaluationFailure(new ApiTimeoutError())
+    expect(failure).toEqual({
       ...GENERIC,
-      message: 'shared.transportFailure.timeout',
+      message: 'missions.evaluationFailure.generic.timeout',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível pedir a avaliação: o servidor demorou demais para responder. Tentar de novo é seguro: o bônus nunca é concedido duas vezes.',
+    )
   })
 
   it('um 404 SEM code (rota ausente, deploy desencontrado) manda atualizar, nao "tente de novo"', () => {

@@ -78,17 +78,26 @@ describe('describeCompletionFailure', () => {
     },
   )
 
-  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
-    expect(
-      describeCompletionFailure(new ApiError('Não foi possível falar com o servidor.', null, null)),
-    ).toEqual({ ...UNCONFIRMED, message: 'shared.transportFailure.network' })
+  it('a rede fora nomeia a acao e diz que nao conectou, e repetir e seguro', () => {
+    const failure = describeCompletionFailure(new ApiError('x', null, null))
+    expect(failure).toEqual({
+      ...UNCONFIRMED,
+      message: 'missions.completionFailure.unconfirmed.network',
+    })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+    )
   })
 
-  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
-    expect(describeCompletionFailure(new ApiTimeoutError())).toEqual({
+  it('o prazo nomeia a acao e diz que a resposta demorou, e repetir e seguro', () => {
+    const failure = describeCompletionFailure(new ApiTimeoutError())
+    expect(failure).toEqual({
       ...UNCONFIRMED,
-      message: 'shared.transportFailure.timeout',
+      message: 'missions.completionFailure.unconfirmed.timeout',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível concluir a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+    )
   })
 
   it('um 5xx sem code continua no texto generico', () => {

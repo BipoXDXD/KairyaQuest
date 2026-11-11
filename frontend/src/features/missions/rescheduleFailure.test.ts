@@ -117,18 +117,26 @@ describe('describeRescheduleFailure', () => {
     },
   )
 
-  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
-    expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual({
+  it('a rede fora nomeia a acao e diz que nao conectou, e repetir e seguro', () => {
+    const failure = describeRescheduleFailure(new ApiError('x', null, null))
+    expect(failure).toEqual({
       ...UNCONFIRMED,
-      message: 'shared.transportFailure.network',
+      message: 'missions.rescheduleFailure.unconfirmed.network',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível reagendar a missão: sem conexão com o servidor. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    )
   })
 
-  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
-    expect(describeRescheduleFailure(new ApiTimeoutError())).toEqual({
+  it('o prazo nomeia a acao e diz que a resposta demorou, e repetir e seguro', () => {
+    const failure = describeRescheduleFailure(new ApiTimeoutError())
+    expect(failure).toEqual({
       ...UNCONFIRMED,
-      message: 'shared.transportFailure.timeout',
+      message: 'missions.rescheduleFailure.unconfirmed.timeout',
     })
+    expect(`${ptBR[failure.message]} ${ptBR[failure.recovery]}`).toBe(
+      'Não foi possível reagendar a missão: o servidor demorou demais para responder. Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    )
   })
 
   it('um 5xx sem code continua no texto generico', () => {

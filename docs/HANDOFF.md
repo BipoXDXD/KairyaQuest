@@ -229,72 +229,6 @@ Comando: `make check` — aprovado (EXIT 0): Vitest 1046 testes em 53 arquivos;
 pytest 1695 passed e 32 subtests, cobertura 100,00% (2231 instruções, 410
 ramificações); Playwright 66 passed; gitleaks sem vazamentos.
 
-# i18n: tutoria no catálogo pt-BR/en — 2026-11-10
-
-Tarefa 7 do plano de i18n (PR 6). Os textos fixos de `TutorConversation`,
-`TutorPanel`, `ProposalCard`, `RescheduleProposalCard`, `DecisionControls`,
-`answerOutcome` e `questionLimit` viraram chaves `tutoring.*` nos dois
-catálogos. Os textos PT são os de antes, sem reescrita; os EN seguem o padrão
-de erro [o que falhou]. [causa]. [o que fazer]. nas duas falhas de carga e nas
-notas de reenvio (12 a 18 palavras).
-
-Contrato: `QuestionLength.counter` passou de `string | null` para
-`Counter | null`, com `type Counter = { kind: 'remaining'; n } | { kind:
-'over'; n }` em `shared/types/counter.ts` (as missões também o usarão, e uma
-feature não importa da outra). O `TutorConversation` monta o texto com
-`plural(locale, n, …)` e as chaves `tutoring.counter.remaining.{zero,one,other}`
-e `tutoring.counter.over.{one,other}`; o `{max}` vem de `MAX_QUESTION_LENGTH`,
-cuja linha `export const` não mudou. Os asserts de `questionLimit.test.ts`
-passaram a afirmar o objeto (mudança de teste justificada pela troca de
-contrato, AGENTS.md §3, a registrar na descrição do PR); as frases PT do
-contador migraram para `TutorPanel.test.tsx` (P18b), inclusive o "Restam 0
-caracteres." que prova a forma `zero`. `announceAnswer` e `unansweredNote`
-devolvem `MessageKey`. O aviso de indisponível usa a chave
-`tutoring.messageFailure.providerNotConfigured.message`, que já tinha o mesmo
-texto.
-
-A regra `no-restricted-syntax` do ESLint passa a valer em
-`src/features/tutoring/**/*.tsx`, com caso em `tests/unit/no-literal-jsx.test.ts`.
-Cada arquivo de teste de componente da área ganhou casos em `en` que leem o
-esperado do catálogo `en`. O P7d (teto diário em inglês) passou a achar o
-campo pelo rótulo EN, que agora existe.
-
-Pendências:
-- `formatDeadline` (`shared/lib/deadline.ts`) já recebe o idioma (T8): os
-  cartões da tutoria formatam o prazo pelo `useLocale()`.
-- Números interpolados (`{count}`, `{max}`, `{value}`, `{minutes}`) saem sem
-  `Intl.NumberFormat`; em `en` o contador mostra 4000, não 4,000.
-
-# i18n: missões no catálogo e datas por idioma — 2026-11-10
-
-Tarefa 8 do plano de i18n. Os textos de `features/missions` (quadro, cartão,
-evidência, reagendamento, histórico, avaliação, recompensa e ciclo) passam pelo
-`t()`, com 99 chaves `missions.*` nos dois catálogos; o PT é o texto anterior.
-O plural usa `plural()`: no ciclo, o zero de "dias seguidos" e de "faltam"
-aponta para a forma `other`, porque o CLDR `pt` põe o 0 em `one`.
-`formatCivilDate`, `civilWeekday` e `formatDeadline` recebem `locale: Locale`
-explícito, com um formatador por idioma (`shared/lib/formatterPerLocale.ts`);
-quem chama obtém o idioma de `useLocale()`. A tutoria já formata o prazo pelo
-idioma de `useLocale()`; só as campanhas (`CampaignTrail.tsx`), ainda não
-migradas, passam `'pt-BR'` por uma constante `DATE_LOCALE`. A regra contra
-literal no JSX passou a valer em `src/features/missions/**`.
-
-**Exceção registrada: números do texto sem formatação por idioma.** O `{max}`
-dos limites de evidência e de link ("4000", "2000") entra como `String(n)`,
-sem `Intl.NumberFormat`, igual ao `questionLimit` da tutoria. O EN mostra
-"4000" em vez de "4,000"; o PT continua "4000" (formatar daria "4.000" e
-mudaria o texto atual). Follow-up: formatar as variáveis numéricas dentro do
-`translate`, pelo idioma, para todas as áreas de uma vez.
-
-**Pendência para a migração de `campaigns`.** A falha de carga de missions usa
-`MissionsLoadFailure` (`features/missions/loadFailure.ts`): o estado guarda
-`{ kind: 'unexpected' }` sem texto, e a tela traduz no idioma corrente. O
-`LoadFailure` compartilhado (`shared/i18n/failureText.ts`) ainda grava a
-mensagem inesperada como texto. Quando `campaigns` migrar, ele deve adotar
-`{ kind: 'unexpected' }` sem texto; então `MissionsLoadFailure` e
-`LoadFailureMessage` saem, e o comentário do `LoadFailure` em `failureText.ts`,
-que promete a chave "no PR da área", é corrigido.
-
 # Pendência 104: matriz de conflitos cruzados e ordem global das travas — 2026-11-10
 
 Objetivo: provar, em conexões reais, a ordem global **ação → missão →
@@ -708,111 +642,6 @@ Kairya é original e descrita só por traços próprios: nenhum desses textos
 compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
-
-# i18n: shell, erros de API e módulos de falha no catálogo — 2026-11-10
-
-Tarefa 6 do plano de i18n (PR 5). `ApiError` ganha `kind` (`network`,
-`timeout`, `http`, `format`, `interrupted`), `retryAfterSeconds` e
-`receivedAt` (o instante em que o cliente recebeu o erro, lido antes do
-corpo). `parseRetryAfterSeconds` é a única leitura do `Retry-After` e aceita só
-inteiro decimal não negativo. O `message` do `ApiError` continua em PT, só para
-depuração. `shared/i18n/failureText.ts` traz `FailureText`, `apiErrorText` e
-`dailyLimitText`; `FailureMessage.tsx` renderiza `t(message) + ' ' +
-t(recovery)`.
-
-Os seis módulos `*Failure.ts` passaram a devolver chaves do catálogo: o antigo
-campo `recovery` (o enum que decide o botão) virou `action`, e `recovery` agora
-é a chave do texto "o que fazer". Os mapas são exportados para o teste conferir
-as chaves. O texto PT dos módulos de falha não mudou (cada texto foi cortado na
-fronteira da frase), salvo os recoveries novos, para conferência:
-reagendamento `prazo_expirado` ("Escolha uma data e um horário futuros."),
-`prazo_derivado` (passa a usar "Atualize para ver o estado atual.") e
-`provedor_nao_configurado` na avaliação e na tutoria ("Configure o provedor e
-tente de novo."). O teto diário da tutoria usa o `Retry-After`: com ele,
-"A Kairya volta à meia-noite." (EN: "Kairya is back at midnight (Brasília time).");
-sem ele, "Tente de novo amanhã.". Os rótulos de estado e de motivo em
-`shared/types/mission.ts` viraram `MessageKey`.
-
-Shell (`SideNav`, `areas.ts`) e o cabeçalho do `Headquarters` passam pelo
-`t()`. Fitness function: `no-restricted-syntax` em `eslint.config.js` contra
-literal com letra no JSX e em `aria-label`/`title`/`placeholder`/`alt`, só em
-`src/app/**` e `src/pages/Headquarters.tsx`. A prova está em
-`tests/unit/no-literal-jsx.test.ts`, inclusive o `\p{L}` com acento. Cada PR de
-área acrescenta a sua pasta ao `files`.
-
-`renderWithI18n` ganhou `strict`, que liga o StrictMode pela opção
-`reactStrictMode` do Testing Library. Um `<StrictMode>` dentro da árvore fica
-abaixo do `wrapper` do provider, e ali o React 19 não repete os efeitos da
-montagem. O teste do `Headquarters` que conta dois pedidos sob StrictMode
-reprovou assim, e os testes de StrictMode de `CycleSection`, `MissionList` e
-`TutorPanel` passaram a usar a opção.
-
-As cargas de tela (`useMissions`, `useCycle`, `useProgress`,
-`useCurrentPlan`) deixaram de exibir `ApiError.message`: o estado de erro
-carrega um `LoadFailure` (`loadFailureFor` em `failureText.ts`), que é o texto
-do catálogo pelo `kind` para o `ApiError` e a mensagem fixa da área ("Falha
-inesperada ao carregar …") para o defeito. `LoadFailureMessage.tsx` exibe os
-dois. Na tela, "O servidor respondeu 503." virou "O servidor não conseguiu
-atender o pedido. Tente de novo em instantes.". Nenhuma tela exibe mais o
-`message` do `ApiError`.
-
-Mensagens de erro em inglês: [o que falhou]. [causa]. [o que fazer]. em 12 a
-18 palavras, `message` e `recovery` somados. `errorTextLength.test.ts`
-enumera os textos pelas funções públicas de cada módulo de falha, com cada
-`code` e as falhas sem `code`. Cinco passavam de 18 palavras (os "Trying again
-is safe: …" viraram "Retrying is safe: …", e o da tutoria virou "your question
-won't repeat") e o `shell.locale.saveFailed` tinha 11 (ganhou "to the server").
-
-Pendências:
-- ~~`useMissions`, `useCycle`, `useProgress` e `useCurrentPlan` ainda exibem
-  `ApiError.message`.~~ Resolvida neste PR (`LoadFailure`, acima). O fallback
-  "Falha inesperada ao carregar …" continua literal e vira chave no PR de cada
-  área.
-- Os demais literais dos componentes que exibem falha migram no PR da área.
-- PR da área da tutoria: com `action: 'unavailable'`, o `TutorConversation`
-  mostra a constante literal `UNAVAILABLE_TEXT`, e o recovery
-  `tutoring.messageFailure.providerNotConfigured.recovery` nunca aparece. Trocar
-  por `<FailureMessage failure={PRE_STREAM_FAILURE_BY_CODE.provedor_nao_configurado} />`
-  ou por uma chave própria.
-- Tarefa 9: a fitness function só olha `JSXText` e `JSXAttribute > Literal`, e
-  deixa passar `<p>{'Olá'}</p>`, `aria-label={'Fechar'}` e template literal com
-  letra. Acrescentar seletores de `Literal` e `TemplateLiteral` dentro de
-  `JSXExpressionContainer`, cada um com caso em `no-literal-jsx.test.ts`.
-
-# i18n: catálogo tipado e seletor de idioma — 2026-11-10
-
-Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
-`frontend/src/shared/i18n/`: catálogo próprio e tipado (`ptBR` define as chaves,
-`en` faz `satisfies Messages`), `translate` com interpolação `{nome}` que lança
-quando falta variável, `plural` sobre `Intl.PluralRules` com a forma opcional
-`zero`, e a detecção do idioma (cache `kairyaquest.locale` válido, senão
-`navigator.language`: `pt*` → `pt-BR`, o resto → `en`). O storage que lança
-(modo privado, cota) é tolerado: o cache só evita o "pisca" do idioma.
-
-O `I18nProvider` envolve o `<App/>` em `main.tsx`, guarda o idioma, espelha em
-`<html lang>` e no cache. O seletor PT/EN fica no bloco da marca da `SideNav`,
-dentro do landmark "Áreas" (`role="group"`, `aria-pressed`, `lang` e nome
-completo por botão). Neste PR a troca é só local: `users.locale` e
-`/api/me` entram nos PRs seguintes. Zero dependências novas.
-
-Convenções do catálogo, válidas para os PRs seguintes: chaves planas
-`<área>.<componente>.<papel>`; plural em chaves irmãs `.one`/`.other` (e
-`.zero` quando o texto do zero difere); números e datas formatados por
-`Intl.*` antes de entrar como variável. Testes de componente renderizam com
-`renderWithI18n` (`src/test/i18n.ts`); o setup do Vitest fixa
-`navigator.language` em `pt-BR` e limpa mocks e `localStorage` após cada teste.
-As strings da interface ainda estão fixas em PT; a migração é por área.
-
-O nome acessível de cada botão do seletor começa pelo texto visível ("PT,
-Português (Brasil)", "EN, English", WCAG 2.5.3), e o alvo de toque é de 44×44 px.
-O `vi.restoreAllMocks()` global do setup desfaz todo `vi.spyOn` após cada
-teste: spy criado em `beforeAll` vale só para o primeiro teste do arquivo,
-então spies nascem em `beforeEach` ou no próprio teste.
-
-Pendências deste PR: a conferência visual do seletor na coluna de 224px do
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
 
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
@@ -1441,3 +1270,204 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
+
+# Pendência 211: textos de falha de transporte — 2026-11-10
+
+A linha 211 da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** A falha de transporte (rede fora ou prazo esgotado) trocava a
+abertura do texto pela causa ("Não foi possível conectar." / "A resposta
+demorou mais que o esperado.") e deixava de nomear a ação que falhou.
+
+**Decisão.** A abertura nomeia a ação, com objeto, e a causa numa frase só:
+"Não foi possível <ação>: <causa>.". As causas são "sem conexão com o
+servidor" (rede) e "o servidor demorou demais para responder" (prazo). O fim
+"Tentar de novo é seguro: …" fica como estava; o E2E do QG continua conferindo
+esse trecho. `leadFor` passa a receber `{ action, fallback }` (`FailureLead`):
+a frase do transporte é montada num lugar só, e o `fallback` continua sendo a
+abertura própria de cada tradutor para 5xx e `code` desconhecido, que não muda.
+
+**Alterações.** `frontend/src/shared/api/transportFailure.ts` (assinatura e
+causas), os tradutores `completion`, `start`, `reschedule` e
+`evaluationFailure.ts` em `features/missions`, `features/tutoring/actionFailure.ts`
+e os testes unitários que conferem esses textos. Ações usadas: concluir a
+missão, iniciar a missão, reagendar a missão, pedir a avaliação, confirmar a
+missão, confirmar o reagendamento e recusar a proposta.
+
+**Limitação nova.** Só o texto de recusar ficou na faixa de 12–18 palavras da
+revisão de ux-writing (16 por rede, 17 por prazo). As outras seis mensagens de
+transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
+a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
+ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
+
+**Teste instável corrigido.** O gate do pre-push reprovou uma vez no D1 de
+`useDecideAction.test.tsx` (`confirming` no lugar de `idle`), num teste que
+este PR não tinha tocado. A causa é uma race no teste: o `then` do hook faz
+`setState` e chama os callbacks fora de `act`, e o `waitFor` esperava o
+callback, de modo que o render com `idle` podia ainda não ter chegado. D1, D6
+e o caso da chave que falha ao ser gerada passam a esperar o estado dentro do
+`waitFor`; as expectativas não mudam.
+
+**Comandos e resultado.** `make check` completo; resultado no corpo do PR.
+
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.
