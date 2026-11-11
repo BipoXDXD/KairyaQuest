@@ -90,12 +90,17 @@ describe('useDecideAction', () => {
       result.current.decision.confirm()
     })
 
+    // Espera o ESTADO renderizado, e nao `changed`/`missionCreated`: o hook os
+    // chama no mesmo tick do `setState`, mas o React so renderiza numa tarefa
+    // posterior. Esperar pelo callback e afirmar o estado depois e uma corrida
+    // que, sob carga, le `confirming` (flaky no gate, 10/11). Os callbacks
+    // vem antes do render, entao afirma-los depois e seguro.
     await waitFor(() => {
-      expect(missionCreated).toHaveBeenCalledTimes(1)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(missionCreated).toHaveBeenCalledTimes(1)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it('D2 a falha de rede mantem a chave para o reenvio', async () => {
@@ -241,12 +246,12 @@ describe('useDecideAction', () => {
       result.current.decision.reject()
     })
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
 
+    expect(changed).toHaveBeenCalledExactlyOnceWith(recusada)
     expect(requestsTo(fetchMock, REJECT).map((init) => jsonBody(init))).toEqual([{}])
     expect(missionCreated).not.toHaveBeenCalled()
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
     // Recusar nao gasta chave nenhuma.
     expect(crypto.randomUUID).not.toHaveBeenCalled()
   })
@@ -470,11 +475,11 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
       result.current.decision.confirm()
     })
     await waitFor(() => {
-      expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
+      expect(result.current.decision.state).toEqual({ status: 'idle' })
     })
+    expect(changed).toHaveBeenCalledExactlyOnceWith(executada)
     expect(sentKeys(fetchMock)).toEqual([{ operation_id: K1 }])
     expect(missionCreated).toHaveBeenCalledTimes(1)
-    expect(result.current.decision.state).toEqual({ status: 'idle' })
   })
 
   it.each(['confirm', 'reject'] as const)(
@@ -509,9 +514,9 @@ describe('useDecideAction — uma decisao em voo por instancia', () => {
       })
       const acao = proxima === 'confirm' ? executada : recusada
       await waitFor(() => {
-        expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
+        expect(result.current.decision.state).toEqual({ status: 'idle' })
       })
-      expect(result.current.decision.state).toEqual({ status: 'idle' })
+      expect(changed).toHaveBeenCalledExactlyOnceWith(acao)
       expect(fetchMock).toHaveBeenCalledTimes(2)
       expect(sentKeys(fetchMock)).toEqual(proxima === 'confirm' ? [{ operation_id: K1 }] : [])
       expect(missionCreated).toHaveBeenCalledTimes(proxima === 'confirm' ? 1 : 0)
