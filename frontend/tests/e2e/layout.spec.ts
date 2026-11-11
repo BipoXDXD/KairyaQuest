@@ -3,12 +3,21 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import type { CurrentPlan } from '../../src/features/campaigns/types'
 import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
 import type { Mission } from '../../src/shared/types/mission'
-import { diaRelativo, instanteRelativo, isoUtc, somarDias } from './datas'
+import {
+  diaRelativo,
+  diasEntre,
+  instanteRelativo,
+  isoUtc,
+  segundaDaSemana,
+  somarDias,
+} from './datas'
 
 // Datas relativas a hoje (pendencia 207): o dia do ciclo, a semana do plano
-// que termina nele, um instante ja passado e os prazos futuros.
+// que o contem (comecando na segunda-feira, como o backend gera), um instante
+// ja passado e os prazos futuros.
 const HOJE = diaRelativo(0)
-const INICIO_DA_SEMANA = somarDias(HOJE, -6)
+const INICIO_DA_SEMANA = segundaDaSemana(HOJE)
+const INDICE_DE_HOJE = diasEntre(INICIO_DA_SEMANA, HOJE)
 const ONTEM = isoUtc(instanteRelativo(-1, 9))
 
 // Estes cenários isolam a apresentação com respostas GET determinísticas.
@@ -303,8 +312,8 @@ for (const width of [320, 375]) {
           week_start: INICIO_DA_SEMANA,
           days: Array.from({ length: 7 }, (_, index) => ({
             day: somarDias(INICIO_DA_SEMANA, index),
-            availability: index === 6 ? 'disponivel' : 'fora_do_plano',
-            mission: index === 6 ? daily : null,
+            availability: index === INDICE_DE_HOJE ? 'disponivel' : 'fora_do_plano',
+            mission: index === INDICE_DE_HOJE ? daily : null,
           })),
           special: { availability: 'bloqueada', progress: 0, mission: null },
         },
