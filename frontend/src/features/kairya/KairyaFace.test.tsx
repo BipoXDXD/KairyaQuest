@@ -1,34 +1,35 @@
 import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
-import { translate } from '../../shared/i18n/catalog'
+import { translate, type MessageKey } from '../../shared/i18n/catalog'
 import type { Locale } from '../../shared/i18n/locale'
 import type { Mood } from './events'
 import { KairyaFace } from './KairyaFace'
 
-const MOODS: readonly [Mood, string][] = [
-  ['idle', 'neutral'],
-  ['speaking', 'neutral'],
-  ['listening', 'listening'],
-  ['thinking', 'thinking'],
-  ['celebrating', 'celebrating'],
-  ['concerned', 'concerned'],
+const MOODS: readonly [Mood, string, MessageKey][] = [
+  ['idle', 'neutral', 'kairya.face.neutral'],
+  ['speaking', 'neutral', 'kairya.face.neutral'],
+  ['listening', 'listening', 'kairya.face.listening'],
+  ['thinking', 'thinking', 'kairya.face.thinking'],
+  ['celebrating', 'celebrating', 'kairya.face.celebrating'],
+  ['concerned', 'concerned', 'kairya.face.concerned'],
 ]
 const LOCALES: readonly Locale[] = ['pt-BR', 'en']
 
 describe('KairyaFace', () => {
-  it.each(LOCALES.flatMap((locale) => MOODS.map(([mood, face]) => [locale, mood, face] as const)))(
-    'em %s, o humor %s na cena traz o alt do catalogo',
-    (locale, mood, face) => {
-      renderWithI18n(<KairyaFace mood={mood} size="scene" />, { locale })
+  it.each(
+    LOCALES.flatMap((locale) =>
+      MOODS.map(([mood, face, altKey]) => [locale, mood, face, altKey] as const),
+    ),
+  )('em %s, o humor %s na cena traz o alt do catalogo', (locale, mood, face, altKey) => {
+    renderWithI18n(<KairyaFace mood={mood} size="scene" />, { locale })
 
-      const image = screen.getByRole('img', {
-        name: translate(locale, `kairya.face.${face}` as 'kairya.face.neutral'),
-      })
-      expect(image).toHaveAttribute('src', `/art/kairya/${face}.webp`)
-      expect(image).toHaveAttribute('decoding', 'async')
-    },
-  )
+    const image = screen.getByRole('img', {
+      name: translate(locale, altKey),
+    })
+    expect(image).toHaveAttribute('src', `/art/kairya/${face}.webp`)
+    expect(image).toHaveAttribute('decoding', 'async')
+  })
 
   it.each(MOODS)('o humor %s na miniatura e decorativo (alt vazio)', (mood, face) => {
     const { container } = renderWithI18n(<KairyaFace mood={mood} size="thumb" />)

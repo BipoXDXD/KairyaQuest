@@ -126,6 +126,61 @@ describe('useRequestEvaluation', () => {
     expect(registrar).toHaveBeenCalledWith(expect.any(String), erro)
   })
 
+  it('onResult recebe o resultado em todo sucesso, com ou sem bonus', async () => {
+    const onResult = vi.fn()
+    for (const resultado of [comBonus, semBonus]) {
+      onResult.mockClear()
+      routeFetch({ [KEY]: () => Response.json(resultado) })
+      const { result } = renderHook(() => useRequestEvaluation(7, undefined, onResult))
+
+      act(() => {
+        result.current.request()
+      })
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('done')
+      })
+      expect(onResult).toHaveBeenCalledTimes(1)
+      expect(onResult).toHaveBeenCalledWith(resultado)
+    }
+  })
+
+  it('onResult nao e chamado na falha', async () => {
+    routeFetch({ [KEY]: () => Response.json({ detail: 'x' }, { status: 503 }) })
+    const onResult = vi.fn()
+    const { result } = renderHook(() => useRequestEvaluation(7, undefined, onResult))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('failed')
+    })
+    expect(onResult).not.toHaveBeenCalled()
+  })
+
+  it('um onResult que lanca nao vira falha e nao impede o onRewarded', async () => {
+    routeFetch({ [KEY]: () => Response.json(comBonus) })
+    const erro = new Error('presenca quebrou')
+    const onResult = vi.fn(() => {
+      throw erro
+    })
+    const onRewarded = vi.fn()
+    const registrar = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { result } = renderHook(() => useRequestEvaluation(7, onRewarded, onResult))
+
+    act(() => {
+      result.current.request()
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'done', result: comBonus })
+    })
+    expect(registrar).toHaveBeenCalledWith(expect.any(String), erro)
+    expect(onRewarded).toHaveBeenCalledTimes(1)
+  })
+
   it('NAO chama onRewarded quando reward e null', async () => {
     routeFetch({ [KEY]: () => Response.json(semBonus) })
     const onRewarded = vi.fn()
@@ -307,8 +362,9 @@ describe('useRequestEvaluation', () => {
   })
 
   it('E7 o prazo e maior que o corte do orfao e que o proxy (90 s)', () => {
-    // Valor literal de proposito: espelho manual do backend (60 s + 30 s de
-    // folga = proxy_read_timeout do nginx). Mudar um lado exige mudar o outro.
+    // Valor literal de proposito: espelho manual da infraestrutura
+    // (proxy_read_timeout do nginx de 90 s mais 15 s de margem). Mudar um lado
+    // exige mudar o outro; tests/unit/test_prazos_coerentes.py confere a relacao.
     expect(EVALUATION_TIMEOUT_MS).toBe(105_000)
     expect(EVALUATION_TIMEOUT_MS).toBeGreaterThan(90_000)
   })

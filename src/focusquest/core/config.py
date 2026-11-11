@@ -94,7 +94,13 @@ class Settings(ConfiguracaoDeLog):
     # O teto de SAIDA de uma resposta da Kairya. O thinking adaptativo gasta
     # deste mesmo teto; a saida e cobrada pelo uso real, nao pelo teto.
     tutor_max_tokens: int = Field(default=2048, ge=1)
-    tutor_timeout_seconds: float = Field(default=60, gt=0)
+    # A espera por LEITURA do provedor (pelos cabecalhos e entre chunks), nao o
+    # orcamento inteiro de uma chamada: a ela o adaptador soma conexao, escrita
+    # e fila do pool (6 s, `anthropic_provider.py`). 54 + 6 = 60 s, o que sobra
+    # do `proxy_read_timeout` (90 s) depois da folga do orfao (30 s). Subir este
+    # numero sem subir o nginx faz o 504 do proxy, sem `code`, vencer o
+    # `tempo_esgotado` do backend; `tests/unit/test_prazos_coerentes.py` reprova.
+    tutor_timeout_seconds: float = Field(default=54, gt=0)
     tutor_history_messages: int = Field(default=20, ge=1)
     # Teto de chamadas ao modelo por dia (de Sao Paulo) por estudante: guarda
     # de orcamento da API, nao regra do produto. O reenvio de uma pergunta

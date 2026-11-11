@@ -176,6 +176,8 @@ class Roteiro:
       `message_stop` (o corte que o SDK nao denuncia).
     - `atrasar_evento`: `(indice, segundos)`, uma demora antes do evento.
     - `atrasar_cabecalhos`: uma demora antes de responder qualquer coisa.
+    - `retry_after`: o cabecalho `Retry-After` (segundos) do erro HTTP. E o que
+      o SDK obedece sem teto para dormir antes de chamar de novo.
     - `segurar_apos_eventos`: depois de N eventos, espera `liberar` antes de
       continuar. E o que deixa um teste desconectar o cliente com a resposta
       comprovadamente no meio.
@@ -195,6 +197,7 @@ class Roteiro:
     cortar_apos_eventos: int | None = None
     atrasar_evento: tuple[int, float] | None = None
     atrasar_cabecalhos: float = 0.0
+    retry_after: float | None = None
     segurar_apos_eventos: int | None = None
     pensar: bool = True
     stop_reason: MotivoDeParada | None = None
@@ -425,6 +428,8 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
             ).encode()
             self.send_response(roteiro.status_http)
             self.send_header("content-type", "application/json")
+            if roteiro.retry_after is not None:
+                self.send_header("retry-after", str(roteiro.retry_after))
             self.send_header("content-length", str(len(erro)))
             self.end_headers()
             self.wfile.write(erro)

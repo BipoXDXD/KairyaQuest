@@ -276,12 +276,14 @@ export const MUTATION_TIMEOUT_MS = 20_000
  * O numero e ESPELHADO A MAO do backend e da infraestrutura, e muda junto com
  * eles:
  *
- * - `tutor_timeout_seconds` (60 s, `core/config.py`): o limite da resposta do
+ * - `tutor_timeout_seconds` (54 s, `core/config.py`): a espera por leitura do
  *   modelo. Ele so e conferido quando um evento do provedor chega, entao uma
  *   resposta legitima -- inclusive o proprio `tempo_esgotado` -- pode sair
- *   depois dos 60 s;
+ *   depois dos 54 s (o pior caso de UMA chamada ao
+ *   provedor, com as outras fases, e de 60 s e esta conferido; a parada no meio
+ *   do stream, nao);
  * - `FOLGA_DO_ORFAO` (30 s, `tutoring/service.py`): a avaliacao em curso so
- *   vira orfa, e o reenvio so e aceito como retomada, 60 + 30 = 90 s depois de
+ *   vira orfa, e o reenvio so e aceito como retomada, 54 + 30 = 84 s depois de
  *   pedida. Antes disso o reenvio recebe 409 `avaliacao_em_andamento`;
  * - `proxy_read_timeout` (90 s, `docker/nginx.conf`): em producao o nginx ja
  *   responde 504 a um backend mudo nesse ponto. O prazo daqui fica ACIMA dele

@@ -3,3 +3,6 @@ export { KairyaPresenceProvider, type KairyaPresenceProviderProps } from './Kair
 export { useKairya } from './useKairya'
 export { KairyaFace } from './KairyaFace'
 export { faceFor } from './faceArt'
+export { KairyaBubble } from './KairyaBubble'
+export { completionEvents, evaluationEvents } from './celebration'
+export type { KairyaEvent } from './events'

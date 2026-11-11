@@ -1,6 +1,8 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
-import { diaEMes, somarDias } from './datas'
+import { diaCivil, diaEMes, somarDias } from './datas'
+import { CHAVE_DA_SAUDACAO } from './saudacaoJaVista'
 import { API_URL } from './servers'
 
 /**
@@ -56,6 +58,19 @@ async function fixarRelogio(page: Page, instante: string): Promise<void> {
   const resposta = await api.put('/_e2e/clock', { data: { now: instante } })
   expect(resposta.status(), await resposta.text()).toBe(200)
   await page.clock.setFixedTime(new Date(instante))
+  // O fixture `saudacaoJaVista` semeia o dia do relogio REAL, que aqui nao e o
+  // do app (fixado em 2025-01): sem regravar, a saudacao apareceria. O script
+  // roda a cada carga, e o ultimo registrado (o instante mais novo) vence.
+  await page.addInitScript(
+    ({ chave, dia }) => {
+      try {
+        window.localStorage.setItem(chave, dia)
+      } catch {
+        // Sem localStorage nao ha o que gravar; a saudacao sai e o spec que se vire.
+      }
+    },
+    { chave: CHAVE_DA_SAUDACAO, dia: diaCivil(new Date(instante)) },
+  )
 }
 
 // O cenario e uma historia contada em ordem: o segundo teste parte do estado
