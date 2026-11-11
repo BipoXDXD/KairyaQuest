@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonBody, requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import { controlledStream, sseFrame, streamResponse } from '../../test/sse'
 import { stubViewport } from '../../test/viewport'
-import { useKairya } from '../kairya'
+import { KairyaBubble, useKairya } from '../kairya'
 import { PANEL_OPEN_KEY } from './panelPreference'
 import { describeQuestionLength } from './questionLimit'
 import { TutorConversation } from './TutorConversation'
@@ -1682,5 +1682,163 @@ describe('TutorPanel: em ingles', () => {
       en['tutoring.panel.closeSheet'],
     )
     await readyEn()
+  })
+})
+
+describe('TutorPanel: a expressao da Kairya durante o chat', () => {
+  /** Dispara eventos da presenca, como a pagina faria ao celebrar uma missao. */
+  function Probe() {
+    const { dispatch } = useKairya()
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'celebrate', reason: 'missionDone', detail: null })}
+        >
+          celebrar
+        </button>
+        <button type="button" onClick={() => dispatch({ type: 'celebrationEnded' })}>
+          fim da celebracao
+        </button>
+      </>
+    )
+  }
+
+  function mountWithPresence(routes: Record<string, Route>, onMissionCreated = vi.fn()) {
+    routeFetch({
+      [STATUS]: () => Response.json({ available: true }),
+      [HISTORY]: () => Response.json([]),
+      ...routes,
+    })
+    stubViewport('desktop')
+    renderWithI18n(
+      <>
+        <TutorPanel onMissionCreated={onMissionCreated} boardHref={BOARD_HREF} />
+        <KairyaBubble />
+        <Probe />
+      </>,
+    )
+  }
+
+  type FaceMood = 'neutral' | 'listening' | 'thinking' | 'celebrating' | 'concerned'
+
+  /** O rosto de cena que o painel mostra agora, pelo `alt` do catalogo. */
+  function expectFace(mood: FaceMood) {
+    const image = screen.getByTestId('tutor-portrait').querySelector('img')
+    expect(image).toHaveAttribute('alt', translate('pt-BR', `kairya.face.${mood}`))
+  }
+
+  const OFFLINE_LINE = 'Perdi a conexão. Vamos tentar de novo daqui a pouco?'
+
+  it('digitar, enviar, primeiro delta e done: ouvindo, pensando, serena e serena', async () => {
+    const stream = controlledStream()
+    mountWithPresence({ [SEND]: () => stream.response })
+    await ready()
+    expectFace('neutral')
+
+    type('Me dá uma missão')
+    expectFace('listening')
+
+    fireEvent.click(sendButton())
+    await waitFor(() => {
+      expectFace('thinking')
+    })
+
+    stream.push(sseFrame('user_message', question(1, 'Me dá uma missão', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Bora' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toHaveTextContent('Bora')
+    })
+    // `speaking` usa a mesma imagem de `neutral` (R2); o efeito da presenca roda depois do render.
+    await waitFor(() => {
+      expectFace('neutral')
+    })
+
+    stream.push(sseFrame('done', answer(2, 1, 'Bora')))
+    stream.close()
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
+    })
+    expectFace('neutral')
+  })
+
+  it('falha provedor_indisponivel: preocupada e a bolha traz a falha de conexao', async () => {
+    mountWithPresence({
+      [SEND]: () =>
+        streamResponse([
+          sseFrame('user_message', question(1, 'Oi', 'c1')),
+          sseFrame('error', { code: 'provedor_indisponivel' }),
+        ]),
+    })
+    await typeAndSend('Oi')
+
+    await waitFor(() => {
+      expectFace('concerned')
+    })
+    expect(screen.getByText(OFFLINE_LINE)).toBeInTheDocument()
+  })
+
+  it('confirmar uma proposta faz a bolha dizer proposal_accepted_1', async () => {
+    const proposal: ActionRead = {
+      id: 5,
+      kind: 'create_mission',
+      state: 'proposta',
+      payload: {
+        instructions: 'Estudar grafos por 40 minutos',
+        completion_criterion: 'Resumo de uma pagina',
+        difficulty: 2,
+        estimated_minutes: 40,
+        deadline: '2027-02-15T21:00:00-03:00',
+      },
+      mission_id: null,
+      error_code: null,
+    }
+    const onMissionCreated = vi.fn()
+    mountWithPresence(
+      {
+        [HISTORY]: () =>
+          Response.json([
+            question(1, 'Me dá uma missão', 'c1'),
+            { ...answer(2, 1, 'Proponho esta missão.'), actions: [proposal] },
+          ]),
+        'POST /api/tutoring/actions/5/confirm': () =>
+          Response.json({
+            action: { ...proposal, state: 'executada', mission_id: 40 },
+            mission: { id: 40, instructions: 'x' },
+          }),
+      },
+      onMissionCreated,
+    )
+
+    const card = await screen.findByTestId('tutor-proposal')
+    expect(screen.queryByText('Combinado. Está na sua lista.')).not.toBeInTheDocument()
+    fireEvent.click(within(card).getByTestId('proposal-confirm'))
+
+    expect(await screen.findByText('Combinado. Está na sua lista.')).toBeInTheDocument()
+    expect(onMissionCreated).toHaveBeenCalledTimes(1)
+  })
+
+  it('Review Focus 5: digitar durante a celebracao nao troca o rosto', async () => {
+    mountWithPresence({})
+    await ready()
+
+    fireEvent.click(screen.getByRole('button', { name: 'celebrar' }))
+    expectFace('celebrating')
+
+    type('Outra duvida')
+    expectFace('celebrating')
+    type('')
+    expectFace('celebrating')
+
+    fireEvent.click(screen.getByRole('button', { name: 'fim da celebracao' }))
+    expectFace('neutral')
+  })
+
+  it('R8: a tutora indisponivel ao abrir nao deixa a Kairya preocupada', async () => {
+    mountWithPresence({ [STATUS]: () => Response.json({ available: false }) })
+
+    expect(await screen.findByTestId('tutor-unavailable')).toBeInTheDocument()
+    expectFace('neutral')
+    expect(screen.queryByText(OFFLINE_LINE)).not.toBeInTheDocument()
   })
 })

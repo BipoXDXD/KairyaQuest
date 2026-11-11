@@ -1,6 +1,7 @@
 // Import NOMEADO, nao o default: ver o comentario em headquarters.spec.ts.
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { esperarAnimacoesFinitas } from './animacoes'
 import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
 import { instanteRelativo, isoUtc } from './datas'
@@ -52,6 +53,7 @@ const LEITURAS_DO_QG = [
 ] as const
 
 async function semViolacoes(page: Page): Promise<void> {
+  await esperarAnimacoesFinitas(page)
   // Conjunto PADRAO: sem `withTags` nem `disableRules`.
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 }

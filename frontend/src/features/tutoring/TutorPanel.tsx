@@ -10,6 +10,7 @@ import { useTutorStatus } from './useTutorStatus'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
 import { KairyaFace, useKairya } from '../kairya'
+import { useTutorPresence } from './useTutorPresence'
 
 /**
  * O que a regiao viva anuncia: o INICIO e o FIM da resposta, e nao cada
@@ -99,6 +100,14 @@ export function TutorPanel({
   // remonta os cartoes, e a chave de um resultado desconhecido tem de voltar
   // no reenvio (pendencia 35).
   const keys = useActionKeys()
+  const { dispatch } = useKairya()
+  useTutorPresence({ send: conversation.send, draft: conversation.draft })
+  // Toda confirmacao bem-sucedida chega aqui (R7): a pagina recarrega o quadro
+  // e a Kairya confirma a missao na bolha.
+  const handleMissionCreated = () => {
+    dispatch({ type: 'say', topic: 'proposalAccepted' })
+    onMissionCreated()
+  }
   const [desktopOpen, setDesktopOpen] = useState(readPanelOpen)
   const [sheetOpen, setSheetOpen] = useState(false)
   const panel = useRef<HTMLElement>(null)
@@ -224,7 +233,7 @@ export function TutorPanel({
           action={action}
           keys={keys}
           onChanged={conversation.updateAction}
-          onMissionCreated={onMissionCreated}
+          onMissionCreated={handleMissionCreated}
           onRefresh={conversation.reloadHistory}
           boardHref={boardHref}
           // No celular a folha cobre o quadro: seguir o link sem fecha-la

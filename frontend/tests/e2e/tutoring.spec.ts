@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type Page } from '@playwright/test'
+import { esperarAnimacoesFinitas } from './animacoes'
 import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
 import type { ActionRead, MessageRead } from '../../src/features/tutoring/types'
@@ -65,6 +66,7 @@ async function perguntar(page: Page, texto: string): Promise<void> {
 // "Tentar de novo a missão: ..." que casariam por acidente.
 
 async function semViolacoes(page: Page): Promise<void> {
+  await esperarAnimacoesFinitas(page)
   // Conjunto PADRAO: sem `withTags` nem `disableRules`.
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 }

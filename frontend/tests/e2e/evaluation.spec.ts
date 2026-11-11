@@ -1,6 +1,7 @@
 // Import NOMEADO, nao o default: ver o comentario em headquarters.spec.ts.
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type APIRequestContext } from '@playwright/test'
+import { expect, type APIRequestContext } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { randomUUID } from 'node:crypto'
 import { definirRoteiro, reiniciar, requisicoes } from './falso'
 
