@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx2
 
-from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.anthropic_provider import Esforco, ProvedorAnthropic
 
 
 class _Copia(httpx2.SyncByteStream):
@@ -90,6 +90,8 @@ def provedor_espionado(
     max_tokens: int,
     timeout_segundos: float,
     fallback: bool,
+    esforco: Esforco,
+    esforco_da_avaliacao: Esforco,
 ) -> tuple[ProvedorAnthropic, Espiao]:
     """O `ProvedorAnthropic` de producao, com o `Espiao` no transporte e sem
     tentativas do SDK (`max_retries=0`), para a conta das chamadas pagas ser
@@ -101,6 +103,8 @@ def provedor_espionado(
         max_tokens=max_tokens,
         timeout_segundos=timeout_segundos,
         fallback=fallback,
+        esforco=esforco,
+        esforco_da_avaliacao=esforco_da_avaliacao,
     )
     espiao = Espiao(httpx2.HTTPTransport())
     # O construtor de producao nao aceita cliente HTTP (e nao deve: a captura

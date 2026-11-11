@@ -69,6 +69,7 @@ function renderReschedule() {
   const rendered = renderHook(() => {
     const { registry, reload: requestReload } = useCompletionRegistry(reload)
     return {
+      registry,
       ...useRescheduleMission(7, registry),
       start: useStartMission(7, registry).start,
       complete: useCompleteMission(7, registry).complete,
@@ -225,6 +226,62 @@ describe('useRescheduleMission', () => {
       { operation_id: K1, new_deadline: '2026-10-05T21:00:59.123456Z', reason: 'falta_de_tempo' },
     ])
     expect(result.current.lastRescheduled).toBeNull()
+  })
+
+  it('depois de uma falha "retry", outro conteudo sai com chave NOVA ja no primeiro envio (pendencia 112)', async () => {
+    const fetchMock = routeFetch({
+      [ROTA]: (_, call) =>
+        call === 1 ? Promise.reject(new TypeError('Failed to fetch')) : Response.json(reagendada),
+    })
+    const { result } = renderReschedule()
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        status: 'failed',
+        failure: { recovery: 'retry' },
+      })
+    })
+    expect(result.current.registry.sentRescheduleFor(7)).toEqual(RASCUNHO)
+
+    act(() => {
+      result.current.reschedule({ ...RASCUNHO, reason: 'dificuldade' })
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'rescheduled', mission: reagendada })
+    })
+    expect(sentKeys(fetchMock)).toEqual([K1, K2])
+    expect(result.current.registry.sentRescheduleFor(7)).toBeNull()
+  })
+
+  it('o sucesso apaga o reagendamento aberto do registro; a falha o conserva', async () => {
+    routeFetch({
+      [ROTA]: (_, call) =>
+        call === 1
+          ? Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 })
+          : Response.json(reagendada),
+    })
+    const { result } = renderReschedule()
+    const aberto = { openedFor: '2026-10-02T21:00:00Z', openedAtMs: 0, draft: RASCUNHO }
+    result.current.registry.saveRescheduleDraft(7, aberto)
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({ status: 'failed' })
+    })
+    expect(result.current.registry.rescheduleDraftFor(7)).toEqual(aberto)
+
+    act(() => {
+      result.current.reschedule(RASCUNHO)
+    })
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({ status: 'rescheduled' })
+    })
+    expect(result.current.registry.rescheduleDraftFor(7)).toBeNull()
   })
 
   it('usa o horario de verao historico: o processo esta em Tokyo, o prazo e de Sao Paulo', async () => {

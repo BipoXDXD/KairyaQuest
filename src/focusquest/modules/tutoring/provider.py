@@ -82,10 +82,17 @@ class MensagemDoTurno:
 
 @dataclass(frozen=True)
 class Turno:
-    """Tudo o que o provedor recebe para responder uma pergunta."""
+    """Tudo o que o provedor recebe para responder uma pergunta.
+
+    `sistema` e a parte ESTATICA das instrucoes (a persona, a rubrica): igual
+    em todo turno, e o que o provedor pode guardar em cache. `contexto` e a
+    parte que muda a cada pergunta (o agora, as missoes, o progresso) e vem
+    depois dela; vazio quando o chamador nao tem contexto.
+    """
 
     sistema: str
     mensagens: tuple[MensagemDoTurno, ...]
+    contexto: str = ""
 
 
 @dataclass(frozen=True)
