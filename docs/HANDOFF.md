@@ -643,40 +643,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# i18n: catálogo tipado e seletor de idioma — 2026-11-10
-
-Primeiro PR da Fase 3 (Tarefas 1 e 2 do plano de i18n). Cria
-`frontend/src/shared/i18n/`: catálogo próprio e tipado (`ptBR` define as chaves,
-`en` faz `satisfies Messages`), `translate` com interpolação `{nome}` que lança
-quando falta variável, `plural` sobre `Intl.PluralRules` com a forma opcional
-`zero`, e a detecção do idioma (cache `kairyaquest.locale` válido, senão
-`navigator.language`: `pt*` → `pt-BR`, o resto → `en`). O storage que lança
-(modo privado, cota) é tolerado: o cache só evita o "pisca" do idioma.
-
-O `I18nProvider` envolve o `<App/>` em `main.tsx`, guarda o idioma, espelha em
-`<html lang>` e no cache. O seletor PT/EN fica no bloco da marca da `SideNav`,
-dentro do landmark "Áreas" (`role="group"`, `aria-pressed`, `lang` e nome
-completo por botão). Neste PR a troca é só local: `users.locale` e
-`/api/me` entram nos PRs seguintes. Zero dependências novas.
-
-Convenções do catálogo, válidas para os PRs seguintes: chaves planas
-`<área>.<componente>.<papel>`; plural em chaves irmãs `.one`/`.other` (e
-`.zero` quando o texto do zero difere); números e datas formatados por
-`Intl.*` antes de entrar como variável. Testes de componente renderizam com
-`renderWithI18n` (`src/test/i18n.ts`); o setup do Vitest fixa
-`navigator.language` em `pt-BR` e limpa mocks e `localStorage` após cada teste.
-As strings da interface ainda estão fixas em PT; a migração é por área.
-
-O nome acessível de cada botão do seletor começa pelo texto visível ("PT,
-Português (Brasil)", "EN, English", WCAG 2.5.3), e o alvo de toque é de 44×44 px.
-O `vi.restoreAllMocks()` global do setup desfaz todo `vi.spyOn` após cada
-teste: spy criado em `beforeAll` vale só para o primeiro teste do arquivo,
-então spies nascem em `beforeEach` ou no próprio teste.
-
-Pendências deste PR: a conferência visual do seletor na coluna de 224px do
-desktop (e em 390px) fica para o gate E2E e para a F4 4.6; o texto EN de
-`shell.locale.saveFailed` passa pela revisão de UX writing na Tarefa 5, quando
-aparecer na tela.
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
 **Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
@@ -1304,3 +1270,109 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.
