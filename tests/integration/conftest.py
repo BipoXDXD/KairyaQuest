@@ -159,8 +159,11 @@ def tutoria(falso: ServidorAnthropicFalso) -> Tutoria:
             timeout_segundos=TIMEOUT_DE_TESTE,
             # O padrao de producao (`Settings.tutor_fallback`, pendencia 174).
             fallback=True,
+            esforco="low",
+            esforco_da_avaliacao="medium",
         ),
         historico=20,
+        turnos_por_dia=60,
         limite=timedelta(seconds=60),
         modelo="claude-opus-5",
     )
