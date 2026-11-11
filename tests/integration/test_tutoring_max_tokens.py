@@ -23,7 +23,6 @@ from focusquest.main import app
 from focusquest.modules.missions.models import Mission, MissionOperation, WeeklyPlan
 from focusquest.modules.progression.models import UserAchievement, XpEntry
 from focusquest.modules.tutoring.anthropic_provider import (
-    TENTATIVAS,
     ProvedorAnthropic,
 )
 from focusquest.modules.tutoring.dependencies import get_tutoria
@@ -182,10 +181,10 @@ def _fechado(observado: ProvedorObservado) -> None:
 
 
 def _uma_geracao(falso: ServidorAnthropicFalso, *, inicio: int = 0) -> None:
-    """Uma chamada logica: o cliente nao repete (`TENTATIVAS`), e nenhuma
-    chamada manual extra sai."""
+    """Uma chamada logica: o cliente nao repete e nenhuma chamada manual extra
+    sai."""
     recebidas = falso.recebidas[inicio:]
-    assert len(recebidas) == 1 + TENTATIVAS
+    assert len(recebidas) == 1
     assert [chamada.cabecalhos["x-stainless-retry-count"] for chamada in recebidas] == [
         str(indice) for indice in range(len(recebidas))
     ]

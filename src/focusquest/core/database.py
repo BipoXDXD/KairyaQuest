@@ -87,6 +87,8 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
     continua preguicosa, e os testes que dependem disso (a guarda do banco de
     teste so le `engine.url`) continuam valendo."""
     # `pool_timeout` e argumento do QueuePool: o NullPool do Alembic o recusa.
+    # `poolclass` so chega preenchido pelo Alembic; `None` e o QueuePool do
+    # dialeto, o unico pool que tem fila para esperar.
     argumentos_do_pool = (
         {"pool_timeout": POOL_TIMEOUT_SEGUNDOS} if poolclass is None else {}
     )

@@ -92,6 +92,24 @@ ser refeita (então `max_retries=1` com read ≤ 23,75 s e o teto fixado pelo te
 do pior caso, que já inclui o backoff). Os casos `500-inicial` de
 `test_tutoring_max_tokens.py` **não voltam**: o comportamento não voltou.
 
+## Revisão do #121 (ressalvas aprovadas pela coordenação)
+
+- `docs/ARCHITECTURE.md`, **só duas passagens**, autorizadas pela coordenação: (1)
+  a da linha ~951 (corte do órfão, que citava `TENTATIVAS = 2`) e (2) a seção
+  "Retentativas HTTP e geração nos testes de encerramento" (~1782), reescrita:
+  descrevia o oráculo `500-inicial`, `1 + TENTATIVAS`, "pelo menos duas
+  requisições" e "nenhuma política de retentativa foi alterada", todos
+  falsos depois deste PR. Agora registram `max_retries=0` e o motivo (o SDK 1.11
+  dorme o `Retry-After` sem teto) e apontam o teste da premissa.
+- **O teto de 60 s é ligeiramente otimista:** `connect = 3 s` não cobre a
+  resolução de DNS (`getaddrinfo` não tem prazo no httpx) e vale por endereço
+  resolvido. Comentado junto das constantes das fases em `anthropic_provider.py`.
+  Só a produção diria o quanto.
+- `useRequestEvaluation.test.tsx`: o comentário do E7 dizia "60 s + 30 s"; agora
+  "proxy de 90 s mais 15 s de margem" (só comentário; o valor 105_000 é o mesmo).
+- `_uma_geracao` exige `== 1` literal.
+- `poolclass is None` mantido, com o motivo em comentário.
+
 ## Alterações
 
 - `src/focusquest/modules/tutoring/anthropic_provider.py`: `TENTATIVAS = 0`,

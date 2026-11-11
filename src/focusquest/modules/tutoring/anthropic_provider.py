@@ -87,6 +87,10 @@ TENTATIVAS = 0
 # sem medida de rede: conectar e escrever um corpo de poucos KB num provedor
 # saudavel leva milissegundos; 3 s e 2 s ja sao folgados. O pool de conexoes do
 # SDK tem 1000 vagas, entao a fila e teorica.
+# O `connect` NAO cobre a resolucao de DNS (o getaddrinfo do sistema nao tem
+# prazo no httpx) e vale POR ENDERECO resolvido: um nome com varios enderecos
+# gasta ate `connect` em cada um. O teto de 60 s e, por isso, ligeiramente
+# otimista no pior caso de rede; so uma medida em producao diria o quanto.
 CONEXAO_SEGUNDOS = 3.0
 ESCRITA_SEGUNDOS = 2.0
 FILA_DO_POOL_SEGUNDOS = 1.0
