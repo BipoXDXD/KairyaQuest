@@ -47,6 +47,51 @@ passageiro do provedor aparece na primeira ocorrência como
 estudante reenvia; o reenvio é o caminho já previsto. Quanto isso pesa na
 prática não foi medido (precisa de produção).
 
+## Reavaliação: `max_retries=1`? (decisão da coordenação, 2ª rodada)
+
+A coordenação pediu preferir `max_retries=1` (um 429/5xx passageiro não chegar
+ao estudante), com timeout por tentativa = (orçamento − backoff)/2, e voltar a 0
+só se a conta não fechar. **Resultado: a conta não fecha; fica 0.**
+
+**O que o SDK instalado faz (lido em `anthropic/_base_client.py`, SDK 1.11.0):**
+`_calculate_retry_timeout` devolve `min(retry_after, 4_294_967.0)` quando há
+`retry-after-ms`, `retry-after` (segundos) ou `retry-after` (data) com valor > 0.
+**Não existe o teto de 60 s** de versões antigas: o único limite é o de
+plataforma do `time.sleep` (~49 dias); o backoff exponencial
+(`MAX_RETRY_DELAY = 8 s`) só vale sem o cabeçalho. Medido, não só lido: o teste
+novo `test_premissa_o_sdk_dorme_o_retry_after_inteiro_se_houver_retentativa`
+faz 429 com `Retry-After: 120` contra o falso, com `max_retries=1`, e vê o SDK
+dormir exatamente `[120.0]` e chamar duas vezes.
+
+**A conta, com as constantes reais** (nginx 90 s − folga do órfão 30 s = 60 s;
+P = soma das quatro fases de uma tentativa; backoff da 1ª retentativa =
+`INITIAL_RETRY_DELAY` 0,5 s no máximo; D = atraso do `Retry-After`):
+
+- `2·P + 0,5 + D ≤ 60`.
+- Sem `Retry-After` (D = 0): P ≤ 29,75 s, ou seja, read ≤ 23,75 s (hoje 54 s).
+  Fecharia, ao custo de mais que dobrar a chance de falso timeout no meio do
+  stream (a retentativa só existe antes do primeiro evento, mas o read de 23,75 s
+  vale também entre chunks).
+- Com `Retry-After` de 60 s (o teto antigo, e valor plausível de um 429 de
+  limite de taxa): `2·P ≤ −0,5`, **impossível**. Com 30 s: read ≤ 8,75 s. Com 120 s
+  (medido acima): estoura o nginx sozinho. O pior caso real é, portanto,
+  ilimitado.
+
+**Limitar o atraso de forma suportada?** Não há opção do SDK além de
+`max_retries`, `timeout` e `http_client`. O único jeito seria um hook de
+resposta do httpx reescrevendo `retry-after`, `retry-after-ms` e a forma em data
+antes de o SDK lê-los: depende de como o SDK interpreta os cabeçalhos
+(detalhe interno, que já mudou entre versões), mexe numa resposta HTTP para
+enganar o chamador, e a conta ainda custaria read ≤ 23,75 s. Recusado como
+gambiarra; sem subclasse de `_calculate_retry_timeout` pela mesma razão (método
+privado).
+
+**Mantido `max_retries=0`.** O teste da premissa vira o gatilho de revisão: se uma
+atualização do SDK passar a limitar o atraso, ele reprova e a conta acima deve
+ser refeita (então `max_retries=1` com read ≤ 23,75 s e o teto fixado pelo teste
+do pior caso, que já inclui o backoff). Os casos `500-inicial` de
+`test_tutoring_max_tokens.py` **não voltam**: o comportamento não voltou.
+
 ## Alterações
 
 - `src/focusquest/modules/tutoring/anthropic_provider.py`: `TENTATIVAS = 0`,
@@ -58,7 +103,7 @@ prática não foi medido (precisa de produção).
   metade da rota mais curta; `NullPool` do Alembic continua aceito).
 - `tests/integration/provedor_falso.py`: `Roteiro.retry_after`.
 - `tests/integration/test_anthropic_provider.py`: teste do 429 com `Retry-After`
-  (uma chamada, resposta em menos de 1 s); dois testes renomeados (o nome falava
+  (uma chamada, resposta em menos de 1 s); teste da premissa do SDK (acima); dois testes renomeados (o nome falava
   em tentativas), assertivas `1 + TENTATIVAS` intactas.
 - `tests/integration/test_tutoring_max_tokens.py`: **removida a parametrização
   `500-inicial`** (7 casos) e o `TratadorComFalhaInicial`. Eles exercitavam o
@@ -88,6 +133,9 @@ prática não foi medido (precisa de produção).
   teste correspondente.
 - `make check` (sob a trava, depois de corrigir os 8 testes do primeiro gate):
   EXIT 0, sem vazamentos no Gitleaks e wheel construído com os prompts.
+  Repetido depois do teste da premissa do SDK: a primeira tentativa foi
+  encerrada por SIGTERM (exit 143, sem falha de teste no log) e a segunda saiu
+  com EXIT 0 (pytest, mypy, E2E com 138 passed).
 
 ## Pendências
 

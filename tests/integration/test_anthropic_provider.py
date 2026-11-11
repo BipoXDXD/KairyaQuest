@@ -3,6 +3,7 @@
 import time
 from typing import Any
 
+import anthropic
 import pytest
 
 from focusquest.modules.tutoring.anthropic_provider import (
@@ -227,6 +228,39 @@ def test_limite_de_taxa_com_retry_after_nao_faz_o_adaptador_dormir_e_repetir(
         list(_provedor(falso).responder(TURNO))
     assert len(falso.recebidas) == 1
     assert time.monotonic() - inicio < 1.0
+
+
+def test_premissa_o_sdk_dorme_o_retry_after_inteiro_se_houver_retentativa(
+    falso: ServidorAnthropicFalso, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PREMISSA de `TENTATIVAS = 0`, medida no SDK instalado.
+
+    Com UMA retentativa, um `Retry-After` de 120 s (acima dos 60 s que algumas
+    versoes do SDK aceitavam e dos 90 s do nginx) e dormido por inteiro: nao ha
+    teto nem gancho suportado para limita-lo, so `max_retries`. Se este teste
+    reprovar depois de uma atualizacao do SDK, o SDK passou a limitar o atraso
+    e vale reavaliar `max_retries=1` (conta em
+    `docs/handoff/2026-11-11-orcamento-tempo.md`).
+    """
+    dormidas: list[float] = []
+    monkeypatch.setattr(time, "sleep", dormidas.append)
+    falso.roteiro = Roteiro(status_http=429, retry_after=120.0)
+    cliente = anthropic.Anthropic(
+        api_key="sk-ant-teste",
+        base_url=falso.url,
+        max_retries=1,
+        timeout=TIMEOUT_FOLGADO,
+    )
+
+    with pytest.raises(anthropic.RateLimitError):
+        cliente.messages.create(
+            model="claude-opus-5",
+            max_tokens=8,
+            messages=[{"role": "user", "content": "oi"}],
+        )
+
+    assert dormidas == [120.0]
+    assert len(falso.recebidas) == 2
 
 
 def test_chave_recusada_vira_indisponivel_sem_nova_tentativa(
