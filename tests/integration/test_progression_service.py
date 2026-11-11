@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -442,6 +443,53 @@ def test_comeback_nao_e_revogado_pela_conclusao_tardia_de_ontem(
     assert recompensa_da_missao(session, diaria_de_sexta) == antes
 
 
+def test_comeback_ignora_avulsa_concluida_no_intervalo(session: Session) -> None:
+    """R4: so diarias contam. Sem o filtro de tipo, a avulsa de quarta partiria
+    o intervalo em dois de um dia so e a volta sumiria."""
+    _plano(session, semana=SEMANA_1, criado=SEMANA_1)
+    quarta = SEMANA_1 + timedelta(days=2)
+    sexta = SEMANA_1 + timedelta(days=4)
+    _concluir(session, _diaria(session, SEMANA_1), instante=ao_meio_dia(SEMANA_1))
+    _concluir(session, _avulsa(session), instante=ao_meio_dia(quarta))
+    diaria_de_sexta = _concluir(
+        session, _diaria(session, sexta), instante=ao_meio_dia(sexta)
+    )
+    assert _datas_do_painel(session)["comeback"] == ao_meio_dia(sexta)
+    assert "comeback" in _codigos(recompensa_da_missao(session, diaria_de_sexta))
+
+
+@pytest.mark.parametrize("hora_utc", [1, 2])
+def test_comeback_usa_o_dia_de_sao_paulo_e_nao_o_de_utc(
+    session: Session, hora_utc: int
+) -> None:
+    """Fuso (America/Sao_Paulo, UTC-3): a diaria de segunda concluida as 22h ou
+    23h de segunda em SP e de terca em UTC. Em SP sobram terca, quarta e quinta
+    (3 dias: ganha); em UTC sobrariam so quarta e quinta (2 dias: nao ganha)."""
+    _plano(session, semana=SEMANA_1, criado=SEMANA_1)
+    terca = SEMANA_1 + timedelta(days=1)
+    sexta = SEMANA_1 + timedelta(days=4)
+    segunda_a_noite = datetime(terca.year, terca.month, terca.day, hora_utc, tzinfo=UTC)
+    _concluir(session, _diaria(session, SEMANA_1), instante=segunda_a_noite)
+    _concluir(session, _diaria(session, sexta), instante=ao_meio_dia(sexta))
+    assert _datas_do_painel(session)["comeback"] == ao_meio_dia(sexta)
+
+
+@pytest.mark.parametrize("hora_utc", [1, 2])
+def test_comeback_nao_nasce_de_conclusao_da_noite_em_sao_paulo(
+    session: Session, hora_utc: int
+) -> None:
+    """O espelho: a diaria de quinta concluida as 22h ou 23h de quinta em SP e
+    de sexta em UTC. Em SP so sobram terca e quarta (2 dias: nao ganha); em UTC
+    sobrariam terca, quarta e quinta (3 dias) e a volta nasceria errada."""
+    _plano(session, semana=SEMANA_1, criado=SEMANA_1)
+    quinta = SEMANA_1 + timedelta(days=3)
+    sexta = SEMANA_1 + timedelta(days=4)
+    quinta_a_noite = datetime(sexta.year, sexta.month, sexta.day, hora_utc, tzinfo=UTC)
+    _concluir(session, _diaria(session, SEMANA_1), instante=ao_meio_dia(SEMANA_1))
+    _concluir(session, _diaria(session, quinta), instante=quinta_a_noite)
+    assert _datas_do_painel(session)["comeback"] is None
+
+
 def test_dia_sem_plano_nao_conta_como_dia_sem_conclusao(session: Session) -> None:
     _plano(session, semana=SEMANA_1, criado=SEMANA_1)
     sexta = SEMANA_1 + timedelta(days=4)
@@ -499,6 +547,9 @@ def test_derivadas_so_anunciam_a_primeira_vez(session: Session) -> None:
 def test_derivadas_contam_so_o_usuario(session: Session) -> None:
     _registrar_outro_usuario(session)
     semana_a, semana_b = date(2026, 9, 7), date(2026, 9, 14)
+    # O estudante tem plano nos mesmos dias do outro, sem concluir nada: sem o
+    # filtro de dono nas diarias concluidas, a volta do OUTRO apareceria aqui.
+    _plano(session, semana=semana_b, criado=semana_b)
     for semana in (semana_a, semana_b):
         criar_plano(
             session,
@@ -572,7 +623,6 @@ def test_as_derivadas_nunca_sao_gravadas(session: Session) -> None:
     registrar_bonus(session, avulsa, Veredito.ATENDE, AGORA)
 
     datas = _datas_do_painel(session)
-    assert [datas[k] for k in ("first_pass", "weekly_trial", "comeback")] != [None] * 3
     assert all(datas[k] is not None for k in ("first_pass", "weekly_trial", "comeback"))
     gravadas = set(session.scalars(select(UserAchievement.code)))
     assert not gravadas & {"first_pass", "weekly_trial", "comeback"}

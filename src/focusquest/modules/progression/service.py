@@ -371,6 +371,9 @@ def _concluidas_do_tipo(
             Mission.user_id == user_id,
             Mission.mission_type == tipo,
             Mission.state == MissionState.CONCLUIDA,
+            # `missions` nao tem CHECK de `completed_at` na concluida: o filtro
+            # e o que sustenta os `cast` de quem le a coluna.
+            Mission.completed_at.is_not(None),
         )
         .order_by(Mission.completed_at, Mission.id)
     )

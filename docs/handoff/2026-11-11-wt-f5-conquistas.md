@@ -101,6 +101,28 @@ enumeravam o painel passaram a enumerar o `PAINEL`.
   regra, mais conclusão tardia, só a primeira vez, só o usuário, nunca
   gravadas); front (`achievementText`, `RewardAnnouncement`, `ProgressPanel`).
 
+## Rodada de correção 1 (revisão)
+
+- Testes que fixam o fuso de `America/Sao_Paulo` (instantes às 01:00 e 02:00 UTC,
+  ainda no dia anterior em SP) nos dois sentidos, e um teste da regra "só
+  diárias" (avulsa concluída dentro do intervalo do `comeback`). Cada um foi
+  conferido por sabotagem temporária (`.date()` em UTC; filtro de tipo
+  removido; filtro de dono removido), depois desfeita.
+- `test_derivadas_contam_so_o_usuario` passou a dar ao estudante um plano nos
+  mesmos dias do outro usuário, isolando o filtro de dono das diárias.
+- `_concluidas_do_tipo` filtra `completed_at IS NOT NULL`: `missions` não tem
+  CHECK dessa coluna na concluída, e o filtro sustenta os `cast`.
+
+## Limitações conhecidas (registradas na revisão)
+
+- `first_pass` só é anunciado se existir o lançamento do bônus
+  (`recompensa_do_bonus` devolve `None` sem ele). Hoje o bônus é metade do XP
+  da missão, no mínimo 10, então sempre existe.
+- Derivar na leitura tem consequências inerentes: apagar a missão que causou
+  uma conquista (CASCADE) move a conquista para a próxima candidata; com duas
+  avaliações concorrentes e `finished_at` fora da ordem de commit, o anúncio de
+  `first_pass` poderia sair duas vezes. Irrelevante com usuário único.
+
 ## Pendências
 
 - Fase 8: ligar a fala da Kairya a `achievements_unlocked` (que agora pode
