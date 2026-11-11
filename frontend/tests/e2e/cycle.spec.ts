@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
-import { segundaDaSemana } from './datas'
+import { diaEMes, diasEntre, segundaDaSemana, somarDias } from './datas'
 import { API_URL } from './servers'
 
 /**
@@ -24,18 +24,6 @@ const EXECUCAO = randomUUID().slice(0, 8)
 
 interface CicloDaApi {
   today: string
-}
-
-/** "23/09", escrito por extenso: o E2E nao importa o formatador da aplicacao. */
-function diaMes(civil: string): string {
-  return `${civil.slice(8, 10)}/${civil.slice(5, 7)}`
-}
-
-/** Uma data civil deslocada `deslocamento` dias, em aritmetica UTC pura. */
-function diaCivil(civil: string, deslocamento: number): string {
-  const dia = new Date(`${civil}T12:00:00Z`)
-  dia.setUTCDate(dia.getUTCDate() + deslocamento)
-  return dia.toISOString().slice(0, 10)
 }
 
 /**
@@ -98,7 +86,7 @@ test.beforeAll(async ({ playwright }) => {
     },
   })
   expect(resposta.status()).toBe(201)
-  missaoDeHoje = DIAS[(new Date(`${hoje}T12:00:00Z`).getUTCDay() + 6) % 7]!.instructions
+  missaoDeHoje = DIAS[diasEntre(segundaDaSemana(hoje), hoje)]!.instructions
   await api.dispose()
 })
 
@@ -114,7 +102,7 @@ test('a missao de hoje do plano semeado aparece com a data civil da API, e passa
 }) => {
   const ciclo = await abrirCiclo(page)
 
-  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaMes(hoje))
+  await expect(ciclo.getByTestId('cycle-today')).toContainText(diaEMes(hoje))
   // O plano foi criado hoje: os dias anteriores estao fora do plano, e a
   // sequencia comeca do zero.
   await expect(ciclo.getByTestId('cycle-progress')).toHaveText(/0 de 7/)
@@ -262,7 +250,7 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   // no dia" -- nunca a missao (B3/C11 da spec do ciclo).
   const segunda = segundaDaSemana(hoje)
   for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
-    const dia = diaCivil(segunda, deslocamento)
+    const dia = somarDias(segunda, deslocamento)
     if (dia > hoje) {
       const item = campanhas.locator(`[data-testid="trail-day"][data-day="${dia}"]`)
       await expect(item.getByTestId('trail-chest')).toContainText('revelada no dia')
