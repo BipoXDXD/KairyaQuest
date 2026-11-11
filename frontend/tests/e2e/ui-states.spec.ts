@@ -18,6 +18,19 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await confirm.click()
     await expect(confirm).toHaveAttribute('aria-busy', 'true')
   },
+  'language-switcher-save-failed': async (page) => {
+    // O setLocale do caso rejeita; a falha aparece na StatusLine danger e o
+    // idioma anterior continua marcado.
+    await page.getByRole('button', { name: 'EN, English' }).click()
+    const status = page.getByRole('status')
+    await expect(status).toHaveAttribute('data-tone', 'danger')
+    await expect(status).toContainText('EN, English')
+    await expect(status).toBeVisible()
+    await expect(page.getByRole('button', { name: 'PT, Português (Brasil)' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  },
 }
 
 const ALVO_MINIMO_PX = 44

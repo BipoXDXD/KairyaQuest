@@ -51,6 +51,10 @@ export default defineConfig({
     // maquina -- que, na do dono, E Sao Paulo --, a asseveracao do texto do
     // prazo passaria mesmo se a aplicacao usasse o fuso de quem le.
     timezoneId: 'Asia/Tokyo',
+    // O idioma inicial vem de `navigator.language`, e o Chromium do Playwright
+    // diz `en-US`. Os E2E procuram os textos do produto em PT; quem testa o EN
+    // troca pelo seletor de idioma (`ui-states.spec.ts`).
+    locale: 'pt-BR',
   },
 
   projects: [

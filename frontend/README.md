@@ -77,7 +77,7 @@ Para trabalhar em paralelo, use o worktree criado por
   requisições interceptadas conforme o cenário, inclusive SSE simulado.
   Essas fixtures de interface não comprovam persistência.
 - `src/index.css`: tokens visuais, layout desktop/mobile e movimento da recompensa.
-- `public/art/`: cenários medievais e retratos locais; procedência em
+- `public/art/`: retratos, cenários e ilustrações da Kairya; procedência em
   [ART](../docs/ART.md).
 
 Vitest exige 100% de linhas, ramificações, funções e instruções do código
@@ -86,8 +86,9 @@ de aplicação em `src/`; o denominador e suas exclusões estão em
 substituem a inspeção visual de desktop/celular ou a validação num aparelho
 com teclado virtual.
 
-O painel usa um retrato gerado da Kairya com o traje clássico, acompanhado
-de cenários medievais. Não há assets extraídos do jogo, tutoria simulada de
+O painel usa o retrato da Kairya gerado na Fase 7, e os heroes usam os
+cenários da biblioteca-dojo e da trilha de lanternas; procedência em
+[ART](../docs/ART.md). Não há assets extraídos do jogo, tutoria simulada de
 produção ou autenticação implementada. A entrega
 com evidência e a avaliação da Kairya estão implementadas; a avaliação é
 interpretação do modelo, identificada na tela. O roadmap e as limitações
