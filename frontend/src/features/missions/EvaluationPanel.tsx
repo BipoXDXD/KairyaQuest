@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import { useCallback, type ReactElement } from 'react'
 import type {
   EvaluationSummary,
   Evidence,
@@ -10,6 +10,8 @@ import type { Reward } from '../../shared/types/reward'
 import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluationFailure'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
+import { evaluationEvents, useKairya } from '../kairya'
+import type { EvaluationResult } from './types'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
@@ -237,9 +239,17 @@ function EvidenceAndEvaluation({
   describedBy?: string
 }) {
   const t = useT()
+  const { dispatchAll } = useKairya()
+  const handleResult = useCallback(
+    (result: EvaluationResult) => {
+      dispatchAll(evaluationEvents({ verdict: result.evaluation.verdict, reward: result.reward }))
+    },
+    [dispatchAll],
+  )
   const { state: request, request: requestEvaluation } = useRequestEvaluation(
     mission.id,
     onRewarded,
+    handleResult,
   )
   const view = currentView(mission.evaluation, request)
   const failure = view.kind === 'failed' ? view.failure : null
