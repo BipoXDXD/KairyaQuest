@@ -1316,6 +1316,101 @@ tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
   argumento do `evaluate`. O resultado do gate final está no corpo do PR.
 
 **Limitação nova.** Nenhuma.
+
+# Pendência 112: rascunho do reagendar no registro — 2026-11-10
+
+A linha **112** da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** O rascunho do Reagendar sobrevive à remontagem do cartão, como a
+chave; conteúdo mudado depois de uma falha `retry` sai com chave nova **antes**
+do envio, também depois da remontagem; e o "último enviado" tem uma fonte só.
+
+**Decisões.**
+
+- Segue o padrão do Concluir (E17): o registro do quadro (`useCompletionRegistry`)
+  guarda, por missão, o reagendamento aberto (`OpenReschedule`: o prazo em que o
+  disclosure abriu, o instante de abertura — a janela de 365 dias parte dele — e
+  o rascunho) e o conteúdo do último envio. Isso substitui a decisão F20 da spec
+  do incremento F ("o rascunho do reagendamento mora no cartão"), que já previa
+  esta pendência como alternativa.
+- O formulário remonta aberto quando o registro tem um reagendamento aberto para
+  o prazo **atual** da missão, como o `EvidenceForm` reabre com rascunho. Aberto
+  para outro prazo, monta fechado e não mexe no foco. Fechar pelo botão descarta
+  o rascunho; só o sucesso do POST o apaga no hook; falhas o conservam.
+- A troca de chave saiu do cartão e foi para o registro: `rescheduleKeyFor(id,
+  draft)` devolve a chave retida só se o rascunho é o mesmo do último envio
+  (`sameDraft`); senão gera outra antes do POST. O cartão dependia do estado do
+  hook (`failed` + `retry`), que a remontagem zera — era isso que deixava passar
+  o 409 `operacao_reutilizada`. Soltar a chave do reagendar apaga o último envio
+  junto. Se o UUID novo lançar, nada muda.
+- Fonte única do "último enviado": `registry.sentRescheduleFor(id)`. O `sent` do
+  formulário e o `lastSentReschedule` do cartão foram removidos. Com a chave
+  retida e o mesmo rascunho, o botão diz "Tentar de novo" também depois da
+  remontagem, como o Iniciar com chave retida.
+
+**Alterações.** `frontend/src/features/missions/`: `types.ts`
+(`OpenReschedule`), `useCompletionRegistry.ts`, `useRescheduleMission.ts`,
+`RescheduleForm.tsx`, `MissionCard.tsx`, e os testes correspondentes
+(registro, hook, formulário e `MissionList` com remontagem real do quadro).
+
+**Limitações novas.**
+
+- A mensagem da falha (`role=alert`) não sobrevive à remontagem: ela é estado do
+  hook, como no Concluir e no Iniciar. O que sobrevive é a chave retida, o
+  rascunho e o "Tentar de novo" com o aviso de que o pedido anterior pode ter
+  chegado.
+- O registro vive na memória da página: recarregar o navegador (F5) perde
+  rascunho e chave, como já acontece com a evidência.
+- Um reagendamento aberto de missão que deixou de ser oferecida (concluída) fica
+  no mapa do registro até a página recarregar; é inofensivo, porque só é lido
+  para o prazo atual de uma avulsa não concluída.
+- `docs/ARCHITECTURE.md` (perto da linha 1242) e a decisão F20 da spec do
+  incremento F ainda dizem que o rascunho do reagendar não sobrevive à recarga.
+  Este PR não pôde editar o `ARCHITECTURE.md` (fora do escopo do lote); a
+  correção fica para a coordenação.
+
+**Comandos e resultados.** Ver o corpo do PR: `vitest` dos arquivos tocados e
+`make check` completo, com a linha de resultado lida.
+
+# Pendência 211: textos de falha de transporte — 2026-11-10
+
+A linha 211 da tabela de pendências fica resolvida por esta seção.
+
+**Objetivo.** A falha de transporte (rede fora ou prazo esgotado) trocava a
+abertura do texto pela causa ("Não foi possível conectar." / "A resposta
+demorou mais que o esperado.") e deixava de nomear a ação que falhou.
+
+**Decisão.** A abertura nomeia a ação, com objeto, e a causa numa frase só:
+"Não foi possível <ação>: <causa>.". As causas são "sem conexão com o
+servidor" (rede) e "o servidor demorou demais para responder" (prazo). O fim
+"Tentar de novo é seguro: …" fica como estava; o E2E do QG continua conferindo
+esse trecho. `leadFor` passa a receber `{ action, fallback }` (`FailureLead`):
+a frase do transporte é montada num lugar só, e o `fallback` continua sendo a
+abertura própria de cada tradutor para 5xx e `code` desconhecido, que não muda.
+
+**Alterações.** `frontend/src/shared/api/transportFailure.ts` (assinatura e
+causas), os tradutores `completion`, `start`, `reschedule` e
+`evaluationFailure.ts` em `features/missions`, `features/tutoring/actionFailure.ts`
+e os testes unitários que conferem esses textos. Ações usadas: concluir a
+missão, iniciar a missão, reagendar a missão, pedir a avaliação, confirmar a
+missão, confirmar o reagendamento e recusar a proposta.
+
+**Limitação nova.** Só o texto de recusar ficou na faixa de 12–18 palavras da
+revisão de ux-writing (16 por rede, 17 por prazo). As outras seis mensagens de
+transporte têm de 22 a 24 palavras, porque o fim explicativo já tem 11 ou 12 e
+a abertura com ação e causa tem 10 a 12. Encurtar exigiria tirar o objeto da
+ação ou mudar o fim, e as duas coisas foram recusadas nesta decisão.
+
+**Teste instável corrigido.** O gate do pre-push reprovou uma vez no D1 de
+`useDecideAction.test.tsx` (`confirming` no lugar de `idle`), num teste que
+este PR não tinha tocado. A causa é uma race no teste: o `then` do hook faz
+`setState` e chama os callbacks fora de `act`, e o `waitFor` esperava o
+callback, de modo que o render com `idle` podia ainda não ter chegado. D1, D6
+e o caso da chave que falha ao ser gerada passam a esperar o estado dentro do
+`waitFor`; as expectativas não mudam.
+
+**Comandos e resultado.** `make check` completo; resultado no corpo do PR.
+
 # Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
 
 A linha 213 da tabela de pendências fica **resolvida por esta seção**.

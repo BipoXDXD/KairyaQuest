@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { RescheduleErrorCode } from './types'
 
 /**
@@ -57,7 +57,10 @@ const FAILURE_BY_CODE: Record<RescheduleErrorCode, RescheduleFailure> = {
   },
 }
 
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar o reagendamento.'
+const UNCONFIRMED_LEAD: FailureLead = {
+  action: 'reagendar a missão',
+  fallback: 'Não foi possível confirmar o reagendamento.',
+}
 const RETRY_IS_SAFE = 'Tentar de novo é seguro: o prazo não mudará duas vezes.'
 
 /**

@@ -81,7 +81,7 @@ describe('describeCompletionFailure', () => {
       describeCompletionFailure(new ApiError('Não foi possível falar com o servidor.', null, null)),
     ).toEqual({
       message:
-        'Não foi possível conectar. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+        'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
       recovery: 'retry',
     })
   })
@@ -89,7 +89,7 @@ describe('describeCompletionFailure', () => {
   it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
     expect(describeCompletionFailure(new ApiTimeoutError())).toEqual({
       message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+        'Não foi possível concluir a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será concluída duas vezes.',
       recovery: 'retry',
     })
   })
