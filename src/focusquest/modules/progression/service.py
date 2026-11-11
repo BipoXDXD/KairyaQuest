@@ -5,25 +5,36 @@ Direcao unica (spec, "Servico"): este modulo LE modelos e regras de `missions`
 e o modelo de acao da `tutoring`, e nao importa nenhum `service` delas.
 """
 
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from focusquest.modules.missions.cycle_domain import dia_de
 from focusquest.modules.missions.cycle_service import carregar_historico
-from focusquest.modules.missions.domain import MissionState, Veredito, xp_da_missao
-from focusquest.modules.missions.models import Mission, User
+from focusquest.modules.missions.domain import (
+    EstadoDaAvaliacao,
+    MissionState,
+    MissionType,
+    Veredito,
+    xp_da_missao,
+)
+from focusquest.modules.missions.models import Mission, MissionEvaluation, User
 from focusquest.modules.progression.domain import (
     CATALOGO,
-    CONQUISTA_POR_CODIGO,
-    Conquista,
+    PAINEL,
+    CodigoDerivado,
+    ConquistaDoPainel,
     FaixaDoNivel,
     FatosDoUsuario,
     Rank,
     bonus_da_avaliacao,
     conquistas_satisfeitas,
     faixa_do_nivel,
+    indice_da_volta,
     maior_sequencia,
     nivel_do_saldo,
     rank_do_nivel,
@@ -44,12 +55,12 @@ class Recompensa:
     xp_total: int
     level_before: int
     level_after: int
-    achievements_unlocked: tuple[Conquista, ...]
+    achievements_unlocked: tuple[ConquistaDoPainel, ...]
 
 
 @dataclass(frozen=True)
 class ConquistaNoPainel:
-    conquista: Conquista
+    conquista: ConquistaDoPainel
     unlocked_at: datetime | None
 
 
@@ -161,13 +172,18 @@ def recompensa_da_missao(session: Session, missao: Mission) -> Recompensa:
             )
         )
     )
+    derivadas = _anunciadas_pela_missao(
+        session,
+        missao,
+        {CodigoDerivado.WEEKLY_TRIAL, CodigoDerivado.COMEBACK},
+    )
     total = antes + entrada.amount
     return Recompensa(
         xp_awarded=entrada.amount,
         xp_total=total,
         level_before=nivel_do_saldo(antes),
         level_after=nivel_do_saldo(total),
-        achievements_unlocked=tuple(c for c in CATALOGO if c.codigo in codigos),
+        achievements_unlocked=_no_painel(codigos | derivadas),
     )
 
 
@@ -176,7 +192,8 @@ def registrar_bonus(
 ) -> None:
     """O bonus da avaliacao (E7), na transacao que grava o veredito, com a
     missao ja travada; trava o usuario depois dela (D12). Nao avalia conquistas:
-    nenhum fato do catalogo muda com o bonus (E15)."""
+    nenhum fato do catalogo PERSISTIDO muda com o bonus (E15); a `first_pass`
+    e derivada na leitura e nasce da avaliacao, nao daqui."""
     valor = bonus_da_avaliacao(
         veredito, xp_da_missao(missao.mission_type, missao.difficulty)
     )
@@ -199,8 +216,8 @@ def recompensa_do_bonus(session: Session, missao: Mission) -> Recompensa | None:
     """O bonus reconstruido do banco (o desenho da D10), ou None sem bonus.
 
     Como `recompensa_da_missao`: o `xp_total` e o saldo DAQUELE momento, e o
-    pedido repetido devolve o mesmo corpo por construcao. Sem conquistas: o
-    bonus nao destrava nenhuma (E15).
+    pedido repetido devolve o mesmo corpo por construcao. So anuncia a
+    `first_pass` (R5, R7): o bonus nao destrava nenhuma conquista persistida (E15).
     """
     entrada = session.scalars(
         select(XpEntry).where(
@@ -210,14 +227,34 @@ def recompensa_do_bonus(session: Session, missao: Mission) -> Recompensa | None:
     if entrada is None:
         return None
     antes = _saldo_antes(session, entrada)
+    derivadas = _anunciadas_pela_missao(session, missao, {CodigoDerivado.FIRST_PASS})
     total = antes + entrada.amount
     return Recompensa(
         xp_awarded=entrada.amount,
         xp_total=total,
         level_before=nivel_do_saldo(antes),
         level_after=nivel_do_saldo(total),
-        achievements_unlocked=(),
+        achievements_unlocked=_no_painel(derivadas),
     )
+
+
+def _no_painel(codigos: AbstractSet[str]) -> tuple[ConquistaDoPainel, ...]:
+    """As conquistas de `codigos`, na ordem do painel."""
+    return tuple(c for c in PAINEL if c.codigo in codigos)
+
+
+def _anunciadas_pela_missao(
+    session: Session, missao: Mission, candidatas: AbstractSet[CodigoDerivado]
+) -> set[str]:
+    """Os codigos derivados de `candidatas` cuja PRIMEIRA vez (R4-R6) foi
+    causada por `missao`: so ela os anuncia, nunca a segunda especial nem a
+    segunda avaliacao `atende`."""
+    desbloqueios = _desbloqueios_derivados(session, missao.user_id)
+    return {
+        codigo.value
+        for codigo in candidatas
+        if codigo in desbloqueios and desbloqueios[codigo].mission_id == missao.id
+    }
 
 
 def _saldo_antes(session: Session, entrada: XpEntry) -> int:
@@ -248,13 +285,95 @@ def ler_progresso(session: Session, user_id: int) -> Progresso:
     ).all()
     total = linhas[0].xp_total
     faixa = faixa_do_nivel(total)
-    datas = {codigo: quando for _, codigo, quando in linhas if codigo is not None}
+    datas: dict[str, datetime] = {
+        codigo: quando for _, codigo, quando in linhas if codigo is not None
+    }
+    # R8: as derivadas vem em comandos a parte, no mesmo request.
+    datas |= {
+        codigo.value: d.unlocked_at
+        for codigo, d in _desbloqueios_derivados(session, user_id).items()
+    }
     return Progresso(
         xp_total=total,
         faixa=faixa,
         rank=rank_do_nivel(faixa.nivel),
-        conquistas=tuple(
-            ConquistaNoPainel(CONQUISTA_POR_CODIGO[c.codigo], datas.get(c.codigo))
-            for c in CATALOGO
-        ),
+        conquistas=tuple(ConquistaNoPainel(c, datas.get(c.codigo)) for c in PAINEL),
+    )
+
+
+@dataclass(frozen=True)
+class DesbloqueioDerivado:
+    unlocked_at: datetime
+    mission_id: int
+
+
+def _desbloqueios_derivados(
+    session: Session, user_id: int
+) -> dict[CodigoDerivado, DesbloqueioDerivado]:
+    """Quando e por qual missao cada conquista derivada foi ganha (R4-R6).
+
+    Nunca gravadas: cada regra e uma consulta sobre fatos que ja existem, e o
+    primeiro desbloqueio e estavel (as listas so crescem no fim).
+    """
+    achados: dict[CodigoDerivado, DesbloqueioDerivado] = {}
+
+    # R5: a primeira avaliacao `atende`; o instante e o fim dela.
+    avaliacao = session.execute(
+        select(MissionEvaluation.finished_at, MissionEvaluation.mission_id)
+        .join(Mission, Mission.id == MissionEvaluation.mission_id)
+        .where(
+            Mission.user_id == user_id,
+            MissionEvaluation.state == EstadoDaAvaliacao.CONCLUIDA,
+            MissionEvaluation.verdict == Veredito.ATENDE,
+        )
+        .order_by(MissionEvaluation.finished_at, MissionEvaluation.id)
+        .limit(1)
+    ).first()
+    if avaliacao is not None:
+        # O CHECK da avaliacao concluida garante o `finished_at`.
+        achados[CodigoDerivado.FIRST_PASS] = DesbloqueioDerivado(
+            cast(datetime, avaliacao.finished_at), avaliacao.mission_id
+        )
+
+    # R6: a primeira especial concluida.
+    especial = session.execute(
+        _concluidas_do_tipo(user_id, MissionType.ESPECIAL).limit(1)
+    ).first()
+    if especial is not None:
+        achados[CodigoDerivado.WEEKLY_TRIAL] = DesbloqueioDerivado(
+            cast(datetime, especial.completed_at), especial.id
+        )
+
+    # R4: a primeira diaria concluida depois de 3 dias planejados sem conclusao.
+    diarias = session.execute(_concluidas_do_tipo(user_id, MissionType.DIARIA)).all()
+    planejados = {
+        dia
+        for dia, estado in carregar_historico(session, user_id).items()
+        if dia >= estado.plano_criado_em
+    }
+    volta = indice_da_volta(
+        [dia_de(cast(datetime, d.completed_at)) for d in diarias], planejados
+    )
+    if volta is not None:
+        achados[CodigoDerivado.COMEBACK] = DesbloqueioDerivado(
+            cast(datetime, diarias[volta].completed_at), diarias[volta].id
+        )
+    return achados
+
+
+def _concluidas_do_tipo(
+    user_id: int, tipo: MissionType
+) -> Select[int, datetime | None]:
+    """As missoes concluidas do usuario do tipo, da mais antiga a mais nova."""
+    return (
+        select(Mission.id, Mission.completed_at)
+        .where(
+            Mission.user_id == user_id,
+            Mission.mission_type == tipo,
+            Mission.state == MissionState.CONCLUIDA,
+            # `missions` nao tem CHECK de `completed_at` na concluida: o filtro
+            # e o que sustenta os `cast` de quem le a coluna.
+            Mission.completed_at.is_not(None),
+        )
+        .order_by(Mission.completed_at, Mission.id)
     )

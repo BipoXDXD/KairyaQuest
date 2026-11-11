@@ -41,6 +41,50 @@ describe('achievementText', () => {
     })
   })
 
+  it.each<[string, Locale, { title: string; description: string }]>([
+    [
+      'first_pass',
+      'pt-BR',
+      {
+        title: 'Primeira aprovação',
+        description: 'Receba da Kairya uma avaliação “atende” numa entrega.',
+      },
+    ],
+    [
+      'first_pass',
+      'en',
+      { title: 'First Pass', description: 'Get a “meets” evaluation from Kairya on a delivery.' },
+    ],
+    [
+      'weekly_trial',
+      'pt-BR',
+      { title: 'Prova da semana vencida', description: 'Conclua a sua primeira missão especial.' },
+    ],
+    [
+      'weekly_trial',
+      'en',
+      { title: 'Weekly Trial Cleared', description: 'Complete your first special mission.' },
+    ],
+    [
+      'comeback',
+      'pt-BR',
+      {
+        title: 'A volta',
+        description: 'Conclua uma diária depois de 3 dias ou mais sem nenhuma concluída.',
+      },
+    ],
+    [
+      'comeback',
+      'en',
+      {
+        title: 'Comeback',
+        description: 'Complete a daily after 3 or more days without completing one.',
+      },
+    ],
+  ])('a conquista derivada %s, em %s: o texto do catalogo', (code, locale, esperado) => {
+    expect(achievementText({ code, title: 'x', description: 'y' }, tFor(locale))).toEqual(esperado)
+  })
+
   it.each<Locale>(['pt-BR', 'en'])(
     'code desconhecido, em %s: o title e a description do back',
     (locale) => {

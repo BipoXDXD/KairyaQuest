@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from focusquest.modules.progression.domain import Conquista, Rank
+from focusquest.modules.progression.domain import ConquistaDoPainel, Rank
 from focusquest.modules.progression.service import Progresso, Recompensa
 
 
@@ -51,7 +51,7 @@ class UnlockedAchievementRead(BaseModel):
     description: str
 
     @classmethod
-    def da_conquista(cls, conquista: Conquista) -> UnlockedAchievementRead:
+    def da_conquista(cls, conquista: ConquistaDoPainel) -> UnlockedAchievementRead:
         return cls(
             code=conquista.codigo.value,
             title=conquista.titulo,
