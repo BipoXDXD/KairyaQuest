@@ -16,6 +16,12 @@
   }
 }
 
+/* Gera a classe `animate-reward-in`, sem valor arbitrario (o designLint os
+   reprova); a bolha da Kairya a usa sob `motion-safe:`. */
+@theme {
+  --animate-reward-in: reward-in 400ms ease-out;
+}
+
 /* Apresentação legada das features ainda não migradas (Tarefas 4.7–4.9).
    O shell e os cabeçalhos das áreas já vivem em tokens e componentes. */
 .rpg-progress,

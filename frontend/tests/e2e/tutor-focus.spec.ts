@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { diaRelativo, instanteRelativo, isoUtc } from './datas'
 
 // Datas relativas a hoje (pendencia 207): o prazo da missao de fundo e o

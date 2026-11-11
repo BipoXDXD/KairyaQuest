@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import type { Cycle } from '../../src/features/missions/types'
 import type { Progress } from '../../src/features/progression/types'
 import type { Mission } from '../../src/shared/types/mission'

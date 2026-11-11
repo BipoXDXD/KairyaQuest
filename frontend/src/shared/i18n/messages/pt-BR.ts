@@ -59,6 +59,8 @@ export const ptBR = {
   'kairya.face.thinking': 'Kairya pensa, com os olhos para o alto e os dedos no grampo de jade',
   'kairya.face.celebrating': 'Kairya comemora, de punho erguido e sorriso aberto',
   'kairya.face.concerned': 'Kairya, atenta e preocupada, olha com carinho',
+  'kairya.speaker': 'Kairya',
+  'kairya.bubble.close': 'Fechar a fala da Kairya',
 
   'shell.nav.label': 'Áreas',
   'shell.brand.name': 'KairyaQuest',

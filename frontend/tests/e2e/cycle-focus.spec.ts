@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, type Page, type Route } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import type { Cycle } from '../../src/features/missions/types'
 import type { Mission } from '../../src/shared/types/mission'
 import { diaEMes, diaRelativo } from './datas'

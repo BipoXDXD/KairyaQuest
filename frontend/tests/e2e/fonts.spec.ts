@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { layoutData } from './layoutData'
 
 // Roda dentro da página: a Alegreya registrada e com o arquivo carregado.

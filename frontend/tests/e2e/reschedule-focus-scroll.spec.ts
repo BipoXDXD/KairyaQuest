@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
+import { expect, type Locator, type Page, type Route } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import type { Mission } from '../../src/shared/types/mission'
 import { campoDeHorario, diaRelativo, instanteRelativo, isoUtc } from './datas'
 

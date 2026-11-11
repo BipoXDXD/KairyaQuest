@@ -30,11 +30,13 @@ export interface UseRequestEvaluationResult {
  *
  * `onRewarded` so e chamado quando a resposta traz `reward` (nem ausente, nem
  * `null`) -- o quadro
- * recarrega o XP; sem bonus, nada mudou de tela.
+ * recarrega o XP; sem bonus, nada mudou de tela. `onResult` e chamado em todo
+ * sucesso, com ou sem bonus (a Kairya reage ao veredito); falha nao o chama.
  */
 export function useRequestEvaluation(
   missionId: number,
   onRewarded?: () => void,
+  onResult?: (result: EvaluationResult) => void,
 ): UseRequestEvaluationResult {
   const [state, setState] = useState<EvaluationRequestState>({ status: 'idle' })
   const inFlight = useRef(false)
@@ -53,6 +55,11 @@ export function useRequestEvaluation(
     )
       .then((result) => {
         setState({ status: 'done', result })
+        try {
+          onResult?.(result)
+        } catch (error) {
+          console.error('onResult lancou depois da avaliacao:', error)
+        }
         if (result.reward != null) {
           // O estado de sucesso ja esta gravado, e o bonus ja foi concedido no
           // servidor: um callback do chamador que lance nao pode cair no
@@ -70,7 +77,7 @@ export function useRequestEvaluation(
       .finally(() => {
         inFlight.current = false
       })
-  }, [missionId, onRewarded])
+  }, [missionId, onRewarded, onResult])
 
   return { state, request }
 }
