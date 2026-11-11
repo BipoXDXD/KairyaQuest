@@ -5,6 +5,7 @@ import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls
 import { RescheduleProposalCard } from './RescheduleProposalCard'
 import type { CreateMissionAction, ProposalCardProps } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
+import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
 
 /**
@@ -90,6 +91,7 @@ function MissionProposalCard({
     missionCreated: onMissionCreated,
   })
   const t = useT()
+  const { locale } = useLocale()
   const { payload } = action
 
   return (
@@ -127,7 +129,7 @@ function MissionProposalCard({
         <dt className="text-text-muted">{t('tutoring.proposal.deadline')}</dt>
         <dd>
           <time data-testid="proposal-deadline" dateTime={payload.deadline}>
-            {formatDeadline(payload.deadline)}
+            {formatDeadline(payload.deadline, locale)}
           </time>
         </dd>
       </dl>

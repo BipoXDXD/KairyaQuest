@@ -3,7 +3,8 @@ import { formatDeadline } from '../../shared/lib/deadline'
 import { MAX_DIFFICULTY, MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
 import { EvidenceForm } from './EvidenceForm'
-import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds } from './evidenceLimit'
+import { describeEvidence, MAX_EVIDENCE_LENGTH, stripEnds, type LinkError } from './evidenceLimit'
+import { linkErrorText } from './evidenceText'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { sameDraft } from './rescheduleDraft'
 import { RescheduleForm } from './RescheduleForm'
@@ -16,7 +17,9 @@ import { useRescheduleMission, type RescheduleState } from './useRescheduleMissi
 import { useStartMission, type StartState } from './useStartMission'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import type { FailureText } from '../../shared/i18n/failureText'
-import { useT } from '../../shared/i18n/useT'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT, type Translate } from '../../shared/i18n/useT'
 
 const CARD_CLASS =
   'rpg-mission-card min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
@@ -39,19 +42,21 @@ const RELOAD_BUTTON_CLASS =
  * cartao (o estado volta a `idle`), mas a chave retida continua la, e o proximo
  * envio reenvia a MESMA chave -- e isso que "Tentar de novo" promete.
  */
-function completeLabel(completion: CompletionState, retryPending: boolean): string {
+function completeLabel(completion: CompletionState, retryPending: boolean): MessageKey {
   if (completion.status === 'submitting') {
-    return 'Concluindo…'
+    return 'missions.card.completing'
   }
-  return completion.status === 'failed' || retryPending ? 'Tentar de novo' : 'Concluir'
+  return completion.status === 'failed' || retryPending
+    ? 'missions.action.retry'
+    : 'missions.card.complete'
 }
 
 /** O que a regiao viva anuncia. Vazio quando nao ha nada acontecendo. */
-function statusText(completion: CompletionState): string {
+function statusText(completion: CompletionState): MessageKey | null {
   if (completion.status === 'submitting') {
-    return 'Concluindo a missão…'
+    return 'missions.card.completingStatus'
   }
-  return completion.status === 'completed' ? 'Missão concluída.' : ''
+  return completion.status === 'completed' ? 'missions.card.completedStatus' : null
 }
 
 /**
@@ -60,19 +65,34 @@ function statusText(completion: CompletionState): string {
  * formulario recolhido, o botao desabilitado continua com o motivo a vista e
  * ligado por `aria-describedby`.
  */
-function blockedReason(draft: EvidenceDraft): string | null {
+type BlockedReason =
+  { kind: 'link'; error: LinkError } | { kind: 'textMissing' } | { kind: 'textTooLong' }
+
+function blockedReason(draft: EvidenceDraft): BlockedReason | null {
   const inUse = stripEnds(draft.text) !== '' || stripEnds(draft.link) !== ''
   const described = describeEvidence(draft)
   if (!inUse || described.sendable) {
     return null
   }
   if (described.linkError !== null) {
-    return `Corrija o link da evidência para concluir. ${described.linkError}`
+    return { kind: 'link', error: described.linkError }
   }
   if (stripEnds(draft.text) === '') {
-    return 'Conte o que você fez para concluir com o link.'
+    return { kind: 'textMissing' }
   }
-  return `Encurte o texto da evidência para concluir: o limite é de ${String(MAX_EVIDENCE_LENGTH)} caracteres.`
+  return { kind: 'textTooLong' }
+}
+
+/** O motivo do bloqueio, no idioma corrente. */
+function blockedText(reason: BlockedReason, t: Translate): string {
+  switch (reason.kind) {
+    case 'link':
+      return t('missions.card.blocked.fixLink', { reason: linkErrorText(reason.error, t) })
+    case 'textMissing':
+      return t('missions.card.blocked.textMissing')
+    case 'textTooLong':
+      return t('missions.card.blocked.textTooLong', { max: MAX_EVIDENCE_LENGTH })
+  }
 }
 
 /**
@@ -127,15 +147,16 @@ function CompletionControls({
   completion: CompletionState
   onComplete: () => void
   /** Por que o rascunho da evidencia em uso nao pode ser enviado, ou `null`. */
-  blocked: string | null
+  blocked: BlockedReason | null
   /** A chave desta missao esta retida no registro (falha que se repete). */
   retryPending: boolean
   onReload: () => void
   reloadWaiting: boolean
-  reloadLabel: string
+  reloadLabel: MessageKey
   /** Um Iniciar ou Reagendar deste cartao esta em voo: um envio de cada vez. */
   otherInFlight: boolean
 }) {
+  const t = useT()
   const blockedId = useId()
   // Missao que ja veio concluida do quadro: nada a oferecer nem a anunciar. O
   // rotulo de estado ja diz "Concluída".
@@ -157,13 +178,15 @@ function CompletionControls({
           onClick={onComplete}
           className={COMPLETE_BUTTON_CLASS}
         >
-          {completeLabel(completion, retryPending)}{' '}
-          <span className="sr-only">a missão: {mission.instructions}</span>
+          {t(completeLabel(completion, retryPending))}{' '}
+          <span className="sr-only">
+            {t('missions.card.whichMission', { instructions: mission.instructions })}
+          </span>
         </button>
       )}
       {canComplete && blocked !== null && (
         <p id={blockedId} data-testid="mission-complete-blocked" className="text-sm text-amber-200">
-          {blocked}
+          {blockedText(blocked, t)}
         </p>
       )}
       {failure?.action === 'refresh' && (
@@ -174,8 +197,10 @@ function CompletionControls({
           onClick={onReload}
           className={RELOAD_BUTTON_CLASS}
         >
-          {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
-          <span className="sr-only">a missão: {mission.instructions}</span>
+          {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
+          <span className="sr-only">
+            {t('missions.card.whichMission', { instructions: mission.instructions })}
+          </span>
         </button>
       )}
       <div
@@ -183,7 +208,7 @@ function CompletionControls({
         data-testid="mission-completion-status"
         className="text-sm text-emerald-300"
       >
-        <p data-testid="mission-completion-text">{statusText(completion)}</p>
+        <p data-testid="mission-completion-text">{translateOrEmpty(statusText(completion), t)}</p>
         {/* `!= null` de proposito: cobre `reward` ausente E `reward: null`. */}
         {completion.status === 'completed' && completion.reward != null && (
           <RewardAnnouncement reward={completion.reward} />
@@ -203,27 +228,34 @@ function CompletionControls({
 }
 
 /** O texto do botao Iniciar em cada estado em que ele aparece. */
-function startLabel(start: StartState, hasRetainedKey: boolean): string {
+function startLabel(start: StartState, hasRetainedKey: boolean): MessageKey {
   if (start.status === 'submitting') {
-    return 'Iniciando…'
+    return 'missions.card.starting'
   }
-  return start.status === 'failed' || hasRetainedKey ? 'Tentar de novo' : 'Iniciar'
+  return start.status === 'failed' || hasRetainedKey
+    ? 'missions.action.retry'
+    : 'missions.card.start'
 }
 
 /** O que a regiao viva do Iniciar anuncia. */
-function startStatusText(start: StartState): string {
+function startStatusText(start: StartState): MessageKey | null {
   if (start.status === 'submitting') {
-    return 'Iniciando a missão…'
+    return 'missions.card.startingStatus'
   }
-  return start.status === 'started' ? 'Missão iniciada.' : ''
+  return start.status === 'started' ? 'missions.card.startedStatus' : null
 }
 
 /** O que a regiao viva do Reagendar anuncia. */
-function rescheduleStatusText(reschedule: RescheduleState): string {
+function rescheduleStatusText(reschedule: RescheduleState): MessageKey | null {
   if (reschedule.status === 'submitting') {
-    return 'Salvando o novo prazo…'
+    return 'missions.card.reschedulingStatus'
   }
-  return reschedule.status === 'rescheduled' ? 'Prazo reagendado.' : ''
+  return reschedule.status === 'rescheduled' ? 'missions.card.rescheduledStatus' : null
+}
+
+/** O texto de uma regiao viva: vazio quando nao ha o que anunciar. */
+function translateOrEmpty(key: MessageKey | null, t: Translate): string {
+  return key === null ? '' : t(key)
 }
 
 /**
@@ -260,9 +292,10 @@ function RefreshNotice({
   testId: string
   onReload: () => void
   reloadWaiting: boolean
-  reloadLabel: string
+  reloadLabel: MessageKey
   instructions: string
 }) {
+  const t = useT()
   return (
     <>
       <button
@@ -272,8 +305,8 @@ function RefreshNotice({
         onClick={onReload}
         className={RELOAD_BUTTON_CLASS}
       >
-        {reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel}{' '}
-        <span className="sr-only">a missão: {instructions}</span>
+        {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
+        <span className="sr-only">{t('missions.card.whichMission', { instructions })}</span>
       </button>
       <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
         <FailureMessage failure={failure} />
@@ -314,8 +347,9 @@ function StartControls({
   otherInFlight: boolean
   onReload: () => void
   reloadWaiting: boolean
-  reloadLabel: string
+  reloadLabel: MessageKey
 }) {
+  const t = useT()
   const failure = start.status === 'failed' ? start.failure : null
   const startable =
     (mission.state === 'pendente' && mission.availability === 'disponivel') ||
@@ -344,8 +378,10 @@ function StartControls({
               onClick={onStart}
               className={COMPLETE_BUTTON_CLASS}
             >
-              {startLabel(start, hasRetainedKey)}{' '}
-              <span className="sr-only">a missão: {mission.instructions}</span>
+              {t(startLabel(start, hasRetainedKey))}{' '}
+              <span className="sr-only">
+                {t('missions.card.whichMission', { instructions: mission.instructions })}
+              </span>
             </button>
           )}
           {failure !== null && (
@@ -360,7 +396,7 @@ function StartControls({
         </>
       )}
       <p role="status" data-testid="mission-start-status" className="text-sm text-emerald-300">
-        {startStatusText(start)}
+        {translateOrEmpty(startStatusText(start), t)}
       </p>
     </div>
   )
@@ -374,7 +410,7 @@ export function MissionCard({
   onCompleted,
   onRewarded,
   titleLevel = 3,
-  reloadLabel = 'Atualizar o quadro',
+  reloadLabel = 'missions.reload.board',
 }: {
   mission: Mission
   registry: CompletionRegistry
@@ -399,9 +435,10 @@ export function MissionCard({
    * O texto do botao de recuperacao. Padrao "Atualizar o quadro", como
    * sempre foi. Ver o comentario de `CompletionControls` acima.
    */
-  reloadLabel?: string
+  reloadLabel?: MessageKey
 }) {
   const t = useT()
+  const { locale } = useLocale()
   const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
   const { state: start, start: startMission } = useStartMission(listed.id, registry)
   const {
@@ -520,30 +557,35 @@ export function MissionCard({
       </div>
 
       <p data-testid="mission-completion-criterion" className="mt-2 text-sm text-slate-300">
-        <span className="text-slate-400">Critério de conclusão: </span>
+        <span className="text-slate-400">{t('missions.card.completionCriterion')} </span>
         {mission.completion_criterion}
       </p>
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-300 sm:grid-cols-4">
-        <dt className="text-slate-400">Prazo</dt>
+        <dt className="text-slate-400">{t('missions.card.deadline')}</dt>
         <dd>
           <time data-testid="mission-deadline" dateTime={mission.deadline}>
-            {formatDeadline(mission.deadline)}
+            {formatDeadline(mission.deadline, locale)}
           </time>
         </dd>
 
-        <dt className="text-slate-400">Dificuldade</dt>
+        <dt className="text-slate-400">{t('missions.card.difficulty')}</dt>
         {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
             espelha `DIFICULDADE_MAXIMA` do backend a mao. */}
         <dd data-testid="mission-difficulty">
-          {mission.difficulty} de {MAX_DIFFICULTY}
+          {t('missions.card.difficultyValue', {
+            difficulty: mission.difficulty,
+            max: MAX_DIFFICULTY,
+          })}
         </dd>
 
-        <dt className="text-slate-400">Estimativa</dt>
-        <dd data-testid="mission-estimated-minutes">{mission.estimated_minutes} min</dd>
+        <dt className="text-slate-400">{t('missions.card.estimate')}</dt>
+        <dd data-testid="mission-estimated-minutes">
+          {t('missions.card.minutes', { minutes: mission.estimated_minutes })}
+        </dd>
 
-        <dt className="text-slate-400">Recompensa</dt>
-        <dd data-testid="mission-xp">{mission.xp} XP</dd>
+        <dt className="text-slate-400">{t('missions.card.reward')}</dt>
+        <dd data-testid="mission-xp">{t('missions.card.xp', { xp: mission.xp })}</dd>
 
         {/* `actual_duration_minutes` e computado pela API e vem nulo enquanto
             faltar o inicio ou a conclusao. Nulo significa "ainda nao existe",
@@ -551,8 +593,10 @@ export function MissionCard({
             mediu. */}
         {mission.actual_duration_minutes !== null && (
           <>
-            <dt className="text-slate-400">Duração real</dt>
-            <dd data-testid="mission-actual-duration">{mission.actual_duration_minutes} min</dd>
+            <dt className="text-slate-400">{t('missions.card.actualDuration')}</dt>
+            <dd data-testid="mission-actual-duration">
+              {t('missions.card.minutes', { minutes: mission.actual_duration_minutes })}
+            </dd>
           </>
         )}
       </dl>
@@ -560,8 +604,8 @@ export function MissionCard({
       {/* "Iniciada em" so em andamento; concluida, o que conta e a duracao real. */}
       {mission.state === 'em_andamento' && mission.started_at !== null && (
         <p data-testid="mission-started-at" className="mt-2 text-sm text-slate-300">
-          <span className="text-slate-400">Iniciada em </span>
-          <time dateTime={mission.started_at}>{formatDeadline(mission.started_at)}</time>
+          <span className="text-slate-400">{t('missions.card.startedAt')} </span>
+          <time dateTime={mission.started_at}>{formatDeadline(mission.started_at, locale)}</time>
         </p>
       )}
 
@@ -631,7 +675,7 @@ export function MissionCard({
           data-testid="mission-reschedule-status"
           className="mt-2 text-sm text-emerald-300"
         >
-          {rescheduleStatusText(reschedule)}
+          {translateOrEmpty(rescheduleStatusText(reschedule), t)}
         </p>
       )}
 

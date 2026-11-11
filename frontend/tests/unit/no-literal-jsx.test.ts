@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { ESLint } from 'eslint'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 /**
  * A fitness function contra texto literal na interface ja traduzida: roda o
@@ -18,6 +18,19 @@ async function literalViolations(code: string, filePath = 'src/app/Fake.tsx'): P
 
 const component = (jsx: string) =>
   `const t = (key: string) => key\nexport function Fake() {\n  return ${jsx}\n}\n`
+
+/**
+ * O primeiro `lintText` carrega o config e os plugins do ESLint (custo de
+ * partida, nao o comportamento testado). Com a suite inteira sob cobertura
+ * numa maquina carregada, isso passou dos 5 s do primeiro caso e o reprovou;
+ * o aquecimento fica num gancho com prazo proprio, e cada caso mede so a
+ * regra.
+ */
+const WARM_UP_TIMEOUT_MS = 30_000
+
+beforeAll(async () => {
+  await literalViolations(component('null'))
+}, WARM_UP_TIMEOUT_MS)
 
 describe('nenhum texto literal no JSX do shell', () => {
   it.each([
@@ -44,21 +57,18 @@ describe('nenhum texto literal no JSX do shell', () => {
     expect(await literalViolations(component('<p>Olá</p>'), 'src/pages/Headquarters.tsx')).toBe(1)
   })
 
-  it('vale para a tutoria', async () => {
-    expect(await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.tsx')).toBe(
-      1,
-    )
-  })
-
-  it('nao vale para o teste da tutoria', async () => {
-    expect(
-      await literalViolations(component('<p>Olá</p>'), 'src/features/tutoring/Fake.test.tsx'),
-    ).toBe(0)
+  it.each([
+    ['a tutoria', 'src/features/tutoring/Fake.tsx'],
+    ['as missoes', 'src/features/missions/Fake.tsx'],
+  ])('vale para %s, ja migrada', async (_caso, filePath) => {
+    expect(await literalViolations(component('<p>Olá</p>'), filePath)).toBe(1)
   })
 
   it.each([
-    ['feature ainda nao migrada', 'src/features/missions/Fake.tsx'],
+    ['feature ainda nao migrada', 'src/features/progression/Fake.tsx'],
     ['teste do shell', 'src/app/Fake.test.tsx'],
+    ['teste das missoes', 'src/features/missions/Fake.test.tsx'],
+    ['teste da tutoria', 'src/features/tutoring/Fake.test.tsx'],
     ['o proprio i18n', 'src/shared/i18n/Fake.tsx'],
   ])('fora do escopo: %s', async (_caso, filePath) => {
     expect(await literalViolations(component('<p>Olá</p>'), filePath)).toBe(0)

@@ -506,10 +506,40 @@ esperado do catálogo `en`. O P7d (teto diário em inglês) passou a achar o
 campo pelo rótulo EN, que agora existe.
 
 Pendências:
-- `formatDeadline` (`shared/lib/deadline.ts`) ainda formata em `pt-BR` nos
-  dois idiomas; fica para quem migrar `shared/lib`.
+- `formatDeadline` (`shared/lib/deadline.ts`) já recebe o idioma (T8): os
+  cartões da tutoria formatam o prazo pelo `useLocale()`.
 - Números interpolados (`{count}`, `{max}`, `{value}`, `{minutes}`) saem sem
   `Intl.NumberFormat`; em `en` o contador mostra 4000, não 4,000.
+
+# i18n: missões no catálogo e datas por idioma — 2026-11-10
+
+Tarefa 8 do plano de i18n. Os textos de `features/missions` (quadro, cartão,
+evidência, reagendamento, histórico, avaliação, recompensa e ciclo) passam pelo
+`t()`, com 99 chaves `missions.*` nos dois catálogos; o PT é o texto anterior.
+O plural usa `plural()`: no ciclo, o zero de "dias seguidos" e de "faltam"
+aponta para a forma `other`, porque o CLDR `pt` põe o 0 em `one`.
+`formatCivilDate`, `civilWeekday` e `formatDeadline` recebem `locale: Locale`
+explícito, com um formatador por idioma (`shared/lib/formatterPerLocale.ts`);
+quem chama obtém o idioma de `useLocale()`. A tutoria já formata o prazo pelo
+idioma de `useLocale()`; só as campanhas (`CampaignTrail.tsx`), ainda não
+migradas, passam `'pt-BR'` por uma constante `DATE_LOCALE`. A regra contra
+literal no JSX passou a valer em `src/features/missions/**`.
+
+**Exceção registrada: números do texto sem formatação por idioma.** O `{max}`
+dos limites de evidência e de link ("4000", "2000") entra como `String(n)`,
+sem `Intl.NumberFormat`, igual ao `questionLimit` da tutoria. O EN mostra
+"4000" em vez de "4,000"; o PT continua "4000" (formatar daria "4.000" e
+mudaria o texto atual). Follow-up: formatar as variáveis numéricas dentro do
+`translate`, pelo idioma, para todas as áreas de uma vez.
+
+**Pendência para a migração de `campaigns`.** A falha de carga de missions usa
+`MissionsLoadFailure` (`features/missions/loadFailure.ts`): o estado guarda
+`{ kind: 'unexpected' }` sem texto, e a tela traduz no idioma corrente. O
+`LoadFailure` compartilhado (`shared/i18n/failureText.ts`) ainda grava a
+mensagem inesperada como texto. Quando `campaigns` migrar, ele deve adotar
+`{ kind: 'unexpected' }` sem texto; então `MissionsLoadFailure` e
+`LoadFailureMessage` saem, e o comentário do `LoadFailure` em `failureText.ts`,
+que promete a chave "no PR da área", é corrigido.
 
 # i18n: shell, erros de API e módulos de falha no catálogo — 2026-11-10
 

@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { isoToSaoPauloCivil } from '../../shared/lib/deadline'
+import { en } from '../../shared/i18n/messages/en'
 import type { Mission } from '../../shared/types/mission'
 import { renderWithI18n } from '../../test/i18n'
 import type { RescheduleFailure } from './rescheduleFailure'
@@ -343,5 +344,35 @@ describe('RescheduleForm', () => {
     abrir()
 
     expect(campo()).toHaveValue('2026-10-02T18:00')
+  })
+
+  it('em en, rotulos, bloqueios, aviso e botoes saem do catalogo ingles', () => {
+    const onSubmit = vi.fn()
+    const props: Props = { mission: missao, disabled: false, failure: null, onSubmit }
+    const view = renderWithI18n(<RescheduleForm {...props} />, { locale: 'en' })
+    fireEvent.click(screen.getByRole('button', { name: en['missions.reschedule.toggle'] }))
+    const prazo = screen.getByLabelText(en['missions.reschedule.deadlineLabel'])
+    expect(
+      screen.getByRole('group', { name: en['missions.reschedule.reasonLegend'] }),
+    ).toBeVisible()
+    expect(screen.getByTestId('reschedule-blocked')).toHaveTextContent(
+      en['missions.reschedule.blocked.missingReason'],
+    )
+
+    fireEvent.change(prazo, { target: { value: '' } })
+    expect(screen.getByTestId('reschedule-blocked')).toHaveTextContent(
+      en['missions.reschedule.blocked.missingDeadline'],
+    )
+
+    fireEvent.change(prazo, { target: { value: '2026-10-05T18:00' } })
+    fireEvent.click(screen.getByTestId('reschedule-reason-falta_de_tempo'))
+    expect(salvar()).toHaveTextContent(en['missions.reschedule.submit'])
+    fireEvent.click(salvar())
+    view.rerender(<RescheduleForm {...props} failure={falhaRetry} />)
+
+    expect(screen.getByTestId('reschedule-retry-notice')).toHaveTextContent(
+      en['missions.reschedule.retryNotice'],
+    )
+    expect(salvar()).toHaveTextContent(en['missions.action.retry'])
   })
 })

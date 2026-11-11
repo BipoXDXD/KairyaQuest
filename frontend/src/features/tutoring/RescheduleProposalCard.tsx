@@ -4,6 +4,7 @@ import { RESCHEDULE_REASON_LABELS } from '../../shared/types/mission'
 import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls'
 import type { ProposalCardProps, RescheduleMissionAction } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
+import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
 
 /**
@@ -87,6 +88,7 @@ export function RescheduleProposalCard({
   onGoToBoard,
 }: ProposalCardProps<RescheduleMissionAction>) {
   const t = useT()
+  const { locale } = useLocale()
   const {
     state: decision,
     confirm,
@@ -112,14 +114,14 @@ export function RescheduleProposalCard({
         <dt className="text-text-muted">{t('tutoring.reschedule.previousDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-previous-deadline" dateTime={payload.previous_deadline}>
-            {formatDeadline(payload.previous_deadline)}
+            {formatDeadline(payload.previous_deadline, locale)}
           </time>
         </dd>
 
         <dt className="text-text-muted">{t('tutoring.reschedule.newDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-new-deadline" dateTime={payload.new_deadline}>
-            {formatDeadline(payload.new_deadline)}
+            {formatDeadline(payload.new_deadline, locale)}
           </time>
         </dd>
       </dl>

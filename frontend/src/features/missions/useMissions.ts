@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestJson } from '../../shared/api/client'
-import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
+import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
 import type { Mission } from '../../shared/types/mission'
 
 /**
@@ -16,23 +16,13 @@ import type { Mission } from '../../shared/types/mission'
 export type MissionsState =
   | { status: 'loading' }
   | { status: 'empty' }
-  | { status: 'error'; failure: LoadFailure }
+  | { status: 'error'; failure: MissionsLoadFailure }
   | { status: 'loaded'; missions: Mission[] }
 
 export interface UseMissionsResult {
   state: MissionsState
   /** Repete o pedido. E o que torna o estado de erro acionavel. */
   reload: () => void
-}
-
-/**
- * A falha da carga, para a tela. O `ApiError` vira o texto do catalogo pelo
- * `kind`; sua `message` e de depuracao e nunca chega a tela. A leitura nao tem
- * erro de dominio com `code`: o que chega e rede ou servidor, e qualquer outra
- * coisa e defeito nosso, sem mensagem propria que ajude alguem.
- */
-function failureFor(error: unknown): LoadFailure {
-  return loadFailureFor(error, 'Falha inesperada ao carregar as missões.')
 }
 
 /**
@@ -80,7 +70,7 @@ export function useMissions(): UseMissionsResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', failure: failureFor(error) })
+        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
       })
 
     return () => {
