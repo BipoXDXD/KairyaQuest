@@ -113,12 +113,13 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 |---|---|
 | `make help` | Lista os alvos disponíveis do Makefile, com a descrição de cada um. |
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
-| `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-e2e` e `check-secrets`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
+| `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
-| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic` e os dois scripts de publicação, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação e `scripts/check_wheel.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
 | `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-handoff` | `scripts/check-handoff.sh`: reprova a branch cujo `git diff origin/main...HEAD` toca `docs/HANDOFF.md`, exceto as branches `wt/consolidar-handoff*`. A branch vem de `FQ_HANDOFF_BRANCH`, que o `check-push.sh` preenche com a ref enviada (o worktree do push é destacado). O handoff de cada PR mora em `docs/handoff/`. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
+| `make check-wheel` | `scripts/check-wheel.sh`: constrói o wheel (`uv build --wheel`, num diretório temporário) e `scripts/check_wheel.py` reprova se faltar nele, ou estiver vazio, algum `.md` de `src/**/prompts/` do checkout (lista derivada dos arquivos, não fixa; a conferência tem teste unitário com wheel falso no `check-api`). A imagem da API instala o wheel, e o pacote lê os `.md` por `importlib.resources`: um `.md` fora do build passaria nos testes (que rodam do checkout) e só quebraria no primeiro turno em produção. Fica fora do `check-api` porque o `uv build` baixa o backend de build (hatchling). |
 | `make format` | **Modifica** arquivos: aplica o Prettier (`prettier --write`) no frontend. Nunca é chamado por `check` nem por qualquer hook — é a única forma de o gate alterar arquivos **versionados**, e é manual. |
 | `make db-up` | `docker compose up -d --wait postgres`: sobe o PostgreSQL do `compose.yaml` e só devolve o controle com o healthcheck aprovado. |
 | `make db-down` | `docker compose down`: derruba o container **preservando** o volume (não usa `-v`). |
@@ -126,7 +127,7 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste** — só migra, não apaga. |
 | `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (**desde a Frente 0, cria o banco de teste se ele não existir**; depois apaga e recria o schema `public` dele, tudo atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
 
-Os alvos de verificação são os cinco `check-*`. `bootstrap`, `format`,
+Os alvos de verificação são os seis `check-*`. `bootstrap`, `format`,
 `db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
 ação manual — por isso nenhum deles tem job próprio no CI (seção 5).
 
@@ -546,7 +547,8 @@ verificação executa **um** alvo, e nada além dele:
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
-| `quality-gate` | nenhum alvo: agrega os cinco acima | — | 5 |
+| `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
+| `quality-gate` | nenhum alvo: agrega os seis acima | — | 5 |
 
 Depois do gate, somente em push da `main`, `publish-api` e `publish-web`
 executam build e push de uma tag pelo commit com AMD64 e
@@ -560,7 +562,7 @@ O helper `scripts/promote_images.py` consulta o HEAD atual da `main` antes e
 depois do preflight; uma execução superada conserva sua tag por commit e não
 escreve os aliases. O alvo revalida os digests antes de
 atualizar `main`/`latest`; confere cada alias depois da escrita. São jobs de
-publicação, separados dos cinco jobs de qualidade da tabela. Só eles recebem
+publicação, separados dos seis jobs de qualidade da tabela. Só eles recebem
 `packages: write`, com autenticação pelo `GITHUB_TOKEN` temporário. Actions,
 QEMU e BuildKit usados na publicação ficam fixados por SHA/digest. A concorrência
 já existente da `main` cobre o workflow inteiro, incluindo publicação, sem

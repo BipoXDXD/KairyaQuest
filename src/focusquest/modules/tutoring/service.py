@@ -70,7 +70,7 @@ from focusquest.modules.tutoring.domain import (
     validar_transicao_da_acao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
-from focusquest.modules.tutoring.persona import PERSONA
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import (
     Delta,
     Parada,
@@ -85,6 +85,7 @@ from focusquest.modules.tutoring.schemas import (
     RescheduleProposal,
     RetratoDoReagendamento,
 )
+from focusquest.modules.users.service import ler_idioma
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
 # limite total so e conferido quando um evento chega: um
@@ -189,8 +190,13 @@ def preparar_turno(
     ve a `gerando` da primeira. O indice parcial do banco e a garantia de
     ultimo recurso; a trava e o que faz a recusa sair como erro de dominio.
     A hora e lida depois da trava, pelo mesmo motivo da conclusao (C13).
+
+    O idioma tambem: lido na mesma transacao, logo depois da trava, ele vale
+    para o turno inteiro. Um turno ja em stream termina no idioma antigo, e o
+    proximo sai no novo.
     """
     session.execute(select(User.id).where(User.id == user_id).with_for_update())
+    idioma = ler_idioma(session, user_id)
     agora = clock()
     _recolher_orfaos(session, user_id, agora - tutoria.limite - FOLGA_DO_ORFAO)
 
@@ -250,7 +256,7 @@ def preparar_turno(
     session.flush()
 
     turno = montar_turno(
-        persona=PERSONA,
+        persona=persona_do_idioma(idioma),
         agora=agora,
         pendentes=[
             missao

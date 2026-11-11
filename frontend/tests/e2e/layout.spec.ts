@@ -165,7 +165,7 @@ for (const viewport of [
             ['veteran_10', 'Veterano I'],
             ['veteran_50', 'Veterano II'],
             ['veteran_100', 'Veterano III'],
-            ['tifa_partnership', 'Parceria com a Kairya'],
+            ['kairya_partnership', 'Parceria com a Kairya'],
           ].map(([code, title]) => ({
             code,
             title,

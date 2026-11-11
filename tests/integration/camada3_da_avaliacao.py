@@ -32,6 +32,7 @@ import anthropic
 from pydantic import ValidationError
 
 from focusquest.core.config import Settings
+from focusquest.core.idioma import Idioma
 from focusquest.modules.evaluation.rubric import (
     FERRAMENTA_DA_AVALIACAO,
     montar_turno_da_avaliacao,
@@ -72,7 +73,7 @@ def capturar(
 ) -> tuple[list[str], dict[str, Any] | None]:
     """A sequencia de tipos e o que `avaliar` devolveu."""
     entrada = provedor.avaliar(
-        montar_turno_da_avaliacao(TENTATIVA), FERRAMENTA_DA_AVALIACAO
+        montar_turno_da_avaliacao(TENTATIVA, Idioma.PT_BR), FERRAMENTA_DA_AVALIACAO
     )
     return sequencia_de_tipos(espiao.linhas()), entrada
 
