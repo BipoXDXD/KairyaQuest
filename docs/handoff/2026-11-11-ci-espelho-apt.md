@@ -16,7 +16,11 @@ fora, pelos mesmos motivos.
   Reexecuções às 11:44, 11:57, ~12:20 e ~13:04 BRT falharam do mesmo jeito. Em
   outro repositório, a mesma troca baixou do kernel.org às 16:12Z e passou.
 - A troca vem antes do `--with-deps`, que é quem chama o apt.
-- A 1ª tentativa usa o espelho padrão: com o DNS normal, nada muda.
+- Antes da 1ª tentativa, `timeout 10 getent hosts archive.ubuntu.com`: sem
+  resposta, o apt já começa no kernel.org. Com os retries, uma 1ª tentativa
+  contra o host sem DNS gastava ~11 min e estourava o teto do job (medido no
+  outro repositório). Com o DNS normal, a 1ª tentativa usa o espelho padrão e
+  nada muda.
 - Há no máximo 3 tentativas, com espera de 30 s e 60 s entre elas. O
   `Acquire::Retries "5"` cobre falhas de pacote isoladas.
 
