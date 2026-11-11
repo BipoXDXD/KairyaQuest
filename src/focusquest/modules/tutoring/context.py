@@ -83,11 +83,13 @@ def montar_turno(
 ) -> Turno:
     """O turno inteiro.
 
-    O "agora" vai no sistema porque a Kairya precisa propor um prazo, e o
-    prazo e obrigatorio. As missoes pendentes sao o `get_study_context` do
-    README s6, so leitura: entram no prompt, e nao viram ferramenta. O
-    progresso e a mesma coisa (D15): a Kairya SABE o nivel, o saldo e as
-    conquistas, mas nenhuma ferramenta muda nada disso.
+    A persona e o `sistema`, o prefixo estatico que o provedor guarda em
+    cache; o cabecalho e o JSON do turno vao em `contexto`, fora dele, porque
+    mudam a cada pergunta. O "agora" vai no contexto porque a Kairya precisa
+    propor um prazo, e o prazo e obrigatorio. As missoes pendentes sao o
+    `get_study_context` do README s6, so leitura: entram no prompt, e nao
+    viram ferramenta. O progresso e a mesma coisa (D15): a Kairya SABE o
+    nivel, o saldo e as conquistas, mas nenhuma ferramenta muda nada disso.
 
     As `tardias` sao as missoes do ciclo em conclusao tardia (F25,
     `tardias_do_ciclo`): a Kairya sabe que ainda da para concluir, mas elas nao

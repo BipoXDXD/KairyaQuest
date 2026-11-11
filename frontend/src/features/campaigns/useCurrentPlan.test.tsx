@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { requestsTo, routeFetch } from '../../test/fetchRoutes'
+import { requestsTo, routeFetch, type Route } from '../../test/fetchRoutes'
 import type { Plan } from './types'
 import { useCurrentPlan } from './useCurrentPlan'
 
@@ -415,6 +415,170 @@ describe('useCurrentPlan', () => {
       status: 'loaded',
       plan: planoAtualizado,
       refreshFailed: false,
+    })
+  })
+
+  // Pendencia 65: mesma prova do `useCycle` (tres ou quatro pedidos em voo,
+  // respondendo em ordens adversas), mais a variacao `no-plan`, que so este
+  // hook tem.
+  describe('tres ou mais refresh concorrentes', () => {
+    /**
+     * Cada chamada a `/api/plans/current` depois das `prontas` primeiras fica
+     * em voo ate o teste responder pelo indice (0 = primeira em voo).
+     *
+     * `responder` cede um macrotask inteiro dentro do `act`: a resposta
+     * percorre todo o `requestJson` antes da assercao seguinte, e um
+     * "ignorado" nao passa vacuamente.
+     */
+    function emVoo(prontas: Response[]) {
+      const pendentes: ((resposta: Response) => void)[] = []
+      const route: Route = (_init, call) => {
+        const pronta = prontas[call - 1]
+        if (pronta !== undefined) return pronta
+        return new Promise<Response>((resolve) => {
+          pendentes.push(resolve)
+        })
+      }
+      async function responder(indice: number, resposta: Response) {
+        const resolve = pendentes[indice]
+        if (resolve === undefined) throw new Error(`o pedido ${String(indice)} nao saiu`)
+        await act(async () => {
+          resolve(resposta)
+          await new Promise((pronto) => setTimeout(pronto, 0))
+        })
+      }
+      return { route, responder }
+    }
+
+    const comProgresso = (progress: number): Plan => ({
+      ...plano,
+      special: { availability: 'bloqueada', progress, mission: null },
+    })
+    const carregado = (plan: Plan, refreshFailed: boolean) => ({
+      status: 'loaded',
+      plan,
+      refreshFailed,
+    })
+
+    /** Monta o hook com a carga inicial pronta (`plano`) e ja assentada. */
+    async function carregarComRotas(route: Route) {
+      routeFetch({ 'GET /api/plans/current': route })
+      const { result } = renderHook(() => useCurrentPlan())
+      await waitFor(() => {
+        expect(result.current.state).toEqual(carregado(plano, false))
+      })
+      return result
+    }
+
+    /** Dispara tres `refresh` no mesmo `act`, como a rajada da aba que volta. */
+    function pedirTresRefresh(result: { current: { refresh: () => void } }) {
+      act(() => {
+        result.current.refresh()
+        result.current.refresh()
+        result.current.refresh()
+      })
+    }
+
+    it('F1 tres refresh respondendo na ordem inversa: fica o dado do terceiro', async () => {
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json({ plan: comProgresso(30) }))
+      expect(result.current.state).toEqual(carregado(comProgresso(30), false))
+      await responder(1, Response.json({ plan: comProgresso(20) }))
+      await responder(0, Response.json({ plan: comProgresso(10) }))
+
+      expect(result.current.state).toEqual(carregado(comProgresso(30), false))
+    })
+
+    it('F2 dois sucessos velhos e a falha do mais recente: mantem a carga e liga o aviso', async () => {
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(0, Response.json({ plan: comProgresso(10) }))
+      await responder(1, Response.json({ plan: comProgresso(20) }))
+      expect(result.current.state).toEqual(carregado(plano, false))
+      await responder(2, new Response(null, { status: 500 }))
+
+      expect(result.current.state).toEqual(carregado(plano, true))
+    })
+
+    it('F3 o mais recente tem sucesso e os dois velhos falham depois: sem aviso', async () => {
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json({ plan: comProgresso(30) }))
+      await responder(0, new Response(null, { status: 500 }))
+      await responder(1, new Response(null, { status: 500 }))
+
+      expect(result.current.state).toEqual(carregado(comProgresso(30), false))
+    })
+
+    it('F4 um reload no meio da rajada: so o refresh pedido depois dele conta', async () => {
+      // Em voo, na ordem das chamadas: 0 = r1, 1 = r2, 2 = carga do reload
+      // (o efeito roda dentro do `act` do reload), 3 = r3.
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      act(() => {
+        result.current.refresh()
+        result.current.refresh()
+      })
+      act(() => {
+        result.current.reload()
+      })
+      expect(result.current.state).toEqual({ status: 'loading' })
+      act(() => {
+        result.current.refresh()
+      })
+
+      await responder(3, Response.json({ plan: comProgresso(40) }))
+      expect(result.current.state).toEqual(carregado(comProgresso(40), false))
+      await responder(2, Response.json({ plan: comProgresso(90) }))
+      await responder(1, Response.json({ plan: comProgresso(80) }))
+      await responder(0, Response.json({ plan: comProgresso(70) }))
+
+      expect(result.current.state).toEqual(carregado(comProgresso(40), false))
+    })
+
+    it('F5 rajada durante a carga inicial: o sucesso velho nao tira do carregando, e a falha do mais recente vira erro', async () => {
+      // Em voo: 0 = carga inicial, 1 a 3 = os tres refresh.
+      const { route, responder } = emVoo([])
+      routeFetch({ 'GET /api/plans/current': route })
+      const { result } = renderHook(() => useCurrentPlan())
+      expect(result.current.state).toEqual({ status: 'loading' })
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json({ plan: comProgresso(20) }))
+      expect(result.current.state).toEqual({ status: 'loading' })
+      await responder(3, new Response(null, { status: 503 }))
+      expect(result.current.state).toEqual({
+        status: 'error',
+        failure: HTTP_FAILURE,
+      })
+      await responder(0, Response.json({ plan: comProgresso(10) }))
+      await responder(1, Response.json({ plan: comProgresso(10) }))
+
+      expect(result.current.state).toEqual({
+        status: 'error',
+        failure: HTTP_FAILURE,
+      })
+    })
+
+    it('F6 o mais recente descobre a semana sem plano; os velhos com plano chegam depois e sao ignorados', async () => {
+      const { route, responder } = emVoo([Response.json({ plan: plano })])
+      const result = await carregarComRotas(route)
+
+      pedirTresRefresh(result)
+      await responder(2, Response.json({ plan: null }))
+      expect(result.current.state).toEqual({ status: 'no-plan' })
+      await responder(0, Response.json({ plan: comProgresso(5) }))
+      await responder(1, Response.json({ plan: planoAtualizado }))
+
+      expect(result.current.state).toEqual({ status: 'no-plan' })
     })
   })
 

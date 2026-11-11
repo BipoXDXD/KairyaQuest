@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/api/client'
+import { leadFor } from '../../shared/api/transportFailure'
 import type { FailureText } from '../../shared/i18n/failureText'
 import type { StartErrorCode } from './types'
 
@@ -51,13 +52,16 @@ export const START_FAILURE_BY_CODE: Readonly<Record<StartErrorCode, StartFailure
 }
 
 /**
- * A falha sem `code` conhecido: rede fora, 5xx, code de um backend mais novo.
- * A mensagem diz a unica coisa certa -- que repetir nao duplica.
+ * A falha sem `code` conhecido: rede fora, prazo, 5xx, code de um backend mais
+ * novo. A abertura diz a causa quando ela e de transporte (`leadFor`); o fim
+ * diz a unica coisa certa -- que repetir nao duplica.
  */
-const UNCONFIRMED: StartFailure = {
-  message: 'missions.startFailure.unconfirmed.message',
-  recovery: 'missions.startFailure.unconfirmed.recovery',
-  action: 'retry',
+function unconfirmed(error: unknown): StartFailure {
+  return {
+    message: leadFor(error, 'missions.startFailure.unconfirmed.message'),
+    recovery: 'missions.startFailure.unconfirmed.recovery',
+    action: 'retry',
+  }
 }
 
 /**
@@ -81,5 +85,5 @@ export function describeStartFailure(error: unknown): StartFailure {
   if (error instanceof ApiError && error.status === 404 && error.code === null) {
     return START_FAILURE_BY_CODE.missao_nao_encontrada
   }
-  return UNCONFIRMED
+  return unconfirmed(error)
 }

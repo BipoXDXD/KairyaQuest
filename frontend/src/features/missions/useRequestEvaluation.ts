@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { postJson } from '../../shared/api/client'
+import { EVALUATION_TIMEOUT_MS, postJson } from '../../shared/api/client'
 import { describeEvaluationFailure, type EvaluationFailure } from './evaluationFailure'
 import type { EvaluationResult } from './types'
 
@@ -24,6 +24,10 @@ export interface UseRequestEvaluationResult {
  * ambos `idle`. Um POST duplicado gastaria uma chamada do modelo a toa (o
  * bonus, esse, nunca e concedido duas vezes: o backend e idempotente).
  *
+ * O POST tem prazo proprio (`EVALUATION_TIMEOUT_MS`, derivado do corte do
+ * orfao no backend): uma avaliacao que nenhuma camada responde vira falha
+ * `retry`, em vez de prender o botao em "avaliando" para sempre.
+ *
  * `onRewarded` so e chamado quando a resposta traz `reward` (nem ausente, nem
  * `null`) -- o quadro
  * recarrega o XP; sem bonus, nada mudou de tela.
@@ -42,7 +46,11 @@ export function useRequestEvaluation(
     inFlight.current = true
     setState({ status: 'requesting' })
 
-    postJson<EvaluationResult>(`/missions/${String(missionId)}/evaluation`, {})
+    postJson<EvaluationResult>(
+      `/missions/${String(missionId)}/evaluation`,
+      {},
+      { timeoutMs: EVALUATION_TIMEOUT_MS },
+    )
       .then((result) => {
         setState({ status: 'done', result })
         if (result.reward != null) {

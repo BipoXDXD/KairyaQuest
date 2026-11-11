@@ -36,6 +36,8 @@ export const ptBR = {
   'shared.apiError.format.recovery': 'Tente de novo.',
   'shared.apiError.interrupted.message': 'A resposta foi interrompida no caminho.',
   'shared.apiError.interrupted.recovery': 'Tente de novo.',
+  'shared.transportFailure.timeout': 'A resposta demorou mais que o esperado.',
+  'shared.transportFailure.network': 'Não foi possível conectar.',
 
   'missions.state.pending': 'Pendente',
   'missions.state.inProgress': 'Em andamento',

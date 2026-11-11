@@ -35,6 +35,8 @@ export const en = {
   'shared.apiError.interrupted.message':
     "The response didn't arrive in full. The connection dropped midway.",
   'shared.apiError.interrupted.recovery': 'Try again.',
+  'shared.transportFailure.timeout': "The response didn't arrive. It took longer than expected.",
+  'shared.transportFailure.network': "Couldn't connect. The server couldn't be reached.",
 
   'missions.state.pending': 'Pending',
   'missions.state.inProgress': 'In progress',

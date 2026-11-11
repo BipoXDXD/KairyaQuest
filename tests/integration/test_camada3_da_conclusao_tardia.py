@@ -55,8 +55,9 @@ def test_o_contexto_traz_a_diaria_de_ontem_tardia_e_a_avulsa_pelo_id(
     falso.roteiro = Roteiro(blocos=(Texto(("Certo.",)),))
     _capturar(falso)
     corpo = falso.recebidas[-1].corpo
-    assert corpo["system"][0]["text"] == PERSONA
-    contexto = json.loads(falso.recebidas[-1].contexto_do_turno.splitlines()[-1])
+    recebida = falso.recebidas[-1]
+    assert recebida.prefixo_cacheado == [PERSONA]
+    contexto = recebida.dados_do_contexto
     assert contexto["late_cycle_missions"] == [
         {
             "kind": "diária de ontem",

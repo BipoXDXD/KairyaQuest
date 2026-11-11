@@ -1,9 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { MUTATION_TIMEOUT_MS } from '../../shared/api/client'
 import type { Mission } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { useCompleteMission } from './useCompleteMission'
 import { useCompletionRegistry } from './useCompletionRegistry'
+import { jsonBody, pendingUntilAborted, requestsTo, routeFetch } from '../../test/fetchRoutes'
 
 const concluida: Mission = {
   id: 7,
@@ -525,6 +527,32 @@ describe('useCompleteMission', () => {
       expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
     })
 
+    it('E4 com o prazo vencido o rascunho continua no registro e o retry fica pendente', async () => {
+      vi.useFakeTimers()
+      try {
+        routeFetch({ 'POST /api/missions/7/complete': pendingUntilAborted })
+        const { result } = renderCompletion()
+        result.current.registry.saveDraft(7, { text: 'Feito', link: '' })
+
+        act(() => {
+          result.current.complete({ text: 'Feito', link: '' })
+        })
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS)
+        })
+
+        expect(result.current.state).toMatchObject({
+          status: 'failed',
+          failure: { message: 'shared.transportFailure.timeout', action: 'retry' },
+        })
+        expect(result.current.registry.draftFor(7)).toEqual({ text: 'Feito', link: '' })
+        expect(result.current.registry.isRetryPending(7)).toBe(true)
+        expect(result.current.registry.operationIdFor(7)).toBe(PRIMEIRA_CHAVE)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it.each(['transicao_ilegal', 'missao_nao_encontrada', 'operacao_reutilizada'])(
       'numa falha sem retry (%s) a chave sai, mas o rascunho FICA (E17)',
       async (code) => {
@@ -638,6 +666,91 @@ describe('useCompleteMission', () => {
         expect(result.current.state.status).toBe('completed')
       })
       expect(result.current.registry.draftFor(7)).toEqual({ text: '', link: '' })
+    })
+  })
+
+  describe('prazo', () => {
+    const ROTA = 'POST /api/missions/7/complete'
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('E1 um Concluir pendurado falha ao fim do prazo, oferecendo repetir', async () => {
+      vi.useFakeTimers()
+      routeFetch({ [ROTA]: pendingUntilAborted })
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+      })
+      expect(result.current.state).toEqual({ status: 'submitting' })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(result.current.state).toMatchObject({
+        status: 'failed',
+        failure: { message: 'shared.transportFailure.timeout', action: 'retry' },
+      })
+    })
+
+    it('E2 a recarga pedida durante o voo acontece quando o prazo vence', async () => {
+      vi.useFakeTimers()
+      routeFetch({ [ROTA]: pendingUntilAborted })
+      const { result, reload } = renderCompletion()
+
+      act(() => {
+        result.current.complete()
+        result.current.requestReload()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS - 1)
+      })
+      expect(reload).not.toHaveBeenCalled()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(reload).toHaveBeenCalledTimes(1)
+    })
+
+    it('E3 depois do prazo, o tentar de novo reenvia a MESMA chave e desarma o timer', async () => {
+      vi.useFakeTimers()
+      const fetchMock = routeFetch({
+        [ROTA]: (init, call) =>
+          call === 1 ? pendingUntilAborted(init, call) : Response.json(concluidaResposta),
+      })
+      const { result } = renderCompletion()
+
+      act(() => {
+        result.current.complete()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MUTATION_TIMEOUT_MS)
+      })
+      act(() => {
+        result.current.complete()
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(result.current.state).toEqual({
+        status: 'completed',
+        mission: concluida,
+        reward: recompensa,
+      })
+      expect(
+        requestsTo(fetchMock, ROTA).map(
+          (init) => (jsonBody(init) as { operation_id: string }).operation_id,
+        ),
+      ).toEqual([PRIMEIRA_CHAVE, PRIMEIRA_CHAVE])
+      // A resposta chegou antes do prazo: o timer do segundo envio foi desarmado.
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
 })
