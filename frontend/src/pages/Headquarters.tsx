@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { KairyaBubble } from '../features/kairya'
-import { CycleSection, type CycleSectionHandle } from '../features/missions/CycleSection'
-import { MissionList, type MissionListHandle } from '../features/missions/MissionList'
-import { ProgressPanel, type ProgressPanelHandle } from '../features/progression/ProgressPanel'
-import { TutorPanel } from '../features/tutoring/TutorPanel'
+import {
+  CycleSection,
+  type CycleSectionHandle,
+  MissionList,
+  type MissionListHandle,
+} from '../features/missions'
+import { ProgressPanel, type ProgressPanelHandle } from '../features/progression'
+import { TutorPanel } from '../features/tutoring'
 import { useT } from '../shared/i18n/useT'
 import { AreaHero } from './AreaHero'
 import { HEADQUARTERS_HEADING_ID } from './headings'
