@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './saudacaoJaVista'
 import { GALLERY_CASE_IDS, type GalleryCaseId } from '../../src/test/gallery/caseIds'
 
 /**

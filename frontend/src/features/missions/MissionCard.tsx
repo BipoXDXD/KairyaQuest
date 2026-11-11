@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { formatDeadline } from '../../shared/lib/deadline'
 import { MAX_DIFFICULTY, MISSION_STATE_LABELS, type Mission } from '../../shared/types/mission'
 import { EvaluationPanel } from './EvaluationPanel'
@@ -10,7 +10,12 @@ import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
 import type { EvidenceDraft, OpenReschedule } from './types'
-import { useCompleteMission, type CompletionState } from './useCompleteMission'
+import { completionEvents, useKairya } from '../kairya'
+import {
+  useCompleteMission,
+  type CompletionOutcome,
+  type CompletionState,
+} from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useRescheduleMission, type RescheduleState } from './useRescheduleMission'
 import { useStartMission, type StartState } from './useStartMission'
@@ -438,7 +443,15 @@ export function MissionCard({
 }) {
   const t = useT()
   const { locale } = useLocale()
-  const { state: completion, complete } = useCompleteMission(listed.id, registry, onCompleted)
+  const { dispatchAll } = useKairya()
+  const handleCompleted = useCallback(
+    (outcome: CompletionOutcome) => {
+      dispatchAll(completionEvents({ type: outcome.mission.mission_type, reward: outcome.reward }))
+      onCompleted?.()
+    },
+    [dispatchAll, onCompleted],
+  )
+  const { state: completion, complete } = useCompleteMission(listed.id, registry, handleCompleted)
   const { state: start, start: startMission } = useStartMission(listed.id, registry)
   const {
     state: reschedule,

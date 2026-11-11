@@ -7,6 +7,12 @@ import { describeEvidence } from './evidenceLimit'
 import type { EvidenceDraft } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 
+/** O que a conclusao entrega a quem reage a ela: a missao (sem `reward`) e a recompensa. */
+export interface CompletionOutcome {
+  mission: Mission
+  reward: Reward | null | undefined
+}
+
 /**
  * Os estados da conclusao de UMA missao, como uniao discriminada.
  *
@@ -81,12 +87,13 @@ export interface UseCompleteMissionResult {
  * em "Concluindo..." para sempre, e a recarga que esperava o voo acontece.
  *
  * Quem precisa reagir ao sucesso -- a secao do ciclo atualiza a sequencia --
- * passa `onCompleted`; o quadro de avulsas nao passa nada.
+ * passa `onCompleted`, que recebe a missao e a recompensa; o quadro de avulsas
+ * nao passa nada.
  */
 export function useCompleteMission(
   missionId: number,
   registry: CompletionRegistry,
-  onCompleted?: () => void,
+  onCompleted?: (outcome: CompletionOutcome) => void,
 ): UseCompleteMissionResult {
   const [state, setState] = useState<CompletionState>({ status: 'idle' })
   const inFlight = useRef(false)
@@ -131,7 +138,7 @@ export function useCompleteMission(
           // chamador que lance nao pode cair no `.catch` abaixo e virar
           // "falhou". Fica registrado, sem mexer no estado.
           try {
-            onCompleted?.()
+            onCompleted?.({ mission, reward })
           } catch (error) {
             console.error('onCompleted lancou depois da conclusao:', error)
           }

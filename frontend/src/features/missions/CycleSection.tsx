@@ -7,6 +7,7 @@ import {
   type ReactElement,
   type Ref,
 } from 'react'
+import { useKairya } from '../kairya'
 import { formatCivilDate } from '../../shared/lib/civilDate'
 import { saoPauloCivilDate } from '../../shared/lib/deadline'
 import { DAYS_PER_MILESTONE, type Mission } from '../../shared/types/mission'
@@ -322,6 +323,15 @@ export function CycleSection({
   const { state, reload, refresh } = useCycle()
   useImperativeHandle(ref, () => ({ refresh }), [refresh])
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
+  const { reportStreak } = useKairya()
+
+  // A saudação do dia nasce de uma leitura boa do ciclo. Com `refreshFailed`
+  // a sequência pode estar velha: tratá-la como atual faria "zerou" de mentira.
+  useEffect(() => {
+    if (state.status === 'loaded' && !state.refreshFailed) {
+      reportStreak(state.cycle.streak)
+    }
+  }, [state, reportStreak])
 
   useEffect(() => {
     if (state.status === 'loaded' && !state.refreshFailed) {

@@ -335,7 +335,8 @@ class ProvedorAnthropic:
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
         """A entrada da chamada de `ferramenta`, ou `None` se o modelo nao a chamou
-        ou se a resposta parou por `stop_reason` diferente de `tool_use`.
+        ou se a resposta parou por `stop_reason` diferente de `tool_use`, ou
+        ainda se chamou a ferramenta mais de uma vez.
 
         `tool_choice` e `auto` (EM3), e nao FORCADO na ferramenta: em alguns
         modelos o forcado da 400 ou exige thinking desligado (ver a referencia
@@ -352,7 +353,7 @@ class ProvedorAnthropic:
             "input_schema": ferramenta.esquema,
             "strict": True,
         }
-        entrada: dict[str, Any] | None = None
+        entradas: list[dict[str, Any]] = []
         terminou = False
         motivo_da_parada: str | None = None
         with (
@@ -374,7 +375,7 @@ class ProvedorAnthropic:
                     and isinstance(evento.content_block, ToolUseBlock)
                     and evento.content_block.name == ferramenta.nome
                 ):
-                    entrada = dict(evento.content_block.input)
+                    entradas.append(dict(evento.content_block.input))
                 elif evento.type == "message_delta":
                     motivo_da_parada = evento.delta.stop_reason
                 elif evento.type == "message_stop":
@@ -385,4 +386,7 @@ class ProvedorAnthropic:
             # `max_tokens` (ou outra parada) deixa um `input` possivelmente
             # parcial: nao o entrega como se fosse uma avaliacao valida.
             return None
-        return entrada
+        # Duas chamadas da ferramenta sao ambiguas (qual veredito vale?) e a
+        # requisicao ja manda `disable_parallel_tool_use`: invalida, em vez de
+        # "o ultimo vence" (decisao da coordenacao, pendencia 97/c1).
+        return entradas[0] if len(entradas) == 1 else None

@@ -353,6 +353,9 @@ describe('useCompleteMission', () => {
       })
     })
     expect(onCompleted).toHaveBeenCalledTimes(1)
+    // Recebe a missao SEM a chave `reward`, e a recompensa a parte.
+    expect(onCompleted).toHaveBeenCalledWith({ mission: concluida, reward: recompensa })
+    expect(onCompleted.mock.calls[0]?.[0].mission).not.toHaveProperty('reward')
 
     onCompleted.mockClear()
     vi.stubGlobal(
@@ -372,6 +375,20 @@ describe('useCompleteMission', () => {
       expect(resultFalha.current.state.status).toBe('failed')
     })
     expect(onCompleted).not.toHaveBeenCalled()
+  })
+
+  it('onCompleted recebe reward undefined quando a resposta vem sem a chave', async () => {
+    const onCompleted = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json(concluida)))
+    const { result } = renderCompletion(onCompleted)
+
+    act(() => {
+      result.current.complete()
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('completed')
+    })
+    expect(onCompleted).toHaveBeenCalledWith({ mission: concluida, reward: undefined })
   })
 
   it('um onCompleted que lanca nao vira falha: a conclusao ja aconteceu no servidor', async () => {

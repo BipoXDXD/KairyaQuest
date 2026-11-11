@@ -42,5 +42,5 @@ export function KairyaPresenceProvider({
     () => ({ state, dispatch, dispatchAll, reportStreak }),
     [state, dispatch, dispatchAll, reportStreak],
   )
-  return <KairyaContext.Provider value={value}>{children}</KairyaContext.Provider>
+  return <KairyaContext value={value}>{children}</KairyaContext>
 }

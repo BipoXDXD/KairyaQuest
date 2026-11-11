@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from focusquest.core.base import Base
 from focusquest.core.idioma import Idioma
+from focusquest.core.texto_de_enum import TextoDeEnum
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
     FalhaDaAvaliacao,
@@ -66,89 +67,6 @@ _ORIGENS_ANTIGAS: dict[str, OrigemDoReagendamento] = {
 }
 _ORIGENS_SQL = ", ".join(f"'{o}'" for o in (*OrigemDoReagendamento, *_ORIGENS_ANTIGAS))
 _TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
-
-
-class MissionStateText(TypeDecorator[MissionState]):
-    """TEXT no banco, MissionState no Python.
-
-    Sem este decorador a anotacao `Mapped[MissionState]` so valeria na IDA:
-    MissionState e StrEnum, entao o driver grava 'pendente' sem ajuda
-    nenhuma. E a VOLTA que quebra -- o PostgreSQL devolve uma str crua, e
-    depois do primeiro refresh `missao.state is MissionState.PENDENTE` passa
-    a ser falso enquanto `==` continua verdadeiro, justamente porque StrEnum
-    compara igual a str. E o tipo de defeito que nao aparece em teste
-    nenhum que use `==`, e que estoura em um `match` ou em um `is` meses
-    depois.
-
-    A alternativa seria `sa.Enum(MissionState, native_enum=False)`, que gera
-    VARCHAR(n) com CHECK proprio -- e a migracao criou TEXT com um CHECK
-    nomeado. Um TypeDecorator sobre Text converte sem mudar o tipo da coluna.
-    """
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(self, value: Any, dialect: Dialect) -> MissionState:
-        # Sem tratar None: a coluna e NOT NULL na migracao. Se um None
-        # chegasse aqui, o esquema teria divergido do modelo, e o ValueError
-        # de `MissionState(None)` e a reacao certa -- devolver None em
-        # silencio esconderia a divergencia atras de um AttributeError em
-        # outro lugar.
-        return MissionState(value)
-
-
-class MissionTypeText(TypeDecorator[MissionType]):
-    """TEXT no banco, MissionType no Python -- mesmo motivo de MissionStateText."""
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(self, value: Any, dialect: Dialect) -> MissionType:
-        return MissionType(value)
-
-
-class EstadoDaAvaliacaoText(TypeDecorator[EstadoDaAvaliacao]):
-    """TEXT no banco, EstadoDaAvaliacao no Python (como MissionStateText)."""
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(self, value: Any, dialect: Dialect) -> EstadoDaAvaliacao:
-        return EstadoDaAvaliacao(value)
-
-
-class VereditoText(TypeDecorator[Veredito]):
-    """TEXT no banco, Veredito no Python. A coluna e nulavel: None volta None."""
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(self, value: Any, dialect: Dialect) -> Veredito | None:
-        return None if value is None else Veredito(value)
-
-
-class FalhaDaAvaliacaoText(TypeDecorator[FalhaDaAvaliacao]):
-    """TEXT no banco, FalhaDaAvaliacao no Python. Nulavel, como VereditoText."""
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(
-        self, value: Any, dialect: Dialect
-    ) -> FalhaDaAvaliacao | None:
-        return None if value is None else FalhaDaAvaliacao(value)
-
-
-class MotivoDoReagendamentoText(TypeDecorator[MotivoDoReagendamento]):
-    """TEXT no banco, MotivoDoReagendamento no Python (como MissionStateText)."""
-
-    impl = Text
-    cache_ok = True
-
-    def process_result_value(
-        self, value: Any, dialect: Dialect
-    ) -> MotivoDoReagendamento:
-        return MotivoDoReagendamento(value)
 
 
 class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
@@ -248,12 +166,12 @@ class Mission(Base):
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # O tipo e passado por quem cria (sem default no modelo nem no banco),
     # pelo mesmo motivo do `state` explicito em `criar_missao`.
-    mission_type: Mapped[MissionType] = mapped_column(MissionTypeText)
+    mission_type: Mapped[MissionType] = mapped_column(TextoDeEnum(MissionType))
     plan_id: Mapped[int | None] = mapped_column(Integer, default=None)
     day: Mapped[date | None] = mapped_column(Date, default=None)
     # O estado e texto no banco (TEXT + CHECK) e StrEnum no Python.
     state: Mapped[MissionState] = mapped_column(
-        MissionStateText, server_default=MissionState.PENDENTE.value
+        TextoDeEnum(MissionState), server_default=MissionState.PENDENTE.value
     )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
@@ -388,7 +306,9 @@ class MissionReschedule(Base):
     )
     previous_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     new_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    reason: Mapped[MotivoDoReagendamento] = mapped_column(MotivoDoReagendamentoText)
+    reason: Mapped[MotivoDoReagendamento] = mapped_column(
+        TextoDeEnum(MotivoDoReagendamento)
+    )
     origin: Mapped[OrigemDoReagendamento] = mapped_column(OrigemDoReagendamentoText)
     rescheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -454,12 +374,14 @@ class MissionEvaluation(Base):
     mission_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("missions.id", ondelete="CASCADE")
     )
-    state: Mapped[EstadoDaAvaliacao] = mapped_column(EstadoDaAvaliacaoText)
+    state: Mapped[EstadoDaAvaliacao] = mapped_column(TextoDeEnum(EstadoDaAvaliacao))
     attempt: Mapped[int] = mapped_column(Integer)
-    verdict: Mapped[Veredito | None] = mapped_column(VereditoText, default=None)
+    verdict: Mapped[Veredito | None] = mapped_column(
+        TextoDeEnum(Veredito, anulavel=True), default=None
+    )
     feedback: Mapped[str | None] = mapped_column(Text, default=None)
     error_code: Mapped[FalhaDaAvaliacao | None] = mapped_column(
-        FalhaDaAvaliacaoText, default=None
+        TextoDeEnum(FalhaDaAvaliacao, anulavel=True), default=None
     )
     model: Mapped[str] = mapped_column(Text)
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
