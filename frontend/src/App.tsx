@@ -39,12 +39,13 @@ function App() {
       stopVoice()
       // `flushSync`: o titulo da area aberta tem de estar no DOM (e visivel)
       // antes do foco. O foco no titulo e o que anuncia a troca de area ao
-      // leitor de tela -- a URL e o documento nao mudam (decisao K5). O `!`: os
-      // dois titulos existem assim que a area deles e a ativa.
+      // leitor de tela -- a URL e o documento nao mudam (decisao K5). `?.`: os
+      // dois titulos existem assim que a area deles e a ativa; sem o titulo, a
+      // navegacao segue e so o foco fica de fora.
       flushSync(() => {
         setArea(next)
       })
-      document.getElementById(HEADING_OF[next])!.focus()
+      document.getElementById(HEADING_OF[next])?.focus()
     },
     [stopVoice],
   )

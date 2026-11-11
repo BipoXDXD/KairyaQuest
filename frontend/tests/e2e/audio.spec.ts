@@ -341,8 +341,8 @@ for (const falha of FALHAS) {
     // A saudacao: a legenda aparece mesmo com a voz falhando.
     await expect(legenda(page)).toBeVisible()
     const saudacao = await falaDaLegenda(page)
-    expect(saudacao, 'a legenda da saudacao nao e uma fala do catalogo').not.toBeNull()
-    await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${saudacao ?? ''}.mp3`)).toBe(1)
+    if (saudacao === null) throw new Error('a legenda da saudacao nao e uma fala do catalogo')
+    await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${saudacao}.mp3`)).toBe(1)
 
     await concluirADiaria(page, falha.dia)
     await expect(legenda(page)).toBeVisible()
@@ -424,9 +424,10 @@ function assertSameLineIsNotRetried(
   const ultimoDoPrimeiro = observacao.audio.lastIndexOf(primeiro)
   const primeiroDoOutro = observacao.audio.indexOf(outro)
   expect(ultimoDoPrimeiro, 'a primeira fala nao foi pedida').toBeGreaterThanOrEqual(0)
-  expect(primeiroDoOutro, 'nenhuma outra fala foi pedida entre as repeticoes').toBeGreaterThan(
-    ultimoDoPrimeiro - 1,
-  )
+  expect(
+    primeiroDoOutro,
+    'nenhuma outra fala foi pedida entre as repeticoes',
+  ).toBeGreaterThanOrEqual(ultimoDoPrimeiro)
   // Um unico pedido da primeira fala (sem Range, ela falha na primeira resposta).
   expect(pedidosDe(observacao, primeiro)).toBe(1)
 }
@@ -442,12 +443,12 @@ test('autoplay bloqueado: um unico aviso, uma tentativa por fala e nenhum erro',
 
   await expect(bolha(page)).toBeVisible()
   const saudacao = await falaDaLegenda(page)
-  expect(saudacao, 'a legenda da saudacao nao e uma fala do catalogo').not.toBeNull()
+  if (saudacao === null) throw new Error('a legenda da saudacao nao e uma fala do catalogo')
   const jogadasDe = async (caminho: string) =>
     (await page.evaluate(() => window.__audioLog)).filter(
       (entrada) => entrada === `play ${caminho}`,
     ).length
-  const caminhoDaSaudacao = `${PASTA_DAS_FALAS}${saudacao ?? ''}.mp3`
+  const caminhoDaSaudacao = `${PASTA_DAS_FALAS}${saudacao}.mp3`
   await expect.poll(() => observacao.avisos).toEqual([AUTOPLAY_BLOCKED_WARNING])
   await expect.poll(() => jogadasDe(caminhoDaSaudacao)).toBe(1)
 
