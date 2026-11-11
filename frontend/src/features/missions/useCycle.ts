@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
 import type { Cycle } from './types'
 
@@ -14,7 +15,7 @@ import type { Cycle } from './types'
  */
 export type CycleState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: MissionsLoadFailure }
   | { status: 'loaded'; cycle: Cycle; refreshFailed: boolean }
 
 export interface UseCycleResult {
@@ -26,10 +27,6 @@ export interface UseCycleResult {
    * uma conclusao, para a sequencia mudar sem desmontar o cartao concluido.
    */
   refresh: () => void
-}
-
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar o ciclo.'
 }
 
 export function useCycle(): UseCycleResult {
@@ -78,7 +75,7 @@ export function useCycle(): UseCycleResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
       })
     return () => {
       controller.abort()
@@ -109,7 +106,7 @@ export function useCycle(): UseCycleResult {
           atual.status === 'loaded'
             ? { ...atual, refreshFailed: true }
             : atual.status === 'loading'
-              ? { status: 'error', message: messageFor(error) }
+              ? { status: 'error', failure: missionsLoadFailureFor(error) }
               : atual,
         )
       })

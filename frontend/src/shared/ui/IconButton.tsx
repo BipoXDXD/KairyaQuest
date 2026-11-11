@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { busyProps } from './busy'
 import { BUTTON_BASE } from './buttonBase'
 
@@ -9,6 +9,13 @@ interface IconButtonProps {
   onClick: () => void
   /** Botão de alternância: vira `aria-pressed`. Ausente, o atributo não existe. */
   pressed?: boolean
+  /** Botão que mostra ou esconde outra região: vira `aria-expanded`. */
+  expanded?: boolean
+  /** O `id` da região que o botão mostra ou esconde: vira `aria-controls`. */
+  controls?: string
+  /** Dica do ponteiro, para quem não usa leitor de tela; costuma repetir o `label`. */
+  title?: string
+  ref?: Ref<HTMLButtonElement>
   disabled?: boolean
   /** Mesma semântica do `Button`: ocupado, focável e sem repassar o clique. */
   loading?: boolean
@@ -24,15 +31,23 @@ export function IconButton({
   icon,
   onClick,
   pressed,
+  expanded,
+  controls,
+  title,
+  ref,
   disabled,
   loading = false,
   'data-testid': testId,
 }: IconButtonProps) {
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       aria-pressed={pressed}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      title={title}
       disabled={disabled}
       data-testid={testId}
       className={`${BUTTON_BASE} ${ICON_CLASS}`}

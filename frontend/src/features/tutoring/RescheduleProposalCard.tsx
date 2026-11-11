@@ -4,6 +4,8 @@ import { RESCHEDULE_REASON_LABELS } from '../../shared/types/mission'
 import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls'
 import type { ProposalCardProps, RescheduleMissionAction } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * O fim do cartao, um ramo por estado da acao.
@@ -29,11 +31,12 @@ function Outcome({
   boardHref: string
   onGoToBoard?: () => void
 }): ReactElement {
+  const t = useT()
   switch (action.state) {
     case 'proposta':
       return (
         <DecisionControls
-          target={`o reagendamento: ${action.payload.instructions}`}
+          target={t('tutoring.reschedule.target', { instructions: action.payload.instructions })}
           decision={decision}
           onConfirm={onConfirm}
           onReject={onReject}
@@ -43,16 +46,16 @@ function Outcome({
     case 'executada':
       return (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <p data-testid="proposal-rescheduled" className="font-medium text-emerald-300">
-            Prazo reagendado
+          <p data-testid="proposal-rescheduled" className="font-bold text-feedback-success">
+            {t('tutoring.reschedule.done')}
           </p>
           <BoardLink href={boardHref} onGoToBoard={onGoToBoard} />
         </div>
       )
     case 'recusada':
       return (
-        <p data-testid="proposal-rejected" className="mt-3 text-sm text-slate-400">
-          Proposta recusada
+        <p data-testid="proposal-rejected" className="mt-3 text-sm text-text-muted">
+          {t('tutoring.proposal.rejected')}
         </p>
       )
     case 'falhou':
@@ -84,6 +87,8 @@ export function RescheduleProposalCard({
   boardHref,
   onGoToBoard,
 }: ProposalCardProps<RescheduleMissionAction>) {
+  const t = useT()
+  const { locale } = useLocale()
   const {
     state: decision,
     confirm,
@@ -99,30 +104,30 @@ export function RescheduleProposalCard({
       data-testid="tutor-reschedule-proposal"
       data-action-id={action.id}
       data-state={action.state}
-      className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
+      className="mt-3 min-w-0 wrap-anywhere rounded-ui border border-border-subtle bg-bg-surface p-3"
     >
-      <h3 className="text-sm font-semibold text-slate-50">Proposta de reagendamento</h3>
-      <p data-testid="reschedule-instructions" className="mt-1 text-sm text-slate-100">
+      <h3 className="text-base text-text-primary">{t('tutoring.reschedule.title')}</h3>
+      <p data-testid="reschedule-instructions" className="mt-1 text-sm text-text-primary">
         {payload.instructions}
       </p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-300">
-        <dt className="text-slate-400">Prazo atual</dt>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-primary">
+        <dt className="text-text-muted">{t('tutoring.reschedule.previousDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-previous-deadline" dateTime={payload.previous_deadline}>
-            {formatDeadline(payload.previous_deadline)}
+            {formatDeadline(payload.previous_deadline, locale)}
           </time>
         </dd>
 
-        <dt className="text-slate-400">Prazo proposto</dt>
+        <dt className="text-text-muted">{t('tutoring.reschedule.newDeadline')}</dt>
         <dd>
           <time data-testid="reschedule-new-deadline" dateTime={payload.new_deadline}>
-            {formatDeadline(payload.new_deadline)}
+            {formatDeadline(payload.new_deadline, locale)}
           </time>
         </dd>
       </dl>
-      <p data-testid="reschedule-reason" className="mt-1 text-sm text-slate-300">
-        <span className="text-slate-400">Motivo: </span>
-        {RESCHEDULE_REASON_LABELS[payload.reason]}
+      <p data-testid="reschedule-reason" className="mt-1 text-sm text-text-primary">
+        <span className="text-text-muted">{t('tutoring.reschedule.reason')} </span>
+        {t(RESCHEDULE_REASON_LABELS[payload.reason])}
       </p>
       <Outcome
         action={action}

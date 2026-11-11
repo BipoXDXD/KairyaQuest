@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, requestJson } from '../../shared/api/client'
+import { requestJson } from '../../shared/api/client'
+import { missionsLoadFailureFor, type MissionsLoadFailure } from './loadFailure'
 import type { Mission } from '../../shared/types/mission'
 
 /**
@@ -15,27 +16,13 @@ import type { Mission } from '../../shared/types/mission'
 export type MissionsState =
   | { status: 'loading' }
   | { status: 'empty' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; failure: MissionsLoadFailure }
   | { status: 'loaded'; missions: Mission[] }
 
 export interface UseMissionsResult {
   state: MissionsState
   /** Repete o pedido. E o que torna o estado de erro acionavel. */
   reload: () => void
-}
-
-/**
- * Mensagem para a pessoa a partir do erro.
- *
- * O `ApiError` ja carrega prosa em pt-BR, escrita pelo cliente HTTP -- nunca o
- * `detail` do backend, que o cliente nem le --, entao ela vai direto. A leitura
- * da lista nao tem erro de dominio com `code`: o que chega aqui e rede fora ou
- * servidor falhando, e o status basta. Qualquer outra coisa e um
- * defeito nosso, e nao tem mensagem propria que ajude alguem: falar
- * "SyntaxError: Unexpected token" para quem quer estudar nao informa nada.
- */
-function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Falha inesperada ao carregar as missões.'
 }
 
 /**
@@ -83,7 +70,7 @@ export function useMissions(): UseMissionsResult {
         if (controller.signal.aborted || requestId.current !== id) {
           return
         }
-        setState({ status: 'error', message: messageFor(error) })
+        setState({ status: 'error', failure: missionsLoadFailureFor(error) })
       })
 
     return () => {

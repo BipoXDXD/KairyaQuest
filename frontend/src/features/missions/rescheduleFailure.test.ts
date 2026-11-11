@@ -1,59 +1,73 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, ApiTimeoutError } from '../../shared/api/client'
-import { describeRescheduleFailure } from './rescheduleFailure'
+import { ptBR } from '../../shared/i18n/messages/pt-BR'
+import { describeRescheduleFailure, RESCHEDULE_FAILURE_BY_CODE } from './rescheduleFailure'
 
 // Escrita por extenso, e nao importada do modulo (mesmo motivo de
 // `startFailure.test.ts`).
 const UNCONFIRMED = {
-  message:
-    'Não foi possível confirmar o reagendamento. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-  recovery: 'retry',
+  message: 'missions.rescheduleFailure.unconfirmed.message',
+  recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+  action: 'retry',
 }
 
 const NOT_FOUND = {
-  message: 'Esta missão não está mais disponível. Atualize para ver o estado atual.',
-  recovery: 'refresh',
+  message: 'missions.failure.notAvailable',
+  recovery: 'missions.failure.refresh',
+  action: 'refresh',
 }
 
 const NOT_ACCEPTED = {
-  message: 'O novo prazo não foi aceito. Revise a data e o motivo.',
-  recovery: 'edit',
+  message: 'missions.rescheduleFailure.notAccepted.message',
+  recovery: 'missions.rescheduleFailure.notAccepted.recovery',
+  action: 'edit',
 }
 
 describe('describeRescheduleFailure', () => {
   it.each([
-    ['prazo_expirado', 422, { message: 'O novo prazo precisa estar no futuro.', recovery: 'edit' }],
+    [
+      'prazo_expirado',
+      422,
+      {
+        message: 'missions.rescheduleFailure.deadlinePassed.message',
+        recovery: 'missions.rescheduleFailure.deadlinePassed.recovery',
+        action: 'edit',
+      },
+    ],
     [
       'prazo_fora_do_limite',
       422,
       {
-        message: 'O novo prazo pode ser no máximo 365 dias a partir de agora.',
-        recovery: 'edit',
+        message: 'missions.rescheduleFailure.beyondLimit.message',
+        recovery: 'missions.rescheduleFailure.beyondLimit.recovery',
+        action: 'edit',
       },
     ],
     [
       'prazo_inalterado',
       409,
       {
-        message: 'O novo prazo é igual ao atual. Escolha outro horário.',
-        recovery: 'edit',
+        message: 'missions.rescheduleFailure.unchanged.message',
+        recovery: 'missions.rescheduleFailure.unchanged.recovery',
+        action: 'edit',
       },
     ],
     [
       'transicao_ilegal',
       409,
       {
-        message:
-          'Esta missão já foi concluída e não pode ser reagendada. Atualize para ver o estado atual.',
-        recovery: 'refresh',
+        message: 'missions.rescheduleFailure.alreadyCompleted.message',
+        recovery: 'missions.failure.refresh',
+        action: 'refresh',
       },
     ],
     [
       'prazo_derivado',
       409,
       {
-        message: 'O prazo desta missão vem do plano da semana e não pode ser reagendado.',
-        recovery: 'refresh',
+        message: 'missions.rescheduleFailure.derivedDeadline.message',
+        recovery: 'missions.failure.refresh',
+        action: 'refresh',
       },
     ],
     ['missao_nao_encontrada', 404, NOT_FOUND],
@@ -61,19 +75,22 @@ describe('describeRescheduleFailure', () => {
       'operacao_reutilizada',
       409,
       {
-        message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-        recovery: 'retry-with-new-operation',
+        message: 'missions.failure.reusedOperation',
+        recovery: 'missions.failure.tryAgain',
+        action: 'retry-with-new-operation',
       },
     ],
-  ])('traduz o code %s (status %i) para a mensagem e a acao da tela', (code, status, esperado) => {
+  ])('traduz o code %s (status %i) para as chaves e a acao da tela', (code, status, esperado) => {
     expect(describeRescheduleFailure(new ApiError('x', status, code))).toEqual(esperado)
   })
 
-  it('nunca repete o detail nem a mensagem tecnica do erro', () => {
-    const erro = new ApiError('PROSA-QUE-NAO-PODE-APARECER', 409, 'prazo_inalterado')
-
-    expect(describeRescheduleFailure(erro).message).not.toContain('PROSA-QUE-NAO-PODE-APARECER')
-  })
+  it.each(Object.entries(RESCHEDULE_FAILURE_BY_CODE))(
+    'as chaves de %s existem no catalogo',
+    (_code, failure) => {
+      expect(Object.hasOwn(ptBR, failure.message)).toBe(true)
+      expect(Object.hasOwn(ptBR, failure.recovery)).toBe(true)
+    },
+  )
 
   it('um 422 SEM code (corpo recusado pelo Pydantic) manda corrigir o formulario', () => {
     expect(describeRescheduleFailure(new ApiError('x', 422, null))).toEqual(NOT_ACCEPTED)
@@ -84,12 +101,12 @@ describe('describeRescheduleFailure', () => {
   })
 
   it('um code conhecido vence o status 422', () => {
-    expect(describeRescheduleFailure(new ApiError('x', 422, 'prazo_derivado')).recovery).toBe(
+    expect(describeRescheduleFailure(new ApiError('x', 422, 'prazo_derivado')).action).toBe(
       'refresh',
     )
   })
 
-  it('cai na mensagem generica, com a mesma chave, quando o code e desconhecido', () => {
+  it('cai na falha generica, com a mesma chave, quando o code e desconhecido', () => {
     expect(describeRescheduleFailure(new ApiError('x', 409, 'codigo_futuro'))).toEqual(UNCONFIRMED)
   })
 
@@ -102,16 +119,17 @@ describe('describeRescheduleFailure', () => {
 
   it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(describeRescheduleFailure(new ApiError('x', null, null))).toEqual({
-      message: 'Não foi possível conectar. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-      recovery: 'retry',
+      message: 'shared.transport.network.lead',
+      recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+      action: 'retry',
     })
   })
 
   it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
     expect(describeRescheduleFailure(new ApiTimeoutError())).toEqual({
-      message:
-        'A resposta demorou mais que o esperado. Tentar de novo é seguro: o prazo não mudará duas vezes.',
-      recovery: 'retry',
+      message: 'shared.transport.timeout.lead',
+      recovery: 'missions.rescheduleFailure.unconfirmed.recovery',
+      action: 'retry',
     })
   })
 
@@ -127,7 +145,7 @@ describe('describeRescheduleFailure', () => {
     expect(describeRescheduleFailure(new ApiError('x', 404, 'codigo_futuro'))).toEqual(UNCONFIRMED)
   })
 
-  it('cai na mensagem generica quando a falha nao e um ApiError', () => {
+  it('cai na falha generica quando a falha nao e um ApiError', () => {
     expect(describeRescheduleFailure(new SyntaxError('Unexpected token'))).toEqual(UNCONFIRMED)
   })
 })

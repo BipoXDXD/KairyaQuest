@@ -1,5 +1,6 @@
 import { ApiError } from '../../shared/api/client'
 import { leadFor } from '../../shared/api/transportFailure'
+import type { FailureText } from '../../shared/i18n/failureText'
 import type { ActionErrorCode, ActionRead } from './types'
 
 /**
@@ -21,45 +22,48 @@ import type { ActionErrorCode, ActionRead } from './types'
  *   1 a 1440 minutos, prazo alem de 365 dias; pendencia 26); o backend GRAVOU
  *   a acao como `falhou` com esse code antes do 422, como no `expired`.
  */
-export type ActionRecovery =
+export type DecisionAction =
   'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated' | 'out-of-bounds'
 
-export interface ActionFailure {
-  message: string
-  recovery: ActionRecovery
-}
+/** O texto (chaves do catalogo) e a acao que decide o cartao. */
+export type ActionFailure = FailureText & { action: DecisionAction }
 
-const BY_CODE: Record<ActionErrorCode, ActionFailure> = {
+/** Exportado so para o teste conferir as chaves no catalogo. */
+export const ACTION_FAILURE_BY_CODE: Readonly<Record<ActionErrorCode, ActionFailure>> = {
   operacao_reutilizada: {
-    message: 'Não foi possível registrar esta tentativa. Tente de novo.',
-    recovery: 'retry-with-new-operation',
+    message: 'tutoring.actionFailure.reusedOperation.message',
+    recovery: 'tutoring.actionFailure.reusedOperation.recovery',
+    action: 'retry-with-new-operation',
   },
   transicao_ilegal: {
-    message: 'Esta proposta já foi decidida. Atualize a conversa para ver o estado atual.',
-    recovery: 'refresh',
+    message: 'tutoring.actionFailure.alreadyDecided.message',
+    recovery: 'tutoring.actionFailure.refreshConversation',
+    action: 'refresh',
   },
   acao_nao_encontrada: {
-    message: 'Esta proposta não existe mais. Atualize a conversa para ver o estado atual.',
-    recovery: 'refresh',
+    message: 'tutoring.actionFailure.notFound.message',
+    recovery: 'tutoring.actionFailure.refreshConversation',
+    action: 'refresh',
   },
   prazo_expirado: {
-    message: 'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
-    recovery: 'expired',
+    message: 'tutoring.actionFailure.expired.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'expired',
   },
   reagendamento_invalido: {
-    message:
-      'A missão mudou desde a proposta e não pôde ser reagendada. Peça à Kairya uma nova proposta.',
-    recovery: 'invalidated',
+    message: 'tutoring.actionFailure.rescheduleInvalid.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'invalidated',
   },
   estimativa_fora_do_limite: {
-    message:
-      'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos. Peça à Kairya uma nova proposta.',
-    recovery: 'out-of-bounds',
+    message: 'tutoring.actionFailure.estimateOutOfBounds.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'out-of-bounds',
   },
   prazo_fora_do_limite: {
-    message:
-      'O prazo desta proposta passa de 365 dias a partir de agora. Peça à Kairya uma nova proposta.',
-    recovery: 'out-of-bounds',
+    message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'out-of-bounds',
   },
 }
 
@@ -67,7 +71,7 @@ const BY_CODE: Record<ActionErrorCode, ActionFailure> = {
  * Se o backend GRAVOU a acao como `falhou` antes de responder, por saida.
  * Exaustivo: uma saida nova reprova o `tsc` ate dizer se grava.
  */
-const RECORDS: Record<ActionRecovery, boolean> = {
+const RECORDS: Record<DecisionAction, boolean> = {
   retry: false,
   'retry-with-new-operation': false,
   refresh: false,
@@ -77,38 +81,31 @@ const RECORDS: Record<ActionRecovery, boolean> = {
 }
 
 /**
- * O texto de uma decisao sem resposta, em duas partes: a abertura propria
- * (`fallback`), trocada pela causa quando ela e de transporte (`leadFor`), e o
- * fim que diz que repetir e seguro.
- */
-interface UnconfirmedText {
-  fallback: string
-  tail: string
-}
-
-/**
  * O aviso de confirmar sem resposta, por `kind`: o que "nao acontece duas
  * vezes" depende do que a proposta faz. Exaustivo: um `kind` novo reprova o
  * `tsc` ate ganhar texto.
  */
-const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], UnconfirmedText> = {
+const UNCONFIRMED_CONFIRM: Record<ActionRead['kind'], ActionFailure> = {
   create_mission: {
-    fallback: 'Não foi possível confirmar a missão.',
-    tail: 'Tentar de novo é seguro: a missão não será criada duas vezes.',
+    message: 'tutoring.actionFailure.unconfirmedCreate.message',
+    recovery: 'tutoring.actionFailure.unconfirmedCreate.recovery',
+    action: 'retry',
   },
   reschedule_mission: {
-    fallback: 'Não foi possível confirmar o reagendamento.',
-    tail: 'Tentar de novo é seguro: o prazo não mudará duas vezes.',
+    message: 'tutoring.actionFailure.unconfirmedReschedule.message',
+    recovery: 'tutoring.actionFailure.unconfirmedReschedule.recovery',
+    action: 'retry',
   },
 }
 
-const UNCONFIRMED_REJECT: UnconfirmedText = {
-  fallback: 'Não foi possível recusar a proposta.',
-  tail: 'Tentar de novo é seguro.',
+const UNCONFIRMED_REJECT: ActionFailure = {
+  message: 'tutoring.actionFailure.unconfirmedReject.message',
+  recovery: 'tutoring.actionFailure.unconfirmedReject.recovery',
+  action: 'retry',
 }
 
 function isActionErrorCode(code: string): code is ActionErrorCode {
-  return Object.hasOwn(BY_CODE, code)
+  return Object.hasOwn(ACTION_FAILURE_BY_CODE, code)
 }
 
 /**
@@ -118,16 +115,17 @@ function isActionErrorCode(code: string): code is ActionErrorCode {
  */
 export function recordedErrorCode(error: unknown): ActionErrorCode | null {
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
-    return RECORDS[BY_CODE[error.code].recovery] ? error.code : null
+    return RECORDS[ACTION_FAILURE_BY_CODE[error.code].action] ? error.code : null
   }
   return null
 }
 
 /**
- * A mensagem e a acao do cartao, decididas pelo `code` e so por ele. O `kind`
+ * O texto e a acao do cartao, decididos pelo `code` e so por ele. O `kind`
  * so escolhe o texto do "confirmar sem resposta", e e OBRIGATORIO: um padrao
  * esconderia do `tsc` o chamador que esquecesse o `kind` de um reagendamento,
- * e ele diria "a missao nao sera criada duas vezes".
+ * e ele diria "a missao nao sera criada duas vezes". Sem `code`, a abertura diz
+ * a causa quando ela e de transporte (`leadFor`).
  */
 export function describeActionFailure(
   error: unknown,
@@ -135,13 +133,16 @@ export function describeActionFailure(
   kind: ActionRead['kind'],
 ): ActionFailure {
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
-    return BY_CODE[error.code]
+    return ACTION_FAILURE_BY_CODE[error.code]
   }
-  const text = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
-  return { message: `${leadFor(error, text.fallback)} ${text.tail}`, recovery: 'retry' }
+  const unconfirmed = attempted === 'confirm' ? UNCONFIRMED_CONFIRM[kind] : UNCONFIRMED_REJECT
+  return { ...unconfirmed, message: leadFor(error, unconfirmed.message) }
 }
 
-const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.'
+const FAILED_TEXT: FailureText = {
+  message: 'tutoring.actionFailure.failed.message',
+  recovery: 'tutoring.actionFailure.askNewProposal',
+}
 
 /**
  * O texto de uma acao que o backend gravou como `falhou`, pelo `error_code`
@@ -150,10 +151,10 @@ const FAILED_TEXT = 'Esta proposta não pôde ser executada. Peça à Kairya uma
  * mesma coisa antes e depois de uma recarga. Qualquer outro cai no generico, e
  * o code cru nunca vai para a tela.
  */
-export function failedActionText(errorCode: string | null): string {
+export function failedActionText(errorCode: string | null): FailureText {
   if (errorCode === null || !isActionErrorCode(errorCode)) {
     return FAILED_TEXT
   }
-  const failure = BY_CODE[errorCode]
-  return RECORDS[failure.recovery] ? failure.message : FAILED_TEXT
+  const { message, recovery, action } = ACTION_FAILURE_BY_CODE[errorCode]
+  return RECORDS[action] ? { message, recovery } : FAILED_TEXT
 }

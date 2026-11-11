@@ -1,3 +1,6 @@
+import type { Locale } from '../i18n/locale'
+import { formatterPerLocale } from './formatterPerLocale'
+
 /**
  * Datas CIVIS do ciclo (`today`, `day`, `week_start`): "2026-09-25", sem hora
  * e sem fuso.
@@ -14,18 +17,21 @@
  * Mora em `shared/lib/` desde o Incremento C (`docs/ARCHITECTURE.md` §5,
  * regra 3): nasceu em `features/missions/` para a "Missão de hoje" e passou a
  * ter um segundo usuario real, a trilha de `features/campaigns/`.
+ *
+ * O idioma chega por parametro (`locale`), e nao de um contexto lido aqui:
+ * `shared/lib/` nao conhece React, e quem chama obtem o idioma de `useLocale()`.
  */
-const civilDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+const CIVIL_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   timeZone: 'UTC',
   weekday: 'long',
   day: '2-digit',
   month: '2-digit',
-})
+}
 
-const civilWeekdayFormatter = new Intl.DateTimeFormat('pt-BR', {
-  timeZone: 'UTC',
-  weekday: 'long',
-})
+const CIVIL_WEEKDAY_OPTIONS: Intl.DateTimeFormatOptions = { timeZone: 'UTC', weekday: 'long' }
+
+const civilDateFormatter = formatterPerLocale(CIVIL_DATE_OPTIONS)
+const civilWeekdayFormatter = formatterPerLocale(CIVIL_WEEKDAY_OPTIONS)
 
 /** O meio-dia em UTC da data civil: da margem ampla ao dia, mas sozinho nao basta a partir de +12h (ver comentario do arquivo). */
 function civilNoon(civil: string): Date {
@@ -35,12 +41,12 @@ function civilNoon(civil: string): Date {
   return new Date(Date.UTC(year, month - 1, day, 12))
 }
 
-/** "segunda-feira, 21/09". */
-export function formatCivilDate(civil: string): string {
-  return civilDateFormatter.format(civilNoon(civil))
+/** "segunda-feira, 21/09" em `pt-BR`; "Monday, 09/21" em `en`. */
+export function formatCivilDate(civil: string, locale: Locale): string {
+  return civilDateFormatter(locale).format(civilNoon(civil))
 }
 
-/** So o dia da semana, sem o resto da data: "quinta-feira" (o bau da trilha). */
-export function civilWeekday(civil: string): string {
-  return civilWeekdayFormatter.format(civilNoon(civil))
+/** So o dia da semana, sem o resto da data: "quinta-feira" / "Thursday" (o bau da trilha). */
+export function civilWeekday(civil: string, locale: Locale): string {
+  return civilWeekdayFormatter(locale).format(civilNoon(civil))
 }

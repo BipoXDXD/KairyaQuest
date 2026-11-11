@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog'
 import { ApiError, ApiTimeoutError } from './client'
 
 /**
@@ -8,13 +9,13 @@ import { ApiError, ApiTimeoutError } from './client'
 export type TransportFailure = 'timeout' | 'network'
 
 /**
- * A abertura do texto de cada falha de transporte. Diz o que aconteceu sem
- * culpar a rede da pessoa: o servidor fora tambem da "Não foi possível
- * conectar".
+ * A abertura (chave do catalogo) do texto de cada falha de transporte. Diz o
+ * que aconteceu sem culpar a rede da pessoa: o servidor fora tambem da "Não foi
+ * possível conectar".
  */
-const LEAD_BY_FAILURE: Record<TransportFailure, string> = {
-  timeout: 'A resposta demorou mais que o esperado.',
-  network: 'Não foi possível conectar.',
+const LEAD_BY_FAILURE: Record<TransportFailure, MessageKey> = {
+  timeout: 'shared.transport.timeout.lead',
+  network: 'shared.transport.network.lead',
 }
 
 /**
@@ -36,11 +37,11 @@ export function transportFailureOf(error: unknown): TransportFailure | null {
 }
 
 /**
- * A frase de abertura do texto de falha: a da falha de transporte, ou
+ * A chave da frase de abertura do texto de falha: a da falha de transporte, ou
  * `fallback`, a abertura propria do tradutor para o resto (5xx, `code`
  * desconhecido).
  */
-export function leadFor(error: unknown, fallback: string): string {
+export function leadFor(error: unknown, fallback: MessageKey): MessageKey {
   const failure = transportFailureOf(error)
   return failure === null ? fallback : LEAD_BY_FAILURE[failure]
 }

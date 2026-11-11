@@ -62,13 +62,54 @@
   }
 
   /* Folga sob o conteúdo do Quartel-General abaixo do lg, onde o botão fixo
-     "Falar com a Kairya" ocupa os 80 px de baixo da tela (retrato de 40 px +
-     py-3 = 64 px de altura, mais bottom-4). 96 px deixam 16 px livres no fim
-     da rolagem, e nenhum botão do último cartão fica sob ele (README §7). */
+     "Falar com a Kairya" ocupa até os 80 px de baixo da tela (hoje um Button
+     de 44 px com o avatar de 40 px, mais bottom-4 = 60 px). 96 px deixam ao
+     menos 16 px livres no fim da rolagem, e nenhum botão do último cartão
+     fica sob ele (README §7). */
   .area-main--fab-clearance {
     @variant max-lg {
       padding-bottom: calc(var(--spacing) * 24);
     }
+  }
+}
+
+/* A lanterna decorativa (LanternMark.tsx). O estado aceso é estático: é ele
+   que vale sob `prefers-reduced-motion: reduce`, quando a animação nem se
+   aplica. Num svg o brilho é `filter`, nunca `box-shadow` (que pinta o
+   retângulo da caixa); o filtro é o drop-shadow sem spread do tokens.css. */
+@layer components {
+  .lantern-mark {
+    opacity: 0.35;
+  }
+
+  .lantern-mark[data-lit='true'] {
+    opacity: 1;
+    filter: var(--glow-lantern-filter);
+  }
+}
+
+/* A entrada do anúncio da recompensa (`motion-safe:animate-reward-in`). */
+@keyframes reward-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A lanterna acendendo (`motion-safe:animate-lantern-light`): termina no mesmo
+   estado do `.lantern-mark[data-lit='true']`. */
+@keyframes lantern-light {
+  from {
+    opacity: 0.35;
+    filter: none;
+  }
+  to {
+    opacity: 1;
+    filter: var(--glow-lantern-filter);
   }
 }
 

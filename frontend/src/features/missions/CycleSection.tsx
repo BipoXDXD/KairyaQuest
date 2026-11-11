@@ -15,14 +15,29 @@ import type { Cycle } from './types'
 import type { CompletionRegistry } from './useCompletionRegistry'
 import { useCompletionRegistry } from './useCompletionRegistry'
 import { useCycle, type CycleState } from './useCycle'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import type { Locale } from '../../shared/i18n/locale'
+import { plural } from '../../shared/i18n/plural'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT, type Translate } from '../../shared/i18n/useT'
+import { Button, Panel } from '../../shared/ui'
 
 export interface CycleSectionHandle {
   refresh: () => void
 }
 
-/** "1 dia seguido" / "3 dias seguidos". */
-function streakLabel(days: number): string {
-  return days === 1 ? '1 dia seguido' : `${String(days)} dias seguidos`
+/**
+ * "1 dia seguido" / "3 dias seguidos". O zero vai na forma `other` de
+ * proposito: no CLDR `pt` o 0 cai em `one`, e "0 dia seguido" seria errado.
+ */
+function streakText(days: number, locale: Locale, t: Translate): string {
+  const forms = {
+    zero: 'missions.cycle.streakDays.other',
+    one: 'missions.cycle.streakDays.one',
+    other: 'missions.cycle.streakDays.other',
+  } as const
+  return t(plural(locale, days, forms), { count: days })
 }
 
 /**
@@ -30,10 +45,10 @@ function streakLabel(days: number): string {
  * continua no ciclo ate o fim de hoje (o `refresh` nao tira o cartao), e o
  * texto de "ainda pode ser concluida" seria falso.
  */
-function lateDailyReason(mission: Mission): string {
+function lateDailyReason(mission: Mission): MessageKey {
   return mission.state === 'concluida'
-    ? 'Concluída com atraso — você começou no dia dela, e ela contou para a sequência.'
-    : 'Você começou esta diária no dia dela: ela ainda pode ser concluída até o fim de hoje, e conta para a sequência.'
+    ? 'missions.cycle.lateDaily.completed'
+    : 'missions.cycle.lateDaily.pending'
 }
 
 /**
@@ -41,18 +56,23 @@ function lateDailyReason(mission: Mission): string {
  * que fecha a janela) ja abriu o dia de hoje -- o backend so a mantem no ciclo,
  * depois disso, se ela foi iniciada na janela. `null` dentro da janela.
  */
-function lateSpecialReason(special: Mission, today: string): string | null {
+function lateSpecialReason(special: Mission, today: string): MessageKey | null {
   if (saoPauloCivilDate(special.deadline) > today) {
     return null
   }
   return special.state === 'concluida'
-    ? 'Concluída depois do fim da janela — você começou a tempo.'
-    : 'Você começou esta missão dentro da janela: ela ainda pode ser concluída até o fim de hoje.'
+    ? 'missions.cycle.lateSpecial.completed'
+    : 'missions.cycle.lateSpecial.pending'
 }
 
-/** "falta 1 dia" / "faltam 4 dias". */
-function remainingLabel(days: number): string {
-  return days === 1 ? 'falta 1 dia' : `faltam ${String(days)} dias`
+/** "falta 1 dia" / "faltam 4 dias"; o zero no plural, como na sequencia. */
+function remainingText(days: number, locale: Locale, t: Translate): string {
+  const forms = {
+    zero: 'missions.cycle.remainingDays.other',
+    one: 'missions.cycle.remainingDays.one',
+    other: 'missions.cycle.remainingDays.other',
+  } as const
+  return t(plural(locale, days, forms), { count: days })
 }
 
 interface CardProps {
@@ -67,7 +87,7 @@ interface CardProps {
    * rotulo do cartao da missao de hoje; os da diaria de ontem e da especial
    * trocam o proprio, porque "a missao de hoje" seria falso neles.
    */
-  reloadLabel: string
+  reloadLabel: MessageKey
 }
 
 /**
@@ -91,17 +111,20 @@ function CycleLoaded({
   refreshFailed: boolean
   card: CardProps
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   const specialReason =
     cycle.special === null ? null : lateSpecialReason(cycle.special, cycle.today)
+  // `gap-2`, e nao o `gap-3` dos cartoes: com os botoes de 44 px, o Iniciar da
+  // diaria so cabe na primeira dobra de 1440x900 assim (layout.spec.ts).
   return (
-    <div className="flex flex-col gap-3">
-      <p data-testid="cycle-today" className="text-sm text-slate-400">
-        Hoje é {formatCivilDate(cycle.today)}.
+    <div className="flex flex-col gap-2">
+      <p data-testid="cycle-today" className="text-sm text-text-muted">
+        {t('missions.cycle.today', { date: formatCivilDate(cycle.today, locale) })}
       </p>
       {cycle.mission === null ? (
-        <p data-testid="cycle-no-plan" className="text-sm text-slate-300">
-          Sem plano nesta semana: não há diária para hoje. Um dia sem plano não quebra a sua
-          sequência.
+        <p data-testid="cycle-no-plan" className="text-sm text-text-primary">
+          {t('missions.cycle.noPlan')}
         </p>
       ) : (
         <ul key={cycle.mission.id} ref={dailyRef} role="list" className="flex flex-col gap-3">
@@ -119,11 +142,9 @@ function CycleLoaded({
           o Concluir pareceria um erro. */}
       {cycle.late_daily !== null && (
         <div data-testid="cycle-late-daily">
-          <h3 className="mb-1 text-base font-semibold text-amber-200">
-            Diária de ontem — iniciada a tempo
-          </h3>
-          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-slate-300">
-            {lateDailyReason(cycle.late_daily)}
+          <h3 className="mb-1 text-lg text-text-primary">{t('missions.cycle.lateDaily.title')}</h3>
+          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-text-muted">
+            {t(lateDailyReason(cycle.late_daily))}
           </p>
           <ul role="list" className="flex flex-col gap-3">
             {/* Mesma chave pela ID, pelo mesmo motivo do cartao de hoje. O
@@ -133,7 +154,7 @@ function CycleLoaded({
               key={cycle.late_daily.id}
               mission={cycle.late_daily}
               {...card}
-              reloadLabel="Atualizar a diária de ontem"
+              reloadLabel="missions.reload.lateDaily"
               titleLevel={4}
             />
           </ul>
@@ -144,24 +165,25 @@ function CycleLoaded({
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
           diaria) nem o texto que muda quando ela chega ao marco eram
           anunciados. */}
-      <p role="status" data-testid="cycle-streak" className="text-sm font-medium text-slate-200">
-        Sequência: {streakLabel(cycle.streak)}
+      <p role="status" data-testid="cycle-streak" className="text-sm font-bold text-text-primary">
+        {t('missions.cycle.streak', { days: streakText(cycle.streak, locale, t) })}
       </p>
       {cycle.special === null ? (
-        <p data-testid="cycle-progress" className="text-sm text-slate-300">
-          Missão especial: {cycle.streak % DAYS_PER_MILESTONE} de {DAYS_PER_MILESTONE} —{' '}
-          {remainingLabel(cycle.days_to_milestone)}.
+        <p data-testid="cycle-progress" className="text-sm text-text-muted">
+          {t('missions.cycle.progress', {
+            progress: cycle.streak % DAYS_PER_MILESTONE,
+            total: DAYS_PER_MILESTONE,
+            remaining: remainingText(cycle.days_to_milestone, locale, t),
+          })}
         </p>
       ) : (
         <div data-testid="cycle-special">
-          <h3 className="mb-2 text-base font-semibold text-emerald-200">
-            Missão especial — bônus da sequência
-          </h3>
+          <h3 className="mb-2 text-lg text-text-primary">{t('missions.cycle.special.title')}</h3>
           {/* F25: depois do fim da janela, o prazo impresso no
               cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
           {specialReason !== null && (
-            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">
-              {specialReason}
+            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-text-muted">
+              {t(specialReason)}
             </p>
           )}
           <ul role="list" className="flex flex-col gap-3">
@@ -171,23 +193,20 @@ function CycleLoaded({
               key={cycle.special.id}
               mission={cycle.special}
               {...card}
-              reloadLabel="Atualizar a missão especial"
+              reloadLabel="missions.reload.special"
               titleLevel={4}
             />
           </ul>
         </div>
       )}
       {refreshFailed && (
-        <div role="alert" data-testid="cycle-stale" className="text-sm text-amber-200">
-          <p>Não foi possível atualizar a sequência.</p>
-          <button
-            type="button"
-            data-testid="cycle-refresh"
-            onClick={card.onReload}
-            className="mt-2 rounded border border-amber-300/60 px-3 py-1 font-medium text-amber-100 hover:bg-amber-900/40 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
-          >
-            Atualizar
-          </button>
+        <div role="alert" data-testid="cycle-stale" className="text-sm text-feedback-danger">
+          <p>{t('missions.cycle.refreshFailed')}</p>
+          <div className="mt-2">
+            <Button data-testid="cycle-refresh" onClick={card.onReload}>
+              {t('missions.cycle.refresh')}
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -204,11 +223,12 @@ function CycleContent({
   card: CardProps
   dailyRef: Ref<HTMLUListElement>
 }): ReactElement {
+  const t = useT()
   switch (state.status) {
     case 'loading':
       return (
-        <p role="status" data-testid="cycle-loading" className="text-sm text-slate-400">
-          Consultando o ciclo…
+        <p role="status" data-testid="cycle-loading" className="text-sm text-text-muted">
+          {t('missions.cycle.loading')}
         </p>
       )
     case 'error':
@@ -216,18 +236,21 @@ function CycleContent({
         <div
           role="alert"
           data-testid="cycle-error"
-          className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
+          className="rounded-ui border border-feedback-danger p-4 text-sm text-text-primary"
         >
-          <p className="font-semibold">Falha ao carregar o ciclo.</p>
-          <p className="mt-1">{state.message}</p>
-          <button
-            type="button"
-            data-testid="cycle-retry"
-            onClick={card.onReload}
-            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
-          >
-            Tentar novamente
-          </button>
+          <p className="font-bold text-feedback-danger">{t('missions.cycle.loadFailed')}</p>
+          <p className="mt-1">
+            {state.failure.kind === 'api' ? (
+              <FailureMessage failure={state.failure.text} />
+            ) : (
+              t('missions.cycle.unexpectedFailure')
+            )}
+          </p>
+          <div className="mt-3">
+            <Button data-testid="cycle-retry" onClick={card.onReload}>
+              {t('missions.action.retryLoad')}
+            </Button>
+          </div>
         </div>
       )
     case 'loaded':
@@ -289,6 +312,7 @@ export function CycleSection({
       target.focus()
     }
   })
+  const t = useT()
   const { state, reload, refresh } = useCycle()
   useImperativeHandle(ref, () => ({ refresh }), [refresh])
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
@@ -311,19 +335,21 @@ export function CycleSection({
       onMissionCompleted?.()
     },
     onRewarded: onMissionCompleted,
-    reloadLabel: 'Atualizar a missão de hoje',
+    reloadLabel: 'missions.reload.today',
   }
   return (
-    <section aria-labelledby="cycle-heading" data-testid="cycle" className="rpg-cycle mb-8">
-      <h2
-        ref={heading}
-        id="cycle-heading"
-        tabIndex={-1}
-        className="mb-3 rounded text-lg font-semibold text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-      >
-        Missão de hoje — sua diária
-      </h2>
-      <CycleContent state={state} card={card} dailyRef={dailyRef} />
-    </section>
+    <div className="mb-8">
+      <Panel as="section" aria-labelledby="cycle-heading" data-testid="cycle">
+        <h2
+          ref={heading}
+          id="cycle-heading"
+          tabIndex={-1}
+          className="mb-3 rounded-ui text-xl text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+        >
+          {t('missions.cycle.title')}
+        </h2>
+        <CycleContent state={state} card={card} dailyRef={dailyRef} />
+      </Panel>
+    </div>
   )
 }

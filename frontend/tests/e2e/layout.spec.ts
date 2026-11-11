@@ -394,7 +394,7 @@ for (const width of [320, 375]) {
       await layoutData(page, [], [{ ...message, content: LONG_TEXT }])
       await page.goto('/')
       await page.getByTestId('tutor-sheet-open').click()
-      await readableText(page.getByTestId('tutor-message').locator('p').nth(1), LONG_TEXT)
+      await readableText(page.getByTestId('tutor-message-content'), LONG_TEXT)
       const region = page.getByRole('region', { name: 'Conversa com a Kairya' })
       expect(await region.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
       await noHorizontalOverflow(page)

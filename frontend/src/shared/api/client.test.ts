@@ -285,6 +285,7 @@ describe('client', () => {
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
       expect((erro as Error).message).toBe('O servidor demorou demais para responder.')
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('timeout')
       expect((erro as Error).cause).toBeInstanceOf(Error)
     })
 
@@ -348,6 +349,7 @@ describe('client', () => {
       expect(erro).not.toBeInstanceOf(ApiTimeoutError)
       expect((erro as InstanceType<typeof ApiError>).status).toBe(409)
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('http')
       expect((erro as Error).message).toBe('O servidor respondeu 409.')
       expect(vi.getTimerCount()).toBe(0)
     })
@@ -398,6 +400,7 @@ describe('client', () => {
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
       expect((erro as InstanceType<typeof ApiError>).cause).toBe(causa)
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('network')
       expect((erro as Error).message).toMatch(/servidor/i)
     })
 
@@ -495,6 +498,91 @@ describe('client', () => {
       expect(erro).toBeInstanceOf(ApiError)
       expect((erro as Error).message).toBe('O servidor respondeu 503.')
       expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+    })
+  })
+
+  describe('parseRetryAfterSeconds', () => {
+    it.each([
+      ['120', 120],
+      ['0', 0],
+      ['-5', null],
+      ['abc', null],
+      ['', null],
+      ['1.5', null],
+      ['Wed, 21 Oct 2026 07:28:00 GMT', null],
+      [null, null],
+    ])('%j vira %j', async (header, expected) => {
+      const { parseRetryAfterSeconds } = await loadClient()
+
+      expect(parseRetryAfterSeconds(header)).toBe(expected)
+    })
+  })
+
+  describe('Retry-After e instante do erro', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('um 429 com Retry-After guarda os segundos e o instante em que a resposta chegou', async () => {
+      vi.useFakeTimers()
+      const chegada = new Date('2026-11-10T15:00:00Z')
+      vi.setSystemTime(chegada)
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json(
+              { detail: 'x', code: 'limite_diario_da_tutoria' },
+              { status: 429, headers: { 'Retry-After': '60' } },
+            ),
+          ),
+      )
+      const { ApiError, postJson } = await loadClient()
+
+      const erro = await failureOf(postJson('/x', {}))
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).toMatchObject({ kind: 'http', status: 429, retryAfterSeconds: 60 })
+      expect((erro as InstanceType<typeof ApiError>).receivedAt).toEqual(chegada)
+    })
+
+    it('um Retry-After que nao e inteiro vira null, nunca NaN', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            Response.json({ detail: 'x' }, { status: 429, headers: { 'Retry-After': 'abc' } }),
+          ),
+      )
+      const { postJson } = await loadClient()
+
+      expect(await failureOf(postJson('/x', {}))).toMatchObject({ retryAfterSeconds: null })
+    })
+
+    it('sem resposta nao ha Retry-After', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+      const { postJson } = await loadClient()
+
+      expect(await failureOf(postJson('/x', {}))).toMatchObject({
+        kind: 'network',
+        retryAfterSeconds: null,
+      })
+    })
+
+    it('o ApiError construido sem os detalhes: sem status e rede, com status e http', async () => {
+      vi.useFakeTimers()
+      const agora = new Date('2026-11-10T12:00:00Z')
+      vi.setSystemTime(agora)
+      const { ApiError } = await loadClient()
+
+      expect(new ApiError('x', null, null)).toMatchObject({
+        kind: 'network',
+        retryAfterSeconds: null,
+        receivedAt: agora,
+      })
+      expect(new ApiError('x', 409, 'c')).toMatchObject({ kind: 'http' })
     })
   })
 
@@ -618,6 +706,7 @@ describe('client', () => {
 
       expect(error).toBeInstanceOf(ApiError)
       expect(error).toMatchObject({
+        kind: 'http',
         status,
         code,
         message: `O servidor respondeu ${String(status)}.`,
@@ -642,6 +731,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'network',
         status: null,
         code: null,
         message: 'Não foi possível falar com o servidor.',
@@ -683,6 +773,7 @@ describe('client', () => {
       stream.fail(new TypeError('network error'))
 
       expect(await failureOf(events.next())).toMatchObject({
+        kind: 'interrupted',
         status: 200,
         code: null,
         message: 'A resposta foi interrompida no caminho.',
@@ -698,6 +789,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'format',
         status: 200,
         message: 'A resposta chegou num formato inesperado.',
       })
@@ -727,6 +819,7 @@ describe('client', () => {
       const { postStream } = await loadClient()
 
       expect(await failureOf(collect(postStream('/x', {})))).toMatchObject({
+        kind: 'format',
         status: 200,
         message: 'A resposta chegou num formato inesperado.',
       })

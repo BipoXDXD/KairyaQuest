@@ -358,13 +358,12 @@ test('concluir pela tela muda o estado no servidor, e a tela concluida e acessiv
   await expect(item.getByTestId('mission-complete')).toHaveCount(0)
 
   // Espera a animacao de entrada do anuncio assentar
-  // (`motion-safe:animate-[reward-in_400ms_ease-out]`, no `<div
-  // data-testid="reward">` de RewardAnnouncement.tsx) antes do axe. Sem isto,
-  // o axe podia auditar um quadro no MEIO do fade-in (opacidade parcial) e
-  // acusar contraste insuficiente -- a cor final (`text-emerald-200` sobre o
-  // fundo composto do cartao) tem contraste ~14,7:1, bem acima do 4,5:1
-  // exigido (conta registrada em task-8-report.md). Nao mudamos a cor, nao
-  // desligamos a animacao.
+  // (`motion-safe:animate-reward-in`, no `<div data-testid="reward">` de
+  // RewardAnnouncement.tsx) antes do axe. Sem isto, o axe podia auditar um
+  // quadro no MEIO do fade-in (opacidade parcial) e acusar contraste
+  // insuficiente -- a cor final (`text-feedback-success` sobre a superficie do
+  // cartao) e um par medido em `tokens/contrastPairs.ts`, acima do 4,5:1. Nao
+  // mudamos a cor, nao desligamos a animacao.
   await expect
     .poll(() => item.getByTestId('reward').evaluate((el) => getComputedStyle(el).opacity))
     .toBe('1')

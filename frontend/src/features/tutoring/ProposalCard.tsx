@@ -5,6 +5,8 @@ import { BoardLink, DecisionControls, RecordedFailure } from './DecisionControls
 import { RescheduleProposalCard } from './RescheduleProposalCard'
 import type { CreateMissionAction, ProposalCardProps } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
 
 /**
  * O fim do cartao, um ramo por estado da acao.
@@ -30,11 +32,12 @@ function Outcome({
   boardHref: string
   onGoToBoard?: () => void
 }): ReactElement {
+  const t = useT()
   switch (action.state) {
     case 'proposta':
       return (
         <DecisionControls
-          target={`a proposta: ${action.payload.instructions}`}
+          target={t('tutoring.proposal.target', { instructions: action.payload.instructions })}
           decision={decision}
           onConfirm={onConfirm}
           onReject={onReject}
@@ -44,16 +47,16 @@ function Outcome({
     case 'executada':
       return (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <p data-testid="proposal-created" className="font-medium text-emerald-300">
-            Missão criada
+          <p data-testid="proposal-created" className="font-bold text-feedback-success">
+            {t('tutoring.proposal.created')}
           </p>
           <BoardLink href={boardHref} onGoToBoard={onGoToBoard} />
         </div>
       )
     case 'recusada':
       return (
-        <p data-testid="proposal-rejected" className="mt-3 text-sm text-slate-400">
-          Proposta recusada
+        <p data-testid="proposal-rejected" className="mt-3 text-sm text-text-muted">
+          {t('tutoring.proposal.rejected')}
         </p>
       )
     case 'falhou':
@@ -87,6 +90,8 @@ function MissionProposalCard({
     changed: onChanged,
     missionCreated: onMissionCreated,
   })
+  const t = useT()
+  const { locale } = useLocale()
   const { payload } = action
 
   return (
@@ -94,32 +99,37 @@ function MissionProposalCard({
       data-testid="tutor-proposal"
       data-action-id={action.id}
       data-state={action.state}
-      className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
+      className="mt-3 min-w-0 wrap-anywhere rounded-ui border border-border-subtle bg-bg-surface p-3"
     >
-      <h3 className="text-sm font-semibold text-slate-50">Proposta de missão</h3>
-      <p data-testid="proposal-instructions" className="mt-1 text-sm text-slate-100">
+      <h3 className="text-base text-text-primary">{t('tutoring.proposal.title')}</h3>
+      <p data-testid="proposal-instructions" className="mt-1 text-sm text-text-primary">
         {payload.instructions}
       </p>
-      <p className="mt-1 text-sm text-slate-300">
-        <span className="text-slate-400">Critério de conclusão: </span>
+      <p className="mt-1 text-sm text-text-primary">
+        <span className="text-text-muted">{t('tutoring.proposal.criterion')} </span>
         {payload.completion_criterion}
       </p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-300">
-        <dt className="text-slate-400">Dificuldade</dt>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-primary">
+        <dt className="text-text-muted">{t('tutoring.proposal.difficulty')}</dt>
         {/* O teto vem de `MAX_DIFFICULTY`, em `shared/types/mission.ts`: esta
             feature importa so de `shared/`, nunca de `missions/`
             (`docs/ARCHITECTURE.md` §5, regra 1). */}
         <dd data-testid="proposal-difficulty">
-          {payload.difficulty} de {MAX_DIFFICULTY}
+          {t('tutoring.proposal.difficultyValue', {
+            value: payload.difficulty,
+            max: MAX_DIFFICULTY,
+          })}
         </dd>
 
-        <dt className="text-slate-400">Estimativa</dt>
-        <dd data-testid="proposal-estimated-minutes">{payload.estimated_minutes} min</dd>
+        <dt className="text-text-muted">{t('tutoring.proposal.estimate')}</dt>
+        <dd data-testid="proposal-estimated-minutes">
+          {t('tutoring.proposal.minutes', { minutes: payload.estimated_minutes })}
+        </dd>
 
-        <dt className="text-slate-400">Prazo</dt>
+        <dt className="text-text-muted">{t('tutoring.proposal.deadline')}</dt>
         <dd>
           <time data-testid="proposal-deadline" dateTime={payload.deadline}>
-            {formatDeadline(payload.deadline)}
+            {formatDeadline(payload.deadline, locale)}
           </time>
         </dd>
       </dl>
@@ -147,14 +157,15 @@ function MissionProposalCard({
  * cliente nao sabe dizer).
  */
 function UnknownProposal({ action }: { action: never }): ReactElement {
+  const t = useT()
   const { id } = action as { id: unknown }
   return (
     <p
       data-testid="tutor-proposal-unknown"
       data-action-id={String(id)}
-      className="mt-3 rounded-lg border border-slate-700/70 bg-slate-900/60 p-3 text-sm text-slate-300"
+      className="mt-3 rounded-ui border border-border-subtle bg-bg-surface p-3 text-sm text-text-primary"
     >
-      Proposta que esta versão não sabe mostrar.
+      {t('tutoring.proposal.unknown')}
     </p>
   )
 }

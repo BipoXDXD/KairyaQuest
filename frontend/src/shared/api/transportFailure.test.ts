@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { translate } from '../i18n/catalog'
 import { ApiError, ApiTimeoutError } from './client'
 import { leadFor, transportFailureOf } from './transportFailure'
 
 const DEMORA = 'A resposta demorou mais que o esperado.'
 const REDE = 'Não foi possível conectar.'
+const OUTRA = 'missions.startFailure.unconfirmed.message'
 
 describe('transportFailureOf', () => {
   it.each([
@@ -23,14 +25,23 @@ describe('transportFailureOf', () => {
 
 describe('leadFor', () => {
   it('o prazo abre com a demora', () => {
-    expect(leadFor(new ApiTimeoutError(), 'Outro.')).toBe(DEMORA)
+    expect(translate('pt-BR', leadFor(new ApiTimeoutError(), OUTRA))).toBe(DEMORA)
   })
 
   it('a rede fora abre com a conexao', () => {
-    expect(leadFor(new ApiError('x', null, null), 'Outro.')).toBe(REDE)
+    expect(translate('pt-BR', leadFor(new ApiError('x', null, null), OUTRA))).toBe(REDE)
   })
 
   it('o resto usa a abertura do chamador', () => {
-    expect(leadFor(new ApiError('x', 500, null), 'Outro.')).toBe('Outro.')
+    expect(leadFor(new ApiError('x', 500, null), OUTRA)).toBe(OUTRA)
+  })
+
+  it('as duas aberturas existem nos dois idiomas', () => {
+    expect(translate('en', leadFor(new ApiTimeoutError(), OUTRA))).toBe(
+      'No answer arrived. It took longer than expected.',
+    )
+    expect(translate('en', leadFor(new ApiError('x', null, null), OUTRA))).toBe(
+      "Couldn't connect. The connection to the server failed.",
+    )
   })
 })

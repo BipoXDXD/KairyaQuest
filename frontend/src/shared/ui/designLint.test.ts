@@ -46,20 +46,7 @@ const RULES: readonly { name: string; pattern: RegExp }[] = [
 // Catraca: só encolhe. As Tarefas 4.6–4.9 tiram arquivos daqui; a 4.9 apaga a lista.
 const PENDING_MIGRATION: ReadonlySet<string> = new Set([
   'src/features/campaigns/CampaignTrail.tsx',
-  'src/features/missions/CycleSection.tsx',
-  'src/features/missions/EvaluationPanel.tsx',
-  'src/features/missions/EvidenceForm.tsx',
-  'src/features/missions/MissionCard.tsx',
-  'src/features/missions/MissionList.tsx',
-  'src/features/missions/RescheduleForm.tsx',
-  'src/features/missions/RescheduleHistory.tsx',
-  'src/features/missions/RewardAnnouncement.tsx',
   'src/features/progression/ProgressPanel.tsx',
-  'src/features/tutoring/DecisionControls.tsx',
-  'src/features/tutoring/ProposalCard.tsx',
-  'src/features/tutoring/RescheduleProposalCard.tsx',
-  'src/features/tutoring/TutorConversation.tsx',
-  'src/features/tutoring/TutorPanel.tsx',
 ])
 
 test('a varredura enxerga o CSS de verdade', () => {

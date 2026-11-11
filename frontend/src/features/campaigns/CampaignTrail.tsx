@@ -9,6 +9,15 @@ import {
 import { AVAILABILITY_DISPLAY } from './availability'
 import type { Plan, PlanDay, PlanSpecial } from './types'
 import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
+import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
+import type { Locale } from '../../shared/i18n/locale'
+
+/**
+ * O idioma das datas desta tela, fixo ate a migracao dela para o catalogo
+ * (Fase 3): os formatadores passaram a receber o `Locale` explicito na
+ * migracao de `features/missions`, e esta tela ainda so tem texto em pt-BR.
+ */
+const DATE_LOCALE: Locale = 'pt-BR'
 
 /**
  * O TOM (cor da borda e do texto) de cada disponibilidade -- so apresentacao,
@@ -155,7 +164,7 @@ function TrailDay({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-slate-100">
-          <time dateTime={day.day}>{formatCivilDate(day.day)}</time>
+          <time dateTime={day.day}>{formatCivilDate(day.day, DATE_LOCALE)}</time>
           {isToday && (
             <>
               {' '}
@@ -171,7 +180,7 @@ function TrailDay({
         <AvailabilityBadge availability={day.availability} />
       </div>
       {day.mission === null ? (
-        <Chest>{`Missão de ${civilWeekday(day.day)} — revelada no dia`}</Chest>
+        <Chest>{`Missão de ${civilWeekday(day.day, DATE_LOCALE)} — revelada no dia`}</Chest>
       ) : (
         <>
           <MissionContent mission={day.mission} />
@@ -245,7 +254,7 @@ function TrailLoaded({
   return (
     <div>
       <p data-testid="trail-week" className="mb-3 text-sm text-slate-400">
-        Semana de {formatCivilDate(plan.week_start)}.
+        Semana de {formatCivilDate(plan.week_start, DATE_LOCALE)}.
       </p>
       <ol role="list" aria-label="Dias da semana" className="flex flex-col gap-3">
         {plan.days.map((day, index) => (
@@ -309,7 +318,9 @@ function TrailContent({
           className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
         >
           <p className="font-semibold">Falha ao carregar a trilha.</p>
-          <p className="mt-1">{state.message}</p>
+          <p className="mt-1">
+            <LoadFailureMessage failure={state.failure} />
+          </p>
           <button
             type="button"
             data-testid="trail-retry"

@@ -6,6 +6,21 @@ import { pendingUntilAborted, routeFetch, type Route } from '../../test/fetchRou
 import type { Cycle } from './types'
 import { useCycle } from './useCycle'
 
+/** O 503 vira o texto do catalogo pelo `kind`; a `message` de depuracao nao sai do hook. */
+const HTTP_FAILURE = {
+  kind: 'api',
+  text: { message: 'shared.apiError.http.message', recovery: 'shared.apiError.http.recovery' },
+} as const
+
+/** O prazo de leitura vira o texto de `timeout` do catalogo; a `message` de depuracao nao sai do hook. */
+const TIMEOUT_FAILURE = {
+  kind: 'api',
+  text: {
+    message: 'shared.apiError.timeout.message',
+    recovery: 'shared.apiError.timeout.recovery',
+  },
+} as const
+
 const semPlano: Cycle = {
   today: '2026-09-23',
   mission: null,
@@ -34,7 +49,7 @@ describe('useCycle', () => {
     })
   })
 
-  it('mostra o erro com a mensagem do cliente HTTP, e o reload tenta de novo', async () => {
+  it('mostra o erro com o texto do catalogo pelo kind, e o reload tenta de novo', async () => {
     routeFetch({
       'GET /api/cycle': (_init, call) =>
         call === 1 ? new Response(null, { status: 503 }) : Response.json(semPlano),
@@ -43,7 +58,7 @@ describe('useCycle', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     act(() => {
@@ -55,13 +70,13 @@ describe('useCycle', () => {
     })
   })
 
-  it('uma falha que nao e ApiError tem mensagem propria', async () => {
+  it('uma falha que nao e ApiError vira falha inesperada, sem texto: a tela o traduz', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nao e json', { status: 200 })))
     const { result } = renderHook(() => useCycle())
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'Falha inesperada ao carregar o ciclo.',
+        failure: { kind: 'unexpected' },
       })
     })
   })
@@ -533,14 +548,14 @@ describe('useCycle', () => {
       await responder(3, new Response(null, { status: 503 }))
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
       await responder(0, Response.json(ciclo(1)))
       await responder(1, Response.json(ciclo(1)))
 
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
   })
@@ -589,7 +604,7 @@ describe('useCycle', () => {
       await waitFor(() => {
         expect(result.current.state).toEqual({
           status: 'error',
-          message: 'O servidor respondeu 503.',
+          failure: HTTP_FAILURE,
         })
       })
 
@@ -602,7 +617,7 @@ describe('useCycle', () => {
       })
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     },
   )
@@ -619,14 +634,14 @@ describe('useCycle', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor respondeu 503.',
+        failure: HTTP_FAILURE,
       })
     })
     await act(async () => {
       result.current.refresh()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(result.current.state).toEqual({ status: 'error', message: 'O servidor respondeu 503.' })
+    expect(result.current.state).toEqual({ status: 'error', failure: HTTP_FAILURE })
   })
 
   it('a aba que volta a ficar visivel atualiza o ciclo em silencio (a virada do dia)', async () => {
@@ -788,7 +803,7 @@ describe('useCycle', () => {
 
       expect(result.current.state).toEqual({
         status: 'error',
-        message: 'O servidor demorou demais para responder.',
+        failure: TIMEOUT_FAILURE,
       })
     })
   })

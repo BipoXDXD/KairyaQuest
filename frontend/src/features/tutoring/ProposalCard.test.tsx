@@ -1,4 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { translate } from '../../shared/i18n/catalog'
+import { en } from '../../shared/i18n/messages/en'
+import { formatDeadline } from '../../shared/lib/deadline'
+import { renderWithI18n } from '../../test/i18n'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { routeFetch, type Route } from '../../test/fetchRoutes'
@@ -80,7 +84,7 @@ afterEach(() => {
 
 describe('ProposalCard', () => {
   it('C1 mostra instrucoes, criterio, dificuldade, minutos e prazo em Sao Paulo', () => {
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     expect(card()).toHaveAttribute('data-action-id', '5')
     expect(card()).toHaveAttribute('data-state', 'proposta')
@@ -96,7 +100,7 @@ describe('ProposalCard', () => {
   })
 
   it('C2 Confirmar e Recusar dizem qual proposta afetam', () => {
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     expect(screen.getByRole('button', { name: `Confirmar a proposta: ${INSTRUCTIONS}` })).toBe(
       confirmButton(),
@@ -110,7 +114,7 @@ describe('ProposalCard', () => {
 
   it('C3 confirmando: os dois botoes desabilitados', () => {
     routeFetch({ [CONFIRM]: PENDING })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -122,7 +126,7 @@ describe('ProposalCard', () => {
 
   it('C3 recusando: os dois botoes desabilitados', () => {
     routeFetch({ [REJECT]: PENDING })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(rejectButton())
 
@@ -139,7 +143,7 @@ describe('ProposalCard', () => {
     })
     const onMissionCreated = vi.fn()
     const onGoToBoard = vi.fn()
-    render(
+    renderWithI18n(
       <Harness initial={proposta} onMissionCreated={onMissionCreated} onGoToBoard={onGoToBoard} />,
     )
 
@@ -157,7 +161,7 @@ describe('ProposalCard', () => {
   })
 
   it('C4 executada sem onGoToBoard: o link segue so pelo href', () => {
-    render(<Harness initial={executada} />)
+    renderWithI18n(<Harness initial={executada} />)
 
     const link = screen.getByRole('link', { name: 'Ver no Quartel-General' })
     expect(link).toHaveAttribute('href', BOARD)
@@ -166,7 +170,7 @@ describe('ProposalCard', () => {
   })
 
   it('C5 recusada: marcada, sem botoes', () => {
-    render(<Harness initial={{ ...proposta, state: 'recusada' }} />)
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'recusada' }} />)
 
     expect(screen.getByTestId('proposal-rejected')).toHaveTextContent('Proposta recusada')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
@@ -174,7 +178,9 @@ describe('ProposalCard', () => {
   })
 
   it('C6 falhou por prazo: a explicacao e a sugestao', () => {
-    render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />)
+    renderWithI18n(
+      <Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />,
+    )
 
     expect(screen.getByTestId('proposal-expired')).toHaveTextContent(
       'O prazo desta proposta já passou. Peça à Kairya uma nova proposta.',
@@ -183,7 +189,7 @@ describe('ProposalCard', () => {
   })
 
   it('C7 falhou por outro motivo: o texto generico', () => {
-    render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'outro' }} />)
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'outro' }} />)
 
     expect(screen.getByTestId('proposal-expired')).toHaveTextContent(
       'Esta proposta não pôde ser executada. Peça à Kairya uma nova proposta.',
@@ -195,7 +201,7 @@ describe('ProposalCard', () => {
 
   it('C8 falha de rede: alerta e o Confirmar vira Tentar de novo', async () => {
     routeFetch({ [CONFIRM]: networkFailure })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -216,7 +222,7 @@ describe('ProposalCard', () => {
       [CONFIRM]: () => Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
     })
     const onRefresh = vi.fn()
-    render(<Harness initial={proposta} onRefresh={onRefresh} />)
+    renderWithI18n(<Harness initial={proposta} onRefresh={onRefresh} />)
 
     fireEvent.click(confirmButton())
 
@@ -233,7 +239,7 @@ describe('ProposalCard', () => {
 
   it('C10 falha ao recusar: o Recusar vira Tentar de novo, e o Confirmar volta ao normal', async () => {
     routeFetch({ [REJECT]: networkFailure })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(rejectButton())
 
@@ -250,7 +256,7 @@ describe('ProposalCard', () => {
     routeFetch({
       [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),
     })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -262,7 +268,9 @@ describe('ProposalCard', () => {
   })
 
   it('uma falha que ja veio gravada do historico NAO e anunciada de novo', () => {
-    render(<Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />)
+    renderWithI18n(
+      <Harness initial={{ ...proposta, state: 'falhou', error_code: 'prazo_expirado' }} />,
+    )
 
     expect(screen.getByTestId('proposal-expired')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -272,7 +280,7 @@ describe('ProposalCard', () => {
     const fetchMock = routeFetch({
       [CONFIRM]: () => Response.json({ detail: 'x', code: 'prazo_expirado' }, { status: 422 }),
     })
-    render(<Harness initial={proposta} />)
+    renderWithI18n(<Harness initial={proposta} />)
 
     fireEvent.click(confirmButton())
 
@@ -282,5 +290,103 @@ describe('ProposalCard', () => {
     expect(card()).toHaveAttribute('data-state', 'falhou')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Os mesmos textos em ingles, lidos do catalogo `en`: os casos PT acima fixam
+ * o literal; estes provam que o cartao troca de catalogo.
+ */
+describe('ProposalCard em ingles', () => {
+  const target = translate('en', 'tutoring.proposal.target', { instructions: INSTRUCTIONS })
+
+  it('E1 rotulos, valores e os nomes dos botoes', () => {
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    expect(
+      within(card()).getByRole('heading', { name: en['tutoring.proposal.title'] }),
+    ).toBeInTheDocument()
+    expect(card()).toHaveTextContent(`${en['tutoring.proposal.criterion']} Resumo de uma pagina`)
+    expect(card()).toHaveTextContent(en['tutoring.proposal.difficulty'])
+    expect(card()).toHaveTextContent(en['tutoring.proposal.estimate'])
+    expect(card()).toHaveTextContent(en['tutoring.proposal.deadline'])
+    expect(screen.getByTestId('proposal-deadline')).toHaveTextContent(
+      formatDeadline(proposta.payload.deadline, 'en'),
+    )
+    expect(screen.getByTestId('proposal-difficulty')).toHaveTextContent(
+      translate('en', 'tutoring.proposal.difficultyValue', { value: 2, max: 5 }),
+    )
+    expect(screen.getByTestId('proposal-estimated-minutes')).toHaveTextContent(
+      translate('en', 'tutoring.proposal.minutes', { minutes: 40 }),
+    )
+    expect(confirmButton()).toHaveAccessibleName(`${en['tutoring.decision.confirm']} ${target}`)
+    expect(rejectButton()).toHaveAccessibleName(`${en['tutoring.decision.reject']} ${target}`)
+  })
+
+  it('E2 confirmando', () => {
+    routeFetch({ [CONFIRM]: PENDING })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+    expect(confirmButton()).toHaveTextContent(en['tutoring.decision.confirming'])
+  })
+
+  it('E2 recusando', () => {
+    routeFetch({ [REJECT]: PENDING })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(rejectButton())
+    expect(rejectButton()).toHaveTextContent(en['tutoring.decision.rejecting'])
+  })
+
+  it('E3 executada: Missao criada e o link do quadro', () => {
+    renderWithI18n(<Harness initial={executada} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-created')).toHaveTextContent(
+      en['tutoring.proposal.created'],
+    )
+    expect(
+      screen.getByRole('link', { name: en['tutoring.proposal.boardLink'] }),
+    ).toBeInTheDocument()
+  })
+
+  it('E4 recusada', () => {
+    renderWithI18n(<Harness initial={{ ...proposta, state: 'recusada' }} />, { locale: 'en' })
+
+    expect(screen.getByTestId('proposal-rejected')).toHaveTextContent(
+      en['tutoring.proposal.rejected'],
+    )
+  })
+
+  it('E5 falha que se repete: o botao tentado vira Tentar de novo', async () => {
+    routeFetch({ [CONFIRM]: networkFailure })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+
+    await screen.findByRole('alert')
+    expect(confirmButton()).toHaveAccessibleName(`${en['tutoring.retry']} ${target}`)
+  })
+
+  it('E6 falha que nao se repete: Atualizar a conversa', async () => {
+    routeFetch({
+      [CONFIRM]: () => Response.json({ detail: 'x', code: 'transicao_ilegal' }, { status: 409 }),
+    })
+    renderWithI18n(<Harness initial={proposta} />, { locale: 'en' })
+
+    fireEvent.click(confirmButton())
+
+    expect(await screen.findByTestId('proposal-refresh')).toHaveTextContent(
+      en['tutoring.decision.refresh'],
+    )
+  })
+
+  it('E7 um kind desconhecido', () => {
+    const future = { ...proposta, kind: 'split_mission' } as unknown as ActionRead
+    renderWithI18n(<Harness initial={future} />, { locale: 'en' })
+
+    expect(screen.getByTestId('tutor-proposal-unknown')).toHaveTextContent(
+      en['tutoring.proposal.unknown'],
+    )
   })
 })
