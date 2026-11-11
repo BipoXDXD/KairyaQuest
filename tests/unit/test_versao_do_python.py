@@ -1,9 +1,22 @@
 """A versao do Python e a mesma em todo lugar que a declara (P-python-3-14-10-1).
 
-`.python-version` manda: o uv le o arquivo, localmente e no CI. A imagem da
-API repete o patch na tag do `FROM python:`, e se um subir sem o outro o gate
-passa com um interpretador e a imagem roda com outro. O `pyproject.toml` pede
-so a serie (`>=3.14`, mypy `3.14`), que tambem precisa casar com o patch.
+`.python-version` manda: o uv le o arquivo, localmente e no CI. Conferido contra
+ele, cada fonte com `arquivo:linha` dos dois lados:
+
+- `FROM [--platform=...] python:X.Y.Z-...` de `docker/*Dockerfile` e
+  `image: python:X.Y.Z-...` do `compose.yaml` (opcional): a tag precisa fixar o
+  patch e ser igual. Pelo menos um `FROM python:` precisa existir.
+- `[tool.mypy] python_version` do `pyproject.toml`: igual a serie (`X.Y`) do
+  patch. A chave precisa existir; `python_version` de outras tabelas nao conta.
+- `[project] requires-python`: so a forma `>=X.Y` ou `>=X.Y.Z` e aceita, e o
+  patch do `.python-version` precisa satisfazer o limite. Qualquer outra forma
+  (`>3.14`, `~=3.14`, `>=3.14,<4`, `==3.14.*`) reprova como "forma nao
+  suportada", mesmo que o interpretador coubesse nela: estender o aceito e
+  decisao consciente, nao acidente. A chave precisa existir.
+- os comentarios `` `.python-version` (X.Y.Z) `` do `quality.yml`: pelo menos um
+  precisa existir e todos citam o mesmo patch.
+
+Fonte ausente (arquivo, tabela, chave ou comentario) reprova: sumir nao e passar.
 
 Este teste NAO prova que o uv fixado no CI (`version:` do `setup-uv`) conhece o
 patch: isso depende do catalogo de downloads da versao do uv e nao cabe em teste
@@ -14,8 +27,10 @@ em `docs/handoff/2026-11-11-versao-python.md`).
 from __future__ import annotations
 
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -28,12 +43,11 @@ ARQUIVO_COMPOSE = "compose.yaml"
 PADRAO_DOCKERFILES = "docker/*Dockerfile"
 
 PATCH = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
-IMAGEM_NO_FROM = re.compile(r"^FROM\s+python:(?P<tag>[^\s@]+)")
+IMAGEM_NO_FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?python:(?P<tag>[^\s@]+)")
 IMAGEM_NO_COMPOSE = re.compile(r"^\s*image:\s*python:(?P<tag>[^\s@]+)")
 TAG_COM_PATCH = re.compile(r"^(\d+\.\d+\.\d+)(?:-|$)")
-REQUIRES_PYTHON = re.compile(r'^requires-python\s*=\s*"(?P<spec>[^"]*)"')
-LIMITE_INFERIOR = re.compile(r">=\s*(\d+)\.(\d+)")
-MYPY_PYTHON = re.compile(r'^python_version\s*=\s*"(?P<serie>[^"]*)"')
+LIMITE_INFERIOR = re.compile(r">=\s*(\d+)\.(\d+)(?:\.(\d+))?")
+CABECALHO_DE_TABELA = re.compile(r"^\s*\[(?P<nome>[^\[\]]+)\]\s*(?:#.*)?$")
 COMENTARIO_DO_WORKFLOW = re.compile(r"`\.python-version` \((?P<valor>[^)]*)\)")
 
 
@@ -94,42 +108,91 @@ def _serie(patch: str) -> str:
     return f"{maior}.{menor}"
 
 
-def _comparar_com_o_pyproject(raiz: Path, esperado: Declaracao) -> list[str]:
-    problemas: list[str] = []
-    serie = _serie(esperado.valor)
-    maior, menor, _ = (int(parte) for parte in esperado.valor.split("."))
+def _onde_no_pyproject(raiz: Path, tabela: str, chave: str) -> str:
+    """`pyproject.toml:linha` da `chave` dentro da `tabela`; sem linha se nao achar."""
+    atual = ""
     for numero, texto in _linhas(raiz, ARQUIVO_PYPROJECT):
-        onde = f"{ARQUIVO_PYPROJECT}:{numero}"
-        mypy = MYPY_PYTHON.match(texto)
-        if mypy and mypy["serie"] != serie:
-            problemas.append(
-                f"versao do Python divergente: {esperado.onde} diz {esperado.valor} "
-                f"(serie {serie}), {onde} diz mypy `python_version = "
-                f"{mypy['serie']}`"
-            )
-        requires = REQUIRES_PYTHON.match(texto)
-        if requires:
-            limite = LIMITE_INFERIOR.search(requires["spec"])
-            if limite is None or (int(limite[1]), int(limite[2])) > (maior, menor):
-                problemas.append(
-                    f"versao do Python divergente: {esperado.onde} diz "
-                    f"{esperado.valor}, {onde} pede `requires-python = "
-                    f"{requires['spec']}`, que nao aceita esse interpretador"
-                )
-    return problemas
+        cabecalho = CABECALHO_DE_TABELA.match(texto)
+        if cabecalho:
+            atual = cabecalho["nome"].strip()
+        elif atual == tabela and re.match(rf"^\s*{re.escape(chave)}\s*=", texto):
+            return f"{ARQUIVO_PYPROJECT}:{numero}"
+    return ARQUIVO_PYPROJECT
+
+
+def _comparar_com_o_pyproject(raiz: Path, esperado: Declaracao) -> list[str]:
+    if not (raiz / ARQUIVO_PYPROJECT).is_file():
+        return [f"{ARQUIVO_PYPROJECT}: arquivo ausente"]
+    try:
+        dados = tomllib.loads((raiz / ARQUIVO_PYPROJECT).read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as erro:
+        return [f"{ARQUIVO_PYPROJECT}: TOML invalido ({erro})"]
+    return _comparar_mypy(raiz, dados, esperado) + _comparar_requires_python(
+        raiz, dados, esperado
+    )
+
+
+def _comparar_mypy(
+    raiz: Path, dados: dict[str, Any], esperado: Declaracao
+) -> list[str]:
+    serie_do_mypy = dados.get("tool", {}).get("mypy", {}).get("python_version")
+    if serie_do_mypy is None:
+        return [f"{ARQUIVO_PYPROJECT}: [tool.mypy] sem `python_version`"]
+    serie = _serie(esperado.valor)
+    if str(serie_do_mypy) == serie:
+        return []
+    onde = _onde_no_pyproject(raiz, "tool.mypy", "python_version")
+    return [
+        f"versao do Python divergente: {esperado.onde} diz {esperado.valor} "
+        f"(serie {serie}), {onde} diz mypy `python_version = {serie_do_mypy}`"
+    ]
+
+
+def _comparar_requires_python(
+    raiz: Path, dados: dict[str, Any], esperado: Declaracao
+) -> list[str]:
+    spec = dados.get("project", {}).get("requires-python")
+    if spec is None:
+        return [f"{ARQUIVO_PYPROJECT}: [project] sem `requires-python`"]
+    onde = _onde_no_pyproject(raiz, "project", "requires-python")
+    limite = LIMITE_INFERIOR.fullmatch(str(spec).strip())
+    if limite is None:
+        return [
+            f"{onde}: `requires-python = {spec}` e uma forma nao suportada "
+            "(esperado so `>=X.Y` ou `>=X.Y.Z`)"
+        ]
+    pedido = tuple(int(parte or 0) for parte in limite.groups())
+    if pedido > tuple(int(parte) for parte in esperado.valor.split(".")):
+        return [
+            f"versao do Python divergente: {esperado.onde} diz {esperado.valor}, "
+            f"{onde} pede `requires-python = {spec}`, que nao aceita esse "
+            "interpretador"
+        ]
+    return []
 
 
 def _comparar_com_comentarios_do_workflow(
     raiz: Path, esperado: Declaracao
 ) -> list[str]:
+    if not (raiz / ARQUIVO_WORKFLOW).is_file():
+        return [f"{ARQUIVO_WORKFLOW}: arquivo ausente"]
     problemas: list[str] = []
+    citacoes = 0
     for numero, texto in _linhas(raiz, ARQUIVO_WORKFLOW):
         achado = COMENTARIO_DO_WORKFLOW.search(texto)
-        if achado and achado["valor"] != esperado.valor:
+        if achado is None:
+            continue
+        citacoes += 1
+        if achado["valor"] != esperado.valor:
             problemas.append(
                 f"versao do Python divergente: {esperado.onde} diz {esperado.valor}, "
                 f"{ARQUIVO_WORKFLOW}:{numero} cita {achado['valor']}"
             )
+    if citacoes == 0:
+        problemas.append(
+            f"{ARQUIVO_WORKFLOW}: nenhum comentario com `.python-version` (X.Y.Z); "
+            "o comentario que cita o patch sumiu ou mudou de formato"
+        )
     return problemas
 
 
@@ -186,8 +249,8 @@ def _repositorio(
     *,
     python_version: str | None = "3.14.10\n",
     dockerfile: str = DOCKERFILE_COERENTE,
-    pyproject: str = PYPROJECT_COERENTE,
-    workflow: str = WORKFLOW_COERENTE,
+    pyproject: str | None = PYPROJECT_COERENTE,
+    workflow: str | None = WORKFLOW_COERENTE,
     compose: str | None = None,
 ) -> Path:
     (destino / "docker").mkdir()
@@ -195,8 +258,10 @@ def _repositorio(
     if python_version is not None:
         (destino / ARQUIVO_PYTHON_VERSION).write_text(python_version)
     (destino / "docker/api.Dockerfile").write_text(dockerfile)
-    (destino / ARQUIVO_PYPROJECT).write_text(pyproject)
-    (destino / ARQUIVO_WORKFLOW).write_text(workflow)
+    if pyproject is not None:
+        (destino / ARQUIVO_PYPROJECT).write_text(pyproject)
+    if workflow is not None:
+        (destino / ARQUIVO_WORKFLOW).write_text(workflow)
     if compose is not None:
         (destino / ARQUIVO_COMPOSE).write_text(compose)
     return destino
@@ -236,18 +301,53 @@ def test_cada_from_python_e_conferido_e_so_o_divergente_reprova(
     ]
 
 
-def test_arquivo_de_versao_diferente_da_imagem_e_do_workflow_reprova(
-    tmp_path: Path,
-) -> None:
-    problemas = verificar_coerencia(_repositorio(tmp_path, python_version="3.14.11\n"))
+DOCKERFILE_UM_ESTAGIO = "FROM python:3.14.10-slim-trixie@sha256:bbbb\n"
+
+
+def test_arquivo_de_versao_mais_novo_que_a_imagem_reprova(tmp_path: Path) -> None:
+    repositorio = _repositorio(
+        tmp_path,
+        python_version="3.14.11\n",
+        dockerfile=DOCKERFILE_UM_ESTAGIO,
+        workflow=WORKFLOW_COERENTE.replace("3.14.10", "3.14.11"),
+    )
+
+    problemas = verificar_coerencia(repositorio)
 
     assert problemas == [
         "versao do Python divergente: .python-version:1 diz 3.14.11, "
-        "docker/api.Dockerfile:2 diz 3.14.10",
+        "docker/api.Dockerfile:1 diz 3.14.10"
+    ]
+
+
+def test_arquivo_de_versao_mais_novo_que_o_comentario_do_workflow_reprova(
+    tmp_path: Path,
+) -> None:
+    repositorio = _repositorio(
+        tmp_path,
+        python_version="3.14.11\n",
+        dockerfile=DOCKERFILE_UM_ESTAGIO.replace("3.14.10", "3.14.11"),
+    )
+
+    problemas = verificar_coerencia(repositorio)
+
+    assert problemas == [
         "versao do Python divergente: .python-version:1 diz 3.14.11, "
-        "docker/api.Dockerfile:4 diz 3.14.10",
-        "versao do Python divergente: .python-version:1 diz 3.14.11, "
-        ".github/workflows/quality.yml:1 cita 3.14.10",
+        ".github/workflows/quality.yml:1 cita 3.14.10"
+    ]
+
+
+def test_from_com_platform_tambem_e_conferido(tmp_path: Path) -> None:
+    dockerfile = (
+        "FROM --platform=$BUILDPLATFORM python:3.14.9-slim-trixie@sha256:bbbb "
+        "AS build\n"
+    )
+
+    problemas = verificar_coerencia(_repositorio(tmp_path, dockerfile=dockerfile))
+
+    assert problemas == [
+        "versao do Python divergente: .python-version:1 diz 3.14.10, "
+        "docker/api.Dockerfile:1 diz 3.14.9"
     ]
 
 
@@ -294,7 +394,7 @@ def test_mypy_em_outra_serie_reprova(tmp_path: Path) -> None:
     assert ".python-version:1 diz 3.14.10" in problemas[0]
 
 
-@pytest.mark.parametrize("spec", [">=3.15", ">3.14", "~=3.14"])
+@pytest.mark.parametrize("spec", [">=3.15", ">=3.14.11"])
 def test_requires_python_que_nao_aceita_o_interpretador_reprova(
     tmp_path: Path, spec: str
 ) -> None:
@@ -302,9 +402,35 @@ def test_requires_python_que_nao_aceita_o_interpretador_reprova(
 
     problemas = verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject))
 
+    assert problemas == [
+        "versao do Python divergente: .python-version:1 diz 3.14.10, "
+        f"pyproject.toml:2 pede `requires-python = {spec}`, que nao aceita "
+        "esse interpretador"
+    ]
+
+
+@pytest.mark.parametrize("spec", [">=3.14", ">=3.14.0", ">=3.14.10", ">= 3.13"])
+def test_requires_python_com_limite_inferior_que_aceita_o_interpretador_passa(
+    tmp_path: Path, spec: str
+) -> None:
+    pyproject = PYPROJECT_COERENTE.replace('">=3.14"', f'"{spec}"')
+
+    assert verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject)) == []
+
+
+@pytest.mark.parametrize("spec", [">3.14", "~=3.14", ">=3.14,<4", "==3.14.*", "3.14"])
+def test_requires_python_em_forma_nao_suportada_reprova_sem_dizer_que_diverge(
+    tmp_path: Path, spec: str
+) -> None:
+    pyproject = PYPROJECT_COERENTE.replace('">=3.14"', f'"{spec}"')
+
+    problemas = verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject))
+
     assert len(problemas) == 1
-    assert "pyproject.toml:2" in problemas[0]
+    assert problemas[0].startswith("pyproject.toml:2:")
     assert f"requires-python = {spec}" in problemas[0]
+    assert "forma nao suportada" in problemas[0]
+    assert "divergente" not in problemas[0]
 
 
 def test_comentario_do_workflow_com_patch_velho_reprova(tmp_path: Path) -> None:
@@ -336,3 +462,80 @@ def test_arquivo_de_versao_invalido_reprova_com_o_arquivo(
     assert len(problemas) == 1
     assert problemas[0].startswith(ARQUIVO_PYTHON_VERSION)
     assert trecho in problemas[0]
+
+
+# --- uma fonte que some nao pode passar em silencio ---------------------------
+
+PYPROJECT_SEM_MYPY = '[project]\nrequires-python = ">=3.14"\n'
+PYPROJECT_SEM_REQUIRES = (
+    '[project]\nname = "x"\n\n[tool.mypy]\npython_version = "3.14"\n'
+)
+
+
+def test_pyproject_sem_a_tabela_do_mypy_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(
+        _repositorio(tmp_path, pyproject=PYPROJECT_SEM_MYPY)
+    )
+
+    assert problemas == ["pyproject.toml: [tool.mypy] sem `python_version`"]
+
+
+def test_mypy_sem_python_version_reprova(tmp_path: Path) -> None:
+    pyproject = PYPROJECT_SEM_MYPY + "\n[tool.mypy]\nstrict = true\n"
+
+    problemas = verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject))
+
+    assert problemas == ["pyproject.toml: [tool.mypy] sem `python_version`"]
+
+
+def test_python_version_de_outra_tabela_nao_conta_como_o_do_mypy(
+    tmp_path: Path,
+) -> None:
+    pyproject = PYPROJECT_SEM_MYPY + '\n[tool.outra]\npython_version = "3.14"\n'
+
+    problemas = verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject))
+
+    assert problemas == ["pyproject.toml: [tool.mypy] sem `python_version`"]
+
+
+def test_python_version_de_outra_tabela_nao_diverge_do_mypy_certo(
+    tmp_path: Path,
+) -> None:
+    pyproject = PYPROJECT_COERENTE + '\n[tool.outra]\npython_version = "3.13"\n'
+
+    assert verificar_coerencia(_repositorio(tmp_path, pyproject=pyproject)) == []
+
+
+def test_pyproject_sem_requires_python_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(
+        _repositorio(tmp_path, pyproject=PYPROJECT_SEM_REQUIRES)
+    )
+
+    assert problemas == ["pyproject.toml: [project] sem `requires-python`"]
+
+
+def test_pyproject_ausente_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(_repositorio(tmp_path, pyproject=None))
+
+    assert problemas == ["pyproject.toml: arquivo ausente"]
+
+
+def test_pyproject_que_nao_e_toml_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(_repositorio(tmp_path, pyproject="[project\n"))
+
+    assert len(problemas) == 1
+    assert problemas[0].startswith("pyproject.toml: TOML invalido")
+
+
+def test_workflow_ausente_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(_repositorio(tmp_path, workflow=None))
+
+    assert problemas == [".github/workflows/quality.yml: arquivo ausente"]
+
+
+def test_workflow_sem_nenhum_comentario_com_o_patch_reprova(tmp_path: Path) -> None:
+    problemas = verificar_coerencia(_repositorio(tmp_path, workflow="name: quality\n"))
+
+    assert len(problemas) == 1
+    assert problemas[0].startswith(".github/workflows/quality.yml: nenhum comentario")
+    assert "`.python-version` (X.Y.Z)" in problemas[0]
