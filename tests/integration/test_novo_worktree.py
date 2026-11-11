@@ -165,10 +165,10 @@ def test_o_env_do_worktree_nao_herda_segredo_do_principal(
     carrega-las. Cada chave em branco no `.env.example`, e uma que o exemplo
     nem conhece, recebe um canario no principal: nenhum aparece no worktree."""
     chaves = _chaves_em_branco_do_exemplo()
-    assert "FOCUSQUEST_GROQ_API_KEY" in chaves
+    assert "FOCUSQUEST_ANTHROPIC_API_KEY" in chaves
     canarios = {
         chave: f"CANARY-{uuid.uuid4()}"
-        for chave in [*chaves, "FOCUSQUEST_ANTHROPIC_API_KEY"]
+        for chave in [*chaves, "FOCUSQUEST_SEGREDO_FORA_DO_EXEMPLO"]
     }
     (repo.principal / ".env").write_text(
         ENV_PRINCIPAL
@@ -201,7 +201,7 @@ def test_exemplo_sem_banco_de_teste_ganha_a_linha_do_worktree(
     repo: Repositorio,
 ) -> None:
     """Sem a linha, o worktree usaria o banco padrao -- o do principal."""
-    (repo.principal / ".env.example").write_text("FOCUSQUEST_GROQ_API_KEY=\n")
+    (repo.principal / ".env.example").write_text("FOCUSQUEST_ANTHROPIC_API_KEY=\n")
     repo.git("commit", "-q", "-am", "exemplo curto")
 
     resultado = repo.rodar("curto")
@@ -211,7 +211,7 @@ def test_exemplo_sem_banco_de_teste_ganha_a_linha_do_worktree(
     assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
         f"{PREFIXO}focusquest_curto_test?options=-c%20x"
     )
-    assert _valor(env, "FOCUSQUEST_GROQ_API_KEY") == ""
+    assert _valor(env, "FOCUSQUEST_ANTHROPIC_API_KEY") == ""
 
 
 def test_o_deslocamento_automatico_e_o_menor_livre(repo: Repositorio) -> None:

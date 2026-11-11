@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../shared/api/client'
+import { ApiError, ApiTimeoutError } from '../../shared/api/client'
 import { describeCompletionFailure } from './completionFailure'
 
 // Escrita por extenso, e nao importada do modulo: se a mensagem generica
@@ -76,10 +76,25 @@ describe('describeCompletionFailure', () => {
     },
   )
 
-  it('cai na mensagem generica quando nao ha code (rede, 5xx)', () => {
+  it('a rede fora diz que nao conectou, e repetir e seguro', () => {
     expect(
       describeCompletionFailure(new ApiError('Não foi possível falar com o servidor.', null, null)),
-    ).toEqual(UNCONFIRMED)
+    ).toEqual({
+      message:
+        'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      recovery: 'retry',
+    })
+  })
+
+  it('o prazo diz que a resposta demorou, e repetir e seguro', () => {
+    expect(describeCompletionFailure(new ApiTimeoutError())).toEqual({
+      message:
+        'Não foi possível concluir a missão: o servidor demorou demais para responder. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+      recovery: 'retry',
+    })
+  })
+
+  it('um 5xx sem code continua no texto generico', () => {
     expect(describeCompletionFailure(new ApiError('O servidor respondeu 500.', 500, null))).toEqual(
       UNCONFIRMED,
     )
