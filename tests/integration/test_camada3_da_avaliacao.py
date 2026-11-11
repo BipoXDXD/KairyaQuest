@@ -17,7 +17,7 @@ from focusquest.modules.evaluation.rubric import (
     NOME_DA_FERRAMENTA,
 )
 from integration import camada3, camada3_da_avaliacao
-from integration.conftest import TIMEOUT_DE_TESTE
+from integration.conftest import TIMEOUT_FOLGADO
 from integration.espiao import provedor_espionado
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -51,7 +51,7 @@ def test_o_falso_emite_a_sequencia_da_avaliacao_real(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",
@@ -77,7 +77,7 @@ def test_a_captura_pede_a_ferramenta_real_da_avaliacao(
         base_url=falso.url,
         modelo="claude-opus-5",
         max_tokens=256,
-        timeout_segundos=TIMEOUT_DE_TESTE,
+        timeout_segundos=TIMEOUT_FOLGADO,
         fallback=True,
         esforco="low",
         esforco_da_avaliacao="medium",
