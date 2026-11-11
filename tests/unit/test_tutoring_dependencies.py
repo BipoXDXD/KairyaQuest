@@ -9,6 +9,7 @@ import pytest
 from anthropic import omit
 
 import focusquest.modules.tutoring.dependencies as dependencias
+from focusquest.core.config import Settings
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from unit.anthropic_falso import FERRAMENTA, TURNO, instalar_cliente_falso
 
@@ -70,6 +71,27 @@ def test_get_tutoria_leva_a_configuracao_do_ambiente(
     assert tutoria.modelo == "claude-haiku-5-5"
     assert (tutoria.historico, tutoria.limite) == (7, timedelta(seconds=12))
     assert tutoria.turnos_por_dia == 5
+
+
+@pytest.mark.usefixtures("ambiente_limpo")
+def test_o_teto_de_parede_do_stream_vem_de_tutor_timeout_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Tutoria.limite` e o teto total do stream (`tutoring/leitura.py`): o elo
+    entre ele e `Settings.tutor_timeout_seconds` (54 s de padrao, o que o
+    `test_prazos_coerentes` confere contra o proxy) nao pode ser uma constante
+    solta na fiacao."""
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-ficticia")
+    padrao = dependencias.get_tutoria()
+    assert padrao is not None
+    assert padrao.limite == timedelta(seconds=Settings().tutor_timeout_seconds)
+    assert padrao.limite == timedelta(seconds=54)
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_TIMEOUT_SECONDS", "31.5")
+    outra = dependencias.get_tutoria()
+    assert outra is not None
+    assert outra.limite == timedelta(seconds=31.5)
 
 
 @pytest.mark.usefixtures("ambiente_limpo")
