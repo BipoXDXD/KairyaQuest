@@ -1,3 +1,4 @@
+import { createRef } from 'react'
 import { render, screen } from '@testing-library/react'
 import { expect, test } from 'vitest'
 import { Panel } from './Panel'
@@ -68,4 +69,33 @@ test('div não repassa aria-labelledby, nem quando o tipo é contornado', () => 
     </Panel>,
   )
   expect(screen.getByTestId('p')).not.toHaveAttribute('aria-labelledby')
+})
+
+test('as="aside" com aria-label vira complementary nomeada', () => {
+  render(
+    <Panel as="aside" aria-label="Kairya">
+      x
+    </Panel>,
+  )
+  expect(screen.getByRole('complementary', { name: 'Kairya' }).tagName).toBe('ASIDE')
+})
+
+test('div não repassa aria-label, nem quando o tipo é contornado', () => {
+  render(
+    // @ts-expect-error ARIA 1.2 proíbe nomear um div sem role; o tipo só aceita aria-label em section, aside e article.
+    <Panel aria-label="Kairya" data-testid="p">
+      x
+    </Panel>,
+  )
+  expect(screen.getByTestId('p')).not.toHaveAttribute('aria-label')
+})
+
+test('ref chega ao elemento renderizado', () => {
+  const ref = createRef<HTMLElement>()
+  render(
+    <Panel as="aside" ref={ref} data-testid="p">
+      x
+    </Panel>,
+  )
+  expect(ref.current).toBe(screen.getByTestId('p'))
 })

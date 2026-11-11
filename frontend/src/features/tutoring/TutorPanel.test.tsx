@@ -214,6 +214,21 @@ describe('TutorPanel: estados da conversa', () => {
     })
   })
 
+  it('P2 o carregamento e o Skeleton do design system, com o mesmo anuncio', async () => {
+    mountPanel({ [HISTORY]: PENDING })
+
+    const loading = screen.getByTestId('tutor-history-loading')
+    expect(within(loading).getByRole('status')).toHaveTextContent(/^Carregando a conversa…$/)
+    const bars = loading.querySelectorAll('[aria-hidden="true"]')
+    expect(bars).toHaveLength(3)
+    for (const bar of bars) {
+      expect(bar).toHaveClass('rounded-ui', 'bg-bg-raised')
+    }
+    await waitFor(() => {
+      expect(input()).toBeEnabled()
+    })
+  })
+
   it('P3 vazio: a saudacao da interface, e nao uma fala da Kairya', async () => {
     mountPanel({})
 
@@ -235,6 +250,19 @@ describe('TutorPanel: estados da conversa', () => {
     expect(within(items[1] as HTMLElement).getByText('Kairya')).toBeInTheDocument()
     expect(within(items[1] as HTMLElement).getByText('Oi! Bora estudar?')).toBeInTheDocument()
     expect(screen.queryByTestId('tutor-greeting')).not.toBeInTheDocument()
+  })
+
+  it('P4b a resposta da Kairya e uma fala nomeada; a pergunta, nao', async () => {
+    const q1 = question(1, 'Oi, Kairya', 'c1')
+    const a2 = answer(2, 1, 'Oi! Bora estudar?')
+    mountPanel({ [HISTORY]: () => Response.json([q1, a2]) })
+
+    const list = await screen.findByTestId('tutor-messages')
+    const items = within(list).getAllByRole('listitem')
+    expect(within(items[0] as HTMLElement).queryByRole('figure')).not.toBeInTheDocument()
+    const speech = within(items[1] as HTMLElement).getByRole('figure', { name: 'Kairya' })
+    expect(speech).toHaveTextContent('Oi! Bora estudar?')
+    await ready()
   })
 
   it('P5 marcas de interrompida, com falha e em andamento no historico', async () => {
@@ -922,19 +950,32 @@ describe('TutorPanel: desktop', () => {
     expect(messageWith('Resposta pronta')).toBeInTheDocument()
   })
 
-  it('P26 o retrato aberto tem nome acessivel e reserva as dimensoes reais do arquivo', async () => {
+  it('P26 o retrato aberto e decorativo, vem do mapa da arte e reserva as dimensoes reais', async () => {
     mountPanel({})
 
+    // O nome do painel ("Kairya") e o titulo ja dizem quem e; o retrato e
+    // ambientacao, e um texto alternativo so repetiria o nome.
     const portrait = screen.getByTestId('tutor-portrait')
     expect(portrait).toHaveAttribute('data-size', 'scene')
-    expect(portrait).not.toHaveAttribute('aria-hidden')
-    const image = screen.getByRole('img', {
-      name: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
-    })
-    expect(portrait).toContainElement(image)
+    expect(portrait).toHaveAttribute('aria-hidden', 'true')
+    const image = portrait.querySelector('img')
     expect(image).toHaveAttribute('src', '/art/kairya/portrait.webp')
+    expect(image).toHaveAttribute('alt', '')
     expect(image).toHaveAttribute('width', '864')
     expect(image).toHaveAttribute('height', '1152')
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+    await ready()
+  })
+
+  it('P26c aberto, o painel acende a luz da lanterna; recolhido, apaga', async () => {
+    mountPanel({})
+
+    expect(screen.getByRole('complementary', { name: 'Kairya' })).toHaveClass('shadow-glow-lantern')
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
+    expect(screen.getByRole('complementary', { name: 'Kairya' })).not.toHaveClass(
+      'shadow-glow-lantern',
+    )
+    fireEvent.click(screen.getByTestId('tutor-panel-toggle'))
     await ready()
   })
 
@@ -965,6 +1006,24 @@ describe('TutorPanel: celular', () => {
     await ready()
     return dialog
   }
+
+  it('P22b celular: o botao fixo e a folha mostram o avatar decorativo, sem a luz', async () => {
+    mountPanel({}, 'mobile')
+
+    const open = screen.getByTestId('tutor-sheet-open')
+    expect(open).toHaveAccessibleName('Falar com a Kairya')
+    const fabAvatar = within(open).getByTestId('tutor-portrait')
+    expect(fabAvatar).toHaveAttribute('data-size', 'compact')
+    expect(fabAvatar.querySelector('img')).toHaveAttribute('src', '/art/kairya/avatar.webp')
+    expect(fabAvatar.querySelector('img')).toHaveAttribute('alt', '')
+    const dialog = await openSheet()
+    const sheetAvatar = within(dialog).getByTestId('tutor-portrait')
+    expect(sheetAvatar.querySelector('img')).toHaveAttribute('src', '/art/kairya/avatar.webp')
+    expect(sheetAvatar.querySelector('img')).toHaveAttribute('alt', '')
+    expect(screen.getByRole('complementary', { name: 'Kairya' })).not.toHaveClass(
+      'shadow-glow-lantern',
+    )
+  })
 
   it('P22 celular: botao fixo abre a folha como dialogo, com o foco no campo', async () => {
     const { fetchMock } = mountPanel({}, 'mobile')

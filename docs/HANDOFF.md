@@ -1,3 +1,37 @@
+# Fase 4, Tarefa 4.7: painel da Kairya no design system — 2026-11-10
+
+Objetivo: migrar a tutoria (painel, conversa, cartões de proposta e controles
+de decisão) para tokens e componentes da F4, sobre a tutoria da F3.
+Base: `wt/f4-migra-shell` (`5a3b014`) com merge de `origin/wt/f3-tutoring`
+(`4cbdd7f`) no commit `34081a3`.
+
+Decisões:
+
+- Desktop: o `aside` é um `Panel as="aside"` com `glow` quando aberto (luz
+  da lanterna), dentro de uma coluna `sticky` de altura `h-dvh`. Celular:
+  `aside` sem moldura, porque o botão e a folha são fixos e uma caixa com
+  borda ficaria vazia no fluxo. A troca de layout passa a remontar o `aside`
+  inteiro (região viva inclusive); antes só o conteúdo remontava.
+- `Panel` ganhou `ref` e `aria-label` só na variante landmark (o `div`
+  continua sem nome); `IconButton` ganhou `ref`, `expanded`, `controls` e
+  `title`; `Button` ganhou `ref` no tipo. Cada extensão tem teste.
+- Retrato (`ART.kairya.portrait`) e avatar (`ART.kairya.avatar`) são
+  decorativos (`alt=""`, moldura `aria-hidden`): o nome vem do painel, do
+  título da folha e do botão. O P26 mudou de "tem nome acessível" para
+  "é decorativo", como pede o brief.
+- Mensagens da Kairya são `SpeechBubble` (`figure` nomeada "Kairya"); a da
+  pessoa, caixa simples com "Você". O carregamento é o `Skeleton`, com o
+  mesmo `data-testid` e o mesmo status `sr-only`.
+- Botões: Enviar e Confirmar `primary`; Recusar, Atualizar, Tentar de novo e
+  Fechar a conversa `secondary`; recolher/abrir é `IconButton` com seta.
+- As falhas continuam `role="alert"` (como a F3 as deixou), agora em
+  `text-feedback-danger`; não viraram `StatusLine` (`role="status"`) para não
+  trocar o papel que os testes e o leitor de tela esperam.
+- `.rpg-tutor` e `.tutor-*` saíram do `index.css`; os cinco arquivos da
+  tutoria saíram de `PENDING_MIGRATION`. No `layout.spec.ts`, o texto longo
+  da resposta é lido por `tutor-message-content`, e não mais pelo segundo
+  `p` da bolha (a autoria da Kairya agora é `figcaption`).
+
 # Fase 4, Tarefa 4.6: shell, navegação e cabeçalhos das áreas — 2026-11-10
 
 Objetivo: migrar o shell (`App`, `SideNav`, cabeçalhos do Quartel-General e

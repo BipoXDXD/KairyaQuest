@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 export type Elevation = 'sunken' | 'surface' | 'raised'
 
@@ -13,12 +13,19 @@ interface PanelBaseProps {
 /**
  * Só elemento com papel pode ter nome: o ARIA 1.2 proíbe nomear um `div` sem
  * role (generic), e o axe acusa `aria-prohibited-attr`. Por isso o
- * `aria-labelledby` só existe na variante de `section`, `aside` e `article`.
+ * `aria-labelledby` e o `aria-label` só existem na variante de `section`,
+ * `aside` e `article`. O `ref` também: quem precisa do elemento é quem o
+ * trata como região (o painel da Kairya isola os irmãos dele).
  */
 export type PanelProps = PanelBaseProps &
   (
-    | { as: 'section' | 'aside' | 'article'; 'aria-labelledby'?: string }
-    | { as?: 'div'; 'aria-labelledby'?: never }
+    | {
+        as: 'section' | 'aside' | 'article'
+        'aria-labelledby'?: string
+        'aria-label'?: string
+        ref?: Ref<HTMLElement>
+      }
+    | { as?: 'div'; 'aria-labelledby'?: never; 'aria-label'?: never; ref?: never }
   )
 
 /** A elevação é dada pela superfície mais clara, nunca por sombra. */
@@ -34,16 +41,27 @@ export function Panel({
   as: Element = 'div',
   glow = false,
   children,
+  ref,
   'aria-labelledby': labelledBy,
+  'aria-label': label,
   'data-testid': testId,
 }: PanelProps) {
-  const glowClass = glow ? ' shadow-glow-lantern' : ''
+  const className = `rounded-ui border border-border-subtle p-4 text-text-primary ${ELEVATION_CLASS[elevation]}${glow ? ' shadow-glow-lantern' : ''}`
+  if (Element === 'div') {
+    return (
+      <div data-testid={testId} data-elevation={elevation} className={className}>
+        {children}
+      </div>
+    )
+  }
   return (
     <Element
-      aria-labelledby={Element === 'div' ? undefined : labelledBy}
+      ref={ref}
+      aria-labelledby={labelledBy}
+      aria-label={label}
       data-testid={testId}
       data-elevation={elevation}
-      className={`rounded-ui border border-border-subtle p-4 text-text-primary ${ELEVATION_CLASS[elevation]}${glowClass}`}
+      className={className}
     >
       {children}
     </Element>

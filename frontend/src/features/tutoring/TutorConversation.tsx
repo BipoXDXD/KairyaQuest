@@ -1,4 +1,4 @@
-import { Fragment, useId, type ReactElement, type Ref } from 'react'
+import { Fragment, useId, type ReactElement, type ReactNode, type Ref } from 'react'
 import { unansweredNote } from './answerOutcome'
 import { latestAnswerTo } from './conversationHistory'
 import { UNKNOWN_RESULT } from './messageFailure'
@@ -11,6 +11,7 @@ import { plural } from '../../shared/i18n/plural'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
 import type { Counter } from '../../shared/types/counter'
+import { Button, Field, Skeleton, SpeechBubble } from '../../shared/ui'
 import { MAX_QUESTION_LENGTH } from './questionLimit'
 
 /**
@@ -31,23 +32,26 @@ const STATUS_MARK: Record<MessageStatus, MessageKey | null> = {
   falhou: 'tutoring.message.mark.failed',
 }
 
-const BUBBLE = {
-  user: 'ml-8 rounded-lg bg-slate-800 p-3 text-sm text-slate-100',
-  tutor:
-    'mr-8 rounded-lg border border-emerald-700/60 bg-emerald-950/40 p-3 text-sm text-slate-100',
-} as const
+/** De que lado fica a fala: a pessoa a direita, a Kairya a esquerda. */
+const SIDE: Record<MessageRead['role'], string> = { user: 'ml-8', tutor: 'mr-8' }
 
-const BUTTON =
-  'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+/** O texto de uma falha, sobre o fundo da conversa. */
+const FAILURE_TEXT = 'flex flex-col items-start gap-2 text-sm text-feedback-danger'
 
-function Author({ role }: { role: MessageRead['role'] }) {
+/**
+ * A bolha de uma mensagem. A da Kairya e uma fala (`SpeechBubble`, `figure`
+ * nomeada por ela); a da pessoa, uma caixa simples com "Você" no topo.
+ */
+function Bubble({ role, children }: { role: MessageRead['role']; children: ReactNode }) {
   const t = useT()
+  if (role === 'tutor') {
+    return <SpeechBubble speaker={t('tutoring.name')}>{children}</SpeechBubble>
+  }
   return (
-    <p className="mb-1 text-xs font-semibold text-slate-400">
-      {t(role === 'user' ? 'tutoring.message.author.user' : 'tutoring.name')}
-    </p>
+    <div className="flex flex-col gap-1 rounded-ui border border-border-subtle bg-bg-surface p-4">
+      <p className="text-sm font-bold text-text-muted">{t('tutoring.message.author.user')}</p>
+      <div className="text-text-primary">{children}</div>
+    </div>
   )
 }
 
@@ -89,31 +93,32 @@ function MessageItem({
   const t = useT()
   const mark = STATUS_MARK[message.status]
   return (
-    <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
-      <Author role={message.role} />
-      {/* Sem texto (a recusada, ou a falha antes do primeiro pedaco), a bolha
-          fica com o autor e a marca: um paragrafo vazio so abriria espaco. */}
-      {message.content !== '' && (
-        <p data-testid="tutor-message-content" className="wrap-anywhere whitespace-pre-wrap">
-          {message.content}
-        </p>
-      )}
-      {mark !== null && (
-        <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
-          {t(mark)}
-        </p>
-      )}
-      {/* Pendencia 174: outro modelo escreveu a resposta (o fallback do
-          servidor depois de uma recusa). Dentro do `li`, para o leitor de
-          tela ler junto com a mensagem; sem alarme e sem a categoria. */}
-      {message.fallback_model !== null && (
-        <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-slate-400">
-          {t('tutoring.message.fallback', { model: message.fallback_model })}
-        </p>
-      )}
-      {message.actions.map((action) => (
-        <Fragment key={action.id}>{renderAction(action)}</Fragment>
-      ))}
+    <li data-testid="tutor-message" data-message-id={message.id} className={SIDE[message.role]}>
+      <Bubble role={message.role}>
+        {/* Sem texto (a recusada, ou a falha antes do primeiro pedaco), a bolha
+            fica com o autor e a marca: um paragrafo vazio so abriria espaco. */}
+        {message.content !== '' && (
+          <p data-testid="tutor-message-content" className="wrap-anywhere whitespace-pre-wrap">
+            {message.content}
+          </p>
+        )}
+        {mark !== null && (
+          <p data-testid="tutor-message-mark" className="mt-1 text-sm font-bold text-text-muted">
+            {t(mark)}
+          </p>
+        )}
+        {/* Pendencia 174: outro modelo escreveu a resposta (o fallback do
+            servidor depois de uma recusa). Dentro do `li`, para o leitor de
+            tela ler junto com a mensagem; sem alarme e sem a categoria. */}
+        {message.fallback_model !== null && (
+          <p data-testid="tutor-message-fallback" className="mt-1 text-sm text-text-muted">
+            {t('tutoring.message.fallback', { model: message.fallback_model })}
+          </p>
+        )}
+        {message.actions.map((action) => (
+          <Fragment key={action.id}>{renderAction(action)}</Fragment>
+        ))}
+      </Bubble>
     </li>
   )
 }
@@ -134,37 +139,19 @@ function HistoryPlaceholder({
   const { history, messages } = conversation
   switch (history.status) {
     case 'loading':
-      return (
-        <div data-testid="tutor-history-loading" className="flex flex-col gap-2">
-          <p role="status" className="sr-only">
-            {t('tutoring.history.loading')}
-          </p>
-          {[0, 1, 2].map((n) => (
-            <div
-              key={n}
-              aria-hidden="true"
-              className="h-12 rounded-lg bg-slate-800 motion-safe:animate-pulse"
-            />
-          ))}
-        </div>
-      )
+      return <Skeleton data-testid="tutor-history-loading" label={t('tutoring.history.loading')} />
     case 'error':
       return (
-        <div data-testid="tutor-history-error" className="text-sm text-red-200">
+        <div data-testid="tutor-history-error" className={FAILURE_TEXT}>
           <p>{t('tutoring.history.loadFailed')}</p>
-          <button
-            type="button"
-            data-testid="tutor-history-retry"
-            onClick={conversation.reloadHistory}
-            className={`mt-2 ${BUTTON}`}
-          >
+          <Button data-testid="tutor-history-retry" onClick={conversation.reloadHistory}>
             {t('tutoring.retryLoad')}
-          </button>
+          </Button>
         </div>
       )
     case 'loaded':
       return messages.length === 0 && conversation.send.status === 'idle' ? (
-        <p data-testid="tutor-greeting" className="text-sm text-slate-300">
+        <p data-testid="tutor-greeting" className="text-text-primary">
           {t('tutoring.conversation.greeting')}
         </p>
       ) : null
@@ -181,10 +168,11 @@ function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
     return null
   }
   return (
-    <li data-testid="tutor-partial" className={BUBBLE.tutor}>
-      <Author role="tutor" />
-      <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
-      <p className="mt-1 text-xs text-emerald-300">{t('tutoring.writing')}</p>
+    <li data-testid="tutor-partial" className={SIDE.tutor}>
+      <Bubble role="tutor">
+        <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
+        <p className="mt-1 text-sm text-text-muted">{t('tutoring.writing')}</p>
+      </Bubble>
     </li>
   )
 }
@@ -223,13 +211,13 @@ function FailureNotice({
   const { send, retryTarget, retry } = conversation
   const retryButton =
     retryTarget === null || !canRetry ? null : (
-      <button type="button" data-testid="tutor-retry" onClick={retry} className={`mt-2 ${BUTTON}`}>
+      <Button data-testid="tutor-retry" onClick={retry}>
         {t('tutoring.retry')}
-      </button>
+      </Button>
     )
   if (send.status === 'failed' && send.failure.action !== 'unavailable') {
     return (
-      <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
+      <div role="alert" data-testid="tutor-failure" className={FAILURE_TEXT}>
         <p>
           <FailureMessage failure={send.failure} />
         </p>
@@ -239,7 +227,7 @@ function FailureNotice({
   }
   if (send.status === 'unknown') {
     return (
-      <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
+      <div role="alert" data-testid="tutor-failure" className={FAILURE_TEXT}>
         <p>
           <FailureMessage failure={UNKNOWN_RESULT} />
         </p>
@@ -249,7 +237,7 @@ function FailureNotice({
   }
   if (send.status === 'idle' && retryTarget !== null && canRetry) {
     return (
-      <div className="text-sm text-slate-300">
+      <div className="flex flex-col items-start gap-2 text-sm text-text-muted">
         <p data-testid="tutor-history-retry-note">
           {t(unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId)))}
         </p>
@@ -292,7 +280,7 @@ export function TutorConversation({
   const busy = send.status === 'sending' || send.status === 'writing'
 
   return (
-    <div className="tutor-conversation flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       {/* A regiao rola; sem nada focavel dentro (sem proposta nem Tentar de
           novo), so o tabIndex deixa quem usa teclado rola-la (axe
           scrollable-region-focusable). O nome diz o que o foco alcancou. */}
@@ -300,24 +288,22 @@ export function TutorConversation({
         role="region"
         aria-label={t('tutoring.conversation.region')}
         tabIndex={0}
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-ui border border-border-subtle bg-bg-canvas p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
         {unavailable && (
-          <p data-testid="tutor-unavailable" className="mb-3 text-sm font-medium text-amber-200">
+          <p
+            data-testid="tutor-unavailable"
+            className="mb-3 text-sm font-bold text-feedback-danger"
+          >
             {t(UNAVAILABLE_TEXT)}
           </p>
         )}
         {status.status === 'error' && (
-          <div data-testid="tutor-status-error" className="mb-3 text-sm text-red-200">
+          <div data-testid="tutor-status-error" className={`mb-3 ${FAILURE_TEXT}`}>
             <p>{t('tutoring.status.loadFailed')}</p>
-            <button
-              type="button"
-              data-testid="tutor-status-retry"
-              onClick={onReloadStatus}
-              className={`mt-2 ${BUTTON}`}
-            >
+            <Button data-testid="tutor-status-retry" onClick={onReloadStatus}>
               {t('tutoring.retryLoad')}
-            </button>
+            </Button>
           </div>
         )}
         <HistoryPlaceholder conversation={conversation} />
@@ -339,34 +325,35 @@ export function TutorConversation({
           conversation.submit()
         }}
       >
-        <label htmlFor={`${counterId}-input`} className="text-sm font-medium text-slate-200">
-          {t('tutoring.input.label')}
-        </label>
-        <textarea
-          id={`${counterId}-input`}
-          ref={inputRef}
-          data-testid="tutor-input"
-          rows={3}
-          value={conversation.draft}
-          disabled={inputDisabled}
-          aria-describedby={length.counter === null ? undefined : counterId}
-          onChange={(event) => {
-            conversation.setDraft(event.target.value)
-          }}
-          className="w-full resize-none rounded border border-slate-600 bg-slate-900 p-2 text-sm text-slate-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none disabled:opacity-60"
-        />
+        <Field label={t('tutoring.input.label')}>
+          {(control) => (
+            <textarea
+              {...control}
+              ref={inputRef}
+              data-testid="tutor-input"
+              rows={3}
+              value={conversation.draft}
+              disabled={inputDisabled}
+              aria-describedby={length.counter === null ? undefined : counterId}
+              onChange={(event) => {
+                conversation.setDraft(event.target.value)
+              }}
+              className={`${control.className} resize-none`}
+            />
+          )}
+        </Field>
         <div className="flex items-center justify-between gap-2">
-          <p id={counterId} data-testid="tutor-counter" className="text-xs text-slate-400">
+          <p id={counterId} data-testid="tutor-counter" className="text-sm text-text-muted">
             {length.counter !== null && <CounterText counter={length.counter} />}
           </p>
-          <button
+          <Button
             type="submit"
+            variant="primary"
             data-testid="tutor-send"
             disabled={inputDisabled || !conversation.canSubmit}
-            className={BUTTON}
           >
             {t(busy ? 'tutoring.send.busy' : 'tutoring.send.idle')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

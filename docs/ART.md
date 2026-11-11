@@ -31,8 +31,8 @@ Datas em UTC, no envio da tarefa. Bytes medidos com `ls -l` no repositório.
 
 | Arquivo em `frontend/public/art/` | Dimensões | Bytes | Uso | Tarefa Tripo | Data | Modelo | Custo |
 |---|---:|---:|---|---|---|---|---:|
-| `kairya/portrait.webp` | 864×1152 | 59.506 | Retrato aberto no painel da Kairya (desktop) | `642b0c67-36ae-426d-b343-e2378fab71fb` | 2026-11-10T09:12:43Z | seedream_v4, text-to-image | 5 |
-| `kairya/avatar.webp` | 128×160 | 3.560 | Avatar compacto (painel recolhido e celular) | `642b0c67-36ae-426d-b343-e2378fab71fb` (recorte do retrato) | 2026-11-10T09:12:43Z | seedream_v4, text-to-image | 0 adicional |
+| `kairya/portrait.webp` | 864×1152 | 59.506 | Retrato aberto no painel da Kairya (desktop), via `ART.kairya.portrait`; decorativo (`alt=""`), o nome vem do painel | `642b0c67-36ae-426d-b343-e2378fab71fb` | 2026-11-10T09:12:43Z | seedream_v4, text-to-image | 5 |
+| `kairya/avatar.webp` | 128×160 | 3.560 | Avatar compacto (painel recolhido, botão "Falar com a Kairya" e título da folha), via `ART.kairya.avatar`; decorativo (`alt=""`) | `642b0c67-36ae-426d-b343-e2378fab71fb` (recorte do retrato) | 2026-11-10T09:12:43Z | seedream_v4, text-to-image | 0 adicional |
 | `kairya/neutral.webp` | 864×1184 | 56.232 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `8efbe441-09ac-4e7e-a364-8533f86f3cdf` | 2026-11-10T09:36:54Z | seedream_v5, image-to-image | 5 |
 | `kairya/listening.webp` | 864×1184 | 54.640 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `8f7aa585-68a6-43b6-9954-0aa47d3d8cd2` | 2026-11-10T09:25:10Z | seedream_v5, image-to-image | 5 |
 | `kairya/thinking.webp` | 864×1184 | 53.424 | Ainda sem uso no front; será ligado na Fase 6 (expressões) | `e6e16af0-b5d4-4c5a-858c-e706ffe6f898` | 2026-11-10T09:37:33Z | seedream_v5, image-to-image | 5 |

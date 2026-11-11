@@ -9,6 +9,7 @@ import { useTutorConversation, type SendState } from './useTutorConversation'
 import { useTutorStatus } from './useTutorStatus'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
+import { ART, Button, IconButton, Panel } from '../../shared/ui'
 
 /**
  * O que a regiao viva anuncia: o INICIO e o FIM da resposta, e nao cada
@@ -28,33 +29,61 @@ function liveText(send: SendState): MessageKey | null {
  * As duas versões do retrato, com as dimensões reais de cada arquivo para
  * reservar o espaço antes do download (procedência em docs/ART.md).
  *
- * Só o retrato aberto tem nome acessível. O avatar compacto aparece no
- * painel recolhido (rotulado "Kairya"), ao lado do título da folha ou dentro
- * do botão "Falar com a Kairya": um texto alternativo ali repetiria o nome e
- * mudaria o nome acessível do botão.
+ * As duas são decorativas (`alt=""`, moldura `aria-hidden`): o nome "Kairya"
+ * já está no painel, no título da folha e no botão "Falar com a Kairya", e um
+ * texto alternativo só o repetiria -- dentro do botão, mudaria até o nome
+ * acessível dele.
  */
 const PORTRAITS = {
   scene: {
-    src: '/art/kairya/portrait.webp',
-    alt: 'Kairya, a tutora, sorri de mãos juntas numa biblioteca iluminada por lanternas, com túnica azul, faixa âmbar e um grampo verde no cabelo',
+    src: ART.kairya.portrait,
     width: 864,
     height: 1152,
+    frame: 'relative block h-40 w-full shrink-0 overflow-hidden rounded-ui',
+    image: 'size-full object-contain object-top',
   },
-  compact: { src: '/art/kairya/avatar.webp', alt: '', width: 128, height: 160 },
+  compact: {
+    src: ART.kairya.avatar,
+    width: 128,
+    height: 160,
+    frame:
+      'block size-10 shrink-0 overflow-hidden rounded-pill border border-action-primary bg-bg-surface',
+    image: 'size-full object-cover object-top',
+  },
 } as const
 
 function Portrait({ scene }: { scene: boolean }) {
   const size = scene ? 'scene' : 'compact'
   const art = PORTRAITS[size]
   return (
-    <span
-      data-testid="tutor-portrait"
-      aria-hidden={scene ? undefined : true}
-      data-size={size}
-      className="tutor-portrait"
-    >
-      <img src={art.src} alt={art.alt} width={art.width} height={art.height} decoding="async" />
+    <span data-testid="tutor-portrait" aria-hidden="true" data-size={size} className={art.frame}>
+      <img
+        src={art.src}
+        alt=""
+        width={art.width}
+        height={art.height}
+        decoding="async"
+        className={art.image}
+      />
     </span>
+  )
+}
+
+/** A seta do recolher (para a borda) e do abrir (para o conteúdo). */
+function Chevron({ toward }: { toward: 'edge' | 'content' }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={toward === 'edge' ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
+    </svg>
   )
 }
 
@@ -77,6 +106,12 @@ function focusables(root: HTMLElement): HTMLElement[] {
  * primeiro render e continua no documento com o painel recolhido ou a folha
  * fechada -- um leitor de tela so anuncia mudanca numa regiao que ja estava
  * la.
+ *
+ * No desktop o `aside` e um `Panel` com a luz da lanterna quando aberto; no
+ * celular, um `aside` sem moldura, porque o botao e a folha sao fixos e uma
+ * caixa com borda ficaria vazia no fluxo da pagina. Por isso a troca de layout
+ * remonta o `aside` inteiro, regiao viva inclusive (antes so o conteudo
+ * remontava).
  */
 export function TutorPanel({
   onMissionCreated,
@@ -235,108 +270,111 @@ export function TutorPanel({
     />
   )
 
-  return (
-    <aside
-      ref={panel}
-      aria-label={t('tutoring.name')}
-      data-testid="tutor-panel"
-      className="rpg-tutor lg:border-l lg:border-slate-800"
-    >
-      <p role="status" data-testid="tutor-live" className="sr-only">
-        {live === null ? '' : t(live)}
-      </p>
+  const liveRegion = (
+    <p role="status" data-testid="tutor-live" className="sr-only">
+      {live === null ? '' : t(live)}
+    </p>
+  )
 
-      {isDesktop ? (
-        <div
-          key="desktop"
-          ref={captureLayout}
-          className={`tutor-desktop flex h-screen flex-col gap-3 p-4 ${desktopOpen ? 'tutor-desktop-open w-96' : 'tutor-desktop-closed w-20'}`}
+  if (isDesktop) {
+    return (
+      <div
+        className={`sticky top-0 grid h-dvh shrink-0 grid-rows-1 self-start ${desktopOpen ? 'w-80 p-4 xl:w-90' : 'w-24 p-2'}`}
+      >
+        <Panel
+          as="aside"
+          ref={panel}
+          aria-label={t('tutoring.name')}
+          glow={desktopOpen}
+          data-testid="tutor-panel"
         >
-          <Portrait scene={desktopOpen} />
-          <header
-            className={`tutor-heading flex items-center gap-3 ${desktopOpen ? '' : 'flex-col'}`}
+          {liveRegion}
+          <div
+            key="desktop"
+            ref={captureLayout}
+            className={`flex h-full min-h-0 flex-col gap-3 ${desktopOpen ? '' : 'items-center'}`}
           >
+            <Portrait scene={desktopOpen} />
+            <header
+              className={`flex gap-3 ${desktopOpen ? 'items-start' : 'flex-col items-center'}`}
+            >
+              {desktopOpen && (
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-2xl text-text-primary">{t('tutoring.name')}</h2>
+                  <p className="text-sm text-text-muted">{t('tutoring.panel.subtitle')}</p>
+                </div>
+              )}
+              <IconButton
+                ref={desktopToggle}
+                data-testid="tutor-panel-toggle"
+                label={toggleLabel}
+                title={toggleLabel}
+                expanded={desktopOpen}
+                controls="tutor-panel-body"
+                onClick={toggleDesktop}
+                icon={<Chevron toward={desktopOpen ? 'edge' : 'content'} />}
+              />
+            </header>
             {desktopOpen && (
-              <div className="flex-1">
-                <h2 className="tutor-name text-lg font-semibold text-slate-50">
-                  {t('tutoring.name')}
-                </h2>
-                <p className="text-xs text-slate-400">{t('tutoring.panel.subtitle')}</p>
+              <div id="tutor-panel-body" className="flex min-h-0 flex-1 flex-col">
+                {body}
               </div>
             )}
-            <button
-              type="button"
-              ref={desktopToggle}
-              data-testid="tutor-panel-toggle"
-              aria-label={toggleLabel}
-              title={toggleLabel}
-              aria-expanded={desktopOpen}
-              aria-controls="tutor-panel-body"
-              onClick={toggleDesktop}
-              className={`rounded border border-slate-600 text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ${desktopOpen ? 'px-2 py-1 text-xs' : 'flex h-11 w-11 items-center justify-center text-xl'}`}
-            >
-              {desktopOpen ? toggleLabel : <span aria-hidden="true">›</span>}
-            </button>
-          </header>
-          {desktopOpen && (
-            <div id="tutor-panel-body" className="flex min-h-0 flex-1 flex-col">
-              {body}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div key="mobile" ref={captureLayout}>
-          {!sheetOpen && (
-            <button
+          </div>
+        </Panel>
+      </div>
+    )
+  }
+
+  return (
+    <aside ref={panel} aria-label={t('tutoring.name')} data-testid="tutor-panel">
+      {liveRegion}
+      <div key="mobile" ref={captureLayout}>
+        {!sheetOpen && (
+          <div className="fixed right-4 bottom-4 z-20">
+            <Button
               ref={openButton}
-              type="button"
+              variant="primary"
               data-testid="tutor-sheet-open"
               aria-expanded={false}
               aria-controls="tutor-sheet"
               onClick={() => setSheetOpen(true)}
-              className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
             >
               <Portrait scene={false} />
               {t('tutoring.panel.openSheet')}
-            </button>
-          )}
-          {sheetOpen && (
-            <>
-              <div
-                aria-hidden="true"
-                className="fixed inset-0 z-30 bg-black/60"
-                onClick={closeSheet}
-              />
-              <div
-                id="tutor-sheet"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="tutor-sheet-title"
-                data-testid="tutor-sheet"
-                onKeyDown={onSheetKeyDown}
-                className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85dvh] flex-col gap-3 rounded-t-2xl bg-slate-950 p-4"
-              >
-                <header className="flex items-center gap-3">
-                  <Portrait scene={false} />
-                  <h2 id="tutor-sheet-title" className="flex-1 text-lg font-semibold text-slate-50">
-                    {t('tutoring.name')}
-                  </h2>
-                  <button
-                    ref={sheetClose}
-                    type="button"
-                    data-testid="tutor-sheet-close"
-                    onClick={closeSheet}
-                    className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-                  >
-                    {t('tutoring.panel.closeSheet')}
-                  </button>
-                </header>
-                {body}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+            </Button>
+          </div>
+        )}
+        {sheetOpen && (
+          <>
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-30 bg-bg-canvas/80"
+              onClick={closeSheet}
+            />
+            <div
+              id="tutor-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tutor-sheet-title"
+              data-testid="tutor-sheet"
+              onKeyDown={onSheetKeyDown}
+              className="fixed inset-x-0 top-16 bottom-0 z-40 flex flex-col gap-3 rounded-t-ui border-t border-border-subtle bg-bg-surface p-4 text-text-primary"
+            >
+              <header className="flex items-center gap-3">
+                <Portrait scene={false} />
+                <h2 id="tutor-sheet-title" className="flex-1 text-2xl text-text-primary">
+                  {t('tutoring.name')}
+                </h2>
+                <Button ref={sheetClose} data-testid="tutor-sheet-close" onClick={closeSheet}>
+                  {t('tutoring.panel.closeSheet')}
+                </Button>
+              </header>
+              {body}
+            </div>
+          </>
+        )}
+      </div>
     </aside>
   )
 }

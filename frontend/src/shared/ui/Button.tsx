@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, Ref } from 'react'
 import { busyProps } from './busy'
 import { BUTTON_BASE } from './buttonBase'
 
@@ -7,6 +7,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger-confi
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
   variant?: ButtonVariant
   loading?: boolean
+  ref?: Ref<HTMLButtonElement>
 }
 
 /**

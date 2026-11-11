@@ -55,11 +55,6 @@ const PENDING_MIGRATION: ReadonlySet<string> = new Set([
   'src/features/missions/RescheduleHistory.tsx',
   'src/features/missions/RewardAnnouncement.tsx',
   'src/features/progression/ProgressPanel.tsx',
-  'src/features/tutoring/DecisionControls.tsx',
-  'src/features/tutoring/ProposalCard.tsx',
-  'src/features/tutoring/RescheduleProposalCard.tsx',
-  'src/features/tutoring/TutorConversation.tsx',
-  'src/features/tutoring/TutorPanel.tsx',
 ])
 
 test('a varredura enxerga o CSS de verdade', () => {

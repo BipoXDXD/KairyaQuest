@@ -1,3 +1,4 @@
+import { createRef } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { IconButton } from './IconButton'
@@ -59,4 +60,35 @@ test('data-testid é repassado', () => {
 test('alvo de toque: size-11 (44px)', () => {
   render(<IconButton label="Som" icon={icon} onClick={vi.fn()} />)
   expect(screen.getByRole('button', { name: 'Som' })).toHaveClass('size-11')
+})
+
+test('expanded e controls viram aria-expanded e aria-controls; title repete o rótulo', () => {
+  render(
+    <IconButton
+      label="Abrir o painel"
+      icon={icon}
+      onClick={vi.fn()}
+      expanded={false}
+      controls="corpo"
+      title="Abrir o painel"
+    />,
+  )
+  const b = screen.getByRole('button', { name: 'Abrir o painel' })
+  expect(b).toHaveAttribute('aria-expanded', 'false')
+  expect(b).toHaveAttribute('aria-controls', 'corpo')
+  expect(b).toHaveAttribute('title', 'Abrir o painel')
+})
+
+test('sem expanded, controls e title, nenhum dos três atributos existe', () => {
+  render(<IconButton label="Som" icon={icon} onClick={vi.fn()} />)
+  const b = screen.getByRole('button', { name: 'Som' })
+  expect(b).not.toHaveAttribute('aria-expanded')
+  expect(b).not.toHaveAttribute('aria-controls')
+  expect(b).not.toHaveAttribute('title')
+})
+
+test('ref chega ao botão', () => {
+  const ref = createRef<HTMLButtonElement>()
+  render(<IconButton label="Som" icon={icon} onClick={vi.fn()} ref={ref} />)
+  expect(ref.current).toBe(screen.getByRole('button', { name: 'Som' }))
 })
