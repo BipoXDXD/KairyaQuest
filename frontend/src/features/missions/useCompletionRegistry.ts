@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import type { EvidenceDraft } from './types'
+import { sameDraft } from './rescheduleDraft'
+import type { EvidenceDraft, OpenReschedule, RescheduleDraft } from './types'
 
 /**
  * O rascunho vazio, um objeto so para todas as missoes: por isso congelado,
@@ -38,8 +39,32 @@ export interface CompletionRegistry {
   actionKeyFor: (missionId: number, action: MissionAction) => string
   /** Consulta a chave existente sem criar UUID nem modificar o registro. */
   hasActionKey: (missionId: number, action: MissionAction) => boolean
-  /** Tira a chave da acao da missao: o proximo pedido dela gera outra. */
+  /**
+   * Tira a chave da acao da missao: o proximo pedido dela gera outra. No
+   * Reagendar, o ultimo envio sai junto: ele so existe para dizer com que
+   * conteudo a chave retida foi usada.
+   */
   releaseActionKey: (missionId: number, action: MissionAction) => void
+  /**
+   * A chave do Reagendar para enviar `draft`. A retida so vale para o MESMO
+   * conteudo (F13: mesma chave com outro conteudo e `409 operacao_reutilizada`):
+   * com o mesmo rascunho do ultimo envio, devolve-a; com outro, ou sem envio
+   * registrado, gera outra ANTES do envio. Registra `draft` como o ultimo envio.
+   * Se a chave nova nao puder nascer, lanca sem mudar nada.
+   */
+  rescheduleKeyFor: (missionId: number, draft: RescheduleDraft) => string
+  /**
+   * O rascunho do ultimo envio do Reagendar enquanto a chave dele existe, ou
+   * `null`. E a fonte unica do "ultimo enviado": a tela compara com ele para
+   * oferecer "Tentar de novo", e ele sobrevive a remontagem como a chave.
+   */
+  sentRescheduleFor: (missionId: number) => RescheduleDraft | null
+  /** O reagendamento aberto da missao, ou `null` se nenhum. */
+  rescheduleDraftFor: (missionId: number) => OpenReschedule | null
+  /** Guarda o reagendamento aberto da missao. */
+  saveRescheduleDraft: (missionId: number, open: OpenReschedule) => void
+  /** Apaga o reagendamento aberto: fechar o disclosure ou o sucesso. */
+  discardRescheduleDraft: (missionId: number) => void
   /**
    * O rascunho da evidencia da missao, ou o vazio. Mora aqui, e nao no
    * formulario, pelo mesmo motivo da chave: o reload remonta os cartoes.
@@ -102,6 +127,8 @@ export interface UseCompletionRegistryResult {
  *
  * As chaves do Iniciar e do Reagendar (incremento F) moram no mesmo registro,
  * pelo mesmo motivo, num mapa a parte: por missao e por tipo (`actionKeyFor`).
+ * O Reagendar guarda aqui tambem o rascunho aberto e o conteudo do ultimo envio
+ * (pendencia 112): os dois sobrevivem a remontagem junto com a chave.
  *
  * Contador, chaves, rascunhos e retry pendente ficam em `useRef`: sao escritos
  * dentro de callbacks e consultados pelos leitores do registro, sem criar
@@ -113,6 +140,8 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
   const operationIds = useRef(new Map<number, string>())
   const actionKeys = useRef(new Map<string, string>())
   const drafts = useRef(new Map<number, EvidenceDraft>())
+  const sentReschedules = useRef(new Map<number, RescheduleDraft>())
+  const openReschedules = useRef(new Map<number, OpenReschedule>())
   const retryPending = useRef(new Set<number>())
   // So chaves existentes entram: nao acumula o catalogo de concluidas.
   const completedPending = useRef(new Set<number>())
@@ -151,6 +180,30 @@ export function useCompletionRegistry(reload: () => void): UseCompletionRegistry
       hasActionKey: (missionId, action) => actionKeys.current.has(`${action}:${String(missionId)}`),
       releaseActionKey: (missionId, action) => {
         actionKeys.current.delete(`${action}:${String(missionId)}`)
+        if (action === 'reschedule') {
+          sentReschedules.current.delete(missionId)
+        }
+      },
+      rescheduleKeyFor: (missionId, draft) => {
+        const slot = `reschedule:${String(missionId)}`
+        const retained = actionKeys.current.get(slot)
+        const sent = sentReschedules.current.get(missionId)
+        if (retained !== undefined && sent !== undefined && sameDraft(sent, draft)) {
+          return retained
+        }
+        // Primeiro o UUID: se ele lancar, a chave retida e o envio ficam.
+        const operationId = crypto.randomUUID()
+        actionKeys.current.set(slot, operationId)
+        sentReschedules.current.set(missionId, draft)
+        return operationId
+      },
+      sentRescheduleFor: (missionId) => sentReschedules.current.get(missionId) ?? null,
+      rescheduleDraftFor: (missionId) => openReschedules.current.get(missionId) ?? null,
+      saveRescheduleDraft: (missionId, open) => {
+        openReschedules.current.set(missionId, open)
+      },
+      discardRescheduleDraft: (missionId) => {
+        openReschedules.current.delete(missionId)
       },
       draftFor: (missionId) => drafts.current.get(missionId) ?? EMPTY_DRAFT,
       saveDraft: (missionId, draft) => {

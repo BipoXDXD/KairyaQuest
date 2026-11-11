@@ -48,7 +48,8 @@ export function jsonBody(init: RequestInit): unknown {
 
 /**
  * Uma rota que nunca responde e obedece ao `signal` do pedido, como o `fetch` de
- * verdade: o abort rejeita com `AbortError`. So o prazo do `postJson` a destrava.
+ * verdade: o abort rejeita com `AbortError`. So o prazo do cliente (`postJson` com
+ * `timeoutMs`, ou o de todo `requestJson`) ou um abort de quem chamou a destrava.
  * Sem `signal` no pedido, ela fica pendurada para sempre.
  */
 export const pendingUntilAborted: Route = (init) =>

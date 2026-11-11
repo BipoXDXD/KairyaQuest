@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/api/client'
-import { leadFor } from '../../shared/api/transportFailure'
+import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { StartErrorCode } from './types'
 
 /**
@@ -50,7 +50,10 @@ const FAILURE_BY_CODE: Record<StartErrorCode, StartFailure> = {
   },
 }
 
-const UNCONFIRMED_LEAD = 'Não foi possível confirmar o início.'
+const UNCONFIRMED_LEAD: FailureLead = {
+  action: 'iniciar a missão',
+  fallback: 'Não foi possível confirmar o início.',
+}
 const RETRY_IS_SAFE = 'Tentar de novo é seguro: a missão não será iniciada duas vezes.'
 
 /**
