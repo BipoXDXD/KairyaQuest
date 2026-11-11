@@ -948,9 +948,11 @@ O caminho, em três passos (`evaluation/service.py`, E9):
    e a órfã passa por `falhou`/`tempo_esgotado` antes). Commit. Órfã é a
    `avaliando` pedida **antes** de `agora − (tutor_timeout_seconds +
    FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento. **O corte não é uma
-   fronteira segura:** com o SDK repetindo a chamada (`TENTATIVAS = 2`), uma
-   tentativa viva pode passar dos 90 s do padrão, e um novo pedido a retoma como
-   órfã, com uma segunda chamada paga e sem corromper nada (pendência 106).
+   fronteira segura:** o SDK não repete a chamada (`TENTATIVAS = 0`, ver
+   "Retentativas HTTP"), mas o timeout dele é por leitura e o total só é
+   conferido quando um evento chega; uma parada no meio do stream deixa a
+   tentativa viva além do corte, e um novo pedido a retoma como órfã, com uma
+   segunda chamada paga e sem corromper nada (pendência 106).
 3. **Fora de transação**, `tutoria.provedor.avaliar(turno, ferramenta)`; o
    turno é uma mensagem única, sem histórico da conversa. Depois, **transação 2**
    (`registrar_resultado`/`registrar_falha`): trava a missão de novo e confere
@@ -1781,24 +1783,30 @@ não muda os dados. É uma prova parcial da F25/160, não uma matriz geral.
 
 ### Retentativas HTTP e geração nos testes de encerramento
 
-Na fatia `wt/sdk-retries-oraculo` (base `5ba81c3`, ainda não integrada à
-`main`), `test_tutoring_max_tokens.py` distingue uma geração lógica das
-retentativas HTTP que o SDK já permite. Um tratador local devolve 500 imediato
-na tentativa zero; as seguintes usam o mesmo servidor falso e stream real.
-Não muda o roteiro global nem depende de atraso artificial para obter retry.
+O cliente do SDK roda com `max_retries=0` (`TENTATIVAS = 0` em
+`anthropic_provider.py`). O motivo é o orçamento de tempo: o SDK 1.11 dorme o
+`Retry-After` da resposta **sem teto** (`_base_client.py`,
+`_calculate_retry_timeout` devolve `min(retry_after, 4_294_967.0)`), então com
+qualquer retentativa o pior caso de uma chamada ao modelo deixa de ser
+calculável e passa dos 90 s do nginx. Só sem retentativas o teto de 60 s (as
+quatro fases do timeout somadas, `proxy_read_timeout` menos `FOLGA_DO_ORFAO`) é
+uma prova, conferida por `tests/unit/test_prazos_coerentes.py`. A conta completa
+e as alternativas recusadas estão em
+`docs/handoff/2026-11-11-orcamento-tempo.md`. O teste
+`test_premissa_o_sdk_dorme_o_retry_after_inteiro_se_houver_retentativa`
+reprova se uma atualização do SDK passar a limitar o atraso: é o sinal para
+refazer a conta e reavaliar `max_retries=1`.
 
-O oráculo exige entre uma e `1 + TENTATIVAS` requisições, sequência exata
-`x-stainless-retry-count` de zero em diante e o mesmo JSON em todas as
-tentativas da geração. No cenário 500, exige pelo menos duas requisições.
-O reenvio explícito delimita duas gerações, cada uma com seu próprio grupo,
-e continua exigindo dois geradores fechados. Status, SSE, proposta,
-persistência e efeitos anteriores permanecem verificados. O teste com
-`max_retries=0` continua exigindo uma única requisição física.
+`test_tutoring_max_tokens.py` distingue uma geração lógica de requisições
+extras: `_uma_geracao` exige exatamente uma requisição física, com
+`x-stainless-retry-count` igual a `0`. O reenvio explícito delimita duas
+gerações, cada uma com seu próprio grupo, e continua exigindo dois geradores
+fechados. Status, SSE, proposta, persistência e efeitos anteriores permanecem
+verificados. Os casos com 500 inicial e retentativa do SDK foram retirados
+junto com a retentativa: não há mais esse caminho a provar.
 
 O header é observabilidade do SDK instalado, confirmado no seu código e no
-HTTP real dos testes, não um contrato público do KairyaQuest. Uma atualização
-do SDK pode exigir rever este oráculo. Nenhuma política de retentativa,
-timeout, adaptador de produção ou contrato do produto foi alterado.
+HTTP real dos testes, não um contrato público do KairyaQuest.
 
 ## Prova sequencial de reuso com evidência — 2026-10-05
 

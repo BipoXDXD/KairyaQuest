@@ -95,6 +95,35 @@ def test_avaliar_ignora_chamada_de_outra_ferramenta(
     assert tutoria.provedor.avaliar(TURNO, FERRAMENTA) is None
 
 
+def test_avaliar_com_duas_chamadas_da_mesma_ferramenta_e_none(
+    falso: ServidorAnthropicFalso, tutoria: Tutoria
+) -> None:
+    """Decisao da coordenacao (pendencia 97/c1): dois `tool_use` da ferramenta
+    sao ambiguos -- qual veredito vale? --, entao a avaliacao e invalida (`None`,
+    que o servico grava como `avaliacao_invalida`), nao "o ultimo vence"."""
+    falso.roteiro = Roteiro(
+        blocos=(
+            ChamadaDeFerramenta({"verdict": "nao_atende"}, nome="record_evaluation"),
+            ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),
+        )
+    )
+    assert tutoria.provedor.avaliar(TURNO, FERRAMENTA) is None
+
+
+def test_avaliar_com_uma_chamada_da_ferramenta_e_outra_de_outra_devolve_a_da_ferramenta(
+    falso: ServidorAnthropicFalso, tutoria: Tutoria
+) -> None:
+    """So a MESMA ferramenta duplicada e ambigua; a chamada de outra continua
+    ignorada, como em `..._ignora_chamada_de_outra_ferramenta`."""
+    falso.roteiro = Roteiro(
+        blocos=(
+            ChamadaDeFerramenta({"instructions": "x"}, nome="create_mission"),
+            ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),
+        )
+    )
+    assert tutoria.provedor.avaliar(TURNO, FERRAMENTA) == {"verdict": "atende"}
+
+
 def test_avaliar_com_stream_cortado_e_provedor_indisponivel(
     falso: ServidorAnthropicFalso, tutoria: Tutoria
 ) -> None:
