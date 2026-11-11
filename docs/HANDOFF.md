@@ -643,67 +643,6 @@ compara a personagem com obra ou franquia existente. O texto final de cada
 fala gravada continua no catálogo i18n (Tarefa 6.2). Só documentação; sem
 código, dependência, endpoint ou custo.
 
-# Arte da Kairya integrada (Fase 7) — 2026-11-10
-
-Base `e57fa2b`. Os 13 WebP aprovados da Fase 7 (retrato, avatar, cinco
-expressões, dois cenários, três estados vazios e a prova da semana) estão em
-`frontend/public/art/{kairya,scenes,empty,trial}/`, todos abaixo de 200 KB.
-A procedência por arquivo (prompt, modelo, id da tarefa Tripo, data e custo
-real) e os retoques locais estão em [ART.md](ART.md).
-
-O painel da Kairya usa `kairya/portrait.webp`, com texto alternativo
-descritivo, e `kairya/avatar.webp`, que é decorativo. Os heroes do
-Quartel-General e de Campanhas usam `scenes/hq.webp` e
-`scenes/campaigns.webp`. Os placeholders `kairya-mentor.webp` e
-`kairya-avatar.webp` e os dois cenários medievais saíram de `public/art`.
-As expressões serão ligadas na Fase 6; os estados vazios e a prova da semana,
-na Fase 5. Não entra dependência, endpoint nem serviço novo.
-
-**Contraste dos heroes.** O axe não mede contraste sobre imagem de fundo, então
-o pior caso foi calculado pela fórmula WCAG 2.x. O cenário é um pixel branco
-(#ffffff) sob o gradiente de cor #07101b com alfa `a`, composto por canal como
-`a·cor + (1 − a)·255`. As cores do texto são o eyebrow #ecd1a4, o título
-`text-slate-50` (≈ #f8fafc) e o subtítulo #d3dce5. Os dois cenários têm
-realces quase brancos em toda a largura, e o texto alcança a borda direita
-no celular. Por isso todo stop entra na conta, não só o de 55%.
-
-| Stop | Alfa | Fundo resultante | Eyebrow | Título | Subtítulo |
-|---|---:|---|---:|---:|---:|
-| antigo QG 55% `99` | 0,600 | (106, 112, 118) | 3,40 | 4,80 | 3,62 |
-| antigo Campanhas 55% `80` | 0,502 | (131, 135, 141) | 2,45 | 3,46 | 2,61 |
-| antigo QG 100% `33` | 0,200 | (205, 207, 209) | 1,06 | 1,49 | 1,12 |
-| novo 0% `e6` | 0,902 | (31, 39, 49) | 10,16 | 14,34 | 10,81 |
-| novo 55% e 100% `b3` | 0,702 | (81, 87, 95) | **4,93** | 6,96 | 5,25 |
-
-O alfa mínimo para 4,5:1 com fundo branco é 0,678 (eyebrow), 0,661
-(subtítulo) e 0,582 (título). `.rpg-hero-library` e `.rpg-hero-citadel`
-passaram a `#07101be6 0%, #07101bb3 55%, #07101bb3 100%`. O teste
-`frontend/src/heroContrast.test.ts` lê os stops e as cores do `index.css`
-e reprova qualquer stop abaixo de 4,5:1. Com o stop de 100% de Campanhas
-de volta em `1a`, ele falhou (1,19:1). A contrapartida é que a metade
-direita dos cenários fica mais escura do que antes.
-
-Comandos e resultados:
-
-- `make check-web`: ESLint, Prettier, `tsc -b` e Vitest aprovados, com
-  52 arquivos e 1007 testes e cobertura de 100% (1269/1269 instruções,
-  962/962 ramificações, 352/352 funções, 1235/1235 linhas).
-- `npx tsc --noEmit` no `frontend/`: exit 0.
-- O `make check` completo, que inclui `check-e2e` e axe, roda no gate de
-  commit.
-
-Pendências:
-
-- Renomear `.rpg-hero-citadel` para `.rpg-hero-campaigns` e
-  `.rpg-hero-library` para `.rpg-hero-hq` na Fase 4 (tarefa 4.6), num
-  refactor separado. A cena de Campanhas não mostra mais uma cidadela.
-- `empty/campaign-new.webp`: o retoque local deixou a lanterna com halo
-  claro, e ela ainda parece levemente acesa. O responsável decide antes da
-  Fase 5 entre aceitar, trocar pela versão sem retoque ou regerar
-  (5 créditos).
-- O `make bootstrap` de `scripts/novo-worktree.sh` falhou no `uv sync
-  --locked` por falta do Python 3.14.9 no PATH do `uv`. Foi contornado com
-  `UV_PYTHON=3.14.10 uv sync --locked`.
 # Tutoria volta à API da Anthropic, com cache e teto diário — 2026-11-10
 
 **Decisão (10/11), que inverte a de 22/10:** o provedor de produção volta a
@@ -1331,3 +1270,109 @@ Link permanente do arquivo antigo:
 QUALITY continua apontando à seção Comandos deste arquivo; ARCHITECTURE/specs
 podem usar este índice/commit para decisões e achados encerrados. `docs/ART.md`,
 README, AGENTS, ARCHITECTURE e QUALITY permanecem documentos vivos.
+
+# Pendência 207: datas relativas no E2E — 2026-11-10
+
+A linha 207 da tabela de pendências ("E2E do QG usa prazos literais de 2027")
+fica **resolvida por esta seção**.
+
+**O que mudou.** `frontend/tests/e2e/datas.ts` é a fonte única das datas dos
+cenários Playwright: todo instante nasce de `agora` mais N dias, numa hora fixa
+de São Paulo (`instanteRelativo(dias, hora, minuto)`), e as grafias que os
+cenários conferem saem do mesmo instante — ISO em UTC sem milissegundos
+(`isoUtc`), ISO com `-03:00` (`isoSaoPaulo`), o valor do campo
+`datetime-local` (`campoDeHorario`), o texto do prazo na tela (`prazoNaTela`,
+regex `DD/MM/AAAA.*HH:MM`) e os dias civis do ciclo e do plano (`diaRelativo`,
+`somarDias`, `diaEMes`). Os sete specs que tinham literais (`headquarters`,
+`reschedule-focus-scroll`, `cycle-focus`, `navigation`, `layout`,
+`tutor-focus`, `tutoring`) passaram a usá-lo, inclusive as fixtures só de
+apresentação (`route.fulfill`), que não venciam mas eram literais do mesmo
+tipo. Datas passadas de propósito (o caso recusado do reagendamento, os
+`created_at`/`completed_at`) usam dias negativos.
+
+**Decisões.**
+- O texto esperado na tela é calculado em `America/Sao_Paulo` (o fuso do
+  produto; o navegador do E2E continua em `Asia/Tokyo`), com aritmética de UTC
+  e deslocamento fixo de −03:00, e não com `Intl`: o esperado não pode sair do
+  mesmo mecanismo que a aplicação usa para formatar. A premissa é São Paulo sem
+  horário de verão (abolido em 2019); se ele voltar, `datas.ts` muda junto.
+- Janela do backend para prazo `(agora, agora + 365 d]`: com `1 <= dias <= 364`
+  qualquer hora cai dentro dela, seja qual for a hora de `agora` — provado em
+  `frontend/tests/unit/datas.test.ts` (Vitest, ambiente `node`, `agora` fixo).
+  Os prazos semeados pela API real ficam entre 30 e 149 dias.
+- A semana do plano nas fixtures termina no dia do ciclo (`hoje − 6` a `hoje`),
+  como antes; o frontend não exige que `week_start` seja segunda-feira.
+- Datas de 2026/2027 em testes unitários com relógio falso ficam como estão:
+  não vencem.
+
+**Comandos e resultados.**
+- `npx vitest run tests/unit/datas.test.ts`: vermelho antes do helper (módulo
+  inexistente), 16 testes verdes depois.
+- `grep -rnE '20[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/20[0-9]{2}|202[67]' frontend/tests/e2e`:
+  nenhuma ocorrência (exit 1).
+- Primeiro `make check` sob a trava: `check-web` e `check-api` verdes, E2E com
+  1 falha (`tutor-focus`: a constante do módulo usada dentro de
+  `page.evaluate`, que roda no navegador). Corrigido passando o instante como
+  argumento do `evaluate`. O resultado do gate final está no corpo do PR.
+
+**Limitação nova.** Nenhuma.
+# Pendência 213: prazo do refresh (todo GET do cliente) — 2026-11-10
+
+A linha 213 da tabela de pendências fica **resolvida por esta seção**.
+
+**Objetivo.** O `refresh` de `useCycle` e `useCurrentPlan` não tinha prazo
+(`requestJson` sem `signal`). Se o pedido mais recente nunca respondia, a
+guarda "o pedido mais recente decide" descartava as respostas velhas e a tela
+ficava no estado anterior, ou em "carregando" se a carga inicial tinha sido
+invalidada.
+
+**Revisão-base:** `320a0ee` (main).
+
+**Decisões.**
+
+- Valor: `READ_TIMEOUT_MS = 20_000` em `frontend/src/shared/api/client.ts`,
+  mesma ordem de grandeza do `MUTATION_TIMEOUT_MS`, sem medida real de rede
+  (mesma ressalva da pendência 193).
+- Alcance: o prazo vale para **todo** `requestJson` (GET), não só para os dois
+  hooks — inclui `useMissions`, `useProgress` e as leituras da tutoria
+  (`/tutoring/status`, `/tutoring/messages`). O mecanismo do `postJson` virou
+  o helper `sendWithin`, usado pelos dois: `setTimeout` + `AbortController`,
+  combinado com o `signal` de quem chama por `AbortSignal.any`. Só o aborto do
+  prazo vira `ApiTimeoutError`; o aborto de quem chama continua saindo como
+  falha de rede, que os hooks já ignoram pela própria guarda. Um status de
+  erro que já chegou preserva o status, como no POST.
+- Mensagem: nenhum texto novo. O refresh mais recente que estoura o prazo
+  segue o caminho de qualquer refresh que falha: com dado na tela, liga o
+  aviso de desatualizado (`refreshFailed`); com a tela em "carregando", vira o
+  erro com a `message` do cliente ("O servidor demorou demais para
+  responder."), com o "Tentar novamente". A regra "o pedido mais recente
+  decide" (F1–F5 da pendência 65) não mudou e os testes dela seguem verdes.
+
+**Alterações.** `client.ts` (constante, `sendWithin`, `requestJson` com
+prazo, `postJson` reusando o helper); testes novos em `client.test.ts`,
+`useCycle.test.tsx` e `useCurrentPlan.test.tsx`; o teste "repassa o
+AbortSignal recebido" virou "o abort do AbortSignal recebido chega ao fetch, e
+a falha não é de prazo", porque o `fetch` agora recebe o sinal combinado, e
+não mais o do chamador — o efeito que importa (abortar o do chamador aborta o
+pedido) é o que passa a ser afirmado.
+
+**Prova.** Timers falsos: um refresh cuja rota só o abort destrava fica
+inalterado em `READ_TIMEOUT_MS - 1` e muda no milissegundo seguinte, nos dois
+estados (com dado na tela e com a carga inicial invalidada). Sabotagens,
+medidas e revertidas: (a) `requestJson` sem prazo → 7 testes falham, incluindo
+os quatro dos hooks; (b) prazo de 40 s → 4 testes do cliente falham (os dos
+hooks usam a constante e não pegam o valor, de propósito; o valor é preso pelo
+teste literal do cliente); (c) traduzir em prazo qualquer aborto, inclusive o
+de quem chama → 1 teste falha.
+
+**Comandos e resultados.** `npx vitest run` dos três arquivos: 93 testes
+aprovados; `make check` completo, EXIT 0 (Vitest 1098 testes em 54 arquivos,
+pytest 1695, Playwright 66, gitleaks sem achados).
+
+**Limitações.**
+
+- 20 s continuam sem medida real de rede (pendência 193).
+- `AbortSignal.any` exige navegador recente (Chrome 116, Firefox 124,
+  Safari 17.4). Sem ele, todo GET com `signal` falharia; não há polyfill.
+- `docs/ARCHITECTURE.md` (seção de `src/shared/api/`) não menciona o prazo
+  dos GETs; ficou fora deste PR porque o arquivo estava fora do escopo do lote.
