@@ -106,6 +106,25 @@ def get_engine() -> Engine:
     return _engine
 
 
+def descartar_engine() -> None:
+    """Fecha o pool da engine compartilhada, se ela chegou a ser criada.
+
+    Chamada pelo lifespan no desligamento (pendencia 14). Sem efeito quando a
+    engine nunca nasceu -- e ela e preguicosa, entao um processo que so serviu
+    `/health` nao tem o que fechar -- e idempotente: a referencia volta a
+    None, e o `get_engine` seguinte cria outra, o que serve ao processo que
+    sobe o app mais de uma vez (a suite, com `with TestClient(app)`).
+
+    Roda sob a MESMA trava do `get_engine`, para nao ler `_engine` no meio de
+    uma criacao em andamento.
+    """
+    global _engine
+    with _trava_da_criacao:
+        engine, _engine = _engine, None
+    if engine is not None:
+        engine.dispose()
+
+
 def get_engine_se_configurada() -> Engine | None:
     """A engine, ou None quando a `database_url` nao esta configurada.
 

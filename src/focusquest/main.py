@@ -21,7 +21,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from focusquest.core.config import ConfiguracaoDeLog
-from focusquest.core.database import get_engine_se_configurada
+from focusquest.core.database import descartar_engine, get_engine_se_configurada
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
@@ -80,6 +80,11 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
     A linha registrada diz o nivel, e so ele: nenhum outro campo da
     configuracao entra no log.
 
+    O desligamento tambem fecha o pool do banco (`descartar_engine`, pendencia
+    14). A partida NAO cria a engine nem toca no banco: ela segue preguicosa, e
+    o `/health` continua sem depender de configuracao. Se fechar o pool falhar,
+    o `try` interno garante que o log e restaurado mesmo assim.
+
     Antes de tudo, le e valida a persona e a rubrica de todo idioma: um
     prompt ausente ou vazio e defeito de build e derruba a partida com
     `PromptInvalidoError` nomeando o arquivo, em vez de falhar no turno do
@@ -97,11 +102,14 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        for handler in raiz.handlers[:]:
-            if handler not in handlers_de_antes:
-                raiz.removeHandler(handler)
-                handler.close()
-        app_logger.setLevel(nivel_de_antes)
+        try:
+            descartar_engine()
+        finally:
+            for handler in raiz.handlers[:]:
+                if handler not in handlers_de_antes:
+                    raiz.removeHandler(handler)
+                    handler.close()
+            app_logger.setLevel(nivel_de_antes)
 
 
 app = FastAPI(title="KairyaQuest", lifespan=_ciclo_de_vida)

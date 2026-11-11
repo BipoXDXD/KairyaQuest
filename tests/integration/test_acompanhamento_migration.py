@@ -160,7 +160,9 @@ def test_o_historico_exige_a_operacao_e_uma_linha_por_chave(session: Session) ->
     mission_id = _missao(session)
     with pytest.raises(IntegrityError) as erro, session.begin_nested():
         session.execute(INSERIR_REAGENDAMENTO, _reagendamento(mission_id, "op-sem"))
-    assert "mission_reschedules_operation_id_fkey" in str(erro.value.orig)
+    # A FK simples da 0006 virou a composta da 0010 (pendencia 165): a recusa e a
+    # mesma, so o nome da restricao mudou.
+    assert "fk_mission_reschedules_operacao" in str(erro.value.orig)
 
     _operacao(session, mission_id, "op-u", "reschedule")
     session.execute(INSERIR_REAGENDAMENTO, _reagendamento(mission_id, "op-u"))
