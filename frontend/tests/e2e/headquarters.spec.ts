@@ -428,7 +428,7 @@ test('com a resposta perdida, o reenvio usa a mesma chave e recebe a mesma concl
   // O texto inteiro: a acao que falhou, a causa (o `route.abort()` e falha de
   // rede) e o porque de repetir ser seguro.
   await expect(item.getByRole('alert')).toHaveText(
-    'Não foi possível concluir a missão: sem conexão com o servidor. Tentar de novo é seguro: a missão não será concluída duas vezes.',
+    'Não foi possível concluir a missão: sem conexão. Tentar de novo é seguro: nada será duplicado.',
   )
   const resultado = await new AxeBuilder({ page }).analyze()
   expect(resultado.violations).toEqual([])

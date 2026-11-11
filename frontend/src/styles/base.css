@@ -1,0 +1,89 @@
+/* Base tipográfica: corpo em Alegreya Sans e títulos em Alegreya.
+   Fica em @layer base para que as utilities (font-bold, text-lg etc.)
+   num título continuem vencendo; uma regra fora de layer ganharia delas. */
+@layer base {
+  body {
+    font-family: var(--font-body);
+    line-height: var(--leading-body);
+    background: var(--color-bg-canvas);
+    color: var(--color-text-primary);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    line-height: var(--leading-heading);
+    font-weight: 500;
+  }
+}
+
+/* Cabeçalho das áreas: a cena ao fundo, mais clara à direita. O texto fica
+   num Panel de fundo sólido (AreaHero.tsx), nunca direto sobre a imagem,
+   por isso o gradiente não precisa garantir contraste e a arte aparece. */
+@layer components {
+  .area-hero {
+    display: flex;
+    min-height: calc(var(--spacing) * 48);
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: calc(var(--spacing) * 4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-ui);
+    background-color: var(--color-bg-surface);
+    background-position: center;
+    background-size: cover;
+
+    @variant lg {
+      min-height: calc(var(--spacing) * 56);
+      padding: calc(var(--spacing) * 6);
+    }
+  }
+
+  .area-hero--hq {
+    background-image:
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--ink-950) 90%, transparent),
+        color-mix(in oklab, var(--ink-950) 20%, transparent)
+      ),
+      url('/art/scenes/hq.webp');
+  }
+
+  .area-hero--campaigns {
+    background-image:
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--ink-950) 90%, transparent),
+        color-mix(in oklab, var(--ink-950) 20%, transparent)
+      ),
+      url('/art/scenes/campaigns.webp');
+  }
+
+  /* Folga sob o conteúdo do Quartel-General abaixo do lg, onde o botão fixo
+     "Falar com a Kairya" ocupa os 80 px de baixo da tela (retrato de 40 px +
+     py-3 = 64 px de altura, mais bottom-4). 96 px deixam 16 px livres no fim
+     da rolagem, e nenhum botão do último cartão fica sob ele (README §7). */
+  .area-main--fab-clearance {
+    @variant max-lg {
+      padding-bottom: calc(var(--spacing) * 24);
+    }
+  }
+}
+
+/* Movimento reduzido, global: zera as transições e animações que existem sem
+   `motion-safe:` (o `transition-colors` do NavTabs, por exemplo). As que estão
+   sob `motion-safe:` nem se aplicam com `reduce`; por isso o estado final de
+   um elemento animado é o estilo estático dele, e a animação só acrescenta a
+   entrada. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

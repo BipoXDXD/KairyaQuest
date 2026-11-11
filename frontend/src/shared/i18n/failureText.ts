@@ -60,14 +60,14 @@ export function dailyLimitText(error: ApiError): FailureText {
 
 /**
  * A falha de uma carga de tela (lista, ciclo, progresso, trilha). O `ApiError`
- * vira texto do catalogo pelo `kind`; o resto e defeito nosso, e mostra a
- * mensagem fixa da area, que vira chave no PR da area.
+ * vira texto do catalogo pelo `kind`; o resto e defeito nosso e vai SEM texto:
+ * quem traduz e a tela, pela chave da area e no idioma corrente. Um texto
+ * gravado no estado ficaria no idioma da hora da falha.
  */
-export type LoadFailure =
-  { kind: 'api'; text: FailureText } | { kind: 'unexpected'; message: string }
+export type LoadFailure = { kind: 'api'; text: FailureText } | { kind: 'unexpected' }
 
-export function loadFailureFor(error: unknown, unexpectedMessage: string): LoadFailure {
+export function loadFailureFor(error: unknown): LoadFailure {
   return error instanceof ApiError
     ? { kind: 'api', text: apiErrorText(error) }
-    : { kind: 'unexpected', message: unexpectedMessage }
+    : { kind: 'unexpected' }
 }

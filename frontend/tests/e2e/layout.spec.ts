@@ -11,6 +11,10 @@ import {
   segundaDaSemana,
   somarDias,
 } from './datas'
+import { layoutData } from './layoutData'
+
+/** Folga mínima entre o fim do último cartão e o topo do botão fixo da Kairya. */
+const MARGEM_MINIMA_KAIRYA_PX = 8
 
 // Datas relativas a hoje (pendencia 207): o dia do ciclo, a semana do plano
 // que o contem (comecando na segunda-feira, como o backend gera), um instante
@@ -69,42 +73,6 @@ const message: MessageRead = {
   fallback_model: null,
   created_at: ONTEM,
   actions: [],
-}
-
-async function layoutData(
-  page: Page,
-  missions: Mission[] = [],
-  history: MessageRead[] = [],
-  plan: CurrentPlan = { plan: null },
-) {
-  const responses: Record<string, unknown> = {
-    '/api/missions': missions,
-    '/api/tutoring/status': { available: true },
-    '/api/tutoring/messages': history,
-    '/api/plans/current': plan,
-    '/api/cycle': {
-      today: HOJE,
-      mission: null,
-      streak: 0,
-      days_to_milestone: 7,
-      special: null,
-      late_daily: null,
-    },
-    '/api/progress': {
-      xp_total: 0,
-      level: 1,
-      level_floor_xp: 0,
-      next_level_xp: 100,
-      achievements: [],
-    },
-  }
-  await page.route('**/api/**', (route) => {
-    const pathname = new URL(route.request().url()).pathname
-    if (route.request().method() === 'GET' && pathname in responses) {
-      return route.fulfill({ json: responses[pathname] })
-    }
-    return route.continue()
-  })
 }
 
 async function noHorizontalOverflow(page: Page) {
@@ -297,6 +265,29 @@ for (const width of [320, 375]) {
       await page.screenshot({ path: testInfo.outputPath('mission-long.png'), fullPage: true })
     })
 
+    test('no fim da rolagem, o botão da Kairya não cobre botão do último cartão', async ({
+      page,
+    }) => {
+      await layoutData(page, [mission, { ...mission, id: mission.id + 1 }])
+      await page.goto('/')
+      const lastCard = page.getByTestId('mission-item').last()
+      await expect(lastCard).toBeVisible()
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+      const kairya = await page.getByTestId('tutor-sheet-open').boundingBox()
+      expect(kairya).not.toBeNull()
+      const buttons = await lastCard.getByRole('button').all()
+      expect(buttons.length).toBeGreaterThan(0)
+      for (const button of buttons) {
+        const box = await button.boundingBox()
+        expect(box).not.toBeNull()
+        // Encostar (base do botão = topo da Kairya) não é sobrepor, e passaria
+        // com a folga antiga de 64 px; a margem mínima pega esse caso.
+        if (kairya !== null && box !== null) {
+          expect(kairya.y - (box.y + box.height)).toBeGreaterThanOrEqual(MARGEM_MINIMA_KAIRYA_PX)
+        }
+      }
+    })
+
     test('a trilha mantém instruções e critério completos e a navegação operável', async ({
       page,
     }, testInfo) => {
@@ -430,3 +421,16 @@ for (const width of [320, 375]) {
     })
   })
 }
+
+// Uma largura só basta: a regra de movimento reduzido é global, sem media de
+// largura, e o NavTabs tem a mesma transição no celular e no desktop.
+test('reduced-motion zera as transições que existem sem ele', async ({ page }) => {
+  await page.goto('/')
+  const nav = page.getByTestId('nav-campaigns')
+  const duration = async () =>
+    parseFloat(await nav.evaluate((el) => getComputedStyle(el).transitionDuration))
+  // Sem a primeira asserção o teste passaria vazio: precisa haver transição para zerar.
+  expect(await duration()).toBeGreaterThan(0)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await duration()).toBeLessThan(0.001)
+})
