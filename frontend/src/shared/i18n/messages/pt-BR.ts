@@ -56,15 +56,20 @@ export const ptBR = {
   'kairya.lines.farewell_2': 'Por hoje está bom. Amanhã a gente continua.',
 
   'shell.nav.label': 'Áreas',
-  'shell.nav.caption': 'Explorar',
   'shell.brand.name': 'KairyaQuest',
   'shell.brand.tagline': 'Sua jornada de estudos',
   'shell.area.headquarters': 'Quartel-General',
   'shell.area.campaigns': 'Campanhas',
 
-  'headquarters.header.eyebrow': 'Biblioteca do aventureiro',
   'headquarters.header.title': 'Quartel-General — seu painel de estudos',
   'headquarters.header.subtitle': 'O que está em aberto, com prazo e recompensa.',
+
+  'ui.dialog.cancel': 'Cancelar',
+  'ui.language.short.ptBR': 'PT',
+  'ui.language.short.en': 'EN',
+  'ui.loading': 'Carregando…',
+  'ui.sound.voice': 'Voz da Kairya',
+  'ui.sound.sfx': 'Efeitos sonoros',
 
   'shared.apiError.network.message': 'Não foi possível falar com o servidor.',
   'shared.apiError.network.recovery': 'Confira a conexão e tente de novo.',
@@ -433,7 +438,6 @@ export const ptBR = {
   'progression.achievement.kairya_partnership.description':
     'Conclua uma missão proposta pela Kairya.',
 
-  'campaigns.page.eyebrow': 'O próximo capítulo',
   'campaigns.page.title': 'Campanhas — planos de estudo',
   'campaigns.page.subtitle': 'A semana inteira, dia a dia, e a missão especial.',
   'campaigns.trail.title': 'Trilha da semana',

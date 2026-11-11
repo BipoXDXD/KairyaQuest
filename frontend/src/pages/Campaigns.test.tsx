@@ -29,6 +29,48 @@ describe('Campaigns', () => {
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 
+  it('o cabeçalho da área usa a cena de Campanhas', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />)
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')
+    expect(header).toHaveClass('area-hero', 'area-hero--campaigns')
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+  })
+
+  it('o texto do hero fica sobre um Panel surface, não sobre a imagem', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />)
+
+    const panel = screen.getByRole('heading', { level: 1 }).closest('[data-elevation]')
+    expect(panel).toHaveAttribute('data-elevation', 'surface')
+    expect(panel).toHaveTextContent('A semana inteira, dia a dia, e a missão especial.')
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+  })
+
+  it('o h1 continua sendo o primeiro heading', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />)
+
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading')[0]).toBe(screen.getByRole('heading', { level: 1 }))
+  })
+
+  it('em inglês, o título e a nota vêm do catálogo', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />, { locale: 'en' })
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Campaigns — study plans')
+    expect(
+      screen.getByText('The whole week, day by day, and the special mission.'),
+    ).toBeInTheDocument()
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+  })
+
   it('compoe a trilha da semana', async () => {
     routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
@@ -46,7 +88,6 @@ describe('Campaigns', () => {
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
       'Campaigns — study plans',
     )
-    expect(main).toHaveTextContent('The next chapter')
     expect(main).toHaveTextContent('The whole week, day by day, and the special mission.')
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
