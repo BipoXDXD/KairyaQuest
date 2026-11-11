@@ -26,7 +26,7 @@ os escapava no contexto e no histórico da Kairya.
   caracteres na instrução, no critério e na evidência. Ele prova que o texto
   da mensagem não contém nenhum deles cru, que é uma linha só e que o
   `json.loads` devolve exatamente os valores originais. Os caracteres estão
-  escritos como escape (`" "`) no fonte do teste.
+  escritos como escape (`"\u2028"`, `"\u2029"` e `"\x85"`) no fonte do teste.
 
 **Decisão: reusar, não duplicar.** Reusar não exigiu tocar
 `tutoring/service.py` nem importar interno da tutoria. A função saiu de
