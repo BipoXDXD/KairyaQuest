@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Availability } from '../../shared/types/mission'
+import { translate } from '../../shared/i18n/catalog'
 import { AVAILABILITY_DISPLAY } from './availability'
 
 /**
@@ -20,10 +21,11 @@ const TODAS_AS_DISPONIBILIDADES: Availability[] = [
 
 describe('AVAILABILITY_DISPLAY', () => {
   it.each(TODAS_AS_DISPONIBILIDADES)(
-    '%s tem rotulo em texto e um icone proprio',
+    '%s tem rotulo em texto nos dois idiomas e um icone proprio',
     (availability) => {
       const { label, icon } = AVAILABILITY_DISPLAY[availability]
-      expect(label.length).toBeGreaterThan(0)
+      expect(translate('pt-BR', label).trim()).not.toBe('')
+      expect(translate('en', label).trim()).not.toBe('')
       expect(icon.length).toBeGreaterThan(0)
     },
   )

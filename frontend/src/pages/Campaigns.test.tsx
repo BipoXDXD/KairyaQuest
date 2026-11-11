@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { routeFetch } from '../test/fetchRoutes'
+import { renderWithI18n } from '../test/i18n'
 import { Campaigns } from './Campaigns'
 import { CAMPAIGNS_HEADING_ID } from './headings'
 
@@ -12,7 +13,7 @@ describe('Campaigns', () => {
   it('anuncia Campanhas no titulo de nivel 1, dentro do main, focavel por programa', async () => {
     routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
-    render(<Campaigns />)
+    renderWithI18n(<Campaigns />)
 
     const main = screen.getByRole('main')
     const heading = within(main).getByRole('heading', { level: 1 })
@@ -31,8 +32,22 @@ describe('Campaigns', () => {
   it('compoe a trilha da semana', async () => {
     routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
 
-    render(<Campaigns />)
+    renderWithI18n(<Campaigns />)
 
+    expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
+  })
+
+  it('em ingles, o cabecalho sai do catalogo', async () => {
+    routeFetch({ 'GET /api/plans/current': () => Response.json({ plan: null }) })
+
+    renderWithI18n(<Campaigns />, { locale: 'en' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Campaigns — study plans',
+    )
+    expect(main).toHaveTextContent('The next chapter')
+    expect(main).toHaveTextContent('The whole week, day by day, and the special mission.')
     expect(await screen.findByTestId('trail-no-plan')).toBeInTheDocument()
   })
 })

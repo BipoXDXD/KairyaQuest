@@ -6,23 +6,29 @@ import type { ActionRead, MessageRead, MessageStatus } from './types'
 import type { UseTutorConversationResult } from './useTutorConversation'
 import type { TutorStatus } from './useTutorStatus'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
+import type { MessageKey } from '../../shared/i18n/catalog'
+import { plural } from '../../shared/i18n/plural'
+import { useLocale } from '../../shared/i18n/useLocale'
+import { useT } from '../../shared/i18n/useT'
+import type { Counter } from '../../shared/types/counter'
+import { MAX_QUESTION_LENGTH } from './questionLimit'
 
-/** O texto do estado indisponivel, literal da spec. */
-export const UNAVAILABLE_TEXT = 'A Kairya está fora do ar: falta configurar o provedor.'
-
-const GREETING =
-  'Aqui você conversa com a Kairya, sua tutora. Peça uma missão de estudo ou tire uma dúvida.'
+/**
+ * O texto do estado indisponivel, literal da spec: e o mesmo fato (e o mesmo
+ * texto) da falha `provedor_nao_configurado` do envio, por isso a mesma chave.
+ */
+const UNAVAILABLE_TEXT: MessageKey = 'tutoring.messageFailure.providerNotConfigured.message'
 
 /**
  * A marca de cada estado de mensagem, EXAUSTIVA sobre o tipo: um estado novo
  * reprova o `tsc` ate ganhar marca (ou `null`, decidido). O estado cru nunca
  * vai para a tela.
  */
-const STATUS_MARK: Record<MessageStatus, string | null> = {
+const STATUS_MARK: Record<MessageStatus, MessageKey | null> = {
   completa: null,
-  gerando: 'Resposta em andamento',
-  interrompida: 'Resposta interrompida',
-  falhou: 'Resposta com falha',
+  gerando: 'tutoring.message.mark.generating',
+  interrompida: 'tutoring.message.mark.interrupted',
+  falhou: 'tutoring.message.mark.failed',
 }
 
 const BUBBLE = {
@@ -37,11 +43,34 @@ const BUTTON =
   'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
 function Author({ role }: { role: MessageRead['role'] }) {
+  const t = useT()
   return (
     <p className="mb-1 text-xs font-semibold text-slate-400">
-      {role === 'user' ? 'Você' : 'Kairya'}
+      {t(role === 'user' ? 'tutoring.message.author.user' : 'tutoring.name')}
     </p>
   )
+}
+
+/**
+ * O texto do contador no idioma. `n` entra como `{count}`; o `{max}` da frase
+ * de excesso vem de `MAX_QUESTION_LENGTH`. O excesso nunca e 0, e por isso nao
+ * tem forma `zero`.
+ */
+function CounterText({ counter }: { counter: Counter }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const key =
+    counter.kind === 'remaining'
+      ? plural(locale, counter.n, {
+          zero: 'tutoring.counter.remaining.zero',
+          one: 'tutoring.counter.remaining.one',
+          other: 'tutoring.counter.remaining.other',
+        })
+      : plural(locale, counter.n, {
+          one: 'tutoring.counter.over.one',
+          other: 'tutoring.counter.over.other',
+        })
+  return <>{t(key, { count: counter.n, max: MAX_QUESTION_LENGTH })}</>
 }
 
 /**
@@ -57,6 +86,7 @@ function MessageItem({
   message: MessageRead
   renderAction: (action: ActionRead) => ReactElement
 }) {
+  const t = useT()
   const mark = STATUS_MARK[message.status]
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
@@ -70,7 +100,7 @@ function MessageItem({
       )}
       {mark !== null && (
         <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
-          {mark}
+          {t(mark)}
         </p>
       )}
       {/* Pendencia 174: outro modelo escreveu a resposta (o fallback do
@@ -78,8 +108,7 @@ function MessageItem({
           tela ler junto com a mensagem; sem alarme e sem a categoria. */}
       {message.fallback_model !== null && (
         <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-slate-400">
-          Respondida por um modelo substituto ({message.fallback_model}), porque o modelo principal
-          não pôde responder a esta pergunta.
+          {t('tutoring.message.fallback', { model: message.fallback_model })}
         </p>
       )}
       {message.actions.map((action) => (
@@ -101,13 +130,14 @@ function HistoryPlaceholder({
 }: {
   conversation: UseTutorConversationResult
 }): ReactElement | null {
+  const t = useT()
   const { history, messages } = conversation
   switch (history.status) {
     case 'loading':
       return (
         <div data-testid="tutor-history-loading" className="flex flex-col gap-2">
           <p role="status" className="sr-only">
-            Carregando a conversa…
+            {t('tutoring.history.loading')}
           </p>
           {[0, 1, 2].map((n) => (
             <div
@@ -121,21 +151,21 @@ function HistoryPlaceholder({
     case 'error':
       return (
         <div data-testid="tutor-history-error" className="text-sm text-red-200">
-          <p>Não foi possível carregar a conversa.</p>
+          <p>{t('tutoring.history.loadFailed')}</p>
           <button
             type="button"
             data-testid="tutor-history-retry"
             onClick={conversation.reloadHistory}
             className={`mt-2 ${BUTTON}`}
           >
-            Tentar novamente
+            {t('tutoring.retryLoad')}
           </button>
         </div>
       )
     case 'loaded':
       return messages.length === 0 && conversation.send.status === 'idle' ? (
         <p data-testid="tutor-greeting" className="text-sm text-slate-300">
-          {GREETING}
+          {t('tutoring.conversation.greeting')}
         </p>
       ) : null
   }
@@ -146,6 +176,7 @@ function HistoryPlaceholder({
  * interrompida ja esta na lista (`settleInterrupted`), com a marca do estado.
  */
 function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
+  const t = useT()
   if (send.status !== 'writing') {
     return null
   }
@@ -153,7 +184,7 @@ function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
     <li data-testid="tutor-partial" className={BUBBLE.tutor}>
       <Author role="tutor" />
       <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
-      <p className="mt-1 text-xs text-emerald-300">Kairya está escrevendo…</p>
+      <p className="mt-1 text-xs text-emerald-300">{t('tutoring.writing')}</p>
     </li>
   )
 }
@@ -188,11 +219,12 @@ function FailureNotice({
   /** Falso com a Kairya indisponivel ou sem status: reenviar so daria 503. */
   canRetry: boolean
 }) {
+  const t = useT()
   const { send, retryTarget, retry } = conversation
   const retryButton =
     retryTarget === null || !canRetry ? null : (
       <button type="button" data-testid="tutor-retry" onClick={retry} className={`mt-2 ${BUTTON}`}>
-        Tentar de novo
+        {t('tutoring.retry')}
       </button>
     )
   if (send.status === 'failed' && send.failure.action !== 'unavailable') {
@@ -219,7 +251,7 @@ function FailureNotice({
     return (
       <div className="text-sm text-slate-300">
         <p data-testid="tutor-history-retry-note">
-          {unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId))}
+          {t(unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId)))}
         </p>
         {retryButton}
       </div>
@@ -249,6 +281,7 @@ export function TutorConversation({
   renderAction: (action: ActionRead) => ReactElement
   inputRef?: Ref<HTMLTextAreaElement>
 }) {
+  const t = useT()
   const counterId = useId()
   const { send, length } = conversation
   const unavailable =
@@ -265,25 +298,25 @@ export function TutorConversation({
           scrollable-region-focusable). O nome diz o que o foco alcancou. */}
       <div
         role="region"
-        aria-label="Conversa com a Kairya"
+        aria-label={t('tutoring.conversation.region')}
         tabIndex={0}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
       >
         {unavailable && (
           <p data-testid="tutor-unavailable" className="mb-3 text-sm font-medium text-amber-200">
-            {UNAVAILABLE_TEXT}
+            {t(UNAVAILABLE_TEXT)}
           </p>
         )}
         {status.status === 'error' && (
           <div data-testid="tutor-status-error" className="mb-3 text-sm text-red-200">
-            <p>Não foi possível verificar se a Kairya está disponível.</p>
+            <p>{t('tutoring.status.loadFailed')}</p>
             <button
               type="button"
               data-testid="tutor-status-retry"
               onClick={onReloadStatus}
               className={`mt-2 ${BUTTON}`}
             >
-              Tentar novamente
+              {t('tutoring.retryLoad')}
             </button>
           </div>
         )}
@@ -307,7 +340,7 @@ export function TutorConversation({
         }}
       >
         <label htmlFor={`${counterId}-input`} className="text-sm font-medium text-slate-200">
-          Sua mensagem para a Kairya
+          {t('tutoring.input.label')}
         </label>
         <textarea
           id={`${counterId}-input`}
@@ -324,7 +357,7 @@ export function TutorConversation({
         />
         <div className="flex items-center justify-between gap-2">
           <p id={counterId} data-testid="tutor-counter" className="text-xs text-slate-400">
-            {length.counter}
+            {length.counter !== null && <CounterText counter={length.counter} />}
           </p>
           <button
             type="submit"
@@ -332,7 +365,7 @@ export function TutorConversation({
             disabled={inputDisabled || !conversation.canSubmit}
             className={BUTTON}
           >
-            {busy ? 'Enviando…' : 'Enviar'}
+            {t(busy ? 'tutoring.send.busy' : 'tutoring.send.idle')}
           </button>
         </div>
       </form>
