@@ -7,12 +7,10 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Dialect,
     ForeignKey,
     Index,
     Integer,
     Text,
-    TypeDecorator,
     UniqueConstraint,
     text,
 )
@@ -20,32 +18,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from focusquest.core.base import Base
+from focusquest.core.texto_de_enum import TextoDeEnum
 from focusquest.modules.tutoring.domain import (
     EstadoDaAcao,
     Papel,
     StatusDaMensagem,
     TipoDeAcao,
 )
-
-
-class TextoDeEnum[E: StrEnum](TypeDecorator[E]):
-    """TEXT no banco, o StrEnum no Python -- nos dois sentidos.
-
-    O mesmo motivo do `MissionStateText`: sem converter na VOLTA, o banco
-    devolve str crua e `is` passa a ser falso. Generico porque a tutoria tem
-    quatro enums; o atributo se chama `enum`, igual ao parametro, porque e
-    por esse nome que o SQLAlchemy monta a chave de cache (`cache_ok`).
-    """
-
-    impl = Text
-    cache_ok = True
-
-    def __init__(self, enum: type[E]) -> None:
-        super().__init__()
-        self.enum = enum
-
-    def process_result_value(self, value: Any, dialect: Dialect) -> E:
-        return self.enum(value)
 
 
 def _lista_sql(enum: type[StrEnum]) -> str:
