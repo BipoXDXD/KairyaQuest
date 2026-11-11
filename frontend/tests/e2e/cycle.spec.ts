@@ -193,7 +193,7 @@ test('o painel mostra as conquistas com texto e passa no axe', async ({ page }) 
     'veteran_10',
     'veteran_50',
     'veteran_100',
-    'tifa_partnership',
+    'kairya_partnership',
   ])
 
   const primeirosPassos = painel.locator(

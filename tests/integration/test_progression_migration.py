@@ -621,7 +621,7 @@ def _rotular(ids: dict[str, Any]) -> dict[int, str]:
     rotulos: dict[int, str] = {
         ids["avulsa1"]: "avulsa1",
         ids["especial"]: "especial",
-        ids["kairya"]: "tifa",
+        ids["kairya"]: "kairya",
     }
     for indice, mission_id in enumerate(ids["diarias"]):
         rotulos[mission_id] = f"diaria_{indice}"

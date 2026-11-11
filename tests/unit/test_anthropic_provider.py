@@ -6,13 +6,16 @@ Aqui so o CONTEUDO do pedido: o que os modelos 5.x recusam com 400, o esforco
 e o prefixo cacheado.
 """
 
+import dataclasses
 import json
 from typing import Any
 
 import pytest
 from anthropic import omit
 
+from focusquest.core.idioma import Idioma
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.persona import persona_do_idioma
 from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 from unit.anthropic_falso import (
     FERRAMENTA,
@@ -108,12 +111,22 @@ def test_a_ultima_ferramenta_marca_o_fim_do_prefixo_cacheado(
     assert all("cache_control" not in f for f in ferramentas[:-1])
 
 
-def test_a_persona_e_o_ultimo_bloco_cacheado_do_sistema(
-    cliente_falso: list[ClienteFalso],
+@pytest.mark.parametrize("idioma", list(Idioma))
+def test_a_persona_do_idioma_e_o_ultimo_bloco_cacheado_do_sistema(
+    cliente_falso: list[ClienteFalso], idioma: Idioma
 ) -> None:
-    sistema = _pedido_do_chat(cliente_falso)["system"]
-    persona, contexto = sistema
-    assert persona == {"type": "text", "text": "PERSONA", "cache_control": _CACHE}
+    """Cada idioma tem o seu prefixo cacheado: a persona inteira do idioma,
+    sozinha e por ultimo no bloco com `cache_control`. Nada que varia (nem o
+    idioma escrito a parte) vem antes dela."""
+    turno = dataclasses.replace(TURNO, sistema=persona_do_idioma(idioma))
+    list(_provedor().responder(turno))
+    (pedido,) = cliente_falso[0].pedidos
+    persona, contexto = pedido["system"]
+    assert persona == {
+        "type": "text",
+        "text": persona_do_idioma(idioma),
+        "cache_control": _CACHE,
+    }
     # O contexto do turno muda a cada pergunta: vem DEPOIS do ponto de cache.
     assert contexto == {"type": "text", "text": "CONTEXTO DO TURNO"}
 
@@ -134,8 +147,9 @@ def test_o_historico_fica_fora_do_prefixo_cacheado(
 def test_sem_contexto_o_sistema_e_so_a_persona_cacheada(
     cliente_falso: list[ClienteFalso],
 ) -> None:
-    list(_provedor().responder(Turno("PERSONA", (MensagemDoTurno("user", "oi"),))))
+    persona = persona_do_idioma(Idioma.EN)
+    list(_provedor().responder(Turno(persona, (MensagemDoTurno("user", "oi"),))))
     (pedido,) = cliente_falso[0].pedidos
     assert pedido["system"] == [
-        {"type": "text", "text": "PERSONA", "cache_control": _CACHE}
+        {"type": "text", "text": persona, "cache_control": _CACHE}
     ]
