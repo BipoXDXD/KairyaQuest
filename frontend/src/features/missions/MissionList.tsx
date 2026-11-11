@@ -4,6 +4,7 @@ import { useCompletionRegistry, type CompletionRegistry } from './useCompletionR
 import { useMissions, type MissionsState } from './useMissions'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import { useT } from '../../shared/i18n/useT'
+import { Button, EmptyState } from '../../shared/ui'
 
 /**
  * Os quatro estados da tela, um por ramo.
@@ -30,7 +31,7 @@ function MissionsContent({
   switch (state.status) {
     case 'loading':
       return (
-        <p role="status" data-testid="missions-loading" className="text-sm text-slate-400">
+        <p role="status" data-testid="missions-loading" className="text-sm text-text-muted">
           {t('missions.list.loading')}
         </p>
       )
@@ -40,9 +41,12 @@ function MissionsContent({
     // no quadro.
     case 'empty':
       return (
-        <p data-testid="missions-empty" className="text-sm text-slate-300">
-          {t('missions.list.empty')}
-        </p>
+        <EmptyState
+          art="missions"
+          title={t('missions.list.empty')}
+          headingLevel={3}
+          data-testid="missions-empty"
+        />
       )
 
     case 'error':
@@ -50,9 +54,9 @@ function MissionsContent({
         <div
           role="alert"
           data-testid="missions-error"
-          className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
+          className="rounded-ui border border-feedback-danger p-4 text-sm text-text-primary"
         >
-          <p className="font-semibold">{t('missions.list.loadFailed')}</p>
+          <p className="font-bold text-feedback-danger">{t('missions.list.loadFailed')}</p>
           <p className="mt-1">
             {state.failure.kind === 'api' ? (
               <FailureMessage failure={state.failure.text} />
@@ -60,14 +64,11 @@ function MissionsContent({
               t('missions.list.unexpectedFailure')
             )}
           </p>
-          <button
-            type="button"
-            data-testid="missions-retry"
-            onClick={onReload}
-            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
-          >
-            {t('missions.action.retryLoad')}
-          </button>
+          <div className="mt-3">
+            <Button data-testid="missions-retry" onClick={onReload}>
+              {t('missions.action.retryLoad')}
+            </Button>
+          </div>
         </div>
       )
 
@@ -159,7 +160,7 @@ export function MissionList({
 
   return (
     <section aria-labelledby="missions-heading" data-testid="missions">
-      <h2 id="missions-heading" className="mb-3 text-lg font-semibold text-slate-200">
+      <h2 id="missions-heading" className="mb-3 text-xl text-text-primary">
         {t('missions.list.title')}
       </h2>
       {/* A regiao viva da espera existe desde o primeiro render, vazia, em

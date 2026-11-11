@@ -3,24 +3,9 @@
 @import './styles/fonts.css';
 @import './styles/base.css';
 
-/* A entrada do anuncio da recompensa (D16), usada so sob `motion-safe:` em
-   RewardAnnouncement.tsx -- README §7, movimento reduzido. */
-@keyframes reward-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Apresentação legada das features ainda não migradas (Tarefas 4.7–4.9).
+/* Apresentação legada das features ainda não migradas (Tarefa 4.9).
    O shell e os cabeçalhos das áreas já vivem em tokens e componentes. */
 .rpg-progress,
-.rpg-cycle,
-.rpg-mission-card,
 .rpg-trail-card {
   border: 1px solid #54616f;
   border-radius: var(--radius-ui);
@@ -30,13 +15,9 @@
     0 8px 25px #0002;
 }
 
-.rpg-progress,
-.rpg-cycle {
+.rpg-progress {
   padding: 20px;
   margin-bottom: calc(var(--spacing) * 6);
-}
-
-.rpg-progress {
   border-top: 2px solid var(--lantern-600);
 }
 
@@ -100,21 +81,6 @@
   border-radius: 3px;
 }
 
-.rpg-mission-card {
-  padding: 20px;
-}
-
-.rpg-mission-card > dl {
-  padding-block: 12px;
-  border-block: 1px solid #405061;
-}
-
-.rpg-mission-state {
-  background: #12392d;
-  border-color: #43826c;
-  color: #a4edc9;
-}
-
 .rpg-trail-card {
   border-left: 3px solid #8c795a;
   padding: 20px;
@@ -136,13 +102,7 @@
 
 @media (max-width: 639px) {
   .rpg-progress,
-  .rpg-cycle,
-  .rpg-mission-card,
   .rpg-trail-card {
     padding: 16px;
-  }
-
-  .rpg-mission-card > div:first-child {
-    flex-wrap: wrap;
   }
 }

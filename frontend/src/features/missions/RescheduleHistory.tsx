@@ -41,8 +41,8 @@ export function RescheduleHistory({ reschedules }: { reschedules: Reschedule[] |
     return null
   }
   return (
-    <div className="mt-3 text-sm text-slate-300">
-      <p data-testid="mission-reschedule-count" className="font-medium text-slate-200">
+    <div className="mt-3 text-sm text-text-primary">
+      <p data-testid="mission-reschedule-count" className="font-bold text-text-primary">
         {t(
           plural(locale, reschedules.length, {
             one: 'missions.history.count.one',
@@ -52,7 +52,7 @@ export function RescheduleHistory({ reschedules }: { reschedules: Reschedule[] |
         )}
       </p>
       <details data-testid="mission-reschedule-history" className="mt-1">
-        <summary className="cursor-pointer rounded text-slate-300 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none">
+        <summary className="cursor-pointer rounded-ui text-text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">
           {t('missions.history.title')}
         </summary>
         <ol className="mt-2 flex flex-col gap-1">

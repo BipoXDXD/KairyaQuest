@@ -14,6 +14,7 @@ import { useRequestEvaluation, type EvaluationRequestState } from './useRequestE
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import { useT, type Translate } from '../../shared/i18n/useT'
+import { Badge, Button } from '../../shared/ui'
 
 /**
  * O que vira ancora: so `http`/`https`, sem diferenciar maiusculas (EM2). O
@@ -22,11 +23,6 @@ import { useT, type Translate } from '../../shared/i18n/useT'
  * TAMBEM aqui, onde o `href` nasce.
  */
 const LINK_SCHEME = /^https?:\/\//i
-
-const REQUEST_BUTTON_CLASS =
-  'rounded border border-sky-400/60 px-3 py-1 text-sm font-medium text-sky-100 ' +
-  'hover:bg-sky-900/50 focus-visible:ring-2 focus-visible:ring-sky-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
 /** O selo da verificacao, sempre em texto (E4). Exaustivo sobre o tipo. */
 const VERIFICATION_LABELS: Readonly<Record<Verification, MessageKey>> = {
@@ -63,17 +59,17 @@ const VERDICT_DISPLAY: Record<Verdict, { label: MessageKey; icon: ReactElement; 
   atende: {
     label: 'missions.evaluation.verdict.meets',
     icon: <VerdictIcon d="M5 12l5 5L20 7" />,
-    tone: 'text-emerald-200',
+    tone: 'text-feedback-success',
   },
   parcial: {
     label: 'missions.evaluation.verdict.partial',
     icon: <VerdictIcon d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18" />,
-    tone: 'text-amber-200',
+    tone: 'text-action-primary',
   },
   nao_atende: {
     label: 'missions.evaluation.verdict.notMet',
     icon: <VerdictIcon d="M6 6l12 12M18 6L6 18" />,
-    tone: 'text-red-300',
+    tone: 'text-feedback-danger',
   },
 }
 
@@ -158,14 +154,14 @@ function statusText(view: EvaluationView, t: Translate): string {
 function EvidenceLink({ link }: { link: string }) {
   const t = useT()
   return (
-    <p data-testid="evaluation-evidence-link" className="mt-1 text-sm break-all text-slate-300">
-      <span className="text-slate-400">{t('missions.evaluation.link')} </span>
+    <p data-testid="evaluation-evidence-link" className="mt-1 text-sm break-all text-text-primary">
+      <span className="text-text-muted">{t('missions.evaluation.link')} </span>
       {LINK_SCHEME.test(link) ? (
         <a
           href={link}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sky-300 underline underline-offset-2 hover:text-sky-200 focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:outline-none"
+          className="rounded-ui text-action-primary underline underline-offset-2 hover:text-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
         >
           {link}
           <span className="sr-only"> {t('missions.evaluation.opensInNewTab')}</span>
@@ -185,22 +181,22 @@ function ConcludedEvaluation({ view }: { view: ConcludedView }) {
       <p
         data-testid="evaluation-verdict"
         data-verdict={view.verdict}
-        className={`inline-flex items-center gap-1 font-semibold ${tone}`}
+        className={`inline-flex items-center gap-1 font-bold ${tone}`}
       >
         {icon}
         <span>{t(label)}</span>
       </p>
-      <p data-testid="evaluation-feedback" className="whitespace-pre-line text-slate-200">
+      <p data-testid="evaluation-feedback" className="whitespace-pre-line text-text-primary">
         {view.feedback}
       </p>
-      <p data-testid="evaluation-label" className="text-xs text-slate-400">
+      <p data-testid="evaluation-label" className="text-xs text-text-muted">
         {t('missions.evaluation.modelLabel')}
       </p>
       {/* EM1: sem `reward` (a leitura depois de recarregar, ou a resposta
           idempotente de uma avaliacao ja concluida) nao ha o numero; o saldo
           esta no painel de progresso. Com `reward`, quem fala e o anuncio. */}
       {view.verdict === 'atende' && view.reward === null && (
-        <p data-testid="evaluation-bonus-credited" className="text-emerald-200">
+        <p data-testid="evaluation-bonus-credited" className="text-feedback-success">
           {t('missions.evaluation.bonusCredited')}
         </p>
       )}
@@ -249,7 +245,7 @@ function EvidenceAndEvaluation({
     <div className="mt-2">
       <p
         data-testid="evaluation-evidence-text"
-        className="text-sm whitespace-pre-line text-slate-200"
+        className="text-sm whitespace-pre-line text-text-primary"
       >
         {evidence.text}
       </p>
@@ -257,41 +253,33 @@ function EvidenceAndEvaluation({
 
       {view.kind === 'concluded' && <ConcludedEvaluation view={view} />}
       {view.kind === 'in_progress' && (
-        <p data-testid="evaluation-in-progress" className="mt-2 text-sm text-slate-300">
+        <p data-testid="evaluation-in-progress" className="mt-2 text-sm text-text-muted">
           {t('missions.evaluation.inProgress')}
         </p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
         {canRequest && (
-          <button
-            type="button"
+          <Button
             data-testid="evaluation-request"
             disabled={view.kind === 'requesting'}
             onClick={requestEvaluation}
             aria-describedby={describedBy}
-            className={REQUEST_BUTTON_CLASS}
           >
             {t(
               failure?.action === 'retry' ? 'missions.action.retry' : 'missions.evaluation.request',
             )}
-          </button>
+          </Button>
         )}
         {failure?.action === 'refresh' && onReload !== undefined && (
-          <button
-            type="button"
-            data-testid="evaluation-reload"
-            disabled={reloadWaiting}
-            onClick={onReload}
-            className={REQUEST_BUTTON_CLASS}
-          >
+          <Button data-testid="evaluation-reload" disabled={reloadWaiting} onClick={onReload}>
             {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
             <span className="sr-only">
               {t('missions.card.whichMission', { instructions: mission.instructions })}
             </span>
-          </button>
+          </Button>
         )}
-        <div role="status" data-testid="evaluation-status" className="text-sm text-sky-200">
+        <div role="status" data-testid="evaluation-status" className="text-sm text-text-muted">
           <p data-testid="evaluation-status-text">{statusText(view, t)}</p>
           {view.kind === 'concluded' && view.reward !== null && (
             <RewardAnnouncement reward={view.reward} bonus />
@@ -304,7 +292,7 @@ function EvidenceAndEvaluation({
           <p
             role={view.kind === 'failed' && view.fresh ? 'alert' : undefined}
             data-testid="evaluation-error"
-            className="w-full text-sm text-red-300"
+            className="w-full text-sm text-feedback-danger"
           >
             <FailureMessage failure={failure} />
           </p>
@@ -356,13 +344,10 @@ export function EvaluationPanel({
   return (
     // Um `div`, e nao `section` rotulada: com varios cartoes, seriam varias
     // regioes de mesmo nome (o `landmark-unique` do axe).
-    <div data-testid="evaluation-panel" className="mt-3 border-t border-slate-700/70 pt-3">
-      <span
-        data-testid="evaluation-verification"
-        className="inline-block rounded-full border border-slate-400/50 px-2 py-0.5 text-xs font-medium text-slate-200"
-      >
+    <div data-testid="evaluation-panel" className="mt-3 border-t border-border-subtle pt-3">
+      <Badge tone="neutral" data-testid="evaluation-verification">
         {t(VERIFICATION_LABELS[mission.verification])}
-      </span>
+      </Badge>
       {mission.evidence != null && (
         <EvidenceAndEvaluation
           mission={mission}

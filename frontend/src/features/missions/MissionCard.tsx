@@ -10,6 +10,7 @@ import { sameDraft } from './rescheduleDraft'
 import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
 import { RewardAnnouncement } from './RewardAnnouncement'
+import { Badge, Button, Panel, type BadgeTone } from '../../shared/ui'
 import type { EvidenceDraft, RescheduleDraft } from './types'
 import { useCompleteMission, type CompletionState } from './useCompleteMission'
 import type { CompletionRegistry } from './useCompletionRegistry'
@@ -21,19 +22,16 @@ import type { MessageKey } from '../../shared/i18n/catalog'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT, type Translate } from '../../shared/i18n/useT'
 
-const CARD_CLASS =
-  'rpg-mission-card min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-4 shadow-sm ' +
-  'focus-within:ring-2 focus-within:ring-emerald-400'
-
-const COMPLETE_BUTTON_CLASS =
-  'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-
-const RELOAD_BUTTON_CLASS =
-  'rounded border border-slate-400/60 px-3 py-1 text-sm font-medium text-slate-100 ' +
-  'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none ' +
-  'disabled:cursor-not-allowed disabled:opacity-60'
+/**
+ * O estado vem como rotulo em texto, e o tom so reforca (README s7: aviso alem
+ * da cor). Cada tom esta medido sobre a superficie do cartao em
+ * `tokens/contrastPairs.ts`.
+ */
+const STATE_TONE: Record<Mission['state'], BadgeTone> = {
+  pendente: 'neutral',
+  em_andamento: 'action',
+  concluida: 'success',
+}
 
 /**
  * O texto do botao de concluir em cada estado em que ele aparece.
@@ -170,55 +168,52 @@ function CompletionControls({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3">
       {canComplete && (
-        <button
-          type="button"
+        <Button
+          variant="primary"
           data-testid="mission-complete"
           disabled={completion.status === 'submitting' || otherInFlight || blocked !== null}
           aria-describedby={blocked === null ? undefined : blockedId}
           onClick={onComplete}
-          className={COMPLETE_BUTTON_CLASS}
         >
           {t(completeLabel(completion, retryPending))}{' '}
           <span className="sr-only">
             {t('missions.card.whichMission', { instructions: mission.instructions })}
           </span>
-        </button>
+        </Button>
       )}
       {canComplete && blocked !== null && (
-        <p id={blockedId} data-testid="mission-complete-blocked" className="text-sm text-amber-200">
+        <p
+          id={blockedId}
+          data-testid="mission-complete-blocked"
+          className="text-sm text-feedback-danger"
+        >
           {blockedText(blocked, t)}
         </p>
       )}
       {failure?.action === 'refresh' && (
-        <button
-          type="button"
-          data-testid="mission-reload"
-          disabled={reloadWaiting}
-          onClick={onReload}
-          className={RELOAD_BUTTON_CLASS}
-        >
+        <Button data-testid="mission-reload" disabled={reloadWaiting} onClick={onReload}>
           {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
           <span className="sr-only">
             {t('missions.card.whichMission', { instructions: mission.instructions })}
           </span>
-        </button>
+        </Button>
       )}
       <div
         role="status"
         data-testid="mission-completion-status"
-        className="text-sm text-emerald-300"
+        className="text-sm text-feedback-success"
       >
         <p data-testid="mission-completion-text">{translateOrEmpty(statusText(completion), t)}</p>
         {/* `!= null` de proposito: cobre `reward` ausente E `reward: null`. */}
         {completion.status === 'completed' && completion.reward != null && (
-          <RewardAnnouncement reward={completion.reward} />
+          <RewardAnnouncement reward={completion.reward} lit={mission.mission_type === 'diaria'} />
         )}
       </div>
       {failure !== null && (
         <p
           role="alert"
           data-testid="mission-completion-error"
-          className="w-full text-sm text-red-300"
+          className="w-full text-sm text-feedback-danger"
         >
           <FailureMessage failure={failure} />
         </p>
@@ -298,17 +293,15 @@ function RefreshNotice({
   const t = useT()
   return (
     <>
-      <button
-        type="button"
-        data-testid={`${testId}-reload`}
-        disabled={reloadWaiting}
-        onClick={onReload}
-        className={RELOAD_BUTTON_CLASS}
-      >
+      <Button data-testid={`${testId}-reload`} disabled={reloadWaiting} onClick={onReload}>
         {t(reloadWaiting ? RELOAD_WAITING_LABEL : reloadLabel)}{' '}
         <span className="sr-only">{t('missions.card.whichMission', { instructions })}</span>
-      </button>
-      <p role="alert" data-testid={`${testId}-error`} className="w-full text-sm text-red-300">
+      </Button>
+      <p
+        role="alert"
+        data-testid={`${testId}-error`}
+        className="w-full text-sm text-feedback-danger"
+      >
         <FailureMessage failure={failure} />
       </p>
     </>
@@ -371,31 +364,29 @@ function StartControls({
       ) : (
         <>
           {startable && (
-            <button
-              type="button"
+            <Button
               data-testid="mission-start"
               disabled={start.status === 'submitting' || otherInFlight}
               onClick={onStart}
-              className={COMPLETE_BUTTON_CLASS}
             >
               {t(startLabel(start, hasRetainedKey))}{' '}
               <span className="sr-only">
                 {t('missions.card.whichMission', { instructions: mission.instructions })}
               </span>
-            </button>
+            </Button>
           )}
           {failure !== null && (
             <p
               role="alert"
               data-testid="mission-start-error"
-              className="w-full text-sm text-red-300"
+              className="w-full text-sm text-feedback-danger"
             >
               <FailureMessage failure={failure} />
             </p>
           )}
         </>
       )}
-      <p role="status" data-testid="mission-start-status" className="text-sm text-emerald-300">
+      <p role="status" data-testid="mission-start-status" className="text-sm text-feedback-success">
         {translateOrEmpty(startStatusText(start), t)}
       </p>
     </div>
@@ -535,160 +526,161 @@ export function MissionCard({
   const liveReschedule = liveStart && listed.mission_type === 'avulsa'
 
   return (
-    <li data-testid="mission-item" data-mission-id={mission.id} className={CARD_CLASS}>
-      <div className="flex items-start justify-between gap-4">
-        <HeadingTag
-          id={titleId}
-          ref={titleRef}
-          tabIndex={-1}
-          data-testid="mission-instructions"
-          className="min-w-0 text-base font-semibold text-slate-100 focus:outline-none"
-        >
-          {mission.instructions}
-        </HeadingTag>
-        {/* O estado vem como rotulo em texto, nao como cor: o README §7 exige
+    <li data-testid="mission-item" data-mission-id={mission.id} className="min-w-0 wrap-anywhere">
+      <Panel>
+        <div className="flex items-start justify-between gap-4">
+          <HeadingTag
+            id={titleId}
+            ref={titleRef}
+            tabIndex={-1}
+            data-testid="mission-instructions"
+            className="min-w-0 rounded-ui text-base font-bold text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+          >
+            {mission.instructions}
+          </HeadingTag>
+          {/* O estado vem como rotulo em texto, nao como cor: o README §7 exige
             aviso alem da cor. */}
-        <span
-          data-testid="mission-state"
-          className="rpg-mission-state shrink-0 rounded-full border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-300"
-        >
-          {t(MISSION_STATE_LABELS[mission.state])}
-        </span>
-      </div>
+          <span className="flex shrink-0">
+            <Badge tone={STATE_TONE[mission.state]} data-testid="mission-state">
+              {t(MISSION_STATE_LABELS[mission.state])}
+            </Badge>
+          </span>
+        </div>
 
-      <p data-testid="mission-completion-criterion" className="mt-2 text-sm text-slate-300">
-        <span className="text-slate-400">{t('missions.card.completionCriterion')} </span>
-        {mission.completion_criterion}
-      </p>
+        <p data-testid="mission-completion-criterion" className="mt-2 text-sm text-text-primary">
+          <span className="text-text-muted">{t('missions.card.completionCriterion')} </span>
+          {mission.completion_criterion}
+        </p>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-300 sm:grid-cols-4">
-        <dt className="text-slate-400">{t('missions.card.deadline')}</dt>
-        <dd>
-          <time data-testid="mission-deadline" dateTime={mission.deadline}>
-            {formatDeadline(mission.deadline, locale)}
-          </time>
-        </dd>
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-y border-border-subtle py-3 text-sm text-text-primary sm:grid-cols-4">
+          <dt className="text-text-muted">{t('missions.card.deadline')}</dt>
+          <dd>
+            <time data-testid="mission-deadline" dateTime={mission.deadline}>
+              {formatDeadline(mission.deadline, locale)}
+            </time>
+          </dd>
 
-        <dt className="text-slate-400">{t('missions.card.difficulty')}</dt>
-        {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
+          <dt className="text-text-muted">{t('missions.card.difficulty')}</dt>
+          {/* O teto vem de `MAX_DIFFICULTY` (`shared/types/mission.ts`), que
             espelha `DIFICULDADE_MAXIMA` do backend a mao. */}
-        <dd data-testid="mission-difficulty">
-          {t('missions.card.difficultyValue', {
-            difficulty: mission.difficulty,
-            max: MAX_DIFFICULTY,
-          })}
-        </dd>
+          <dd data-testid="mission-difficulty">
+            {t('missions.card.difficultyValue', {
+              difficulty: mission.difficulty,
+              max: MAX_DIFFICULTY,
+            })}
+          </dd>
 
-        <dt className="text-slate-400">{t('missions.card.estimate')}</dt>
-        <dd data-testid="mission-estimated-minutes">
-          {t('missions.card.minutes', { minutes: mission.estimated_minutes })}
-        </dd>
+          <dt className="text-text-muted">{t('missions.card.estimate')}</dt>
+          <dd data-testid="mission-estimated-minutes">
+            {t('missions.card.minutes', { minutes: mission.estimated_minutes })}
+          </dd>
 
-        <dt className="text-slate-400">{t('missions.card.reward')}</dt>
-        <dd data-testid="mission-xp">{t('missions.card.xp', { xp: mission.xp })}</dd>
+          <dt className="text-text-muted">{t('missions.card.reward')}</dt>
+          <dd data-testid="mission-xp">{t('missions.card.xp', { xp: mission.xp })}</dd>
 
-        {/* `actual_duration_minutes` e computado pela API e vem nulo enquanto
+          {/* `actual_duration_minutes` e computado pela API e vem nulo enquanto
             faltar o inicio ou a conclusao. Nulo significa "ainda nao existe",
             e nao "zero minuto": mostrar "0 min" seria afirmar o que ninguem
             mediu. */}
-        {mission.actual_duration_minutes !== null && (
-          <>
-            <dt className="text-slate-400">{t('missions.card.actualDuration')}</dt>
-            <dd data-testid="mission-actual-duration">
-              {t('missions.card.minutes', { minutes: mission.actual_duration_minutes })}
-            </dd>
-          </>
+          {mission.actual_duration_minutes !== null && (
+            <>
+              <dt className="text-text-muted">{t('missions.card.actualDuration')}</dt>
+              <dd data-testid="mission-actual-duration">
+                {t('missions.card.minutes', { minutes: mission.actual_duration_minutes })}
+              </dd>
+            </>
+          )}
+        </dl>
+
+        {/* "Iniciada em" so em andamento; concluida, o que conta e a duracao real. */}
+        {mission.state === 'em_andamento' && mission.started_at !== null && (
+          <p data-testid="mission-started-at" className="mt-2 text-sm text-text-primary">
+            <span className="text-text-muted">{t('missions.card.startedAt')} </span>
+            <time dateTime={mission.started_at}>{formatDeadline(mission.started_at, locale)}</time>
+          </p>
         )}
-      </dl>
 
-      {/* "Iniciada em" so em andamento; concluida, o que conta e a duracao real. */}
-      {mission.state === 'em_andamento' && mission.started_at !== null && (
-        <p data-testid="mission-started-at" className="mt-2 text-sm text-slate-300">
-          <span className="text-slate-400">{t('missions.card.startedAt')} </span>
-          <time dateTime={mission.started_at}>{formatDeadline(mission.started_at, locale)}</time>
-        </p>
-      )}
+        <RescheduleHistory reschedules={mission.reschedules} />
 
-      <RescheduleHistory reschedules={mission.reschedules} />
+        {offersEvidence && (
+          <EvidenceForm
+            draft={draft}
+            onChange={changeDraft}
+            disabled={completion.status === 'submitting'}
+            retryPending={retryPending}
+            describedBy={titleId}
+          />
+        )}
 
-      {offersEvidence && (
-        <EvidenceForm
-          draft={draft}
-          onChange={changeDraft}
-          disabled={completion.status === 'submitting'}
-          retryPending={retryPending}
-          describedBy={titleId}
-        />
-      )}
-
-      {liveStart && !completed && (
-        <StartControls
-          mission={mission}
-          start={start}
-          hasRetainedKey={registry.hasActionKey(listed.id, 'start')}
-          onStart={startMission}
-          otherInFlight={completing || rescheduling}
-          onReload={onReload}
-          reloadWaiting={reloadWaiting}
-          reloadLabel={reloadLabel}
-        />
-      )}
-
-      <CompletionControls
-        mission={mission}
-        completion={completion}
-        onComplete={() => {
-          complete(draftInUse ? draft : undefined)
-        }}
-        blocked={blockedReason(draft)}
-        retryPending={retryPending}
-        onReload={onReload}
-        reloadWaiting={reloadWaiting}
-        reloadLabel={reloadLabel}
-        otherInFlight={starting || rescheduling}
-      />
-
-      {offersReschedule && (
-        <RescheduleForm
-          mission={mission}
-          disabled={completing || starting || rescheduling}
-          failure={rescheduleFailure}
-          onSubmit={submitReschedule}
-          describedBy={titleId}
-        />
-      )}
-      {rescheduleFailure?.action === 'refresh' && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <RefreshNotice
-            failure={rescheduleFailure}
-            testId="mission-reschedule"
-            instructions={mission.instructions}
+        {liveStart && !completed && (
+          <StartControls
+            mission={mission}
+            start={start}
+            hasRetainedKey={registry.hasActionKey(listed.id, 'start')}
+            onStart={startMission}
+            otherInFlight={completing || rescheduling}
             onReload={onReload}
             reloadWaiting={reloadWaiting}
             reloadLabel={reloadLabel}
           />
-        </div>
-      )}
-      {liveReschedule && (
-        <p
-          role="status"
-          data-testid="mission-reschedule-status"
-          className="mt-2 text-sm text-emerald-300"
-        >
-          {translateOrEmpty(rescheduleStatusText(reschedule), t)}
-        </p>
-      )}
+        )}
 
-      {mission.state === 'concluida' && (
-        <EvaluationPanel
+        <CompletionControls
           mission={mission}
-          onRewarded={onRewarded}
+          completion={completion}
+          onComplete={() => {
+            complete(draftInUse ? draft : undefined)
+          }}
+          blocked={blockedReason(draft)}
+          retryPending={retryPending}
           onReload={onReload}
-          reloadLabel={reloadLabel}
           reloadWaiting={reloadWaiting}
-          describedBy={titleId}
+          reloadLabel={reloadLabel}
+          otherInFlight={starting || rescheduling}
         />
-      )}
+
+        {offersReschedule && (
+          <RescheduleForm
+            mission={mission}
+            disabled={completing || starting || rescheduling}
+            failure={rescheduleFailure}
+            onSubmit={submitReschedule}
+            describedBy={titleId}
+          />
+        )}
+        {rescheduleFailure?.action === 'refresh' && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <RefreshNotice
+              failure={rescheduleFailure}
+              testId="mission-reschedule"
+              instructions={mission.instructions}
+              onReload={onReload}
+              reloadWaiting={reloadWaiting}
+              reloadLabel={reloadLabel}
+            />
+          </div>
+        )}
+        {liveReschedule && (
+          <p
+            role="status"
+            data-testid="mission-reschedule-status"
+            className="mt-2 text-sm text-feedback-success"
+          >
+            {translateOrEmpty(rescheduleStatusText(reschedule), t)}
+          </p>
+        )}
+
+        {mission.state === 'concluida' && (
+          <EvaluationPanel
+            mission={mission}
+            onRewarded={onRewarded}
+            onReload={onReload}
+            reloadLabel={reloadLabel}
+            reloadWaiting={reloadWaiting}
+            describedBy={titleId}
+          />
+        )}
+      </Panel>
     </li>
   )
 }

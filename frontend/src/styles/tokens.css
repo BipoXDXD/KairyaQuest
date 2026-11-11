@@ -67,6 +67,10 @@
   --radius-ui: 10px;
   --radius-pill: 999px;
   --shadow-glow-lantern: 0 0 24px 4px var(--glow-lantern-color);
+
+  /* Animações: só sob `motion-safe:` (os keyframes ficam no base.css). */
+  --animate-reward-in: reward-in 400ms ease-out;
+  --animate-lantern-light: lantern-light 900ms ease-out both;
 }
 
 /* O glow da lanterna é o único efeito decorativo. A cor, o alias para CSS

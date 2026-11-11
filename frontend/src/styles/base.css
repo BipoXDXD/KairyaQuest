@@ -73,6 +73,46 @@
   }
 }
 
+/* A lanterna decorativa (LanternMark.tsx). O estado aceso é estático: é ele
+   que vale sob `prefers-reduced-motion: reduce`, quando a animação nem se
+   aplica. Num svg o brilho é `filter`, nunca `box-shadow` (que pinta o
+   retângulo da caixa); o filtro é o drop-shadow sem spread do tokens.css. */
+@layer components {
+  .lantern-mark {
+    opacity: 0.35;
+  }
+
+  .lantern-mark[data-lit='true'] {
+    opacity: 1;
+    filter: var(--glow-lantern-filter);
+  }
+}
+
+/* A entrada do anúncio da recompensa (`motion-safe:animate-reward-in`). */
+@keyframes reward-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A lanterna acendendo (`motion-safe:animate-lantern-light`): termina no mesmo
+   estado do `.lantern-mark[data-lit='true']`. */
+@keyframes lantern-light {
+  from {
+    opacity: 0.35;
+    filter: none;
+  }
+  to {
+    opacity: 1;
+    filter: var(--glow-lantern-filter);
+  }
+}
+
 /* Movimento reduzido, global: zera as transições e animações que existem sem
    `motion-safe:` (o `transition-colors` do NavTabs, por exemplo). As que estão
    sob `motion-safe:` nem se aplicam com `reduce`; por isso o estado final de

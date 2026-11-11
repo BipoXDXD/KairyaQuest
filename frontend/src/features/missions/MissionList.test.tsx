@@ -108,6 +108,18 @@ describe('MissionList', () => {
     expect(screen.queryByTestId('missions-list')).not.toBeInTheDocument()
   })
 
+  it('o estado vazio e o EmptyState com a arte de missoes e um h3 abaixo do titulo da secao', async () => {
+    stubFetchResolving([])
+
+    renderWithI18n(<MissionList />)
+
+    const vazio = await screen.findByTestId('missions-empty')
+    expect(within(vazio).getByRole('heading', { level: 3 })).toHaveTextContent(/nenhuma missão/i)
+    const arte = vazio.querySelector('img')
+    expect(arte).toHaveAttribute('src', '/art/empty/missions.webp')
+    expect(arte).toHaveAttribute('alt', '')
+  })
+
   it('em ingles, o erro de carga sai do catalogo', async () => {
     stubFetchResolving({ detail: 'Banco indisponível.' }, { status: 503 })
 

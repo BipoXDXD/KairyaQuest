@@ -86,6 +86,22 @@ describe('RewardAnnouncement', () => {
     expect(classes.some((classe) => /^animate-/.test(classe))).toBe(false)
   })
 
+  it('com lit, acende a lanterna decorativa ao lado do anuncio', () => {
+    renderWithI18n(<RewardAnnouncement reward={reward()} lit />)
+
+    const lanterna = screen.getByTestId('reward-lantern')
+    expect(lanterna).toHaveAttribute('data-lit', 'true')
+    expect(lanterna).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByTestId('reward')).toContainElement(lanterna)
+    expect(screen.getByTestId('reward-xp')).toHaveTextContent('+220 XP')
+  })
+
+  it('sem lit, nenhuma lanterna aparece', () => {
+    renderWithI18n(<RewardAnnouncement reward={reward()} />)
+
+    expect(screen.queryByTestId('reward-lantern')).not.toBeInTheDocument()
+  })
+
   it('em en, XP, bonus, nivel e conquista saem do catalogo ingles', () => {
     const { rerender } = renderWithI18n(
       <RewardAnnouncement

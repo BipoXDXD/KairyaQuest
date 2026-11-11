@@ -11,20 +11,7 @@ import type { RescheduleDraft } from './types'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
-
-const TOGGLE_CLASS =
-  'rounded text-sm font-medium text-emerald-200 underline-offset-2 hover:underline ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none'
-
-const FIELD_CLASS =
-  'rounded border border-slate-600 bg-slate-900 p-2 text-sm text-slate-100 ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ' +
-  'disabled:opacity-60'
-
-const SUBMIT_CLASS =
-  'self-start rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+import { Button, Field } from '../../shared/ui'
 
 /** A ordem dos motivos na tela: a do README §5. */
 const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_de_prioridade']
@@ -104,7 +91,6 @@ export function RescheduleForm({
   const toggleRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const regionId = `${id}-region`
-  const fieldId = `${id}-deadline`
   const blockedId = `${id}-blocked`
   const noticeId = `${id}-retry-notice`
 
@@ -122,9 +108,9 @@ export function RescheduleForm({
 
   return (
     <div className="mt-3">
-      <button
+      <Button
         ref={toggleRef}
-        type="button"
+        variant="tertiary"
         data-testid="reschedule-toggle"
         aria-expanded={expanded}
         aria-controls={regionId}
@@ -142,33 +128,32 @@ export function RescheduleForm({
           })
           setSent(null)
         }}
-        className={TOGGLE_CLASS}
       >
         {t('missions.reschedule.toggle')}
-      </button>
-      <div id={regionId} className="mt-2 flex flex-col gap-2">
+      </Button>
+      <div id={regionId} className="flex flex-col gap-2 not-empty:mt-2">
         {expanded && (
           <>
-            <label htmlFor={fieldId} className="text-sm font-medium text-slate-200">
-              {t('missions.reschedule.deadlineLabel')}
-            </label>
-            <input
-              id={fieldId}
-              data-testid="reschedule-deadline"
-              type="datetime-local"
-              value={draft.civil}
-              disabled={disabled}
-              onChange={(event) => {
-                setDraft({ ...draft, civil: event.target.value })
-              }}
-              className={`${FIELD_CLASS} self-start`}
-            />
+            <Field label={t('missions.reschedule.deadlineLabel')}>
+              {(control) => (
+                <input
+                  {...control}
+                  data-testid="reschedule-deadline"
+                  type="datetime-local"
+                  value={draft.civil}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    setDraft({ ...draft, civil: event.target.value })
+                  }}
+                />
+              )}
+            </Field>
             <fieldset className="flex flex-col gap-1" disabled={disabled}>
-              <legend className="text-sm font-medium text-slate-200">
+              <legend className="mb-1 text-base font-bold text-text-primary">
                 {t('missions.reschedule.reasonLegend')}
               </legend>
               {REASONS.map((reason) => (
-                <label key={reason} className="flex items-center gap-2 text-sm text-slate-200">
+                <label key={reason} className="flex items-center gap-2 text-sm text-text-primary">
                   <input
                     type="radio"
                     name={`${id}-reason`}
@@ -178,7 +163,7 @@ export function RescheduleForm({
                     onChange={() => {
                       setDraft({ ...draft, reason })
                     }}
-                    className="focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+                    className="accent-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                   />
                   {t(RESCHEDULE_REASON_LABELS[reason])}
                 </label>
@@ -188,34 +173,42 @@ export function RescheduleForm({
               <p
                 id={noticeId}
                 data-testid="reschedule-retry-notice"
-                className="text-xs text-amber-200"
+                className="text-xs text-text-muted"
               >
                 {t('missions.reschedule.retryNotice')}
               </p>
             )}
-            <button
-              type="button"
-              data-testid="reschedule-submit"
-              disabled={disabled || blocked !== null}
-              aria-describedby={joinIds(
-                blocked === null ? null : blockedId,
-                retrySame ? noticeId : null,
-              )}
-              onClick={() => {
-                setSent(draft)
-                onSubmit(draft)
-              }}
-              className={SUBMIT_CLASS}
-            >
-              {t(retryLabel ? 'missions.action.retry' : 'missions.reschedule.submit')}
-            </button>
+            <div>
+              <Button
+                data-testid="reschedule-submit"
+                disabled={disabled || blocked !== null}
+                aria-describedby={joinIds(
+                  blocked === null ? null : blockedId,
+                  retrySame ? noticeId : null,
+                )}
+                onClick={() => {
+                  setSent(draft)
+                  onSubmit(draft)
+                }}
+              >
+                {t(retryLabel ? 'missions.action.retry' : 'missions.reschedule.submit')}
+              </Button>
+            </div>
             {blocked !== null && (
-              <p id={blockedId} data-testid="reschedule-blocked" className="text-sm text-amber-200">
+              <p
+                id={blockedId}
+                data-testid="reschedule-blocked"
+                className="text-sm text-feedback-danger"
+              >
                 {t(blocked)}
               </p>
             )}
             {failure !== null && (
-              <p role="alert" data-testid="reschedule-error" className="text-sm text-red-300">
+              <p
+                role="alert"
+                data-testid="reschedule-error"
+                className="text-sm text-feedback-danger"
+              >
                 <FailureMessage failure={failure} />
               </p>
             )}
