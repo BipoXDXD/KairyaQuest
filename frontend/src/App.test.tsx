@@ -74,10 +74,10 @@ describe('App', () => {
 
     const raizDoApp = container.firstElementChild
     const raizDoQuartel = screen.getByTestId('headquarters').parentElement
-    expect(raizDoApp).toHaveClass('min-h-screen', 'bg-slate-950', 'text-slate-100')
+    expect(raizDoApp).toHaveClass('min-h-screen', 'bg-bg-canvas', 'text-text-primary')
     // Duplicar `min-h-screen` na pagina soma a altura da navegacao no celular:
     // a tela curta ganha uma rolagem sem conteudo (medido: 905px contra 844px).
-    for (const classe of ['min-h-screen', 'bg-slate-950', 'text-slate-100']) {
+    for (const classe of ['min-h-screen', 'bg-bg-canvas', 'text-text-primary']) {
       expect(raizDoQuartel).not.toHaveClass(classe)
     }
     await settleHeadquarters()

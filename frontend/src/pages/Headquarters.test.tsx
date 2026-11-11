@@ -1,11 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { StrictMode } from 'react'
 import type { Progress } from '../features/progression/types'
 import type { ActionRead, MessageRead } from '../features/tutoring/types'
 import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion, Reward } from '../shared/types/reward'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
+import { renderWithI18n } from '../test/i18n'
 import { stubViewport } from '../test/viewport'
 import { Headquarters } from './Headquarters'
 import { HEADQUARTERS_HEADING_ID } from './headings'
@@ -38,6 +38,13 @@ function stubPage() {
   })
 }
 
+/** Espera os efeitos das features assentarem, para o teste nao terminar no meio de uma atualizacao. */
+async function settle() {
+  await screen.findByTestId('missions-empty')
+  await screen.findByTestId('tutor-greeting')
+  await screen.findByTestId('progress-level')
+}
+
 describe('Headquarters', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -46,7 +53,7 @@ describe('Headquarters', () => {
   it('anuncia a tela no titulo de nivel 1, em portugues', async () => {
     stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Quartel-General/)
     // Espera os efeitos das features assentarem, para o teste nao terminar no
@@ -59,7 +66,7 @@ describe('Headquarters', () => {
   it('compoe a feature de missoes, e nao busca dado por conta propria', async () => {
     const fetchMock = stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     expect(screen.getByTestId('missions')).toBeInTheDocument()
     await screen.findByTestId('missions-empty')
@@ -80,7 +87,7 @@ describe('Headquarters', () => {
   it('compoe a missao de hoje acima do quadro de avulsas', async () => {
     stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
@@ -95,7 +102,7 @@ describe('Headquarters', () => {
   it('o painel de progresso fica acima da missão de hoje', async () => {
     stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
@@ -110,7 +117,7 @@ describe('Headquarters', () => {
   it('o titulo de nivel 1 e focavel por programa, com o id combinado com o App', async () => {
     stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading).toHaveAttribute('id', HEADQUARTERS_HEADING_ID)
@@ -121,10 +128,54 @@ describe('Headquarters', () => {
     await screen.findByTestId('progress-level')
   })
 
+  it('o cabeçalho da área usa a cena do QG', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')
+    expect(header).toHaveClass('area-hero', 'area-hero--hq')
+    await settle()
+  })
+
+  it('o texto do hero fica sobre um Panel surface, não sobre a imagem', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    const panel = heading.closest('[data-elevation]')
+    expect(panel).toHaveAttribute('data-elevation', 'surface')
+    expect(panel).toHaveTextContent('O que está em aberto, com prazo e recompensa.')
+    expect(panel).not.toHaveClass('area-hero')
+    await settle()
+  })
+
+  it('o h1 continua sendo o primeiro heading', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />)
+
+    await settle()
+    expect(screen.getAllByRole('heading')[0]).toBe(screen.getByRole('heading', { level: 1 }))
+  })
+
+  it('em inglês, o título e a nota vêm do catálogo', async () => {
+    stubPage()
+
+    renderWithI18n(<Headquarters />, { locale: 'en' })
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Headquarters — your study dashboard',
+    )
+    expect(screen.getByText("What's open, with due dates and rewards.")).toBeInTheDocument()
+    await settle()
+  })
+
   it('oculta, esconde o main e o painel da Kairya, sem desmontar', async () => {
     stubPage()
 
-    render(<Headquarters hidden />)
+    renderWithI18n(<Headquarters hidden />)
 
     // O `main` leva o proprio `hidden` (so um `main` sem ele por documento);
     // o painel da Kairya, fora do `main`, some pela raiz.
@@ -139,7 +190,7 @@ describe('Headquarters', () => {
   it('compoe o painel da Kairya ao lado do quadro', async () => {
     stubPage()
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
 
     expect(screen.getByRole('complementary', { name: 'Kairya' })).toBeInTheDocument()
     expect(screen.getByTestId('missions')).toBeInTheDocument()
@@ -157,10 +208,7 @@ describe('Headquarters', () => {
     'só oculto→visível atualiza, sem carga adicional na montagem (oculta: %s, StrictMode: %s)',
     async (initialHidden, strict) => {
       const fetchMock = stubPage()
-      const { rerender } = render(
-        <Headquarters hidden={initialHidden} />,
-        strict ? { wrapper: StrictMode } : {},
-      )
+      const { rerender } = renderWithI18n(<Headquarters hidden={initialHidden} />, { strict })
       await screen.findByTestId('progress-level')
       await screen.findByTestId('cycle-no-plan')
       await screen.findByTestId('tutor-greeting')
@@ -249,7 +297,7 @@ describe('Headquarters', () => {
       'POST /api/missions/21/complete': () => Response.json(completion),
     })
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
     await screen.findByTestId('missions-list')
     await screen.findByTestId('tutor-greeting')
     await screen.findByTestId('cycle-no-plan')
@@ -345,7 +393,7 @@ describe('Headquarters', () => {
       'POST /api/missions/22/complete': () => Response.json(completion),
     })
 
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
     await screen.findByTestId('mission-item')
     await screen.findByTestId('missions-empty')
     await screen.findByTestId('tutor-greeting')
@@ -448,7 +496,7 @@ describe('Headquarters: a missao criada pela Kairya', () => {
       'GET /api/tutoring/messages': () => Response.json(history),
       [CONFIRM]: confirmed,
     })
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
     await screen.findByTestId('missions-empty')
 
     fireEvent.click(await screen.findByTestId('proposal-confirm'))
@@ -473,7 +521,7 @@ describe('Headquarters: a missao criada pela Kairya', () => {
       [CONFIRM]: confirmed,
       [COMPLETE]: () => post,
     })
-    render(<Headquarters />)
+    renderWithI18n(<Headquarters />)
     fireEvent.click(await screen.findByTestId('mission-complete'))
 
     fireEvent.click(await screen.findByTestId('proposal-confirm'))

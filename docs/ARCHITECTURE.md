@@ -1417,14 +1417,18 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   de `features/missions/types.ts` **sem reexport** — "um lugar só para o
   contrato". `features/missions/types.ts` ficou só com `Cycle` (que importa
   `Mission` de `shared/`) e `MissionErrorCode`.
-- **`src/shared/ui/`** *(existe, desde a F4 4.1)* — o design system. Por ora
-  só `tokens/` (`contrast.ts`, `contrastPairs.ts`) e o `tokens.test.ts`, que
-  mede o contraste WCAG de cada par de cor sobre o CSS real; os componentes
-  chegam nas tarefas seguintes da Fase 4.
+- **`src/shared/ui/`** *(existe, desde a F4 4.1)* — o design system:
+  `tokens/` (`contrast.ts`, `contrastPairs.ts`) com o `tokens.test.ts`, que
+  mede o contraste WCAG de cada par de cor sobre o CSS real, e os componentes
+  das Tarefas 4.3–4.5. Desde a 4.6, quem usa o design system importa pelo
+  barrel `shared/ui/index.ts`, nunca pelo arquivo do componente.
 - **`src/styles/`** *(existe, desde a F4 4.1)* — `tokens.css` é a fonte
   única dos tokens (primitivos em `:root`, semânticos e de componente no
   `@theme` do Tailwind). O `src/index.css` importa o Tailwind e o
-  `tokens.css` e mantém as regras `.rpg-*` legadas até a Tarefa 4.9.
+  `tokens.css` e mantém as regras `.rpg-*` legadas das features até a
+  Tarefa 4.9. O `base.css` guarda a base tipográfica, os cabeçalhos das
+  áreas (`.area-hero--*`, desde a 4.6) e a regra global de movimento
+  reduzido.
 - **`src/assets/`** *(contrato)* — imagens e SVGs importados pelo código, em
   oposição a `public/`, servido sem passar pelo bundler. A pasta não existe
   hoje: os arquivos do scaffold foram removidos por órfãos (§1).
