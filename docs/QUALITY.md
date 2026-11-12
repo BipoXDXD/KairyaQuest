@@ -81,10 +81,19 @@ em `VIRTUAL_ENV`. (Conferido com `uv` real num repositório temporário: o
 `make check` de um hook disparado em `.claude/worktrees/w2` imprimiu o cwd do
 worktree, `VIRTUAL_ENV` vazio e nenhum `pre-commit` no `PATH`.)
 
-`make check-hooks` (`scripts/verificar-hooks.sh`) é o check: reprova se algum
-dos três hooks estiver ausente, sem `INSTALL_PYTHON`, apontando para dentro de
-`.claude/worktrees/` ou de qualquer worktree registrado fora o principal, ou
-para um Python que não existe. Fica **fora** do `make check` de propósito: o
+`make check-hooks` (`scripts/verificar-hooks.sh`) é o check, e a regra é
+**exata** (lote 23): reprova se algum dos três hooks (`pre-commit`,
+`pre-merge-commit`, `pre-push`) estiver ausente, sem `INSTALL_PYTHON`, ou com
+`INSTALL_PYTHON` diferente de `<pai do git-common-dir>/.hooks-venv/bin/python` —
+o mesmo caminho que o `instalar-hooks.sh` grava (os dois leem
+`scripts/hooks-venv-lib.sh`, para não haver dois cálculos). Isso cobre o que a
+regra anterior deixava passar: um `pre-commit install` rodado de um worktree
+**vivo**, do Python do sistema ou do venv de outro projeto grava um
+interpretador que existe e fica fora de `.claude/worktrees/`, mas não é o
+`.hooks-venv`. A mensagem é `hook X aponta para Y; esperado Z`, com a causa
+provável (`pre-commit install` rodado à mão) e o conserto
+(`scripts/instalar-hooks.sh`, que precisa da autorização do responsável). Se o
+valor é o esperado mas o Python não existe, reprova também. Fica **fora** do `make check` de propósito: o
 estado dos hooks é da máquina, não do commit, e o CI não tem hooks. Rode-o
 quando suspeitar, e depois de qualquer instalação.
 
@@ -976,7 +985,9 @@ Sem eufemismo:
   esse worktree derrubaria todo commit e push, de todos. Não há como o git ou
   o `pre-commit` impedir isso (quem roda `install` decide o `INSTALL_PYTHON`);
   as guardas são o instalador único, que usa o venv dedicado, e o
-  `make check-hooks`, que reprova o estado errado — mas ele só roda quando
+  `make check-hooks`, que reprova qualquer `INSTALL_PYTHON` que não seja
+  exatamente o `.hooks-venv` (inclusive de um worktree ainda vivo, que o
+  lote 20 deixava passar até ele ser removido) — mas ele só roda quando
   alguém o chama (e ao fim do instalador), não a cada commit.
 - **Hooks são contornáveis por quem controla o Git.** Mesmo instalados,
   quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,

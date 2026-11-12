@@ -25,8 +25,8 @@
 #  6. "pre_commit install --install-hooks" COM O PYTHON DO VENV, a partir deste
 #     worktree (e o .pre-commit-config.yaml dele que vale): o INSTALL_PYTHON
 #     gravado passa a ser <venv>/bin/python;
-#  7. roda scripts/verificar-hooks.sh e falha se algum hook ainda apontar para
-#     dentro de um worktree.
+#  7. roda scripts/verificar-hooks.sh e falha se algum hook nao apontar
+#     EXATAMENTE para <venv>/bin/python.
 #
 # Idempotente: rodar de novo regrava hooks identicos. Rodar de um worktree mais
 # novo ATUALIZA o pre-commit se o lock dele mudou.
@@ -52,9 +52,12 @@ recusa() {
   exit 1
 }
 
-# Relativo ao cwd, por isso o cd antes: o .git comum, nunca o do worktree.
-comum="$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
-venv="$(dirname "$comum")/.hooks-venv"
+# O .git comum e o venv saem da biblioteca que o verificador tambem usa: o que
+# este script grava e exatamente o que scripts/verificar-hooks.sh exige.
+# shellcheck source=scripts/hooks-venv-lib.sh
+. "${ROOT}/scripts/hooks-venv-lib.sh"
+comum="$(hooks_git_comum "$ROOT")"
+venv="$(hooks_venv_dir "$comum")"
 
 case "$venv" in
   *"/.claude/worktrees/"*)
