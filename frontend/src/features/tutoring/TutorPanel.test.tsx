@@ -1434,6 +1434,45 @@ describe('TutorPanel: a proposta sem texto da Kairya', () => {
     expect(within(bubble).getByTestId('tutor-proposal-unknown')).toBeInTheDocument()
   })
 
+  it('S6 antes do done a frase padrao nao existe: so o parcial; depois do done ela aparece', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Cria uma missão')
+    stream.push(sseFrame('user_message', question(1, 'Cria uma missão', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Vou pensar' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(en['tutoring.proposal.line.create'])).toBeNull()
+    expect(screen.queryByText('Deixei uma proposta de missão para você revisar.')).toBeNull()
+
+    stream.push(sseFrame('done', { ...answer(2, 1, ''), actions: [creation] }))
+    stream.close()
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+      'Deixei uma proposta de missão para você revisar.',
+    )
+    expect(screen.queryByTestId('tutor-partial')).toBeNull()
+  })
+
+  it.each(['gerando', 'interrompida', 'falhou'] as const)(
+    'S7 resposta %s com acao e sem texto nao ganha a frase padrao',
+    async (status) => {
+      mountPanel({
+        [HISTORY]: () =>
+          Response.json([
+            question(1, 'Cria uma missão', 'c1'),
+            { ...answer(2, 1, '', status), actions: [creation] },
+          ]),
+      })
+
+      const bubble = await waitFor(kairyaMessage)
+      expect(within(bubble).queryByTestId('tutor-message-content')).toBeNull()
+      expect(within(bubble).queryByText(/Deixei uma proposta/)).toBeNull()
+    },
+  )
+
   it('S5 a resposta ao vivo (done) sem texto e com proposta mostra a frase', async () => {
     const stream = controlledStream()
     mountPanel({ [SEND]: () => stream.response })

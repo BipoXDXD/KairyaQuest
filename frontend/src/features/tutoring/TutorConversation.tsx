@@ -34,12 +34,13 @@ const STATUS_MARK: Record<MessageStatus, MessageKey | null> = {
 /**
  * A frase da bolha quando a Kairya so chamou a ferramenta e devolveu texto
  * vazio (ou so espacos): sem ela a bolha mostraria so o cartao, e o leitor de
- * tela nao leria nada de quem propos. `null` para quem nao tem proposta, ou
- * tem uma de `kind` que esta versao nao conhece (o cartao ja avisa).
+ * tela nao leria nada de quem propos. So a resposta `completa` ganha a frase:
+ * a `gerando`, `interrompida` ou `falhou` ja tem a marca do estado. `null` para
+ * quem nao tem proposta, ou tem uma de `kind` que esta versao nao conhece (o cartao ja avisa).
  */
 function proposalLine(message: MessageRead): MessageKey | null {
   const [first] = message.actions
-  if (message.content.trim() !== '' || first === undefined) {
+  if (message.status !== 'completa' || message.content.trim() !== '' || first === undefined) {
     return null
   }
   switch (first.kind) {
