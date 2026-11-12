@@ -691,6 +691,31 @@ def test_proposta_historica_fora_do_esquema_grava_falhou(
         _confirmar(session, acao.id, "op-p47-2")
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [[], ["mission_id"], "texto", 7],
+    ids=["lista vazia", "lista", "texto", "numero"],
+)
+def test_proposta_historica_que_nao_e_objeto_grava_falhou(
+    session: Session, payload: Any
+) -> None:
+    """Um payload JSONB que nao e objeto nao passa pela revalidacao. Era
+    `AttributeError` solto (500), antes mesmo do `model_validate`; agora vira
+    a mesma falha gravada da pendencia 47."""
+    missao = _avulsa(session)
+    acao = _proposta(session, missao.id)
+    acao.payload = payload
+    session.flush()
+    resultado = _confirmar(session, acao.id, "op-nd-1")
+    assert resultado == PropostaInvalida(acao)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PROPOSTA_INVALIDA)
+    assert (acao.operation_id, acao.decided_at) == ("op-nd-1", AGORA)
+    assert acao.mission_id is None
+    assert missao.deadline == PRAZO_ATUAL
+    assert _linhas(session, missao.id) == []
+    assert _confirmar(session, acao.id, "op-nd-1") == PropostaInvalida(acao)
+
+
 def test_prazo_proposto_no_horizonte_ainda_executa(session: Session) -> None:
     missao = _avulsa(session)
     teto = AGORA + timedelta(days=365)
