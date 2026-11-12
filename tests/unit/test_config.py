@@ -77,6 +77,26 @@ _BANCOS = (
 )
 
 
+def test_variavel_desconhecida_so_no_ambiente_do_processo_e_ignorada(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Limite conhecido (pendencia 12/151): o `extra="forbid"` so vale para arquivo.
+
+    O caso do arquivo esta em `test_falha_quando_ha_variavel_desconhecida_no_env`.
+    Este teste FIXA o outro lado: se um dia a variavel solta no ambiente passar
+    a ser erro, ele falha e o limite se reavalia.
+    """
+    for chave in list(os.environ):
+        if chave.startswith("FOCUSQUEST_"):
+            monkeypatch.delenv(chave, raising=False)
+    monkeypatch.chdir(tmp_path)
+    arquivo = tmp_path / "teste.env"
+    arquivo.write_text(_BANCOS)
+    monkeypatch.setenv("FOCUSQUEST_ALGO_ERRADO", "qualquer-coisa")
+    configuracao = Settings(_env_file=arquivo)
+    assert configuracao.database_url.endswith("/d")
+
+
 def _settings_do_arquivo(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, conteudo: str
 ) -> Settings:

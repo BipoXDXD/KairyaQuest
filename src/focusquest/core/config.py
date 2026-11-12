@@ -65,6 +65,10 @@ class Settings(ConfiguracaoDeLog):
     # `extra="forbid"` escrito, e nao herdado do padrao: a classe-mae ignora
     # chave desconhecida, e sem esta linha o `Settings` passaria a ignorar
     # tambem.
+    # Limite: o pydantic-settings so aplica `extra` as fontes de arquivo (.env)
+    # e de init. A fonte de AMBIENTE le apenas as variaveis dos campos
+    # declarados, entao `FOCUSQUEST_ALGO_ERRADO=1` exportado no processo e
+    # descartada em silencio (fixado em tests/unit/test_config.py).
     model_config = SettingsConfigDict(
         env_prefix="FOCUSQUEST_",
         env_file=".env",
