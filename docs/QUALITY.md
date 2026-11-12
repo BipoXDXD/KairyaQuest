@@ -156,7 +156,7 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
 | `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
-| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação e `scripts/check_wheel.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação, `scripts/check_wheel.py` e `scripts/varrer_traces.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
 | `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-handoff` | `scripts/check-handoff.sh`: reprova a branch cujo `git diff origin/main...HEAD` toca `docs/HANDOFF.md`, exceto as branches `wt/consolidar-handoff*`. A branch vem de `FQ_HANDOFF_BRANCH`, que o `check-push.sh` preenche com a ref enviada (o worktree do push é destacado). O handoff de cada PR mora em `docs/handoff/`. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
@@ -627,7 +627,7 @@ verificação executa **um** alvo, e nada além dele:
 |---|---|---|---|
 | `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
 | `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
-| `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
+| `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium`; **só em falha:** varredura dos traces e upload (parágrafo abaixo) | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
 | `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
@@ -680,6 +680,34 @@ são óbvios:
 - **As variáveis `FOCUSQUEST_DATABASE_URL` e `FOCUSQUEST_TEST_DATABASE_URL`
   vêm do `env:` do job**, com a credencial local do container de serviço —
   não há segredo do repositório envolvido.
+
+**Traces do E2E em falha (guarda do artefato, não verificação).** Quando o
+`check-e2e` reprova, dois passos **depois** do alvo (`if: failure()`) tratam o
+`frontend/test-results/` do Playwright (`trace: 'retain-on-failure'`): o
+`scripts/varrer_traces.py` varre o diretório e cada zip dentro dele
+(`trace.zip`, recursivamente, em memória) atrás de `sk-`/`sk_`/`tsk_`/`gsk_`
+com token, `Bearer <token>`, `Authorization`, `x-api-key` diferente da chave
+fictícia do E2E e qualquer `Cookie`/`Set-Cookie` com valor (o backend não
+define cookie algum), e só então o `actions/upload-artifact` (fixado por SHA,
+`retention-days: 7`) sobe o diretório. A varredura **falha fechada**: achado,
+diretório inexistente, zip ilegível ou conteúdo acima do teto reprovam o
+passo, e o upload depende de `steps.varredura.outcome == 'success'`. Imprime
+só caminho, padrão e contagem, nunca o valor. Os testes são
+`tests/unit/test_varrer_traces.py`, no `check-api`, e o script entra no mypy
+desse alvo.
+
+Isso **não** quebra a D5: a D5 exige que cada verificação seja um alvo do
+Makefile, e estes passos não verificam nada — o veredito do job já é o do
+`make check-e2e`. Só decidem o que sobe como artefato de uma falha. Um alvo
+`check-traces` seria pior: rodaria localmente e no `make check` sobre um
+`test-results/` que quase nunca existe, e a paridade diria que há uma
+verificação onde há só uma guarda de publicação. A defesa de fundo não é a
+varredura, é o job **não ter segredo**: nenhum `secrets.*`, nenhuma variável
+`*_API_KEY` no `env:`, no Makefile nem no `playwright.config.ts`; o provedor é
+o servidor falso em loopback e a chave é a fictícia imposta por
+`scripts/e2e-env.sh`. A varredura cobre o que a prova de ausência não vê.
+Limite: ela lê texto, não pixels — um segredo desenhado numa captura de tela
+do trace não seria visto (o app nunca renderiza chave).
 
 O job `check-secrets` não precisa de preparo de Node, Python nem instalação
 de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do
