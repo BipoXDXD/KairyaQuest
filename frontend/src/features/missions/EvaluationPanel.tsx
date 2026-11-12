@@ -9,7 +9,7 @@ import type {
 import type { Reward } from '../../shared/types/reward'
 import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluationFailure'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
-import { RewardAnnouncement } from './RewardAnnouncement'
+import { RewardAnnouncement, RewardTurntable } from './RewardAnnouncement'
 import { evaluationEvents, sfxForEvaluation, useKairya } from '../kairya'
 import type { EvaluationResult } from './types'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
@@ -312,6 +312,9 @@ function EvidenceAndEvaluation({
             <RewardAnnouncement reward={view.reward} bonus />
           )}
         </div>
+        {view.kind === 'concluded' && view.reward !== null && (
+          <RewardTurntable reward={view.reward} />
+        )}
         {failure !== null && (
           // `alert` so na falha FRESCA (o pedido que a pessoa acabou de fazer).
           // A gravada, lida com a pagina, e texto comum: com varias missoes

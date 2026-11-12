@@ -61,6 +61,8 @@ export const ptBR = {
   'kairya.face.concerned': 'Kairya, atenta e preocupada, olha com carinho',
   'kairya.turntable.alt': 'A Kairya gira e comemora o seu novo nível',
   'kairya.turntable.placeholderAlt': 'A Kairya comemora o seu novo nível',
+  'kairya.turntable.pause': 'Pausar a animação',
+  'kairya.turntable.resume': 'Retomar a animação',
   'kairya.speaker': 'Kairya',
   'kairya.bubble.close': 'Fechar a fala da Kairya',
 

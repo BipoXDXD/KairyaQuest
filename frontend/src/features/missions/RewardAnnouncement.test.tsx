@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
 import type { Reward } from '../../shared/types/reward'
 import { en } from '../../shared/i18n/messages/en'
-import { RewardAnnouncement } from './RewardAnnouncement'
+import { RewardAnnouncement, RewardTurntable } from './RewardAnnouncement'
 
 const reward = (ajustes: Partial<Reward> = {}): Reward => ({
   xp_awarded: 220,
@@ -45,24 +45,24 @@ describe('RewardAnnouncement', () => {
     expect(screen.queryByTestId('reward-level-up')).not.toBeInTheDocument()
   })
 
-  it('com subida de nivel, mostra o turntable (placeholder ate o asset existir)', () => {
+  it('o anuncio nunca contem o turntable, nem com subida de nivel', () => {
     renderWithI18n(<RewardAnnouncement reward={reward({ level_before: 4, level_after: 5 })} />)
-
-    expect(screen.getByTestId('kairya-turntable-placeholder')).toBeInTheDocument()
-  })
-
-  it('sem subida de nivel, nao ha turntable', () => {
-    renderWithI18n(<RewardAnnouncement reward={reward({ level_before: 4, level_after: 4 })} />)
 
     expect(screen.queryByTestId('kairya-turntable-placeholder')).not.toBeInTheDocument()
   })
 
-  it('o bonus com subida de nivel mostra o turntable uma vez', () => {
-    renderWithI18n(
-      <RewardAnnouncement reward={reward({ level_before: 4, level_after: 5 })} bonus />,
-    )
+  it('o RewardTurntable com subida de nivel mostra o turntable (placeholder ate o asset existir)', () => {
+    renderWithI18n(<RewardTurntable reward={reward({ level_before: 4, level_after: 5 })} />)
 
     expect(screen.getAllByTestId('kairya-turntable-placeholder')).toHaveLength(1)
+  })
+
+  it('o RewardTurntable sem subida de nivel nao renderiza nada', () => {
+    const { container } = renderWithI18n(
+      <RewardTurntable reward={reward({ level_before: 4, level_after: 4 })} />,
+    )
+
+    expect(container).toBeEmptyDOMElement()
   })
 
   it('lista as conquistas destravadas pelo titulo', () => {

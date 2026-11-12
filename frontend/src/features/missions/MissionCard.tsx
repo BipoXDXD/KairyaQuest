@@ -8,7 +8,7 @@ import { linkErrorText } from './evidenceText'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RescheduleForm } from './RescheduleForm'
 import { RescheduleHistory } from './RescheduleHistory'
-import { RewardAnnouncement } from './RewardAnnouncement'
+import { RewardAnnouncement, RewardTurntable } from './RewardAnnouncement'
 import type { EvidenceDraft, OpenReschedule } from './types'
 import { completionEvents, sfxForCompletion, useKairya } from '../kairya'
 import {
@@ -219,6 +219,9 @@ function CompletionControls({
           <RewardAnnouncement reward={completion.reward} />
         )}
       </div>
+      {completion.status === 'completed' && completion.reward != null && (
+        <RewardTurntable reward={completion.reward} />
+      )}
       {failure !== null && (
         <p
           role="alert"
