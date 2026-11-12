@@ -38,7 +38,11 @@
 #     escutando em 127.0.0.1 agora. A sondagem e um connect de verdade
 #     (/dev/tcp do bash: existe no macOS e no Linux, sem lsof nem python); so
 #     "Connection refused" conta como porta livre -- qualquer outro resultado
-#     (timeout, /dev/tcp ausente) recusa, e nao aprova no escuro.
+#     (connect que nao concluiu em SONDA_TIMEOUT_PADRAO_S segundos, /dev/tcp
+#     ausente, erro de rede) recusa, e nao aprova no escuro. O limite e real:
+#     uma porta com DROP no firewall deixaria o connect pendurado por minutos,
+#     e o macOS nao tem `timeout`; por isso o connect roda em segundo plano e o
+#     script o mata pelo PID proprio quando o prazo estoura.
 # Alocar e pegar o PRIMEIRO que passa nos dois. Por que a sondagem: a regra
 # antiga olhava so os .env, e worktrees de PRs ja mesclados seguiam segurando
 # deslocamento para sempre -- e um processo solto na porta so aparecia no meio
@@ -58,7 +62,10 @@
 # As bases moram no servers.ts (a fonte). O padrao abaixo e uma copia, e
 # tests/integration/test_novo_worktree.py a confere contra ele. A variavel
 # FQ_PORTAS_BASE_E2E ("api web falso galeria") existe para os testes apontarem
-# a sondagem para uma janela propria; ninguem precisa dela no dia a dia.
+# a sondagem para uma janela propria; ninguem precisa dela no dia a dia. Do
+# mesmo tipo, so para teste: FQ_SONDA_TIMEOUT (inteiro >= 1, segundos; encurta o
+# limite) e FQ_SONDA_SIMULA ("travada" ou "erro"; troca o connect por uma sonda
+# que trava ou que falha sem ser recusada, sem depender da rede).
 #
 # Recusa, sem criar nada: nome fora de [a-z0-9-] (ou comecando com hifen, ou
 # acima de 30 caracteres -- o nome vira diretorio, branch e banco, e o banco do
@@ -104,6 +111,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/push-env.sh
 . "${ROOT}/scripts/push-env.sh"
 portas_base="${FQ_PORTAS_BASE_E2E:-8100 5273 8150 5373}"
+# Limite de cada sondagem de porta (sonda_porta): quanto o connect pode levar
+# antes de a porta contar como "nao sondavel". 2 s sobra para um connect local
+# (refused e imediato). A sondagem de um candidato para na primeira porta que
+# reprova, entao o pior caso e um limite por candidato: 24 x 2 s na alocacao
+# automatica.
+SONDA_TIMEOUT_PADRAO_S=2
+SONDA_PASSO_S=0.02
+SONDA_PASSOS_POR_S=50
+sonda_timeout="${FQ_SONDA_TIMEOUT:-$SONDA_TIMEOUT_PADRAO_S}"
 read -r -a bases <<<"$portas_base"
 maior_base=0
 if [ "${#bases[@]}" -ne 4 ]; then
@@ -115,6 +131,10 @@ for base in "${bases[@]}"; do
   fi
   ((10#$base > maior_base)) && maior_base=$((10#$base))
 done
+if ! [[ $sonda_timeout =~ ^[0-9]+$ ]] || ((10#$sonda_timeout < 1)); then
+  recusa "FQ_SONDA_TIMEOUT='${sonda_timeout}' invalido: esperado um inteiro de segundos, 1 ou mais"
+fi
+sonda_timeout=$((10#$sonda_timeout))
 teto=$((FQ_RESERVA_DO_PUSH - 1))
 ((65535 - maior_base < teto)) && teto=$((65535 - maior_base))
 
@@ -209,14 +229,42 @@ $(banco_do_push "$banco_dele") ${caminho} (banco do push)
 done < <(git -C "$principal" worktree list --porcelain | sed -n 's/^worktree //p')
 
 # sonda_porta PORTA: 0 se ninguem escuta, 1 se alguem escuta, 2 se nao deu para
-# saber. LC_ALL=C fixa o texto do erro do bash ("Connection refused"), que e o
-# unico sinal de porta livre aceito.
+# saber (erro que nao e "recusada", ou o connect nao concluiu dentro do limite).
+# LC_ALL=C fixa o texto do erro do bash ("Connection refused"), que e o unico
+# sinal de porta livre aceito. O connect roda num subshell em segundo plano; o
+# laco abaixo o vigia de SONDA_PASSO_S em SONDA_PASSO_S e, estourado o limite,
+# o mata pelo PID dele (o do proprio subshell, nao o de um grupo) e devolve 2.
+# O limite e aproximado: cada passo custa um pouco mais que SONDA_PASSO_S.
 sonda_porta() {
-  local erro
-  if erro="$( (
+  local porta="$1" arquivo pid passos=0 status=0 erro
+  local passos_maximos=$((sonda_timeout * SONDA_PASSOS_POR_S))
+  arquivo="$(mktemp)"
+  (
     export LC_ALL=C
-    exec 3<>"/dev/tcp/127.0.0.1/$1"
-  ) 2>&1)"; then
+    case "${FQ_SONDA_SIMULA:-}" in
+      travada) exec sleep $((sonda_timeout + 60)) ;;
+      erro)
+        echo "bash: connect: Network is unreachable" >&2
+        exit 1
+        ;;
+    esac
+    exec 3<>"/dev/tcp/127.0.0.1/${porta}"
+  ) 2>"$arquivo" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((passos >= passos_maximos)); then
+      kill "$pid" 2>/dev/null || true
+      { wait "$pid"; } 2>/dev/null || true
+      rm -f "$arquivo"
+      return 2
+    fi
+    sleep "$SONDA_PASSO_S"
+    passos=$((passos + 1))
+  done
+  { wait "$pid"; } 2>/dev/null || status=$?
+  erro="$(cat "$arquivo")"
+  rm -f "$arquivo"
+  if [ "$status" -eq 0 ]; then
     return 1
   fi
   case "$erro" in

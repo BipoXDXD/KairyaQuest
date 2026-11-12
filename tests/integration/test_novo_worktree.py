@@ -20,6 +20,7 @@ import re
 import shutil
 import socket
 import subprocess
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
@@ -129,7 +130,9 @@ class Repositorio:
             check=True,
         ).stdout.strip()
 
-    def rodar(self, *argumentos: str) -> subprocess.CompletedProcess[str]:
+    def rodar(
+        self, *argumentos: str, timeout: float | None = None
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [str(self.principal / "scripts" / "novo-worktree.sh"), *argumentos],
             cwd=self.base,
@@ -137,6 +140,7 @@ class Repositorio:
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
 
     def make_chamado(self) -> list[str]:
@@ -914,6 +918,55 @@ def test_deslocamento_pedido_com_porta_ocupada_e_recusado(repo: Repositorio) -> 
     assert resultado.returncode != 0
     assert "deslocamento 7" in resultado.stderr
     assert f"porta {ocupada} em uso" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+# O limite da sondagem. Uma porta com DROP no firewall deixaria o connect do
+# /dev/tcp pendurado por minutos (e o macOS nao tem `timeout`); o script o
+# interrompe sozinho. Nenhum teste depende da rede: `FQ_SONDA_SIMULA` troca o
+# connect por uma sonda que trava ("travada") ou que falha com um erro que nao
+# e "recusada" ("erro"), e `FQ_SONDA_TIMEOUT` encurta o limite para 1 s.
+LIMITE_DA_SONDA_S = 1
+FOLGA_DO_LIMITE_S = 8
+PARADA_DO_TESTE_S = 30
+
+
+@pytest.mark.parametrize("simulacao", ["travada", "erro"])
+def test_sonda_que_nao_conclui_recusa_o_deslocamento_pedido(
+    repo: Repositorio, simulacao: str
+) -> None:
+    """Resultado nao sondavel (travou ou falhou sem ser recusada) recusa, e a
+    sonda travada e cortada no limite em vez de segurar o script."""
+    repo.ambiente |= {
+        "FQ_SONDA_SIMULA": simulacao,
+        "FQ_SONDA_TIMEOUT": str(LIMITE_DA_SONDA_S),
+    }
+    antes = repo.worktrees()
+
+    inicio = time.monotonic()
+    resultado = repo.rodar("nao-sondavel", "3", timeout=PARADA_DO_TESTE_S)
+    duracao = time.monotonic() - inicio
+
+    assert resultado.returncode != 0
+    assert "o deslocamento 3 nao esta livre" in resultado.stderr
+    assert f"porta {repo.bases[0] + 3} nao pode ser sondada" in resultado.stderr
+    assert duracao < FOLGA_DO_LIMITE_S
+    _nada_foi_criado(repo, antes)
+
+
+def test_sonda_com_erro_desconhecido_pula_todos_os_deslocamentos(
+    repo: Repositorio,
+) -> None:
+    """Na alocacao automatica, "nao deu para saber" nunca vira "livre": todos os
+    deslocamentos ficam para tras, cada um com a porta nomeada."""
+    repo.ambiente |= {"FQ_SONDA_SIMULA": "erro"}
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("no-escuro", timeout=PARADA_DO_TESTE_S)
+
+    assert resultado.returncode != 0
+    assert f"nenhum deslocamento livre de 1 a {TETO_DOS_WORKTREES}" in resultado.stderr
+    assert resultado.stderr.count("nao pode ser sondada") == TETO_DOS_WORKTREES
     _nada_foi_criado(repo, antes)
 
 
