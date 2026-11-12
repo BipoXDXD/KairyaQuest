@@ -2,6 +2,7 @@
 
 import importlib.util
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -59,3 +60,31 @@ def test_scale_factor_leva_a_altura_ao_alvo() -> None:
 def test_scale_factor_altura_invalida_levanta(altura: float) -> None:
     with pytest.raises(ValueError):
         params.scale_factor(altura)
+
+
+def test_encode_turntable_sh_concorda_com_frames_e_fps_dos_parametros() -> None:
+    """O script de encode repete FRAMES e FPS; os dois lados nao podem divergir.
+
+    `CRF` so existe no script (turntable_params nao tem constante de CRF),
+    entao nao entra na comparacao.
+    """
+    arquivo = "scripts/encode-turntable.sh"
+    texto = (ROOT / arquivo).read_text(encoding="utf-8")
+    esperado = {"FRAMES": params.FRAMES, "FPS": params.FPS}
+    divergentes: list[str] = []
+    for nome, valor in esperado.items():
+        achadas = [
+            (numero, int(casamento.group(1)))
+            for numero, linha in enumerate(texto.splitlines(), start=1)
+            if (casamento := re.match(rf"readonly {nome}=(\d+)\s*$", linha))
+        ]
+        assert len(achadas) == 1, (
+            f"{arquivo}: esperava um `readonly {nome}=`, achei {achadas}"
+        )
+        numero, no_script = achadas[0]
+        if no_script != valor:
+            divergentes.append(
+                f"{arquivo}:{numero}: {nome}={no_script}, "
+                f"turntable_params.{nome}={valor}"
+            )
+    assert divergentes == [], f"valores divergentes: {divergentes}"

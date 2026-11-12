@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
-import { CATALOGS } from '../../src/shared/i18n/catalog'
+import { CATALOGS, translate } from '../../src/shared/i18n/catalog'
 import { esperarAnimacoesFinitas } from './animacoes'
 import { instanteRelativo, isoUtc } from './datas'
 import { test } from './saudacaoJaVista'
@@ -59,8 +59,16 @@ async function concluir(page: Page, instrucao: string): Promise<void> {
   const item = page.getByTestId('missions-list').getByTestId('mission-item').filter({
     hasText: instrucao,
   })
-  await item.getByRole('button', { name: `Concluir a missão: ${instrucao}` }).click()
-  await expect(item.getByTestId('mission-state')).toHaveText('Concluída')
+  // O nome acessivel do botao e "Concluir" + o trecho so para leitor de tela.
+  const nome = `${translate('pt-BR', 'missions.card.complete')} ${translate(
+    'pt-BR',
+    'missions.card.whichMission',
+    { instructions: instrucao },
+  )}`
+  await item.getByRole('button', { name: nome }).click()
+  await expect(item.getByTestId('mission-state')).toHaveText(
+    CATALOGS['pt-BR']['missions.state.completed'],
+  )
 }
 
 test('nivel novo: o placeholder da Kairya aparece na recompensa, com o alt em pt-BR, e passa no axe', async ({
