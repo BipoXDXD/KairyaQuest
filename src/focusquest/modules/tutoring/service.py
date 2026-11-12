@@ -60,6 +60,7 @@ from focusquest.modules.tutoring.domain import (
     ESTIMATIVA_FORA_DO_LIMITE,
     PRAZO_EXPIRADO,
     PRAZO_FORA_DO_LIMITE,
+    PROPOSTA_INVALIDA,
     REAGENDAMENTO_INVALIDO,
     RESPOSTA_LONGA,
     CodigoDoStream,
@@ -485,8 +486,17 @@ class ForaDoLimite:
     codigo: str
 
 
+@dataclass(frozen=True)
+class PropostaInvalida:
+    """A entrada gravada nao passa mais no esquema atual da ferramenta
+    (pendencia 47). A acao foi GRAVADA como `falhou`: o chamador commita e so
+    depois traduz em 422."""
+
+    acao: TutorAction
+
+
 ResultadoDaConfirmacao = (
-    Executada | PrazoExpirado | ReagendamentoInvalido | ForaDoLimite
+    Executada | PrazoExpirado | ReagendamentoInvalido | ForaDoLimite | PropostaInvalida
 )
 
 # O `error_code` gravado na acao para cada recusa de limite da avulsa.
@@ -545,7 +555,10 @@ def confirmar_acao(
     try:
         if acao.kind is TipoDeAcao.REAGENDAR_MISSAO:
             return _confirmar_reagendamento(session, user_id, acao, operation_id, clock)
-        dados = MissionCreate.model_validate(acao.payload)
+        try:
+            dados = MissionCreate.model_validate(acao.payload)
+        except ValidationError:
+            return _falhar_por_proposta_invalida(session, acao, operation_id, agora)
         if dados.deadline <= agora:
             # `operation_id` e `decided_at` entram JUNTO com o `state`, nunca
             # antes: gravar os dois com a acao ainda `proposta` violaria o
@@ -597,7 +610,8 @@ def _confirmar_reagendamento(
     Revalida so os tres campos do modelo; o retrato (`CAMPOS_DO_RETRATO`) e o
     que a pessoa viu, e nao decide nada -- o `previous_deadline` do historico
     e o prazo que a trava da missao le. O `payload` vem do banco, gravado ja
-    validado; a revalidacao e a mesma cautela da criacao (pendencia 47).
+    validado; a revalidacao e a mesma cautela da criacao, e a entrada que nao
+    passa mais no esquema atual vira `proposta_invalida` (pendencia 47).
 
     Toda recusa do `reagendar_missao` vem antes da primeira escrita dele, e e
     isso que deixa gravar a falha na acao aqui, na mesma transacao. O
@@ -609,7 +623,10 @@ def _confirmar_reagendamento(
         for campo, valor in acao.payload.items()
         if campo not in CAMPOS_DO_RETRATO
     }
-    dados = RescheduleProposal.model_validate(entrada)
+    try:
+        dados = RescheduleProposal.model_validate(entrada)
+    except ValidationError:
+        return _falhar_por_proposta_invalida(session, acao, operation_id, clock())
     try:
         missao = reagendar_missao(
             session,
@@ -671,6 +688,17 @@ def _falhar_por_limite(
     _gravar_falha(acao, codigo, operation_id, agora)
     session.flush()
     return ForaDoLimite(acao, codigo)
+
+
+def _falhar_por_proposta_invalida(
+    session: Session, acao: TutorAction, operation_id: str, agora: datetime
+) -> PropostaInvalida:
+    """Grava `falhou`/`proposta_invalida`: a entrada gravada nao passa mais
+    no esquema atual (pendencia 47). Recusar, e nao ler com tolerancia: a
+    missao nasceria ou mudaria com um valor que a tela ja nao aceita."""
+    _gravar_falha(acao, PROPOSTA_INVALIDA, operation_id, agora)
+    session.flush()
+    return PropostaInvalida(acao)
 
 
 def _gravar_falha(
@@ -912,7 +940,8 @@ def _buscar_acao(session: Session, user_id: int, action_id: int) -> TutorAction:
 def _resultado_anterior(session: Session, acao: TutorAction) -> ResultadoDaConfirmacao:
     """O que a confirmacao com esta chave produziu da primeira vez. So
     `executada` e `falhou` (prazo expirado ou reagendamento invalido) gravam
-    `operation_id`. Os limites da avulsa tambem gravam (pendencia 26)."""
+    `operation_id`. Os limites da avulsa (pendencia 26) e a proposta que nao
+    passa mais no esquema (pendencia 47) tambem gravam."""
     if acao.state is EstadoDaAcao.EXECUTADA:
         missao = session.get(Mission, acao.mission_id)
         assert missao is not None
@@ -921,6 +950,8 @@ def _resultado_anterior(session: Session, acao: TutorAction) -> ResultadoDaConfi
         return ReagendamentoInvalido(acao)
     if acao.error_code in (ESTIMATIVA_FORA_DO_LIMITE, PRAZO_FORA_DO_LIMITE):
         return ForaDoLimite(acao, acao.error_code)
+    if acao.error_code == PROPOSTA_INVALIDA:
+        return PropostaInvalida(acao)
     return PrazoExpirado(acao)
 
 

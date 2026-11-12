@@ -22,6 +22,7 @@ from focusquest.modules.tutoring.domain import (
     ESTIMATIVA_FORA_DO_LIMITE,
     PRAZO_EXPIRADO,
     PRAZO_FORA_DO_LIMITE,
+    PROPOSTA_INVALIDA,
     EstadoDaAcao,
     Papel,
     StatusDaMensagem,
@@ -32,6 +33,7 @@ from focusquest.modules.tutoring.service import (
     Executada,
     ForaDoLimite,
     PrazoExpirado,
+    PropostaInvalida,
     ResultadoDaConfirmacao,
     confirmar_acao,
     rejeitar_acao,
@@ -203,6 +205,34 @@ def test_proposta_fora_do_limite_grava_falhou_e_nao_cria_missao(
     assert _missoes(session) == 0
     # O mesmo clique de novo: o mesmo resultado, gravado, e nao transicao ilegal.
     assert _confirmar(session, acao.id, "op-1") == ForaDoLimite(acao, codigo)
+    with pytest.raises(TransicaoIlegalError):
+        _confirmar(session, acao.id, "op-2")
+
+
+@pytest.mark.parametrize(
+    "ajuste",
+    [
+        {"instructions": ""},
+        {"difficulty": 6},
+        {"deadline": "2026-09-20T12:00:00"},
+    ],
+    ids=["instrucoes vazias", "dificuldade 6", "prazo sem fuso"],
+)
+def test_proposta_historica_fora_do_esquema_grava_falhou_e_nao_cria_missao(
+    session: Session, ajuste: dict[str, Any]
+) -> None:
+    """Pendencia 47: um payload gravado antes de o esquema endurecer nao
+    passa mais na revalidacao. Era `ValidationError` solto (500); agora a falha
+    e gravada na acao, como o prazo expirado, e a rota a traduz em 422."""
+    acao = _proposta(session, payload=_payload(AGORA + timedelta(days=1)) | ajuste)
+    resultado = _confirmar(session, acao.id, "op-1")
+
+    assert resultado == PropostaInvalida(acao)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PROPOSTA_INVALIDA)
+    assert (acao.operation_id, acao.decided_at) == ("op-1", AGORA)
+    assert acao.mission_id is None
+    assert _missoes(session) == 0
+    assert _confirmar(session, acao.id, "op-1") == PropostaInvalida(acao)
     with pytest.raises(TransicaoIlegalError):
         _confirmar(session, acao.id, "op-2")
 
