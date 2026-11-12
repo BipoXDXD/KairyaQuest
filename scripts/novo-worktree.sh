@@ -7,9 +7,10 @@
 #
 # O que faz, nesta ordem, e so depois de validar TUDO:
 #  1. cria .claude/worktrees/<nome> dentro do principal numa branch nova,
-#     wt/<nome>, a partir da main atual;
-#  2. escreve o .env dele a partir do .env.example da main (a mesma revisao do
-#     worktree), com o banco de teste do principal trocado para
+#     wt/<nome>, a partir da origin/main -- depois de um "git fetch origin
+#     main" feito pelo proprio script (lote 21, abaixo);
+#  2. escreve o .env dele a partir do .env.example da origin/main (a mesma
+#     revisao do worktree), com o banco de teste do principal trocado para
 #     focusquest_<nome>_test (servidor, credencial e opcoes da URL ficam) e
 #     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o PRIMEIRO livre de 1 ao teto
 #     (24 por padrao; ver "O que e um deslocamento livre", abaixo);
@@ -19,6 +20,22 @@
 #     worktree as preenche a mao;
 #  3. roda "make bootstrap" nele;
 #  4. imprime os proximos passos.
+#
+# A base e a origin/main, nunca a main local (lote 21, P-worktree-base-1). O
+# principal deste projeto e um repositorio bare: ali "git fetch" so atualiza a
+# origin/main, e a main local fica parada no ultimo commit feito nele. Nascer
+# dela dava um worktree numa revisao velha, com um .env.example velho (e um .env
+# que as Settings recusavam). O script faz o fetch ele mesmo, para a base nao
+# depender de alguem lembrar de buscar.
+#
+# Se o fetch falhar (sem rede, sem remoto origin, sem a branch main no remoto),
+# o script RECUSA, sem criar nada, e diz o que fazer. Nao ha fallback para a main
+# local: criar dela em silencio reproduziria o defeito sem aviso. A origin/main
+# que sobrou de um fetch antigo tambem nao serve de base -- sem fetch bem
+# sucedido, nao ha base. O fetch roda DEPOIS das recusas baratas (nome, destino,
+# .env do principal), entao um nome invalido nao depende de rede. A branch nasce
+# de um sha, sem rastrear a origin/main: um "git push" sem argumento nao deve
+# mirar a main protegida.
 #
 # O que NAO faz, de proposito:
 #  - nao cria o banco: ele nasce sozinho no primeiro uso (a fixture "engine"
@@ -78,7 +95,7 @@
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
 # branch que ja existam; deslocamento fora de 0 ao teto, reivindicado por outro
 # worktree ou com porta em uso; .env do principal ausente ou com um banco de teste que nao termine
-# em _test; main sem .env.example; outra execucao em andamento (a trava). E
+# em _test; fetch da origin/main que falha; origin/main sem .env.example; outra execucao em andamento (a trava). E
 # NUNCA escreve por cima de um .env que ja exista no destino.
 #
 # Por que "push" e o UNICO nome reservado (HANDOFF, decisao F12): o banco de
@@ -171,9 +188,17 @@ if git -C "$principal" show-ref --verify --quiet "refs/heads/${branch}"; then
   recusa "a branch ${branch} ja existe; escolha outro nome"
 fi
 [ -f "${principal}/.env" ] || recusa "o principal nao tem .env (${principal}/.env): crie-o com cp .env.example .env"
-# O modelo do .env novo: o .env.example da main, de onde o worktree nasce.
-exemplo="$(git -C "$principal" show main:.env.example 2>/dev/null)" ||
-  recusa "a main nao tem .env.example: o .env do worktree e gerado a partir dele"
+# A base: a origin/main, buscada AGORA. Sem fetch bem-sucedido nao ha base --
+# recusa, sem cair na main local (que, num bare, esta parada). GIT_TERMINAL_PROMPT=0
+# impede o git de ficar esperando uma credencial que ninguem vai digitar.
+if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet origin main 2>&1)"; then
+  recusa "o fetch de origin/main falhou (sem rede, sem o remoto origin ou sem a branch main nele?); o worktree nasce da origin/main atualizada e nunca da main local, entao nada foi criado. Erro do git: ${erro_do_fetch:-<sem mensagem>}"
+fi
+base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'origin/main^{commit}')" ||
+  recusa "depois do fetch, origin/main nao resolve para um commit"
+# O modelo do .env novo: o .env.example da origin/main, de onde o worktree nasce.
+exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
+  recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
 
 # O valor de uma chave num .env, sem executar o arquivo (mesma regra do
 # push-env.sh): ultima ocorrencia, aspas envolventes removidas.
@@ -381,7 +406,7 @@ FOCUSQUEST_E2E_PORT_OFFSET=${deslocamento}
 "
 
 mkdir -p "${principal}/.claude/worktrees" "${principal}/.superpowers/sdd/worktree-ledgers"
-git -C "$principal" worktree add --quiet -b "$branch" "$destino" main
+git -C "$principal" worktree add --quiet --no-track -b "$branch" "$destino" "$base_da_branch"
 
 # noclobber: o redirecionamento falha se o arquivo ja existir, sem janela
 # entre conferir e escrever. A conferencia ANTES serve so para a mensagem: a

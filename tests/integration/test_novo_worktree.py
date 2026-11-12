@@ -7,6 +7,11 @@ biblioteca `push-env.sh`, de onde ele tira a reserva de portas do push) fica
 em `<tmp>/FocusQuest/scripts/`, e o script resolve o principal a partir do
 proprio caminho -- nunca encosta no repositorio real.
 
+O principal tem um remoto `origin` (um repositorio bare temporario): o worktree
+novo nasce da `origin/main`, nao da `main` local (pendencia P-worktree-base-1).
+Quem muda o que o script enxerga como "a main" empurra para o remoto
+(`Repositorio.publicar`); num commit so local o script nao toca.
+
 O `make` do PATH e falso: registra os argumentos num arquivo e sai com zero.
 Assim "roda `make bootstrap`" e verificavel sem `npm ci` nenhum, e "nao roda"
 tambem -- uma recusa que chamasse o `make` deixaria rastro.
@@ -114,6 +119,11 @@ class Repositorio:
         shutil.copy2(EXEMPLO, self.principal / ".env.example")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "base")
+        # O remoto: um bare ao lado do principal, ja com a main empurrada.
+        self.remoto = tmp_path / "remoto.git"
+        self.git("init", "-q", "--bare", "-b", "main", str(self.remoto))
+        self.git("remote", "add", "origin", str(self.remoto))
+        self.publicar()
         scripts = self.principal / "scripts"
         scripts.mkdir()
         shutil.copy2(SCRIPT, scripts / "novo-worktree.sh")
@@ -129,6 +139,10 @@ class Repositorio:
             text=True,
             check=True,
         ).stdout.strip()
+
+    def publicar(self) -> None:
+        """Empurra a main local para o remoto: o que o script passa a enxergar."""
+        self.git("push", "-q", "origin", "main")
 
     def rodar(
         self, *argumentos: str, timeout: float | None = None
@@ -174,7 +188,9 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     destino = repo.principal / ".claude" / "worktrees" / "medida"
     # Branch nova, a partir da main.
     assert repo.git("rev-parse", "--abbrev-ref", "HEAD", onde=destino) == "wt/medida"
-    assert repo.git("rev-parse", "HEAD", onde=destino) == repo.git("rev-parse", "main")
+    assert repo.git("rev-parse", "HEAD", onde=destino) == repo.git(
+        "rev-parse", "origin/main"
+    )
 
     env = (destino / ".env").read_text()
     # So o NOME do banco de teste muda; servidor, credencial e query ficam.
@@ -251,6 +267,7 @@ def test_o_env_do_worktree_nao_herda_segredo_do_principal(
 def test_recusa_se_a_main_nao_tem_env_example(repo: Repositorio) -> None:
     repo.git("rm", "-q", ".env.example")
     repo.git("commit", "-q", "-m", "sem exemplo")
+    repo.publicar()
     antes = repo.worktrees()
 
     resultado = repo.rodar("novo")
@@ -266,6 +283,7 @@ def test_exemplo_sem_banco_de_teste_ganha_a_linha_do_worktree(
     """Sem a linha, o worktree usaria o banco padrao -- o do principal."""
     (repo.principal / ".env.example").write_text("FOCUSQUEST_ANTHROPIC_API_KEY=\n")
     repo.git("commit", "-q", "-am", "exemplo curto")
+    repo.publicar()
 
     resultado = repo.rodar("curto")
 
@@ -412,6 +430,7 @@ def test_nunca_sobrescreve_um_env_existente(repo: Repositorio) -> None:
     (repo.principal / ".env").write_text("VERSIONADO=1\n")
     repo.git("add", ".env", ".gitignore")
     repo.git("commit", "-q", "-m", "env versionado")
+    repo.publicar()
     (repo.principal / ".env").write_text(ENV_PRINCIPAL)
 
     resultado = repo.rodar("novo")
@@ -700,6 +719,7 @@ def test_recusa_destino_link_quebrado(repo: Repositorio) -> None:
 def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
     repo.git("add", "scripts")
     repo.git("commit", "-q", "-m", "script")
+    repo.publicar()
     assert repo.rodar("primeiro").returncode == 0
     primeiro = repo.principal / ".claude/worktrees/primeiro"
     env = primeiro / ".env"
@@ -755,6 +775,138 @@ def test_recusa_scratch_trazido_pelo_checkout(repo: Repositorio, tipo: str) -> N
         assert (
             repo.principal / ".claude/worktrees/novo/.superpowers/sdd/intocado"
         ).read_text() == "preservado\n"
+
+
+# ---------------------------------------------------------------------------
+# A base do worktree e a origin/main, depois de um fetch do proprio script
+# (pendencia P-worktree-base-1)
+# ---------------------------------------------------------------------------
+#
+# Num repositorio bare (o principal deste projeto) "git fetch" atualiza so a
+# `origin/main`: a `main` local fica parada no ultimo commit feito ali. Um
+# worktree criado da `main` local nascia de uma revisao velha e com um
+# `.env.example` velho -- o `.env` gerado era recusado pelas Settings.
+
+MARCADOR_DO_REMOTO = "FOCUSQUEST_CHAVE_SO_DO_REMOTO"
+
+
+def _avancar_o_remoto(repo: Repositorio) -> str:
+    """Um segundo clone empurra um commit para o remoto: o principal nao o
+    viu, entao a `main` local e a `origin/main` dele ficam ATRAS. Devolve o sha."""
+    outro = repo.base / "outro-clone"
+    repo.git("clone", "-q", str(repo.remoto), str(outro))
+    exemplo = outro / ".env.example"
+    exemplo.write_text(exemplo.read_text() + f"{MARCADOR_DO_REMOTO}=\n")
+    repo.git("commit", "-q", "-am", "o remoto anda", onde=outro)
+    repo.git("push", "-q", "origin", "main", onde=outro)
+    return repo.git("rev-parse", "HEAD", onde=outro)
+
+
+def test_o_worktree_nasce_da_origin_main_buscada_pelo_script(
+    repo: Repositorio,
+) -> None:
+    na_main_local = repo.git("rev-parse", "main")
+    no_remoto = _avancar_o_remoto(repo)
+    assert no_remoto != na_main_local
+    # O principal ainda nao sabe: a origin/main dele esta atras.
+    assert repo.git("rev-parse", "origin/main") == na_main_local
+
+    resultado = repo.rodar("fresco")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.principal / ".claude" / "worktrees" / "fresco"
+    assert repo.git("rev-parse", "HEAD", onde=destino) == no_remoto
+    assert repo.git("rev-parse", "--abbrev-ref", "HEAD", onde=destino) == "wt/fresco"
+    # O fetch do script atualizou a origin/main; a main local nao e tocada.
+    assert repo.git("rev-parse", "origin/main") == no_remoto
+    assert repo.git("rev-parse", "main") == na_main_local
+    # A branch nova nao rastreia a origin/main (um "git push" sem argumento
+    # nao deve mirar nela).
+    rastreio = subprocess.run(
+        ["git", "config", "--get", "branch.wt/fresco.remote"],
+        cwd=destino,
+        env=repo.ambiente,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert rastreio.stdout == ""
+
+
+def test_o_env_example_do_worktree_vem_da_origin_main(repo: Repositorio) -> None:
+    _avancar_o_remoto(repo)
+    # A main local tem um exemplo DIFERENTE, so local, que nao pode vazar.
+    (repo.principal / ".env.example").write_text("FOCUSQUEST_SO_DA_MAIN_LOCAL=\n")
+    repo.git("commit", "-q", "-am", "exemplo so local")
+
+    resultado = repo.rodar("fresco")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/fresco/.env").read_text()
+    assert f"{MARCADOR_DO_REMOTO}=" in env
+    assert "FOCUSQUEST_SO_DA_MAIN_LOCAL" not in env
+
+
+def test_um_commit_so_local_na_main_nao_entra_no_worktree(repo: Repositorio) -> None:
+    no_remoto = repo.git("rev-parse", "origin/main")
+    (repo.principal / "so-local.txt").write_text("nao publicado\n")
+    repo.git("add", "so-local.txt")
+    repo.git("commit", "-q", "-m", "so local")
+
+    resultado = repo.rodar("limpo")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.principal / ".claude/worktrees/limpo"
+    assert repo.git("rev-parse", "HEAD", onde=destino) == no_remoto
+    assert not (destino / "so-local.txt").exists()
+
+
+def test_recusa_se_o_fetch_falha_sem_cair_na_main_local(repo: Repositorio) -> None:
+    """Sem rede (aqui, um remoto que nao existe) o script recusa: criar da `main`
+    local seria nascer de uma revisao velha, em silencio."""
+    repo.git("remote", "set-url", "origin", str(repo.base / "nao-existe.git"))
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("offline")
+
+    assert resultado.returncode != 0
+    assert "fetch" in resultado.stderr
+    assert "origin" in resultado.stderr
+    assert "main local" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+    assert not (repo.principal / ".claude/worktrees/offline").exists()
+    assert not (repo.principal / ".superpowers/sdd/worktree-ledgers/offline").exists()
+
+
+def test_recusa_se_nao_ha_remoto_origin(repo: Repositorio) -> None:
+    repo.git("remote", "remove", "origin")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("sem-remoto")
+
+    assert resultado.returncode != 0
+    assert "fetch" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_recusa_se_o_remoto_nao_tem_main_mesmo_com_origin_main_antiga(
+    repo: Repositorio,
+) -> None:
+    """O remoto responde, mas sem a branch `main`: a `origin/main` que sobrou
+    de um fetch anterior e velha e nao pode servir de base."""
+    assert repo.git("rev-parse", "origin/main")
+    sem_main = repo.base / "sem-main.git"
+    repo.git("init", "-q", "--bare", "-b", "outra", str(sem_main))
+    repo.git("push", "-q", str(sem_main), "main:outra")
+    repo.git("remote", "set-url", "origin", str(sem_main))
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("sem-main")
+
+    assert resultado.returncode != 0
+    assert "origin" in resultado.stderr
+    assert "main" in resultado.stderr
+    _nada_foi_criado(repo, antes)
 
 
 # ---------------------------------------------------------------------------

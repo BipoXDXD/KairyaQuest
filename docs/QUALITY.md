@@ -828,6 +828,17 @@ Sem eufemismo:
   acumula dados). Testado sem push nem worktree em
   `tests/integration/test_push_env.py`, com uma mutação reprovando cada
   guarda.
+- **A base do worktree é a `origin/main`, buscada pelo script** (lote 21,
+  P-worktree-base-1). O principal é um repositório bare: ali `git fetch` só
+  atualiza a `origin/main`, e a `main` local fica parada no último commit feito
+  nele. O `scripts/novo-worktree.sh` roda `git fetch origin main` sozinho e cria
+  `wt/<nome>` a partir do sha da `origin/main`, sem rastreá-la, e o `.env` vem
+  do `.env.example` desse mesmo sha. **Se o fetch falhar** (sem rede, sem o
+  remoto `origin`, sem a branch `main` nele), o script **recusa sem criar nada**
+  e mostra o erro do git; não há fallback para a `main` local, nem uso de uma
+  `origin/main` antiga. As recusas baratas (nome, destino, `.env` do principal)
+  vêm antes do fetch. Provado em `tests/integration/test_novo_worktree.py`
+  (`test_o_worktree_nasce_da_origin_main_buscada_pelo_script` e vizinhos).
 - **O que é um deslocamento "livre" no `scripts/novo-worktree.sh`** (lote
   19b). O script aloca o **primeiro** deslocamento de 1 ao teto que passa nos
   dois testes, nesta ordem: (1) **nenhum worktree registrado o reivindica** no
