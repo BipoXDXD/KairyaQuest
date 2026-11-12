@@ -72,7 +72,7 @@ pendência 19): em vez do roteiro acima, a partir de qualquer worktree já
 configurado,
 
 ```bash
-scripts/novo-worktree.sh <nome>                   # ou <nome> <deslocamento>, de 0 a 24
+scripts/novo-worktree.sh <nome>                   # ou <nome> <deslocamento>, de 0 ao teto (24)
 # entre no caminho absoluto impresso pelo script
 # no principal: cd .claude/worktrees/<nome>
 make check
@@ -81,8 +81,9 @@ make check
 O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
 `main`), gera o `.env` a partir do `.env.example` da `main` com um banco de
 teste próprio (`focusquest_<nome>_test`, no servidor e com a credencial e as
-opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre,
-e roda `make bootstrap`. Do `.env` do principal só a URL do banco de teste é
+opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre
+(o primeiro, de 1 ao teto, que passa nos dois testes descritos abaixo), e roda
+`make bootstrap`. Do `.env` do principal só a URL do banco de teste é
 lida: as chaves de segredo (`FOCUSQUEST_ANTHROPIC_API_KEY` e afins) nascem em
 branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
@@ -774,9 +775,42 @@ Sem eufemismo:
   acumula dados). Testado sem push nem worktree em
   `tests/integration/test_push_env.py`, com uma mutação reprovando cada
   guarda.
+- **O que é um deslocamento "livre" no `scripts/novo-worktree.sh`** (lote
+  19b). O script aloca o **primeiro** deslocamento de 1 ao teto que passa nos
+  dois testes, nesta ordem: (1) **nenhum worktree registrado o reivindica** no
+  `.env` dele (um worktree parado não escuta porta alguma, e dois parados não
+  podem levar o mesmo valor; o principal sem a linha reivindica 0); e (2)
+  **nenhuma das quatro portas que ele implica** — API, frontend, falso e
+  galeria, base + deslocamento — tem alguém escutando em `127.0.0.1` agora. A
+  sondagem é um `connect` de verdade (`/dev/tcp` do bash, presente no macOS e
+  no Linux do CI, sem `lsof` nem Python); só `Connection refused` conta como
+  porta livre, e qualquer outro resultado recusa em vez de aprovar no escuro.
+  A saída lista os deslocamentos pulados e o motivo (reivindicado por qual
+  worktree, ou qual porta está em uso). A regra anterior olhava só os `.env`
+  numa faixa fixa de 1 a 24, e worktrees de PRs já mesclados seguiam segurando
+  deslocamento até a recusa, com 25 worktrees. **A reivindicação continua
+  valendo**: o que devolve o deslocamento de um worktree velho é removê-lo
+  (`git worktree remove <caminho>`); a mensagem de recusa lista cada
+  deslocamento e o motivo. Com o deslocamento **pedido** (`<nome> <n>`), as
+  mesmas duas conferências valem e a recusa diz qual falhou. **O teto é o
+  menor de dois limites, ambos derivados:** a reserva do pre-push
+  (`FQ_RESERVA_DO_PUSH - 1` = 24; de 25 a 49 é do push, e 49 é o vão do
+  `servers.ts`) e o fim do espaço de portas (65535 menos a **maior** porta-base,
+  hoje 8150 → 57385, muito acima de 24). As bases não colidem com 8000/5173
+  (desenvolvimento) nem 55432 (PostgreSQL), e as quatro faixas para 0 a 24
+  (8100–8124, 8150–8174, 5273–5297, 5373–5397) são disjuntas. As portas do
+  push (deslocamento + 25) **não** são sondadas: só existem durante um push e
+  derivam do mesmo deslocamento reivindicado. A fonte das bases é o
+  `frontend/tests/e2e/servers.ts`; o script guarda uma cópia, e
+  `tests/integration/test_novo_worktree.py` confere que batem. Os testes abrem
+  sockets reais, mas numa janela de portas própria (a variável
+  `FQ_PORTAS_BASE_E2E`, só para teste), sem depender do que a máquina roda.
+  Limite que continua: a sondagem é uma foto — um servidor que suba depois do
+  `novo-worktree.sh` e antes do primeiro gate ainda colide, e o gate falha
+  alto (porta ocupada), não passa em silêncio.
 - **Duas execuções simultâneas do `scripts/novo-worktree.sh`.** O
-  deslocamento automático é o menor livre entre os `.env` dos worktrees
-  registrados; entre ler e escrever o `.env` novo há uma janela (TOCTOU), e
+  deslocamento automático é o primeiro livre entre os `.env` dos worktrees
+  registrados e as portas; entre ler e escrever o `.env` novo há uma janela (TOCTOU), e
   duas execuções ao mesmo tempo escolheriam o mesmo deslocamento — o mesmo
   vale para a conferência de bancos. O script fecha a janela com uma
   **trava**: um diretório `novo-worktree.lock` no `.git` comum, criado com
