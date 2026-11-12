@@ -28,5 +28,9 @@ dependência aponta de quem tem a chave estrangeira para o dono da tabela.
   entra o import de registro de `users.models`.
 - `alembic/env.py`: importa `users.models` explicitamente, junto dos outros.
 - Imports de `User` trocados para `users.models` em 3 services e 17 testes.
-- `docs/ARCHITECTURE.md`: os três trechos que diziam que `User` morava em
-  `missions/models.py`.
+- `docs/ARCHITECTURE.md`: os trechos que diziam que `User` morava em
+  `missions/models.py`, incluindo a aresta `users → missions.models` do módulo
+  `users` (agora `missions.models → users.models`) e a leitura de `User` pelo
+  `progression.service`.
+- `docs/HANDOFF.md` não é editado: a pendência 8 deve ser riscada lá na
+  consolidação dos fragmentos.

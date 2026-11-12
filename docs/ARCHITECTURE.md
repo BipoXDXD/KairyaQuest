@@ -252,7 +252,7 @@ sentido inverso.
 (`missions/service.py`) chama `progression.registrar_conclusao` depois do
 `try/flush` que grava a `MissionOperation` (decisão P1) e antes do `return`,
 com a missão já travada. No sentido contrário, `progression.service` só
-**lê** — nunca escreve em — `missions.models` (`Mission`, `User`),
+**lê** — nunca escreve em — `missions.models` (`Mission`), `users.models` (`User`),
 `missions.cycle_service` (`carregar_historico`), `missions.cycle_domain`
 (`sequencia_ate`), `missions.domain` (`xp_da_missao`) e o modelo de ação da
 tutoria, `tutoring.models.TutorAction` (mais os enums `tutoring.domain.EstadoDaAcao`
@@ -298,9 +298,10 @@ seria um terceiro par nos dois sentidos (pendência 88). Até esta integração
 o E **não** acrescentou par novo ao grafo; os dois que já existiam continuam.
 
 **O módulo `users` (F3).** Lê e grava o idioma do usuário (`GET`/`PATCH
-/api/me`). Arestas: `users → missions.models` (`User`, que continua lá; ver
-`docs/HANDOFF.md`) e `users → core` (`Idioma`, `CampoDesconhecidoError`,
-sessão e usuário único). `users` é importado por `main.py` (o router) e,
+/api/me`) e é dono do modelo `User` (`users/models.py`, pendência 8).
+Arestas: `users → core` (`Idioma`, `CampoDesconhecidoError`, sessão e usuário
+único); no sentido contrário, `missions.models → users.models`, só para
+registrar a tabela alvo da chave estrangeira em `Base.metadata`. `users` é importado por `main.py` (o router) e,
 só pela função de leitura `ler_idioma`, por `tutoring.service` e
 `evaluation.service`, que escolhem a persona e a rubrica pelo idioma gravado
 (F3). Não forma par nos dois sentidos: `users` não importa `tutoring` nem
