@@ -3,8 +3,9 @@ import type { PlanCreateBody } from './types'
 
 /**
  * O teto de cada texto, em unidades UTF-16 (`String.length`): a mesma conta do
- * `maxLength` do campo e do contador. So do front: o servidor nao tem
- * teto (follow-up da #142); o front o impoe para o plano caber nos cartoes.
+ * `maxLength` do campo e do contador. Espelha
+ * `TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO` do backend, que responde 422 acima dele;
+ * `tests/unit/test_limite_do_texto_do_plano.py` prende os dois valores.
  */
 export const MAX_TEXT_LENGTH = 500
 
