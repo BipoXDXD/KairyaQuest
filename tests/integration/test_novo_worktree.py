@@ -16,9 +16,14 @@ quem o cria e o gate, no primeiro uso (`test_banco_de_teste.py`).
 """
 
 import os
+import re
 import shutil
+import socket
 import subprocess
+import time
 import uuid
+from collections.abc import Iterator
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 
 import pytest
@@ -27,6 +32,14 @@ RAIZ = Path(__file__).resolve().parents[2]
 SCRIPT = RAIZ / "scripts" / "novo-worktree.sh"
 BIBLIOTECA = RAIZ / "scripts" / "push-env.sh"
 EXEMPLO = RAIZ / ".env.example"
+SERVERS_TS = RAIZ / "frontend" / "tests" / "e2e" / "servers.ts"
+
+# As quatro portas-base do E2E, na ordem do script: API, frontend, falso, galeria.
+NOMES_DAS_PORTAS = ("API", "frontend", "falso", "galeria")
+# O teto dos worktrees por convencao (FQ_RESERVA_DO_PUSH - 1): de 25 em diante
+# e do pre-push.
+TETO_DOS_WORKTREES = 24
+PORTA_MAXIMA = 65535
 
 PREFIXO = "postgresql+psycopg://focusquest:focusquest_local@127.0.0.1:55432/"
 ENV_PRINCIPAL = (
@@ -37,10 +50,40 @@ ENV_PRINCIPAL = (
 )
 
 
+def _porta_esta_livre(porta: int) -> bool:
+    with closing(socket.socket()) as teste:
+        try:
+            teste.bind(("127.0.0.1", porta))
+        except OSError:
+            return False
+    return True
+
+
+def _bases_de_porta_livres() -> tuple[int, int, int, int]:
+    """Quatro portas-base cujas janelas de 0 a 24 estao inteiras livres AGORA.
+
+    O script sonda as portas de verdade; com as bases reais (8100, 5273...) o
+    resultado dependeria do que a maquina roda. Os testes apontam o script
+    (`FQ_PORTAS_BASE_E2E`) para uma janela propria, abaixo da faixa das portas
+    efemeras, e checam por bind que nada a ocupa. Nenhum teste encosta nas
+    portas reais do projeto.
+    """
+    for inicio in range(20000, 30000, 211):
+        bases = (inicio, inicio + 40, inicio + 80, inicio + 120)
+        if all(
+            _porta_esta_livre(base + deslocamento)
+            for base in bases
+            for deslocamento in range(TETO_DOS_WORKTREES + 1)
+        ):
+            return bases
+    raise AssertionError("nenhuma janela de portas livre para os testes")
+
+
 class Repositorio:
     """O principal temporario, o `make` falso e o jeito de rodar o script."""
 
     def __init__(self, tmp_path: Path) -> None:
+        self.bases = _bases_de_porta_livres()
         self.base = tmp_path
         self.principal = tmp_path / "FocusQuest"
         self.registro_do_make = tmp_path / "make-chamado"
@@ -55,6 +98,7 @@ class Repositorio:
             if not chave.startswith(("FOCUSQUEST_", "GIT_"))
         } | {
             "PATH": f"{bin_falso}{os.pathsep}{os.environ['PATH']}",
+            "FQ_PORTAS_BASE_E2E": " ".join(map(str, self.bases)),
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_AUTHOR_NAME": "teste",
@@ -86,7 +130,9 @@ class Repositorio:
             check=True,
         ).stdout.strip()
 
-    def rodar(self, *argumentos: str) -> subprocess.CompletedProcess[str]:
+    def rodar(
+        self, *argumentos: str, timeout: float | None = None
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [str(self.principal / "scripts" / "novo-worktree.sh"), *argumentos],
             cwd=self.base,
@@ -94,6 +140,7 @@ class Repositorio:
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
 
     def make_chamado(self) -> list[str]:
@@ -143,7 +190,8 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
 
     assert repo.make_chamado() == [f"-C {destino} bootstrap"]
     assert "focusquest_medida_test" in resultado.stdout
-    assert "8101" in resultado.stdout
+    # As portas impressas saem das mesmas bases que o script sondou.
+    assert str(repo.bases[0] + 1) in resultado.stdout
     assert "make check" in resultado.stdout
     # O .env do principal nao muda.
     assert (repo.principal / ".env").read_text() == ENV_PRINCIPAL
@@ -692,3 +740,275 @@ def test_recusa_scratch_trazido_pelo_checkout(repo: Repositorio, tipo: str) -> N
         assert (
             repo.principal / ".claude/worktrees/novo/.superpowers/sdd/intocado"
         ).read_text() == "preservado\n"
+
+
+# ---------------------------------------------------------------------------
+# Alocacao do deslocamento: o primeiro LIVRE, de verdade (lote 19b)
+# ---------------------------------------------------------------------------
+#
+# "Livre" = nenhum outro worktree o reivindica no `.env` E nenhuma das quatro
+# portas que ele implica (API, frontend, falso, galeria) tem alguem escutando.
+# Os testes abrem sockets REAIS em portas derivadas da janela propria do teste
+# (`Repositorio.bases`), nunca nas portas reais do projeto.
+
+
+@contextmanager
+def _portas_ocupadas(*portas: int) -> Iterator[None]:
+    """Alguem escutando em cada porta, em 127.0.0.1, ate o bloco acabar."""
+    with ExitStack() as pilha:
+        for porta in portas:
+            servidor = pilha.enter_context(closing(socket.socket()))
+            servidor.bind(("127.0.0.1", porta))
+            servidor.listen()
+        yield
+
+
+def _deslocamento_do(repo: Repositorio, nome: str) -> str:
+    env = (repo.principal / ".claude" / "worktrees" / nome / ".env").read_text()
+    return _valor(env, "FOCUSQUEST_E2E_PORT_OFFSET")
+
+
+def _reivindicar_a_mao(repo: Repositorio, nome: str, deslocamento: int) -> Path:
+    """Um worktree que so reivindica o deslocamento no `.env`: nenhum servidor,
+    nenhum `make`, nenhuma sondagem de porta -- e o que um worktree parado de um
+    PR ja mesclado faz."""
+    destino = repo.principal / ".claude" / "worktrees" / nome
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    repo.git("worktree", "add", "-q", "-b", f"parado/{nome}", str(destino), "main")
+    (destino / ".env").write_text(
+        f"FOCUSQUEST_TEST_DATABASE_URL={PREFIXO}focusquest_{nome}_test\n"
+        f"FOCUSQUEST_E2E_PORT_OFFSET={deslocamento}\n"
+    )
+    return destino
+
+
+def test_sem_nada_em_uso_o_primeiro_deslocamento_livre_e_1(repo: Repositorio) -> None:
+    resultado = repo.rodar("primeiro")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert _deslocamento_do(repo, "primeiro") == "1"
+    for base in repo.bases:
+        assert str(base + 1) in resultado.stdout
+    assert "pulad" not in resultado.stdout
+
+
+@pytest.mark.parametrize("indice", range(4), ids=NOMES_DAS_PORTAS)
+def test_pula_o_deslocamento_cuja_porta_esta_ocupada(
+    repo: Repositorio, indice: int
+) -> None:
+    """Qualquer uma das quatro portas basta para o deslocamento nao servir; a
+    saida diz qual porta e por que o 1 ficou para tras."""
+    ocupada = repo.bases[indice] + 1
+
+    with _portas_ocupadas(ocupada):
+        resultado = repo.rodar("desviado")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert _deslocamento_do(repo, "desviado") == "2"
+    assert f"porta {ocupada} em uso" in resultado.stdout
+    assert str(repo.bases[indice] + 2) in resultado.stdout
+
+
+def test_pula_reivindicados_e_ocupados_ate_o_primeiro_livre(
+    repo: Repositorio,
+) -> None:
+    """1 reivindicado, 2 e 3 com porta ocupada: o primeiro livre e o 4."""
+    dono = _reivindicar_a_mao(repo, "parado", 1)
+
+    with _portas_ocupadas(repo.bases[1] + 2, repo.bases[3] + 3):
+        resultado = repo.rodar("novo")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert _deslocamento_do(repo, "novo") == "4"
+    assert str(dono) in resultado.stdout
+    assert f"porta {repo.bases[1] + 2} em uso" in resultado.stdout
+    assert f"porta {repo.bases[3] + 3} em uso" in resultado.stdout
+
+
+def test_porta_liberada_volta_a_ser_candidata(repo: Repositorio) -> None:
+    """A ocupacao e lida a cada execucao: nada fica gravado de uma vez para a outra."""
+    with _portas_ocupadas(repo.bases[0] + 1):
+        assert repo.rodar("a").returncode == 0
+    assert _deslocamento_do(repo, "a") == "2"
+
+    resultado = repo.rodar("b")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert _deslocamento_do(repo, "b") == "1"
+
+
+def test_pula_o_deslocamento_reivindicado_por_outro_env_com_as_portas_livres(
+    repo: Repositorio,
+) -> None:
+    """Dois worktrees parados (nenhum servidor de pe) nao podem levar o mesmo
+    deslocamento: a reivindicacao no `.env` vale mesmo com as portas livres."""
+    _reivindicar_a_mao(repo, "parado-um", 1)
+    _reivindicar_a_mao(repo, "parado-dois", 2)
+
+    resultado = repo.rodar("terceiro")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert _deslocamento_do(repo, "terceiro") == "3"
+    assert "reivindicado no .env de" in resultado.stdout
+
+
+def test_mensagem_clara_quando_nao_ha_deslocamento_livre_ate_o_teto(
+    repo: Repositorio,
+) -> None:
+    """Todos os 24 com a porta da API ocupada: recusa, nomeia o intervalo e cada
+    porta, ensina a sair e nao cria nada."""
+    antes = repo.worktrees()
+    todas = [repo.bases[0] + d for d in range(1, TETO_DOS_WORKTREES + 1)]
+
+    with _portas_ocupadas(*todas):
+        resultado = repo.rodar("sem-lugar")
+
+    assert resultado.returncode != 0
+    assert f"nenhum deslocamento livre de 1 a {TETO_DOS_WORKTREES}" in resultado.stderr
+    for porta in (todas[0], todas[-1]):
+        assert f"porta {porta} em uso" in resultado.stderr
+    assert "git worktree remove" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_sem_deslocamento_livre_a_recusa_conta_reivindicados_e_ocupados(
+    repo: Repositorio,
+) -> None:
+    """O teto vem tambem das portas: com a maior base em 65530, o maior
+    deslocamento e 5 (65535 e a ultima porta). 1 e 2 reivindicados no `.env`,
+    3 a 5 reivindicados tambem -- nenhuma porta e sondada, o teste nao depende
+    do que escuta no topo da faixa."""
+    repo.ambiente["FQ_PORTAS_BASE_E2E"] = "65500 65510 65520 65530"
+    for deslocamento in range(1, 6):
+        _reivindicar_a_mao(repo, f"parado-{deslocamento}", deslocamento)
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("sem-lugar")
+
+    assert resultado.returncode != 0
+    assert "nenhum deslocamento livre de 1 a 5" in resultado.stderr
+    assert str(PORTA_MAXIMA) in resultado.stderr
+    assert resultado.stderr.count("reivindicado no .env de") == 5
+    _nada_foi_criado(repo, antes)
+
+
+def test_o_teto_deriva_das_portas_e_vale_para_o_deslocamento_pedido(
+    repo: Repositorio,
+) -> None:
+    """6 esta dentro da reserva dos worktrees (0 a 24), mas 65530 + 6 passa de
+    65535: nenhuma porta existe ali."""
+    repo.ambiente["FQ_PORTAS_BASE_E2E"] = "65500 65510 65520 65530"
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("alto", "6")
+
+    assert resultado.returncode != 0
+    assert "deslocamento invalido" in resultado.stderr
+    assert "0 a 5" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_deslocamento_pedido_com_porta_ocupada_e_recusado(repo: Repositorio) -> None:
+    ocupada = repo.bases[3] + 7
+    antes = repo.worktrees()
+
+    with _portas_ocupadas(ocupada):
+        resultado = repo.rodar("pedido", "7")
+
+    assert resultado.returncode != 0
+    assert "deslocamento 7" in resultado.stderr
+    assert f"porta {ocupada} em uso" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+# O limite da sondagem. Uma porta com DROP no firewall deixaria o connect do
+# /dev/tcp pendurado por minutos (e o macOS nao tem `timeout`); o script o
+# interrompe sozinho. Nenhum teste depende da rede: `FQ_SONDA_SIMULA` troca o
+# connect por uma sonda que trava ("travada") ou que falha com um erro que nao
+# e "recusada" ("erro"), e `FQ_SONDA_TIMEOUT` encurta o limite para 1 s.
+LIMITE_DA_SONDA_S = 1
+FOLGA_DO_LIMITE_S = 8
+PARADA_DO_TESTE_S = 30
+
+
+@pytest.mark.parametrize("simulacao", ["travada", "erro"])
+def test_sonda_que_nao_conclui_recusa_o_deslocamento_pedido(
+    repo: Repositorio, simulacao: str
+) -> None:
+    """Resultado nao sondavel (travou ou falhou sem ser recusada) recusa, e a
+    sonda travada e cortada no limite em vez de segurar o script."""
+    repo.ambiente |= {
+        "FQ_SONDA_SIMULA": simulacao,
+        "FQ_SONDA_TIMEOUT": str(LIMITE_DA_SONDA_S),
+    }
+    antes = repo.worktrees()
+
+    inicio = time.monotonic()
+    resultado = repo.rodar("nao-sondavel", "3", timeout=PARADA_DO_TESTE_S)
+    duracao = time.monotonic() - inicio
+
+    assert resultado.returncode != 0
+    assert "o deslocamento 3 nao esta livre" in resultado.stderr
+    assert f"porta {repo.bases[0] + 3} nao pode ser sondada" in resultado.stderr
+    assert duracao < FOLGA_DO_LIMITE_S
+    _nada_foi_criado(repo, antes)
+
+
+def test_sonda_com_erro_desconhecido_pula_todos_os_deslocamentos(
+    repo: Repositorio,
+) -> None:
+    """Na alocacao automatica, "nao deu para saber" nunca vira "livre": todos os
+    deslocamentos ficam para tras, cada um com a porta nomeada."""
+    repo.ambiente |= {"FQ_SONDA_SIMULA": "erro"}
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("no-escuro", timeout=PARADA_DO_TESTE_S)
+
+    assert resultado.returncode != 0
+    assert f"nenhum deslocamento livre de 1 a {TETO_DOS_WORKTREES}" in resultado.stderr
+    assert resultado.stderr.count("nao pode ser sondada") == TETO_DOS_WORKTREES
+    _nada_foi_criado(repo, antes)
+
+
+def test_deslocamento_pedido_reivindicado_e_recusado_dizendo_por_quem(
+    repo: Repositorio,
+) -> None:
+    dono = _reivindicar_a_mao(repo, "parado", 7)
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("pedido", "7")
+
+    assert resultado.returncode != 0
+    assert "deslocamento 7" in resultado.stderr
+    assert str(dono) in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+@pytest.mark.parametrize(
+    "valor", ["abc", "1 2 3", "1 2 3 4 5", "0 1 2 3", "1 2 3 70000"]
+)
+def test_recusa_bases_de_porta_invalidas(repo: Repositorio, valor: str) -> None:
+    repo.ambiente["FQ_PORTAS_BASE_E2E"] = valor
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "FQ_PORTAS_BASE_E2E" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_as_portas_base_do_script_sao_as_do_servers_ts() -> None:
+    """Duas linguagens, uma verdade: o script sonda as portas que o
+    `servers.ts` de fato usa. Se uma mudar sem a outra, a sondagem passa a olhar
+    portas que nenhum E2E usa."""
+    fonte = SERVERS_TS.read_text()
+    do_servers = []
+    for nome in ("PORTA_DA_API", "PORTA_DO_WEB", "PORTA_DO_FALSO", "PORTA_DA_GALERIA"):
+        achado = re.search(rf"const {nome} = (\d+)", fonte)
+        assert achado is not None, nome
+        do_servers.append(int(achado.group(1)))
+    padrao = re.search(r"FQ_PORTAS_BASE_E2E:-([0-9 ]+)\}", SCRIPT.read_text())
+
+    assert padrao is not None
+    assert [int(porta) for porta in padrao.group(1).split()] == do_servers

@@ -11,7 +11,8 @@
 #  2. escreve o .env dele a partir do .env.example da main (a mesma revisao do
 #     worktree), com o banco de teste do principal trocado para
 #     focusquest_<nome>_test (servidor, credencial e opcoes da URL ficam) e
-#     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o menor livre de 1 a 24;
+#     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o PRIMEIRO livre de 1 ao teto
+#     (24 por padrao; ver "O que e um deslocamento livre", abaixo);
 #     do .env do principal so a URL do banco de teste e lida. Nenhum outro
 #     valor dele e copiado: as chaves de segredo (FOCUSQUEST_ANTHROPIC_API_KEY e
 #     afins) nascem em branco, como no exemplo, e quem precisar delas no
@@ -29,13 +30,50 @@
 #  - nao instala hooks: eles moram no .git comum, e ja valem para o worktree
 #    novo.
 #
+# O que e um deslocamento livre (lote 19b). Os dois testes valem, nesta ordem:
+#  1. nenhum worktree registrado o reivindica no .env dele (um worktree parado
+#     nao escuta porta nenhuma, e dois parados nao podem levar o mesmo valor);
+#  2. nenhuma das QUATRO portas que ele implica -- API, frontend, falso da
+#     Anthropic e galeria de estados, base + deslocamento -- tem alguem
+#     escutando em 127.0.0.1 agora. A sondagem e um connect de verdade
+#     (/dev/tcp do bash: existe no macOS e no Linux, sem lsof nem python); so
+#     "Connection refused" conta como porta livre -- qualquer outro resultado
+#     (connect que nao concluiu em SONDA_TIMEOUT_PADRAO_S segundos, /dev/tcp
+#     ausente, erro de rede) recusa, e nao aprova no escuro. O limite e real:
+#     uma porta com DROP no firewall deixaria o connect pendurado por minutos,
+#     e o macOS nao tem `timeout`; por isso o connect roda em segundo plano e o
+#     script o mata pelo PID proprio quando o prazo estoura.
+# Alocar e pegar o PRIMEIRO que passa nos dois. Por que a sondagem: a regra
+# antiga olhava so os .env, e worktrees de PRs ja mesclados seguiam segurando
+# deslocamento para sempre -- e um processo solto na porta so aparecia no meio
+# do gate. A reivindicacao continua valendo: remover o worktree antigo
+# (git worktree remove) e o que devolve o deslocamento dele.
+#
+# O teto e o MENOR de dois limites, os dois derivados, nenhum escrito a mao:
+#  - a reserva do pre-push: FQ_RESERVA_DO_PUSH - 1 (24); de 25 a 49 e do push,
+#    e 49 e o limite do servers.ts (o vao entre a API e o falso, menos um);
+#  - o fim do espaco de portas: 65535 menos a MAIOR base (hoje 8150 -> 57385,
+#    muito acima de 24; so aperta se alguem mover as bases para o topo).
+# As bases NAO colidem com outras portas do projeto: 8000 e 5173 sao as de
+# desenvolvimento, a do PostgreSQL (FOCUSQUEST_DB_PORT) fica fora de todas as
+# faixas, e as quatro faixas (8100-8124, 8150-8174, 5273-5297, 5373-5397 para
+# 0 a 24) sao disjuntas entre si.
+#
+# As bases moram no servers.ts (a fonte). O padrao abaixo e uma copia, e
+# tests/integration/test_novo_worktree.py a confere contra ele. A variavel
+# FQ_PORTAS_BASE_E2E ("api web falso galeria") existe para os testes apontarem
+# a sondagem para uma janela propria; ninguem precisa dela no dia a dia. Do
+# mesmo tipo, so para teste: FQ_SONDA_TIMEOUT (inteiro >= 1, segundos; encurta o
+# limite) e FQ_SONDA_SIMULA ("travada" ou "erro"; troca o connect por uma sonda
+# que trava ou que falha sem ser recusada, sem depender da rede).
+#
 # Recusa, sem criar nada: nome fora de [a-z0-9-] (ou comecando com hifen, ou
 # acima de 30 caracteres -- o nome vira diretorio, branch e banco, e o banco do
 # push, focusquest_<nome>_push_test, precisa caber nos 63 bytes do
 # PostgreSQL); o nome reservado "push"; um nome cujo banco (ou banco do push)
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
-# branch que ja existam; deslocamento fora de 0 a 24 ou ja em uso por outro
-# worktree; .env do principal ausente ou com um banco de teste que nao termine
+# branch que ja existam; deslocamento fora de 0 ao teto, reivindicado por outro
+# worktree ou com porta em uso; .env do principal ausente ou com um banco de teste que nao termine
 # em _test; main sem .env.example; outra execucao em andamento (a trava). E
 # NUNCA escreve por cima de um .env que ja exista no destino.
 #
@@ -72,7 +110,33 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # de repetir o numero, mantem uma fonte so para a faixa.
 # shellcheck source=scripts/push-env.sh
 . "${ROOT}/scripts/push-env.sh"
+portas_base="${FQ_PORTAS_BASE_E2E:-8100 5273 8150 5373}"
+# Limite de cada sondagem de porta (sonda_porta): quanto o connect pode levar
+# antes de a porta contar como "nao sondavel". 2 s sobra para um connect local
+# (refused e imediato). A sondagem de um candidato para na primeira porta que
+# reprova, entao o pior caso e um limite por candidato: 24 x 2 s na alocacao
+# automatica.
+SONDA_TIMEOUT_PADRAO_S=2
+SONDA_PASSO_S=0.02
+SONDA_PASSOS_POR_S=50
+sonda_timeout="${FQ_SONDA_TIMEOUT:-$SONDA_TIMEOUT_PADRAO_S}"
+read -r -a bases <<<"$portas_base"
+maior_base=0
+if [ "${#bases[@]}" -ne 4 ]; then
+  recusa "FQ_PORTAS_BASE_E2E='${portas_base}' invalida: esperadas quatro portas (api web falso galeria)"
+fi
+for base in "${bases[@]}"; do
+  if ! [[ $base =~ ^[0-9]+$ ]] || ((10#$base < 1 || 10#$base > 65535)); then
+    recusa "FQ_PORTAS_BASE_E2E='${portas_base}' invalida: cada porta-base deve ser um inteiro de 1 a 65535"
+  fi
+  ((10#$base > maior_base)) && maior_base=$((10#$base))
+done
+if ! [[ $sonda_timeout =~ ^[0-9]+$ ]] || ((10#$sonda_timeout < 1)); then
+  recusa "FQ_SONDA_TIMEOUT='${sonda_timeout}' invalido: esperado um inteiro de segundos, 1 ou mais"
+fi
+sonda_timeout=$((10#$sonda_timeout))
 teto=$((FQ_RESERVA_DO_PUSH - 1))
+((65535 - maior_base < teto)) && teto=$((65535 - maior_base))
 
 if ! [[ $nome =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ "${#nome}" -gt 30 ]; then
   recusa "nome invalido '${nome}': use so [a-z0-9-], comecando por letra ou digito, com ate 30 caracteres"
@@ -143,6 +207,7 @@ trap liberar_trava EXIT
 # e o do push derivado dele. Um worktree sem .env, ou com um banco que nao
 # termine em _test, nao roda gate nenhum e nao ocupa banco.
 em_uso=" "
+reivindicados=""
 bancos_ocupados=""
 while IFS= read -r caminho; do
   valor=""
@@ -159,25 +224,110 @@ $(banco_do_push "$banco_dele") ${caminho} (banco do push)
   fi
   [[ $valor =~ ^[0-9]+$ ]] || valor=0
   em_uso="${em_uso}$((10#$valor)) "
+  reivindicados="${reivindicados}$((10#$valor)) ${caminho}
+"
 done < <(git -C "$principal" worktree list --porcelain | sed -n 's/^worktree //p')
 
+# sonda_porta PORTA: 0 se ninguem escuta, 1 se alguem escuta, 2 se nao deu para
+# saber (erro que nao e "recusada", ou o connect nao concluiu dentro do limite).
+# LC_ALL=C fixa o texto do erro do bash ("Connection refused"), que e o unico
+# sinal de porta livre aceito. O connect roda num subshell em segundo plano; o
+# laco abaixo o vigia de SONDA_PASSO_S em SONDA_PASSO_S e, estourado o limite,
+# o mata pelo PID dele (o do proprio subshell, nao o de um grupo) e devolve 2.
+# O limite e aproximado: cada passo custa um pouco mais que SONDA_PASSO_S.
+sonda_porta() {
+  local porta="$1" arquivo pid passos=0 status=0 erro
+  local passos_maximos=$((sonda_timeout * SONDA_PASSOS_POR_S))
+  arquivo="$(mktemp)"
+  (
+    export LC_ALL=C
+    case "${FQ_SONDA_SIMULA:-}" in
+      travada) exec sleep $((sonda_timeout + 60)) ;;
+      erro)
+        echo "bash: connect: Network is unreachable" >&2
+        exit 1
+        ;;
+    esac
+    exec 3<>"/dev/tcp/127.0.0.1/${porta}"
+  ) 2>"$arquivo" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((passos >= passos_maximos)); then
+      kill "$pid" 2>/dev/null || true
+      { wait "$pid"; } 2>/dev/null || true
+      rm -f "$arquivo"
+      return 2
+    fi
+    sleep "$SONDA_PASSO_S"
+    passos=$((passos + 1))
+  done
+  { wait "$pid"; } 2>/dev/null || status=$?
+  erro="$(cat "$arquivo")"
+  rm -f "$arquivo"
+  if [ "$status" -eq 0 ]; then
+    return 1
+  fi
+  case "$erro" in
+    *"Connection refused"*) return 0 ;;
+  esac
+  return 2
+}
+
+# motivo_de_ocupacao DESLOCAMENTO: deixa em $motivo por que o deslocamento nao
+# serve (vazio = livre). A reivindicacao no .env vem antes da sondagem das
+# portas, e a sondagem para na primeira porta que reprova.
+motivo=""
+motivo_de_ocupacao() {
+  local candidato="$1" off dono porta base resultado
+  motivo=""
+  while IFS=' ' read -r off dono; do
+    if [ -n "$off" ] && [ "$off" = "$candidato" ]; then
+      motivo="em uso por outro worktree: reivindicado no .env de ${dono}"
+      return 0
+    fi
+  done <<<"$reivindicados"
+  for base in "${bases[@]}"; do
+    porta=$((10#$base + candidato))
+    resultado=0
+    sonda_porta "$porta" || resultado=$?
+    case "$resultado" in
+      1)
+        motivo="porta ${porta} em uso por outro processo"
+        return 0
+        ;;
+      2)
+        motivo="porta ${porta} nao pode ser sondada (conexao a 127.0.0.1:${porta} falhou sem ser recusada)"
+        return 0
+        ;;
+    esac
+  done
+}
+
+pulados=""
 if [ -n "$pedido" ]; then
   if ! [[ $pedido =~ ^[0-9]+$ ]] || ((10#$pedido > teto)); then
-    recusa "deslocamento invalido '${pedido}': esperado um inteiro de 0 a ${teto} (de ${FQ_RESERVA_DO_PUSH} em diante a faixa e do pre-push)"
+    recusa "deslocamento invalido '${pedido}': esperado um inteiro de 0 a ${teto} (de ${FQ_RESERVA_DO_PUSH} em diante a faixa e do pre-push; acima de $((65535 - maior_base)) a porta passaria de 65535)"
   fi
   deslocamento=$((10#$pedido))
-  if [[ $em_uso == *" ${deslocamento} "* ]]; then
-    recusa "o deslocamento ${deslocamento} ja esta em uso por outro worktree (em uso:${em_uso% })"
+  motivo_de_ocupacao "$deslocamento"
+  if [ -n "$motivo" ]; then
+    recusa "o deslocamento ${deslocamento} nao esta livre: ${motivo}"
   fi
 else
   deslocamento=""
   for candidato in $(seq 1 "$teto"); do
-    if [[ $em_uso != *" ${candidato} "* ]]; then
+    motivo_de_ocupacao "$candidato"
+    if [ -z "$motivo" ]; then
       deslocamento="$candidato"
       break
     fi
+    pulados="${pulados}    ${candidato}: ${motivo}
+"
   done
-  [ -n "$deslocamento" ] || recusa "nenhum deslocamento livre de 1 a ${teto}; remova um worktree antigo"
+  if [ -z "$deslocamento" ]; then
+    recusa "nenhum deslocamento livre de 1 a ${teto} (o teto e o menor entre a reserva do pre-push, $((FQ_RESERVA_DO_PUSH - 1)), e 65535 menos a maior porta-base, $((65535 - maior_base)))
+${pulados}remova um worktree antigo (git worktree remove <caminho>) ou encerre o processo que segura a porta"
+  fi
 fi
 
 # O banco de teste: so o NOME muda (o ultimo segmento do caminho, antes da
@@ -260,8 +410,9 @@ make -C "$destino" bootstrap
 cat <<FIM
 ==> worktree pronto: ${destino} (branch ${branch})
     banco de teste:  ${banco} (nasce sozinho no primeiro uso)
-    portas do E2E:   API $((8100 + deslocamento)), frontend $((5273 + deslocamento)), falso $((8150 + deslocamento)), galeria $((5373 + deslocamento)) (deslocamento ${deslocamento})
-proximos passos:
+    portas do E2E:   API $((10#${bases[0]} + deslocamento)), frontend $((10#${bases[1]} + deslocamento)), falso $((10#${bases[2]} + deslocamento)), galeria $((10#${bases[3]} + deslocamento)) (deslocamento ${deslocamento})
+${pulados:+deslocamentos pulados antes de ${deslocamento}:
+${pulados}}proximos passos:
     cd ${destino}
     make check
 nao rode "make db-up" neste worktree: o PostgreSQL e o do principal, e o compose
