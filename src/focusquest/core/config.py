@@ -31,6 +31,8 @@ class ConfiguracaoDeLog(BaseSettings):
         env_prefix="FOCUSQUEST_",
         env_file=".env",
         env_ignore_empty=True,
+        # O valor pode ser segredo: sem isto o erro imprime `input_value=...`.
+        hide_input_in_errors=True,
         extra="ignore",
     )
 
@@ -67,6 +69,8 @@ class Settings(ConfiguracaoDeLog):
         env_prefix="FOCUSQUEST_",
         env_file=".env",
         env_ignore_empty=True,
+        # O valor pode ser segredo: sem isto o erro imprime `input_value=...`.
+        hide_input_in_errors=True,
         extra="forbid",
     )
 
