@@ -5,6 +5,7 @@ import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion } from '../shared/types/reward'
 import { fakeAudio, memoryStorage, type FakeAudio } from '../test/audioDoubles'
 import { routeFetch } from '../test/fetchRoutes'
+import { flushPendingEffects } from '../test/flushEffects'
 import { renderWithI18n } from '../test/i18n'
 import { sseFrame, streamResponse } from '../test/sse'
 import { stubViewport } from '../test/viewport'
@@ -125,6 +126,9 @@ describe('Headquarters -- a jornada com o som desligado', () => {
     fireEvent.change(field, { target: { value: 'Oi' } })
     fireEvent.click(screen.getByTestId('tutor-send'))
     await screen.findByText('Oi!')
+    // Ausência não se espera: o efeito da última resposta pode estar pendente,
+    // e "nenhum elemento" passaria vazio. Descarregue-os antes de afirmar.
+    flushPendingEffects()
 
     expect(elements).toHaveLength(0)
   })
