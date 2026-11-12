@@ -26,6 +26,7 @@ from focusquest.core.clock import get_clock, system_now
 from focusquest.core.database import get_session
 from focusquest.main import app
 from integration.relogio_do_e2e import ROTA_DO_RELOGIO
+from integration.reset_do_e2e import ROTA_DO_RESET
 
 # Um instante que nenhum relogio real devolve hoje: se ele aparecer como o dia
 # do ciclo, a rota de controle existiu e funcionou.
@@ -75,3 +76,10 @@ def test_a_rota_do_relogio_responde_404_e_o_relogio_nao_muda(
     depois = datetime.now(UTC).astimezone(fuso).date().isoformat()
     assert hoje in {antes, depois}
     assert hoje != DIA_FORJADO
+
+
+def test_a_rota_do_reset_do_e2e_responde_404_em_producao(client: TestClient) -> None:
+    """O reset do E2E (`/_e2e/reset`) tambem e so da entrada do E2E."""
+    resposta = client.post(ROTA_DO_RESET)
+
+    assert resposta.status_code == 404
