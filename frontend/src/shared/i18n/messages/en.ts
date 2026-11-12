@@ -58,6 +58,8 @@ export const en = {
   'kairya.face.concerned': 'Kairya looks on, attentive and concerned, with care',
   'kairya.turntable.alt': 'Kairya turns around, celebrating your new level',
   'kairya.turntable.placeholderAlt': 'Kairya celebrates your new level',
+  'kairya.turntable.pause': 'Pause the animation',
+  'kairya.turntable.resume': 'Resume the animation',
   'kairya.speaker': 'Kairya',
   'kairya.bubble.close': "Dismiss Kairya's message",
 

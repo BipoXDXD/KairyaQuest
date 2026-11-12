@@ -12,6 +12,10 @@ import { KairyaTurntable } from '../kairya'
  * `bonus` e o anuncio do bonus da avaliacao da Kairya (incremento E): o mesmo
  * desenho, com "de bonus" junto do XP para nao parecer uma segunda conclusao.
  *
+ * O turntable NAO mora aqui: o botao de pausa dele nao pode ficar dentro de
+ * uma regiao viva atomica (cada troca de rotulo releria o anuncio inteiro).
+ * Ele e o `RewardTurntable`, irmao da regiao viva.
+ *
  * O titulo da conquista sai do catalogo pelo `code` (`achievementText`); um
  * `code` que o catalogo nao conhece mostra o `title` do back.
  */
@@ -26,12 +30,9 @@ export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; 
         {t(bonus ? 'missions.reward.bonusXp' : 'missions.reward.xp', { xp: reward.xp_awarded })}
       </p>
       {reward.level_after > reward.level_before && (
-        <>
-          <p data-testid="reward-level-up">
-            {t('missions.reward.levelUp', { level: reward.level_after })}
-          </p>
-          <KairyaTurntable />
-        </>
+        <p data-testid="reward-level-up">
+          {t('missions.reward.levelUp', { level: reward.level_after })}
+        </p>
       )}
       {reward.achievements_unlocked.length > 0 && (
         <ul role="list">
@@ -44,4 +45,13 @@ export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; 
       )}
     </div>
   )
+}
+
+/**
+ * A Kairya girando na subida de nivel, FORA da regiao viva do anuncio
+ * (`RewardAnnouncement`), como irma dela: o botao de pausa e um controle, nao
+ * um texto a ser anunciado. Sem subida de nivel, nao renderiza nada.
+ */
+export function RewardTurntable({ reward }: { reward: Reward }) {
+  return reward.level_after > reward.level_before ? <KairyaTurntable /> : null
 }
