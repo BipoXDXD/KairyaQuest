@@ -831,13 +831,16 @@ Sem eufemismo:
 - **A base do worktree é a `origin/main`, buscada pelo script** (lote 21,
   P-worktree-base-1). O principal é um repositório bare: ali `git fetch` só
   atualiza a `origin/main`, e a `main` local fica parada no último commit feito
-  nele. O `scripts/novo-worktree.sh` roda `git fetch origin main` sozinho e cria
-  `wt/<nome>` a partir do sha da `origin/main`, sem rastreá-la, e o `.env` vem
-  do `.env.example` desse mesmo sha. **Se o fetch falhar** (sem rede, sem o
+  nele. O `scripts/novo-worktree.sh` roda `git fetch origin +refs/heads/main:refs/remotes/origin/main` sozinho (refspec
+  explícito: vale também num principal sem `remote.origin.fetch`, onde um
+  `git fetch origin main` sairia com 0 e deixaria a `origin/main` velha) e cria
+  `wt/<nome>` a partir do sha da `origin/main`, que o git não rastreia, e o
+  `.env` vem do `.env.example` desse mesmo sha. **Se o fetch falhar** (sem rede, sem o
   remoto `origin`, sem a branch `main` nele), o script **recusa sem criar nada**
   e mostra o erro do git; não há fallback para a `main` local, nem uso de uma
-  `origin/main` antiga. As recusas baratas (nome, destino, `.env` do principal)
-  vêm antes do fetch. Provado em `tests/integration/test_novo_worktree.py`
+  `origin/main` antiga. O fetch roda depois de todas as recusas locais
+  (nome, destino, `.env` do principal, deslocamento, bancos, trava) e logo antes
+  de criar o worktree, dentro da trava. Provado em `tests/integration/test_novo_worktree.py`
   (`test_o_worktree_nasce_da_origin_main_buscada_pelo_script` e vizinhos).
 - **O que é um deslocamento "livre" no `scripts/novo-worktree.sh`** (lote
   19b). O script aloca o **primeiro** deslocamento de 1 ao teto que passa nos

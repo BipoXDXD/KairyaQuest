@@ -25,17 +25,21 @@
 # principal deste projeto e um repositorio bare: ali "git fetch" so atualiza a
 # origin/main, e a main local fica parada no ultimo commit feito nele. Nascer
 # dela dava um worktree numa revisao velha, com um .env.example velho (e um .env
-# que as Settings recusavam). O script faz o fetch ele mesmo, para a base nao
-# depender de alguem lembrar de buscar.
+# que as Settings recusavam). O script faz o fetch ele mesmo, com refspec
+# explicito (+refs/heads/main:refs/remotes/origin/main, que vale mesmo num
+# principal sem "remote.origin.fetch"), para a base nao depender de alguem
+# lembrar de buscar.
 #
 # Se o fetch falhar (sem rede, sem remoto origin, sem a branch main no remoto),
 # o script RECUSA, sem criar nada, e diz o que fazer. Nao ha fallback para a main
 # local: criar dela em silencio reproduziria o defeito sem aviso. A origin/main
 # que sobrou de um fetch antigo tambem nao serve de base -- sem fetch bem
-# sucedido, nao ha base. O fetch roda DEPOIS das recusas baratas (nome, destino,
-# .env do principal), entao um nome invalido nao depende de rede. A branch nasce
-# de um sha, sem rastrear a origin/main: um "git push" sem argumento nao deve
-# mirar a main protegida.
+# sucedido, nao ha base. O fetch roda DEPOIS de todas as recusas locais (nome,
+# destino, .env do principal, deslocamento, bancos, trava) e logo antes de criar
+# o worktree, entao uma recusa que nao precisa de rede nao depende dela. A branch
+# nasce de um sha, e o git nao rastreia um sha: um "git push" sem argumento nao
+# mira a main protegida (partir do nome "origin/main" faria o git configurar o
+# rastreio).
 #
 # O que NAO faz, de proposito:
 #  - nao cria o banco: ele nasce sozinho no primeiro uso (a fixture "engine"
@@ -188,18 +192,6 @@ if git -C "$principal" show-ref --verify --quiet "refs/heads/${branch}"; then
   recusa "a branch ${branch} ja existe; escolha outro nome"
 fi
 [ -f "${principal}/.env" ] || recusa "o principal nao tem .env (${principal}/.env): crie-o com cp .env.example .env"
-# A base: a origin/main, buscada AGORA. Sem fetch bem-sucedido nao ha base --
-# recusa, sem cair na main local (que, num bare, esta parada). GIT_TERMINAL_PROMPT=0
-# impede o git de ficar esperando uma credencial que ninguem vai digitar.
-if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet origin main 2>&1)"; then
-  recusa "o fetch de origin/main falhou (sem rede, sem o remoto origin ou sem a branch main nele?); o worktree nasce da origin/main atualizada e nunca da main local, entao nada foi criado. Erro do git: ${erro_do_fetch:-<sem mensagem>}"
-fi
-base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'origin/main^{commit}')" ||
-  recusa "depois do fetch, origin/main nao resolve para um commit"
-# O modelo do .env novo: o .env.example da origin/main, de onde o worktree nasce.
-exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
-  recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
-
 # O valor de uma chave num .env, sem executar o arquivo (mesma regra do
 # push-env.sh): ultima ocorrencia, aspas envolventes removidas.
 valor_no_env() {
@@ -377,6 +369,27 @@ while IFS=' ' read -r ocupado dono; do
   fi
 done <<<"$bancos_ocupados"
 
+# A base: a origin/main, buscada AGORA, depois de TODAS as recusas locais
+# (nome, destino, .env do principal, deslocamento, bancos, trava) e logo antes
+# de criar qualquer coisa -- uma recusa que nao precisa de rede nao depende
+# dela. Dentro da trava, de proposito: ler o remoto fora dela deixaria duas
+# execucoes verem bases diferentes; o custo e que um fetch lento segura a trava
+# (a outra execucao recusa com a mensagem da trava).
+# O refspec e EXPLICITO: sem "remote.origin.fetch" (um principal feito com
+# "git clone --bare"), "git fetch origin main" sai com 0 e so avanca o
+# FETCH_HEAD, deixando a origin/main velha ou ausente -- base errada sem aviso.
+# Sem fetch bem-sucedido nao ha base: recusa, sem cair na main local (que, num
+# bare, esta parada). GIT_TERMINAL_PROMPT=0 impede o git de esperar uma
+# credencial que ninguem vai digitar.
+if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' 2>&1)"; then
+  recusa "o fetch de origin/main falhou (sem rede, sem o remoto origin ou sem a branch main nele?); o worktree nasce da origin/main atualizada e nunca da main local, entao nada foi criado. Erro do git: ${erro_do_fetch:-<sem mensagem>}"
+fi
+base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}')" ||
+  recusa "depois do fetch, origin/main nao resolve para um commit"
+# O modelo do .env novo: o .env.example da origin/main, de onde o worktree nasce.
+exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
+  recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
+
 # O .env novo, montado ANTES de criar qualquer coisa: as linhas do
 # .env.example, com o banco de teste trocado e sem deslocamento; o
 # deslocamento do worktree novo vai no fim. Partir do exemplo, e nao do .env
@@ -406,7 +419,7 @@ FOCUSQUEST_E2E_PORT_OFFSET=${deslocamento}
 "
 
 mkdir -p "${principal}/.claude/worktrees" "${principal}/.superpowers/sdd/worktree-ledgers"
-git -C "$principal" worktree add --quiet --no-track -b "$branch" "$destino" "$base_da_branch"
+git -C "$principal" worktree add --quiet -b "$branch" "$destino" "$base_da_branch"
 
 # noclobber: o redirecionamento falha se o arquivo ja existir, sem janela
 # entre conferir e escrever. A conferencia ANTES serve so para a mensagem: a

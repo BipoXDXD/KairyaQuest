@@ -21,15 +21,16 @@ sem o remoto `origin`, remoto sem a branch `main`. **Não há fallback para a
 `main` local** (nasceria de uma revisão velha em silêncio, o defeito original) e
 **não se usa uma `origin/main` antiga** que sobrou de um fetch anterior: sem fetch
 bem-sucedido não há base. Custo: o script passa a exigir rede; as recusas
-baratas (nome inválido, destino, `.env` do principal) vêm antes do fetch e não
-dependem dela. `GIT_TERMINAL_PROMPT=0` evita que o git espere credencial.
+locais (nome, destino, `.env` do principal, deslocamento, bancos, trava) vêm
+antes do fetch e não dependem dela. `GIT_TERMINAL_PROMPT=0` evita que o git espere credencial.
 
 ## Alterações
 
-- `scripts/novo-worktree.sh`: `git fetch origin main` antes de ler o exemplo;
-  resolve `origin/main` para um sha; `git show <sha>:.env.example`;
-  `git worktree add --no-track -b wt/<nome> <dest> <sha>` (sem rastrear a
-  `origin/main`, para um `git push` sem argumento não mirar a main protegida).
+- `scripts/novo-worktree.sh`: `git fetch origin +refs/heads/main:refs/remotes/origin/main` (refspec explícito,
+  vale sem `remote.origin.fetch`) depois de todas as recusas locais e logo antes
+  de criar o worktree; resolve `refs/remotes/origin/main` para um sha; `git show <sha>:.env.example`;
+  `git worktree add -b wt/<nome> <dest> <sha>` (um sha não é rastreado, então um
+  `git push` sem argumento não mira a main protegida).
   Comentários do cabeçalho atualizados.
 - `tests/integration/test_novo_worktree.py`: a fixture ganhou um remoto `origin`
   (bare temporário) e `Repositorio.publicar()`; os testes que mudavam a `main`

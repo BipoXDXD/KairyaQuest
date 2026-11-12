@@ -788,6 +788,9 @@ def test_recusa_scratch_trazido_pelo_checkout(repo: Repositorio, tipo: str) -> N
 # `.env.example` velho -- o `.env` gerado era recusado pelas Settings.
 
 MARCADOR_DO_REMOTO = "FOCUSQUEST_CHAVE_SO_DO_REMOTO"
+# O inicio da mensagem de recusa do fetch (a do script, nao a do git, que sai
+# traduzida conforme o locale).
+RECUSA_DO_FETCH = "!! o fetch de origin/main falhou"
 
 
 def _avancar_o_remoto(repo: Repositorio) -> str:
@@ -821,7 +824,9 @@ def test_o_worktree_nasce_da_origin_main_buscada_pelo_script(
     assert repo.git("rev-parse", "origin/main") == no_remoto
     assert repo.git("rev-parse", "main") == na_main_local
     # A branch nova nao rastreia a origin/main (um "git push" sem argumento
-    # nao deve mirar nela).
+    # nao deve mirar nela). O script parte de um sha, que o git nao rastreia;
+    # partir do nome "origin/main" faria o git configurar o rastreio, e e isto
+    # que a asserção guarda.
     rastreio = subprocess.run(
         ["git", "config", "--get", "branch.wt/fresco.remote"],
         cwd=destino,
@@ -870,9 +875,9 @@ def test_recusa_se_o_fetch_falha_sem_cair_na_main_local(repo: Repositorio) -> No
     resultado = repo.rodar("offline")
 
     assert resultado.returncode != 0
-    assert "fetch" in resultado.stderr
-    assert "origin" in resultado.stderr
-    assert "main local" in resultado.stderr
+    assert RECUSA_DO_FETCH in resultado.stderr
+    assert "nunca da main local" in resultado.stderr
+    assert "nao-existe.git" in resultado.stderr  # o erro do git vem junto
     _nada_foi_criado(repo, antes)
     assert not (repo.principal / ".claude/worktrees/offline").exists()
     assert not (repo.principal / ".superpowers/sdd/worktree-ledgers/offline").exists()
@@ -885,7 +890,7 @@ def test_recusa_se_nao_ha_remoto_origin(repo: Repositorio) -> None:
     resultado = repo.rodar("sem-remoto")
 
     assert resultado.returncode != 0
-    assert "fetch" in resultado.stderr
+    assert RECUSA_DO_FETCH in resultado.stderr
     _nada_foi_criado(repo, antes)
 
 
@@ -904,9 +909,64 @@ def test_recusa_se_o_remoto_nao_tem_main_mesmo_com_origin_main_antiga(
     resultado = repo.rodar("sem-main")
 
     assert resultado.returncode != 0
-    assert "origin" in resultado.stderr
-    assert "main" in resultado.stderr
+    assert RECUSA_DO_FETCH in resultado.stderr
     _nada_foi_criado(repo, antes)
+
+
+@pytest.mark.parametrize("estado", ["velha", "ausente"])
+def test_o_fetch_atualiza_a_origin_main_mesmo_sem_refspec_de_fetch(
+    repo: Repositorio, estado: str
+) -> None:
+    """Um principal criado com `git clone --bare` nao tem
+    `remote.origin.fetch`: ai `git fetch origin main` sai com 0 e so avanca o
+    FETCH_HEAD, e a `origin/main` fica velha (ou nem existe). O script pede o
+    refspec explicito, entao a base e o commit do remoto nos dois casos."""
+    repo.git("config", "--unset-all", "remote.origin.fetch")
+    if estado == "ausente":
+        repo.git("update-ref", "-d", "refs/remotes/origin/main")
+    no_remoto = _avancar_o_remoto(repo)
+
+    resultado = repo.rodar("sem-refspec")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.principal / ".claude/worktrees/sem-refspec"
+    assert repo.git("rev-parse", "HEAD", onde=destino) == no_remoto
+    env = (destino / ".env").read_text()
+    assert f"{MARCADOR_DO_REMOTO}=" in env
+
+
+@pytest.mark.parametrize(
+    ("argumentos", "trecho"),
+    [(("99",), "deslocamento"), (("1",), "deslocamento 1 ")],
+    ids=["fora-da-faixa", "reivindicado"],
+)
+def test_as_recusas_locais_vem_antes_do_fetch(
+    repo: Repositorio, argumentos: tuple[str, ...], trecho: str
+) -> None:
+    """Com o remoto inalcancavel, a recusa que o script ja sabia dar sem rede
+    continua sendo a dada: o fetch so roda depois de todas as recusas locais
+    (deslocamento, banco ocupado, trava)."""
+    assert repo.rodar("primeiro").returncode == 0
+    repo.git("remote", "set-url", "origin", str(repo.base / "nao-existe.git"))
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("segundo", *argumentos)
+
+    assert resultado.returncode != 0
+    assert trecho in resultado.stderr
+    assert RECUSA_DO_FETCH not in resultado.stderr
+    assert repo.worktrees() == antes
+
+
+def test_recusa_da_trava_vem_antes_do_fetch(repo: Repositorio) -> None:
+    repo.git("remote", "set-url", "origin", str(repo.base / "nao-existe.git"))
+    _trava(repo).mkdir()
+
+    resultado = repo.rodar("trancado")
+
+    assert resultado.returncode != 0
+    assert "outra execucao" in resultado.stderr
+    assert RECUSA_DO_FETCH not in resultado.stderr
 
 
 # ---------------------------------------------------------------------------
