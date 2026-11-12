@@ -237,6 +237,8 @@ export const ptBR = {
   'tutoring.proposal.rejected': 'Proposta recusada',
   'tutoring.proposal.boardLink': 'Ver no Quartel-General',
   'tutoring.proposal.unknown': 'Proposta que esta versão não sabe mostrar.',
+  'tutoring.proposal.line.create': 'Deixei uma proposta de missão para você revisar.',
+  'tutoring.proposal.line.reschedule': 'Deixei uma proposta de novo prazo para você revisar.',
 
   'tutoring.reschedule.title': 'Proposta de reagendamento',
   'tutoring.reschedule.target': 'o reagendamento: {instructions}',
