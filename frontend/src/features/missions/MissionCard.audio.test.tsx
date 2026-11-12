@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission, MissionType } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
@@ -120,6 +120,15 @@ describe('MissionCard -- o efeito da conclusao', () => {
   ] as const)('%s concluida (%#) toca %s', async (type, reward, expected) => {
     const { played } = await completeWith(type, reward)
     expect(played()).toEqual([expected])
+  })
+
+  it('o turntable da subida de nivel fica fora da regiao viva; o texto, dentro', async () => {
+    await completeWith('avulsa', NIVEL)
+
+    const status = screen.getByTestId('mission-completion-status')
+    expect(within(status).getByTestId('reward-level-up')).toBeInTheDocument()
+    const turntable = screen.getByTestId('kairya-turntable-placeholder')
+    expect(status).not.toContainElement(turntable)
   })
 
   it('nivel e conquista juntos tocam um unico efeito', async () => {
