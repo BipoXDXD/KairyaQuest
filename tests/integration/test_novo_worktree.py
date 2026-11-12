@@ -197,6 +197,21 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     assert (repo.principal / ".env").read_text() == ENV_PRINCIPAL
 
 
+def test_nao_instala_hooks_e_aponta_para_o_script_unico(repo: Repositorio) -> None:
+    """Lote 20: `pre-commit install` por worktree fixava o `.venv` dele nos hooks
+    do `.git` comum. O script nao instala hook nenhum; so manda usar o unico
+    instalador, uma vez por clone."""
+    hooks = repo.principal / ".git" / "hooks"
+    antes = sorted(p.name for p in hooks.iterdir())
+
+    resultado = repo.rodar("medida")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert sorted(p.name for p in hooks.iterdir()) == antes
+    assert "scripts/instalar-hooks.sh" in resultado.stdout
+    assert 'nao rode "pre-commit install"' in resultado.stdout
+
+
 def _chaves_em_branco_do_exemplo() -> list[str]:
     """As chaves que o `.env.example` deixa vazias: as de segredo."""
     return [

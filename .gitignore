@@ -1,5 +1,8 @@
 # ---- Python ----
 .venv/
+# Venv dedicado dos hooks de git (scripts/instalar-hooks.sh): mora no principal,
+# ao lado do .git comum, fora de qualquer worktree.
+.hooks-venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/

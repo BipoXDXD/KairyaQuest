@@ -27,8 +27,12 @@
 #    de outro diretorio, RECRIA o container (o bind do init-test-db.sql muda de
 #    caminho -- medido com "docker compose up --dry-run"), derrubando o gate
 #    que estiver rodando em qualquer worktree;
-#  - nao instala hooks: eles moram no .git comum, e ja valem para o worktree
-#    novo.
+#  - nao instala hooks, e nunca deve rodar "pre-commit install": eles moram no
+#    .git comum e ja valem para o worktree novo. Um "pre-commit install" aqui
+#    gravaria no .git comum o .venv DESTE worktree, e remove-lo quebraria os
+#    hooks de todos (lote 20). Quem instala ou atualiza os hooks e o script
+#    unico scripts/instalar-hooks.sh, uma vez por clone, com um venv dedicado
+#    fora de qualquer worktree.
 #
 # O que e um deslocamento livre (lote 19b). Os dois testes valem, nesta ordem:
 #  1. nenhum worktree registrado o reivindica no .env dele (um worktree parado
@@ -416,5 +420,8 @@ ${pulados}}proximos passos:
     cd ${destino}
     make check
 nao rode "make db-up" neste worktree: o PostgreSQL e o do principal, e o compose
-recriaria o container (docs/QUALITY.md secao 6). Os hooks de git ja valem aqui.
+recriaria o container (docs/QUALITY.md secao 6). Os hooks de git moram no .git
+comum e ja valem aqui: nao rode "pre-commit install" neste worktree. Para
+instalar ou atualizar os hooks, use scripts/instalar-hooks.sh (uma vez por
+clone); "make check-hooks" confere se eles apontam para fora de worktrees.
 FIM
