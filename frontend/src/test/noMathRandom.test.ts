@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import ts from 'typescript'
-import { expect, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
+import { mayContainWord } from './mayContainWord'
 import { listSources, readSource } from './readSource'
 
 /**
@@ -79,9 +80,26 @@ function usesRandomOfMath(node: ts.Node): boolean {
   return takesRandomFromMath(node)
 }
 
+/** Quantos textos já passaram pelo parse; os testes do filtro leem a diferença. */
+let parsedCount = 0
+
+/**
+ * Filtro barato antes do parse (`mayContainWord`): o arquivo só tem como usar
+ * `Math.random` se a palavra `random` puder existir nele, escrita por extenso
+ * ou com escapes (`Math['\u0072andom']`, `Math.\u0072andom`), que a AST lê já
+ * decodificados. Só o texto que passa por aqui paga o parse, que é o custo da
+ * varredura. Condição necessária, nunca suficiente: quem passa é decidido pela
+ * AST.
+ */
+function mayUseMathRandom(text: string): boolean {
+  return mayContainWord(text, 'random')
+}
+
 /** `true` se o código do arquivo usa `Math.random` (chamada, referência, colchetes ou desestruturação). */
 function usesMathRandom(text: string, fileName = 'amostra.ts'): boolean {
+  if (!mayUseMathRandom(text)) return false
   const kind = fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  parsedCount += 1
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind)
   const visit = (node: ts.Node): boolean =>
     usesRandomOfMath(node) || ts.forEachChild(node, visit) === true
@@ -114,6 +132,63 @@ test.each(SAMPLES)('a regra acusa %s', (_name, sample) => {
 test('a regra acusa Math.random depois de um apóstrofo em JSX', () => {
   const sample = `const a = <p>don't</p>; const b = ${M}.${R}(); const c = <p>it's</p>`
   expect(usesMathRandom(sample, 'amostra.tsx')).toBe(true)
+})
+
+/**
+ * Casos que um filtro textual ingênuo (`text.includes('random')`) deixaria
+ * escapar: a palavra só existe depois de decodificada. O detector de AST lê o
+ * texto já decodificado (`node.text`), então a regra continua acusando todos, e
+ * o filtro que antecede o parse precisa deixá-los passar.
+ */
+const ESCAPED_SAMPLES: Array<[string, string]> = [
+  ['o acesso com escape unicode no colchete', `${M}['\\u0072andom']()`],
+  ['o acesso com escape unicode no identificador', `${M}.\\u0072andom()`],
+  ['o acesso com escape hexadecimal', `${M}['ran\\x64om']()`],
+  ['o acesso com escape de letra comum', `${M}['ran\\dom']()`],
+  ['o acesso com continuação de linha', `${M}['ran\\\ndom']()`],
+  ['o acesso com escape no template sem substituição', `${M}[\`\\u0072andom\`]()`],
+  ['a desestruturação com escape no identificador', `const { \\u0072andom } = ${M}`],
+  ['a desestruturação com escape no nome entre aspas', `const { 'ran\\x64om': r } = ${M}`],
+  ['a atribuição desestruturada com escape', `let r; ({ \\u0072andom: r } = ${M})`],
+]
+
+test.each(ESCAPED_SAMPLES)('a regra acusa %s', (_name, sample) => {
+  expect(usesMathRandom(sample)).toBe(true)
+})
+
+test('a regra acusa o uso mesmo quando a palavra só aparece uma vez, no fim de um arquivo longo', () => {
+  const filler = 'const a = 1\n'.repeat(500)
+  expect(usesMathRandom(`${filler}const seed = ${M}.${R}()`)).toBe(true)
+})
+
+test('a regra não acusa quem só cita a palavra sem usar Math.random', () => {
+  expect(usesMathRandom(`const ${R} = 1; rng.${R}(); const x = { ${R}: 2 }`)).toBe(false)
+  expect(usesMathRandom('const nome = "ran\\u0064om"')).toBe(false)
+})
+
+describe('o filtro textual que antecede o parse', () => {
+  /** Quantos parses o `action` provocou. */
+  function parsesDuring(action: () => void): number {
+    const before = parsedCount
+    action()
+    return parsedCount - before
+  }
+
+  test('poupa o parse do texto que não tem a palavra', () => {
+    expect(parsesDuring(() => usesMathRandom('const x = Math.floor(1.5)'))).toBe(0)
+  })
+
+  test('poupa o parse do texto com escapes que não formam a palavra', () => {
+    const sample = 'const s = "a\\nb"; const re = /\\d+/; const u = "\\u0062"'
+    expect(parsesDuring(() => usesMathRandom(sample))).toBe(0)
+  })
+
+  test.each([
+    ['a palavra', `const seed = ${M}.${R}()`],
+    ['a palavra escrita com escape', "const s = 'ran\\u0064om'"],
+  ])('faz o parse quando o texto tem %s', (_name, sample) => {
+    expect(parsesDuring(() => usesMathRandom(sample))).toBe(1)
+  })
 })
 
 test('a regra deixa passar o espião de Math.random', () => {
@@ -155,7 +230,10 @@ test('a varredura inclui o teste que espia Math.random, os helpers e os e2e', ()
   )
 })
 
-test('nenhum teste usa Math.random', () => {
-  const offenders = scannedFiles().filter((path) => usesMathRandom(readSource(path), path))
+test('nenhum teste usa Math.random, e a varredura só faz o parse de metade dos arquivos, no máximo', () => {
+  const files = scannedFiles()
+  const parsedBefore = parsedCount
+  const offenders = files.filter((path) => usesMathRandom(readSource(path), path))
   expect(offenders).toEqual([])
+  expect(parsedCount - parsedBefore).toBeLessThanOrEqual(files.length / 2)
 })
