@@ -178,7 +178,12 @@ describe('LanternTrail: criar o plano da semana', () => {
     fireEvent.click(screen.getByTestId('week-plan-submit'))
     const confirmation = await screen.findByTestId('week-plan-created-next')
     expect(confirmation).toHaveTextContent('Ele começa segunda-feira, 28/09.')
-    expect(confirmation).toHaveFocus()
+    // O foco vai para a confirmacao num efeito passivo, que o React roda numa
+    // tarefa do Scheduler DEPOIS do commit que o `findBy` ja viu: espera-se o
+    // proprio efeito, nao o tempo.
+    await waitFor(() => {
+      expect(confirmation).toHaveFocus()
+    })
     expect(screen.queryByTestId('week-plan-form')).not.toBeInTheDocument()
     expect(screen.getByTestId('trail-no-plan')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Criar o plano da semana' })).toBeInTheDocument()

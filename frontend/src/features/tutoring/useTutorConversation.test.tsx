@@ -1038,6 +1038,12 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
     })
+    // O GET sai antes do commit que poe a resposta provisoria na lista (o React
+    // o agenda no Scheduler): espera-se a PRESENCA dela e so depois se deixa a
+    // atualizacao que falha chegar, para a afirmacao de que ela nao a apaga.
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2)
+    })
     await settle()
 
     expect(result.current.messages).toEqual([
@@ -1258,13 +1264,21 @@ describe('useTutorConversation: envio', () => {
     await waitFor(() => {
       expect(requestsTo(fetchMock, HISTORY)).toHaveLength(2)
     })
+    // O GET sai na hora e o `failed` so aparece no commit seguinte, que o React
+    // agenda no Scheduler: `retry` le o estado do ultimo render, entao espera-se
+    // o estado (o botao que a pessoa clicaria), nao a ordem dos dois.
+    await waitFor(() => {
+      expect(result.current.send.status).toBe('failed')
+    })
     act(() => {
       result.current.retry()
     })
     await waitFor(() => {
       expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
     })
-    expect(result.current.send.status).toBe('failed')
+    await waitFor(() => {
+      expect(result.current.send.status).toBe('failed')
+    })
 
     // A mais nova chega primeiro e vale.
     act(() => {
