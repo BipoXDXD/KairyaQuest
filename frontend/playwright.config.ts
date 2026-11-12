@@ -1,17 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { fileURLToPath } from 'node:url'
-import { API_URL, FALSO_URL, GALERIA_URL, WEB_URL } from './tests/e2e/servers'
-
-/**
- * A raiz do repositorio, resolvida a partir deste arquivo.
- *
- * O `cwd` do webServer da API precisa ser a raiz: o `uv` procura o
- * `pyproject.toml` e o `Settings` le o `.env` do diretorio corrente. Um
- * caminho relativo simples (`'..'`) funcionaria por acidente -- ele se
- * resolveria contra o diretorio de onde o `npx playwright test` foi chamado,
- * nao contra o diretorio deste arquivo.
- */
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+import { API_URL, FALSO_URL, GALERIA_URL, REPO_ROOT, WEB_URL } from './tests/e2e/servers'
 
 /**
  * As portas saem de `servers.ts`, a fonte unica -- nenhuma e escrita aqui.
