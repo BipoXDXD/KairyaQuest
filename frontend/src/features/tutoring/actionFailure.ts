@@ -15,10 +15,12 @@ import type { ActionErrorCode, ActionRead } from './types'
  *   conversa mostra o estado de verdade.
  * - `expired`: o prazo passou, o backend GRAVOU a acao como `falhou` antes do
  *   422, e o cartao passa a esse estado.
- * - `invalidated`: a missao mudou desde a proposta de reagendamento (sumiu,
- *   foi concluida, o prazo ja e o proposto); o backend GRAVOU a acao como
- *   `falhou`/`reagendamento_invalido` antes do 409 (F17), e o cartao passa a
- *   esse estado, como no `expired`.
+ * - `invalidated`: a proposta nao vale mais. Ou a missao mudou desde a
+ *   proposta de reagendamento (sumiu, foi concluida, o prazo ja e o proposto;
+ *   `reagendamento_invalido`, 409, F17), ou a entrada gravada nao passa mais
+ *   no esquema atual (`proposta_invalida`, 422, pendencia 47). O backend
+ *   GRAVOU a acao como `falhou` antes de responder, e o cartao passa a esse
+ *   estado, como no `expired`.
  * - `out-of-bounds`: a proposta saiu dos limites da avulsa (estimativa fora de
  *   1 a 1440 minutos, prazo alem de 365 dias; pendencia 26); o backend GRAVOU
  *   a acao como `falhou` com esse code antes do 422, como no `expired`.
@@ -65,6 +67,13 @@ export const ACTION_FAILURE_BY_CODE: Readonly<Record<ActionErrorCode, ActionFail
     message: 'tutoring.actionFailure.deadlineOutOfBounds.message',
     recovery: 'tutoring.actionFailure.askNewProposal',
     action: 'out-of-bounds',
+  },
+  // Sem texto proprio: a causa (um esquema que endureceu depois da proposta)
+  // nao e acionavel para a pessoa; o generico diz o que importa.
+  proposta_invalida: {
+    message: 'tutoring.actionFailure.failed.message',
+    recovery: 'tutoring.actionFailure.askNewProposal',
+    action: 'invalidated',
   },
 }
 
