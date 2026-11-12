@@ -622,11 +622,19 @@ def _confirmar_reagendamento(
     `IntegrityError` da UNIQUE da chave (tambem no `flush` da falha) e
     traduzido pelo `try` do `confirmar_acao`, que envolve esta chamada.
     """
-    entrada = {
-        campo: valor
-        for campo, valor in acao.payload.items()
-        if campo not in CAMPOS_DO_RETRATO
-    }
+    # O JSONB nao garante objeto: o tipo do mapeamento vale para o que o codigo
+    # grava hoje, nao para toda linha antiga. O que nao e objeto segue inteiro
+    # para o `model_validate`, que o recusa pelo mesmo caminho da pendencia 47.
+    payload: object = acao.payload
+    entrada = (
+        {
+            campo: valor
+            for campo, valor in payload.items()
+            if campo not in CAMPOS_DO_RETRATO
+        }
+        if isinstance(payload, dict)
+        else payload
+    )
     try:
         dados = RescheduleProposal.model_validate(entrada)
     except ValidationError:

@@ -5,17 +5,21 @@ missao e grava `executada` na MESMA transacao, com a acao travada.
 """
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, delete, event, func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from focusquest.core.clock import get_clock
+from focusquest.core.database import get_engine
 from focusquest.core.errors import AcaoNaoEncontradaError, OperacaoReutilizadaError
+from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
 from focusquest.modules.missions.models import (
     Mission,
@@ -238,6 +242,24 @@ def test_proposta_historica_fora_do_esquema_grava_falhou_e_nao_cria_missao(
     assert _confirmar(session, acao.id, "op-1") == PropostaInvalida(acao)
     with pytest.raises(TransicaoIlegalError):
         _confirmar(session, acao.id, "op-2")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [[], ["instructions"], "texto", 7],
+    ids=["lista vazia", "lista", "texto", "numero"],
+)
+def test_proposta_historica_que_nao_e_objeto_grava_falhou_e_nao_cria_missao(
+    session: Session, payload: Any
+) -> None:
+    acao = _proposta(session, payload=payload)
+    resultado = _confirmar(session, acao.id, "op-1")
+
+    assert resultado == PropostaInvalida(acao)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PROPOSTA_INVALIDA)
+    assert acao.mission_id is None
+    assert _missoes(session) == 0
+    assert _confirmar(session, acao.id, "op-1") == PropostaInvalida(acao)
 
 
 @pytest.mark.parametrize(
@@ -594,3 +616,59 @@ def test_chave_gravada_depois_da_consulta_vira_reuso(
                 )
                 limpeza.commit()
     assert outra.id != acao_commitada
+
+
+# --- API ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def api(banco_migrado: Engine) -> Iterator[TestClient]:
+    sobrepostos: dict[Callable[..., Any], Callable[..., Any]] = {
+        get_engine: lambda: banco_migrado,
+        get_clock: lambda: lambda: AGORA,
+    }
+    app.dependency_overrides.update(sobrepostos)
+    with TestClient(app) as c:
+        yield c
+    for chave in sobrepostos:
+        app.dependency_overrides.pop(chave, None)
+
+
+@pytest.fixture
+def proposta_historica(banco_migrado: Engine) -> Iterator[int]:
+    """Uma proposta de missao commitada com payload fora do esquema atual."""
+    payload = _payload(AGORA + timedelta(days=1)) | {"difficulty": 6}
+    with Session(bind=banco_migrado, expire_on_commit=False) as sessao:
+        acao = _proposta(sessao, cid="api-historica", payload=payload)
+        sessao.commit()
+    try:
+        yield acao.id
+    finally:
+        with Session(bind=banco_migrado) as limpeza:
+            limpeza.execute(text(f"SET LOCAL lock_timeout = '{LIMITE_DE_TRAVA}'"))
+            limpeza.execute(
+                delete(TutorMessage).where(
+                    TutorMessage.client_message_id == "api-historica"
+                )
+            )
+            limpeza.commit()
+
+
+def test_api_proposta_de_missao_invalida_e_422_com_a_falha_ja_gravada(
+    api: TestClient, banco_migrado: Engine, proposta_historica: int
+) -> None:
+    """Pendencia 47 na criacao: nunca 500. O 422 sai depois do commit da
+    falha, o reenvio devolve o mesmo erro e nenhuma missao nasce."""
+    url = f"/api/tutoring/actions/{proposta_historica}/confirm"
+    resposta = api.post(url, json={"operation_id": "op-api-hist"})
+    assert resposta.status_code == 422, resposta.text
+    assert resposta.json()["code"] == "proposta_invalida"
+    with Session(bind=banco_migrado) as sessao:
+        acao = sessao.get_one(TutorAction, proposta_historica)
+        assert (acao.state, acao.error_code) == (
+            EstadoDaAcao.FALHOU,
+            PROPOSTA_INVALIDA,
+        )
+        assert acao.mission_id is None
+    de_novo = api.post(url, json={"operation_id": "op-api-hist"})
+    assert (de_novo.status_code, de_novo.json()["code"]) == (422, "proposta_invalida")
