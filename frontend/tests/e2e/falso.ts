@@ -1,4 +1,4 @@
-import { FALSO_URL } from './servers'
+import { API_URL, FALSO_URL } from './servers'
 
 /**
  * O controle do servidor falso, para os cenarios da tutoria e da avaliacao.
@@ -46,8 +46,20 @@ export async function liberar(): Promise<void> {
   await exigir(await fetch(`${FALSO_URL}/_control/release`, { method: 'POST' }), 204)
 }
 
+/**
+ * Reinicia o E2E para o proximo cenario: o falso volta ao roteiro vazio, sem
+ * pedidos recebidos, e nenhum pedido do cenario anterior sobrevive ao reset.
+ *
+ * O reset passa pela API (`integration/reset_do_e2e.py`), e nao pelo falso
+ * sozinho: um pedido que o cenario anterior deixou a meio caminho (ja na API,
+ * ainda nao no falso) chegaria ao falso DEPOIS do reset, acharia o roteiro
+ * vazio e gravaria `falhou` no banco compartilhado -- a cascata do cenario
+ * (c) da tutoria (P-e2e-flaky-1). A API libera o que o falso segura, espera
+ * os pedidos em andamento terminarem contra o roteiro de quem os originou e
+ * so entao reinicia o falso.
+ */
 export async function reiniciar(): Promise<void> {
-  await exigir(await fetch(`${FALSO_URL}/_control/reset`, { method: 'POST' }), 204)
+  await exigir(await fetch(`${API_URL}/_e2e/reset`, { method: 'POST' }), 204)
 }
 
 export async function requisicoes(): Promise<{ api_key: string; body: unknown }[]> {

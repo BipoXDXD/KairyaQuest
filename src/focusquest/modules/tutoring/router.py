@@ -14,6 +14,7 @@ from focusquest.core.errors import (
     EstimativaForaDoLimite,
     PrazoExpiradoError,
     PrazoForaDoLimite,
+    PropostaInvalidaError,
     ProvedorNaoConfiguradoError,
     ReagendamentoInvalidoError,
 )
@@ -43,6 +44,7 @@ from focusquest.modules.tutoring.service import (
     ForaDoLimite,
     PerguntaGravada,
     PrazoExpirado,
+    PropostaInvalida,
     ReagendamentoInvalido,
     RespostaConcluida,
     RespostaFalhou,
@@ -146,8 +148,9 @@ def confirmar(
     session: SessaoDaRequisicao,
     clock: Relogio,
 ) -> ConfirmRead:
-    """Confirma a proposta. O prazo expirado e o reagendamento que nao vale
-    mais (F17) sao GRAVADOS e so depois viram 422/409: o commit vem antes de
+    """Confirma a proposta. O prazo expirado, o reagendamento que nao vale
+    mais (F17) e a proposta que nao passa no esquema atual (pendencia 47) sao
+    GRAVADOS e so depois viram 422/409: o commit vem antes de
     levantar, ou a falha morreria com a transacao."""
     resultado = confirmar_acao(
         session, USUARIO_UNICO, action_id, dados.operation_id, clock=clock
@@ -160,6 +163,10 @@ def confirmar(
     if isinstance(resultado, ReagendamentoInvalido):
         raise ReagendamentoInvalidoError(
             "a missao mudou depois da proposta; peca outra proposta"
+        )
+    if isinstance(resultado, PropostaInvalida):
+        raise PropostaInvalidaError(
+            "a proposta nao vale mais nas regras atuais; peca outra proposta"
         )
     return ConfirmRead(
         action=ActionRead.model_validate(resultado.acao),
