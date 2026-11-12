@@ -1,4 +1,6 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
+import { WeekPlanEntry, WeekPlanForm } from '../../features/campaigns'
+import { KairyaPresenceProvider } from '../../features/kairya'
 import { I18nContext } from '../../shared/i18n/i18nContext'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
@@ -201,4 +203,47 @@ export function LanguageSwitcherCase({ saveFails }: { saveFails: boolean }) {
 export function SoundToggleCase({ channel, pressed }: { channel: SoundChannel; pressed: boolean }) {
   const [on, setOn] = useState(pressed)
   return <SoundToggle channel={channel} pressed={on} onPressedChange={setOn} />
+}
+
+function noop(): void {
+  // A galeria mede o estado em repouso: nenhum dos avisos do formulário importa.
+}
+
+/**
+ * O `h2` só para leitor de tela faz o papel do título da trilha, que na tela
+ * real vem antes do formulário (`h3`): sem ele o axe acusa pulo de nível.
+ */
+function PlanContext({ children }: { children: ReactNode }) {
+  const t = useT()
+  return (
+    <>
+      <h2 className="sr-only">{t('campaigns.lantern.title')}</h2>
+      {children}
+    </>
+  )
+}
+
+/** O estado vazio da trilha: o botão que abre o formulário. A Kairya é do pai real, e aqui vem pelo provider. */
+export function WeekPlanEntryCase() {
+  return (
+    <KairyaPresenceProvider greeting={false}>
+      <PlanContext>
+        <WeekPlanEntry onCreated={noop} onExists={noop} />
+      </PlanContext>
+    </KairyaPresenceProvider>
+  )
+}
+
+/**
+ * O formulário aberto. O erro de campo, o envio e a falha vêm de interações do
+ * spec (clicar em "Criar plano", com o `POST /api/plans` interceptado), pela
+ * mesma decisão N3 dos outros casos: a API do componente não ganha prop só
+ * para a galeria.
+ */
+export function WeekPlanFormCase() {
+  return (
+    <PlanContext>
+      <WeekPlanForm onCreated={noop} onExists={noop} onCancel={noop} />
+    </PlanContext>
+  )
 }

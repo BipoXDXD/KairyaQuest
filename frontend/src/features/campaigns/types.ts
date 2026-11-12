@@ -37,3 +37,33 @@ export interface Plan {
 export interface CurrentPlan {
   plan: Plan | null
 }
+
+/**
+ * O corpo de `POST /api/plans` (`PlanCreate`, em cycle_schemas.py): a segunda
+ * da semana, sete treinos e a prova. Os tres schemas recusam campo a mais
+ * (`extra="forbid"`), entao o corpo e montado so com estas chaves.
+ */
+export interface PlanCreateBody {
+  week_start: string
+  days: PlanCreateDay[]
+  bonus: PlanCreateBonus
+}
+
+export interface PlanCreateDay {
+  instructions: string
+  completion_criterion: string
+  difficulty: number
+  estimated_minutes: number
+}
+
+export interface PlanCreateBonus {
+  instructions: string
+  completion_criterion: string
+  estimated_minutes: number
+}
+
+/**
+ * Os `code` de 409 de `POST /api/plans` (a mao, como os de `missions/types.ts`):
+ * um code novo entra aqui e o `tsc` exige a traducao dele em `planFailure.ts`.
+ */
+export type PlanErrorCode = 'plano_existente' | 'semana_encerrada' | 'semana_distante'
