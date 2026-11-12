@@ -269,7 +269,7 @@ def test_a_resposta_guarda_o_modelo_substituto(session: Session) -> None:
 
 
 def test_papel_status_e_estado_voltam_do_banco_como_enum(session: Session) -> None:
-    """O mesmo defeito que o `MissionStateText` previne na missao: sem o
+    """O mesmo defeito que o `TextoDeEnum` previne na missao: sem o
     decorador, depois do refresh `is` passaria a ser falso."""
     acao = _acao(session, _resposta(session, _pergunta(session)))
     session.expire_all()
