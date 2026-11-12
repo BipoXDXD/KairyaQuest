@@ -19,7 +19,7 @@ ordem**:
 
 ```bash
 make bootstrap                                    # dependencias, Chromium do Playwright e Gitleaks
-uv run pre-commit install --install-hooks         # hooks de git (NAO vem do bootstrap)
+scripts/instalar-hooks.sh                         # hooks de git, UMA vez por clone (NAO vem do bootstrap)
 cp .env.example .env                              # configuracao local; o .env e ignorado pelo git
 make db-up                                        # PostgreSQL em container, porta 55432 do host
 make migrate-test                                 # esquema no banco de teste
@@ -43,12 +43,50 @@ O comando dos hooks é separado do `make bootstrap` **de propósito**, não por
 esquecimento: `make bootstrap` não instala hooks de git, e não vai passar a
 instalar. `scripts/check-push.sh` roda `make bootstrap` dentro de um
 worktree temporário a cada ref validada no `pre-push`; como um worktree
-compartilha o diretório `.git` do repositório principal, um
-`pre-commit install` disparado a partir de dentro de `bootstrap` reescreveria
-os hooks do repositório principal no meio da validação de um push — efeito
-colateral inaceitável. Manter os dois comandos sempre separados também
-mantém "nenhum alvo do Makefile invoca `pre-commit`" (seção 2 abaixo) como
-regra absoluta, sem exceção a lembrar.
+compartilha o diretório `.git` do repositório principal, uma instalação de
+hooks disparada a partir de dentro de `bootstrap` reescreveria os hooks do
+repositório principal no meio da validação de um push — efeito colateral
+inaceitável. Manter os dois comandos sempre separados também mantém "nenhum
+alvo do Makefile invoca `pre-commit`" (seção 2 abaixo) como regra absoluta,
+sem exceção a lembrar.
+
+**Os hooks têm um Python próprio, fora de qualquer worktree** (lote 20).
+`pre-commit install` grava em cada hook do `.git` comum a linha
+`INSTALL_PYTHON=<python de quem o rodou>`. Rodado num worktree — o que o
+roteiro antigo mandava fazer em cada um —, ele fixava o `.venv` **daquele**
+worktree nos hooks de **todos**, e remover o worktree (o fim normal de uma
+branch) fazia todo `git commit` falhar com `` `pre-commit` not found ``. Por
+isso a instalação é `scripts/instalar-hooks.sh`, e só ele:
+
+- cria (ou reaproveita, se saudável) o venv `.hooks-venv`, em
+  `<pai do git-common-dir>/.hooks-venv` — ao lado do repositório principal,
+  ignorado pelo git, fora de `.claude/worktrees/` (o script recusa um caminho
+  que caia ali);
+- instala nele o `pre-commit` na versão do `uv.lock` do worktree de onde roda
+  (`uv export --locked`, a mesma do `pyproject.toml`), com o export inteiro
+  como constraints, de modo que as dependências do `pre-commit` também ficam
+  nas versões travadas;
+- roda `pre_commit install --install-hooks` com o Python desse venv, a partir
+  do worktree em que está — é o `.pre-commit-config.yaml` dele que vale — e
+  confere o resultado com `scripts/verificar-hooks.sh`;
+- é idempotente, pega uma trava (`<git-common-dir>/instalar-hooks.lock`) e
+  **não recria** um venv saudável: há hooks em uso por outras sessões.
+
+O venv dos hooks só sobe o próprio `pre-commit`. O gate continua rodando no
+worktree **onde o commit acontece**: o hook roda com o diretório do worktree
+como cwd (`--config=.pre-commit-config.yaml` é relativo), `make check` e
+`scripts/check-push.sh` são resolvidos ali, e o `.venv` do projeto (`uv run`)
+continua sendo o de cada worktree — o venv dos hooks não entra no `PATH` nem
+em `VIRTUAL_ENV`. (Conferido com `uv` real num repositório temporário: o
+`make check` de um hook disparado em `.claude/worktrees/w2` imprimiu o cwd do
+worktree, `VIRTUAL_ENV` vazio e nenhum `pre-commit` no `PATH`.)
+
+`make check-hooks` (`scripts/verificar-hooks.sh`) é o check: reprova se algum
+dos três hooks estiver ausente, sem `INSTALL_PYTHON`, apontando para dentro de
+`.claude/worktrees/` ou de qualquer worktree registrado fora o principal, ou
+para um Python que não existe. Fica **fora** do `make check` de propósito: o
+estado dos hooks é da máquina, não do commit, e o CI não tem hooks. Rode-o
+quando suspeitar, e depois de qualquer instalação.
 
 O mesmo compartilhamento de worktree tem um efeito colateral análogo sobre
 `.tools/`, não só sobre hooks. `scripts/check-push.sh` exporta
@@ -86,7 +124,9 @@ opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre
 `make bootstrap`. Do `.env` do principal só a URL do banco de teste é
 lida: as chaves de segredo (`FOCUSQUEST_ANTHROPIC_API_KEY` e afins) nascem em
 branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
-valem (moram no `.git` comum). **Não rode `make db-up` fora do principal**: o
+valem (moram no `.git` comum, com o Python do `.hooks-venv`): **não rode
+`pre-commit install` no worktree novo**, nem `scripts/instalar-hooks.sh` — ele
+é por clone, não por worktree. **Não rode `make db-up` fora do principal**: o
 PostgreSQL é um só, e o compose chamado de outro diretório **recria** o
 container (seção 6). O nome `push` é **reservado** (o banco dele seria o
 `focusquest_push_test`, o do gate do push do principal), e o script recusa um
@@ -151,8 +191,10 @@ modifica nada". E há um estado fora do disco que ele muda de propósito: o
 > **Fonte de verdade:** `Makefile` e `.pre-commit-config.yaml`. Esta seção
 > explica a regra; quem a **impõe** são os dois arquivos. O `AGENTS.md` §4
 > repete a regra de forma resumida — se os dois textos divergirem, arbitre
-> pelos arquivos (`grep -rn "pre-commit" Makefile scripts/`; as ocorrências em
-> `scripts/` são comentários), nunca por um dos documentos.
+> pelos arquivos (`grep -rn "pre-commit" Makefile scripts/`; as ocorrências são
+> comentários, exceto em `scripts/instalar-hooks.sh`, o instalador, que roda
+> `pre_commit install` e **não é chamado por nenhum alvo** — ver o fim desta
+> seção), nunca por um dos documentos.
 
 ```
 git hook -> pre-commit -> make -> ferramentas
@@ -179,6 +221,17 @@ worktree onde não faz sentido reinstalar hooks). Ver README §9: `make check`
 "para qualquer branch" — uma definição que só se sustenta se o alvo puder
 ser chamado sozinho, sem pressupor que está sendo executado a partir de um
 hook.
+
+**O instalador dos hooks é a exceção que confirma a regra.**
+`scripts/instalar-hooks.sh` é o único lugar que executa `pre_commit install`, e
+nenhum alvo do Makefile (nem o `bootstrap`) o chama: quem o roda é uma pessoa ou
+um agente, uma vez por clone, fora de qualquer commit. A direção continua
+descendente — `git hook -> pre-commit -> make -> ferramentas` — porque nada
+que o `pre-commit` executa volta a ele. `make check-hooks` (que roda
+`scripts/verificar-hooks.sh`) só **lê** os hooks já instalados e fica fora do
+`make check`: o estado dos hooks é da máquina, não do commit, e o CI não tem
+hooks. O motivo de o instalador existir (hook que aponta para o `.venv` de um
+worktree some junto com ele) está na seção 6.
 
 ## 3. Denominador da cobertura
 
@@ -884,9 +937,9 @@ Sem eufemismo:
   existe; o interpretador do shebang, não). Os hooks falham **fechado**: sem o
   Python do `INSTALL_PYTHON` e sem `pre-commit` no `PATH`, o hook imprime
   `` `pre-commit` not found `` e sai com 1, bloqueando o commit — não o deixa
-  passar sem gate. Conserto, da raiz nova: `rm -rf .venv`,
-  `uv sync --locked` e `uv run pre-commit install --install-hooks` (o mesmo
-  passo de "Primeiro uso após clonar"). O `frontend/node_modules/` não sofre
+  passar sem gate. Conserto, da raiz nova: `rm -rf .venv .hooks-venv`,
+  `uv sync --locked` e `scripts/instalar-hooks.sh` (o mesmo passo de "Primeiro
+  uso após clonar"; o `.hooks-venv` também guarda o caminho absoluto). O `frontend/node_modules/` não sofre
   disso: os links de `.bin/` são relativos.
 - **O gate roda inteiro a cada commit, e fica mais lento conforme o
   projeto cresce.** Medido nesta máquina, com o PostgreSQL já de pé e os
@@ -912,11 +965,19 @@ Sem eufemismo:
   120 segundos por ele antes de desistir.
 - **Hooks não vêm no clone.** `make bootstrap` **não** instala hooks de git
   — só dependências (npm, Chromium do Playwright, uv, Gitleaks).
-  `uv run pre-commit install --install-hooks` precisa ser executado à parte,
-  uma vez por clone e uma vez por cada worktree novo (inclusive no PyCharm),
+  `scripts/instalar-hooks.sh` precisa ser executado à parte, **uma vez por
+  clone** (não por worktree: os hooks moram no `.git` comum e valem para todos),
   como descrito em "Primeiro uso após clonar" no início deste documento.
   Enquanto isso não for feito, `git commit` e `git push` funcionam sem
   nenhuma validação, sem aviso nenhum de que o gate não está ativo.
+- **`pre-commit install` à mão, de um worktree, reaponta os hooks de todos
+  para o `.venv` dele.** Foi o estado desta máquina ao abrir o lote 20: os três
+  hooks do `.git` comum fixavam o `.venv` de um worktree de agente, e remover
+  esse worktree derrubaria todo commit e push, de todos. Não há como o git ou
+  o `pre-commit` impedir isso (quem roda `install` decide o `INSTALL_PYTHON`);
+  as guardas são o instalador único, que usa o venv dedicado, e o
+  `make check-hooks`, que reprova o estado errado — mas ele só roda quando
+  alguém o chama (e ao fim do instalador), não a cada commit.
 - **Hooks são contornáveis por quem controla o Git.** Mesmo instalados,
   quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,
   editar ou apagar `.pre-commit-config.yaml`, ou desinstalar os hooks.
