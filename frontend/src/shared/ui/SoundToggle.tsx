@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import type { MessageKey } from '../i18n/catalog'
 import { useT } from '../i18n/useT'
 import { IconButton } from './IconButton'
@@ -16,8 +17,52 @@ const LABEL_KEY: Record<SoundChannel, MessageKey> = {
   sfx: 'ui.sound.sfx',
 }
 
-/** Alto-falante com ondas (ligado) ou com um X (cortado): a forma muda, não só a cor. */
-function SpeakerIcon({ on }: { on: boolean }) {
+/** Barra diagonal que corta o desenho: a forma muda, não só a cor. */
+const SLASH = <path d="m3 3 18 18" />
+
+interface ChannelDrawing {
+  on: ReactElement
+  off: ReactElement
+}
+
+const DRAWINGS: Record<SoundChannel, ChannelDrawing> = {
+  // Balão de fala: com duas linhas de texto (ligado) ou riscado (cortado).
+  voice: {
+    on: (
+      <>
+        <path d="M4 4h16v12H11l-4 4v-4H4z" />
+        <path d="M8 8.5h8M8 12h5" />
+      </>
+    ),
+    off: (
+      <>
+        <path d="M4 4h16v12H11l-4 4v-4H4z" />
+        {SLASH}
+      </>
+    ),
+  },
+  // Nota musical: inteira (ligado) ou riscada (cortado).
+  sfx: {
+    on: (
+      <>
+        <path d="M9 18V5l11-2v13" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="17" cy="16" r="3" />
+      </>
+    ),
+    off: (
+      <>
+        <path d="M9 18V5l11-2v13" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="17" cy="16" r="3" />
+        {SLASH}
+      </>
+    ),
+  },
+}
+
+/** Ícone do canal (balão de fala para a voz, nota musical para os efeitos). */
+function ChannelIcon({ channel, on }: { channel: SoundChannel; on: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -28,14 +73,10 @@ function SpeakerIcon({ on }: { on: boolean }) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      data-icon={channel}
       data-testid={on ? 'sound-icon-on' : 'sound-icon-off'}
     >
-      <path d="M4 9v6h4l5 4V5L8 9z" />
-      {on ? (
-        <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
-      ) : (
-        <path d="m16 9 5 6M21 9l-5 6" />
-      )}
+      {on ? DRAWINGS[channel].on : DRAWINGS[channel].off}
     </svg>
   )
 }
@@ -49,7 +90,7 @@ export function SoundToggle({ channel, pressed, onPressedChange }: SoundTogglePr
   return (
     <IconButton
       label={t(LABEL_KEY[channel])}
-      icon={<SpeakerIcon on={pressed} />}
+      icon={<ChannelIcon channel={channel} on={pressed} />}
       pressed={pressed}
       onClick={() => {
         onPressedChange(!pressed)
