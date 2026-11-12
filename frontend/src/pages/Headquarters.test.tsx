@@ -6,6 +6,7 @@ import type { ActionRead, MessageRead } from '../features/tutoring'
 import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion, Reward } from '../shared/types/reward'
 import { useKairya } from '../features/kairya'
+import { flushPendingEffects } from '../test/flushEffects'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { memoryStorage } from '../test/audioDoubles'
 import { renderWithI18n } from '../test/i18n'
@@ -770,6 +771,18 @@ describe('Headquarters: saudação do dia', () => {
     })
   }
 
+  /**
+   * A bolha da saudação sai de um efeito, depois do commit que traz o ciclo.
+   * Espera o ciclo (o dado observável), descarrega os efeitos desse commit e só
+   * então espera a bolha: a cadeia efeito -> estado -> efeito não paga, uma a
+   * uma, as tarefas do Scheduler, e o teste não depende da velocidade dele.
+   */
+  async function findGreeting() {
+    await screen.findByTestId('cycle-today')
+    flushPendingEffects()
+    return screen.findByRole('figure', { name: 'Kairya' })
+  }
+
   function presence(clock: () => Date, storage: Storage | null) {
     return { presence: { greeting: true, clock, storage, random: () => 0 } }
   }
@@ -780,7 +793,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    const bubble = await findGreeting()
     expect(bubble).toHaveTextContent('Bom dia. Qual é o primeiro passo de hoje?')
     expect(screen.getByTestId('kairya-announcement')).toHaveTextContent(
       'Bom dia. Qual é o primeiro passo de hoje?',
@@ -800,7 +813,7 @@ describe('Headquarters: saudação do dia', () => {
       presence(() => new Date(`2026-11-10T${hour}`), memoryStorage()),
     )
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent(text)
+    expect(await findGreeting()).toHaveTextContent(text)
     await settle()
   })
 
@@ -808,17 +821,19 @@ describe('Headquarters: saudação do dia', () => {
     stubCycle([3])
     const storage = memoryStorage()
     const first = renderWithI18n(<Headquarters />, presence(MORNING, storage))
-    await screen.findByRole('figure', { name: 'Kairya' })
+    await findGreeting()
     await settle()
     first.unmount()
 
     const same = renderWithI18n(<Headquarters />, presence(MORNING, storage))
     await settle()
+    // Ausência: só vale depois de os efeitos do commit terem rodado.
+    flushPendingEffects()
     expect(screen.queryByRole('figure', { name: 'Kairya' })).toBeNull()
     same.unmount()
 
     renderWithI18n(<Headquarters />, presence(NEXT_DAY, storage))
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -878,7 +893,7 @@ describe('Headquarters: saudação do dia', () => {
     const setItem = vi.spyOn(storage, 'setItem')
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
-    await screen.findByRole('figure', { name: 'Kairya' })
+    await findGreeting()
     fireEvent.click(
       await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
     )
@@ -899,7 +914,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    const bubble = await findGreeting()
     expect(bubble).toHaveTextContent(
       'A sequência zerou. O que você aprendeu, não. Vamos de novo hoje?',
     )
@@ -919,7 +934,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -928,7 +943,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, null))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -938,7 +953,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     expect(storage.getItem('kairyaquest.lastGreeting')).toBe('2026-11-10')
     await settle()
   })
