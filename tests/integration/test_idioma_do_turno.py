@@ -23,7 +23,9 @@ from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.main import app
 from focusquest.modules.evaluation.rubric import rubrica_do_idioma
 from focusquest.modules.evaluation.service import avaliar_missao
-from focusquest.modules.missions.models import Mission, User
+from focusquest.modules.missions.models import (
+    Mission,
+)
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
@@ -42,6 +44,7 @@ from focusquest.modules.tutoring.service import (
     preparar_turno,
     transmitir,
 )
+from focusquest.modules.users.models import User
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,

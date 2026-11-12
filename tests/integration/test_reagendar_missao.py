@@ -40,7 +40,6 @@ from focusquest.modules.missions.models import (
     Mission,
     MissionOperation,
     MissionReschedule,
-    User,
 )
 from focusquest.modules.missions.service import (
     concluir_missao,
@@ -49,6 +48,7 @@ from focusquest.modules.missions.service import (
     missao_reagendavel,
     reagendar_missao,
 )
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 OUTRO = 2

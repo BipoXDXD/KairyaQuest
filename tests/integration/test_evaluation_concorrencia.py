@@ -51,7 +51,6 @@ from focusquest.modules.missions.models import (
     Mission,
     MissionEvaluation,
     MissionOperation,
-    User,
 )
 from focusquest.modules.missions.service import (
     NovaEvidencia,
@@ -62,6 +61,7 @@ from focusquest.modules.progression.models import FONTE_BONUS, FONTE_CONCLUSAO, 
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.provider import EventoDoProvedor, Ferramenta, Turno
 from focusquest.modules.tutoring.service import Tutoria
+from focusquest.modules.users.models import User
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
     ChamadaDeFerramenta,
