@@ -520,9 +520,12 @@ def _proposta(
     novo: datetime = NOVO_PRAZO,
     motivo: str = "falta_de_tempo",
     cid: str = "reag-1",
-    retrato: dict[str, Any] | None = None,
+    sobrescritas: dict[str, Any] | None = None,
 ) -> TutorAction:
-    """A acao como o `_completar` a grava: entrada normalizada + retrato."""
+    """A acao como o `_completar` a grava: entrada normalizada + retrato.
+
+    `sobrescritas` troca ou acrescenta qualquer campo do payload gravado, do
+    retrato ou da entrada."""
     pergunta = TutorMessage(
         user_id=ESTUDANTE,
         role=Papel.USUARIO,
@@ -549,7 +552,7 @@ def _proposta(
         "reason": motivo,
         "instructions": "Ler o capitulo 3",
         "previous_deadline": PRAZO_ATUAL.isoformat(),
-    } | (retrato or {})
+    } | (sobrescritas or {})
     acao = TutorAction(
         message_id=resposta.id,
         kind=TipoDeAcao.REAGENDAR_MISSAO,
@@ -606,7 +609,7 @@ def test_o_retrato_nao_decide_nada(session: Session) -> None:
     acao = _proposta(
         session,
         missao.id,
-        retrato={"previous_deadline": "2020-01-01T00:00:00Z", "instructions": "x"},
+        sobrescritas={"previous_deadline": "2020-01-01T00:00:00Z", "instructions": "x"},
     )
     assert isinstance(_confirmar(session, acao.id, "op-t7-r"), Executada)
     (linha,) = _linhas(session, missao.id)
@@ -666,8 +669,8 @@ def test_prazo_proposto_alem_de_365_dias_grava_falhou(session: Session) -> None:
     "ajustes",
     [
         {"motivo": "motivo_aposentado"},
-        {"retrato": {"campo_antigo": 1}},
-        {"retrato": {"mission_id": "12"}},
+        {"sobrescritas": {"campo_antigo": 1}},
+        {"sobrescritas": {"mission_id": "12"}},
     ],
     ids=["motivo que saiu do enum", "campo que o esquema nao conhece", "id em texto"],
 )
