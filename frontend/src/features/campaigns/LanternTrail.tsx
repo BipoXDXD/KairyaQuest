@@ -17,6 +17,7 @@ import {
 } from './lanterns'
 import type { Plan } from './types'
 import { useCurrentPlan, type CurrentPlanState } from './useCurrentPlan'
+import { WeekPlanEntry } from './WeekPlanEntry'
 
 /** O texto de cada disponibilidade: acolhedor, e e ele (nao a cor) quem diz o estado. */
 const DAY_TEXT: Record<Availability, MessageKey> = {
@@ -214,10 +215,14 @@ function TrailLoaded({
 function TrailContent({
   state,
   reload,
+  onPlanCreated,
+  onPlanExists,
   onOpenHeadquarters,
 }: {
   state: CurrentPlanState
   reload: () => void
+  onPlanCreated: () => void
+  onPlanExists: () => void
   onOpenHeadquarters?: () => void
 }): ReactElement {
   const t = useT()
@@ -245,9 +250,12 @@ function TrailContent({
       )
     case 'no-plan':
       return (
-        <p data-testid="trail-no-plan" className="text-base text-text-muted">
-          {t('campaigns.trail.noPlan')}
-        </p>
+        <div className="flex flex-col gap-4">
+          <p data-testid="trail-no-plan" className="text-base text-text-muted">
+            {t('campaigns.trail.noPlan')}
+          </p>
+          <WeekPlanEntry onCreated={onPlanCreated} onExists={onPlanExists} />
+        </div>
       )
     case 'loaded':
       return (
@@ -282,13 +290,31 @@ export function LanternTrail({
   onOpenHeadquarters?: () => void
 } = {}) {
   const t = useT()
-  const { state, reload } = useCurrentPlan()
+  const { state, reload, refresh } = useCurrentPlan()
+  const heading = useRef<HTMLHeadingElement>(null)
+  // O plano criado troca o "sem plano" pela trilha: o foco, que estava no
+  // formulario que vai sair, vai para o titulo da secao.
+  const handlePlanCreated = () => {
+    refresh()
+    heading.current?.focus()
+  }
   return (
     <Panel as="section" aria-labelledby="lantern-trail-heading" data-testid="campaign-trail">
-      <h2 id="lantern-trail-heading" className="mb-4 font-display text-xl font-bold">
+      <h2
+        ref={heading}
+        id="lantern-trail-heading"
+        tabIndex={-1}
+        className="mb-4 rounded-ui font-display text-xl font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+      >
         {t('campaigns.lantern.title')}
       </h2>
-      <TrailContent state={state} reload={reload} onOpenHeadquarters={onOpenHeadquarters} />
+      <TrailContent
+        state={state}
+        reload={reload}
+        onPlanCreated={handlePlanCreated}
+        onPlanExists={refresh}
+        onOpenHeadquarters={onOpenHeadquarters}
+      />
     </Panel>
   )
 }
