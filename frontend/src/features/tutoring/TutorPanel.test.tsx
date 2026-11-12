@@ -1323,6 +1323,172 @@ describe('TutorPanel: o cartao escolhido pelo kind', () => {
   })
 })
 
+describe('TutorPanel: a proposta sem texto da Kairya', () => {
+  const creation: ActionRead = {
+    id: 5,
+    kind: 'create_mission',
+    state: 'proposta',
+    payload: {
+      instructions: 'Estudar grafos por 40 minutos',
+      completion_criterion: 'Resumo de uma pagina',
+      difficulty: 2,
+      estimated_minutes: 40,
+      deadline: '2027-02-15T21:00:00-03:00',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+  const reschedule: ActionRead = {
+    id: 6,
+    kind: 'reschedule_mission',
+    state: 'proposta',
+    payload: {
+      mission_id: 12,
+      new_deadline: '2026-10-05T21:00:00Z',
+      reason: 'falta_de_tempo',
+      instructions: 'Resumir o capítulo 3',
+      previous_deadline: '2026-10-02T21:00:00Z',
+    },
+    mission_id: null,
+    error_code: null,
+  }
+
+  /** A resposta da Kairya que so chamou a ferramenta: texto `content`, uma acao. */
+  const historyOf = (content: string, action: unknown) => () =>
+    Response.json([
+      question(1, 'Cria uma missão', 'c1'),
+      { ...answer(2, 1, content), actions: [action] },
+    ])
+
+  const kairyaMessage = (): HTMLElement => {
+    const item = screen.getAllByTestId('tutor-message').find((li) => li.dataset.messageId === '2')
+    if (item === undefined) {
+      throw new Error('a resposta da Kairya nao esta na lista')
+    }
+    return item
+  }
+
+  it.each([
+    ['pt-BR', 'create_mission', creation, 'Deixei uma proposta de missão para você revisar.'],
+    ['en', 'create_mission', creation, "I've left a mission proposal for you to review."],
+    [
+      'pt-BR',
+      'reschedule_mission',
+      reschedule,
+      'Deixei uma proposta de novo prazo para você revisar.',
+    ],
+    [
+      'en',
+      'reschedule_mission',
+      reschedule,
+      "I've left a new deadline proposal for you to review.",
+    ],
+  ] as const)(
+    'S1 texto vazio com proposta (%s, %s): a bolha diz a frase padrao e o cartao continua',
+    async (locale, _kind, action, line) => {
+      mountPanel({ [HISTORY]: historyOf('', action) }, 'desktop', vi.fn(), locale)
+
+      const bubble = await waitFor(kairyaMessage)
+      expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(line)
+      expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+        translate(
+          locale,
+          action.kind === 'create_mission'
+            ? 'tutoring.proposal.line.create'
+            : 'tutoring.proposal.line.reschedule',
+        ),
+      )
+      expect(
+        within(bubble).getByTestId(
+          action.kind === 'create_mission' ? 'tutor-proposal' : 'tutor-reschedule-proposal',
+        ),
+      ).toBeInTheDocument()
+    },
+  )
+
+  it('S2 so espacos contam como vazio, e a frase padrao entra no lugar', async () => {
+    mountPanel({ [HISTORY]: historyOf(' \n\t ', creation) })
+
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+      'Deixei uma proposta de missão para você revisar.',
+    )
+  })
+
+  it('S3 a Kairya que escreveu a frase nao e substituida pela padrao', async () => {
+    mountPanel({ [HISTORY]: historyOf('Boa para treinar grafos.', creation) })
+
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+      'Boa para treinar grafos.',
+    )
+    expect(within(bubble).queryByText(/Deixei uma proposta/)).toBeNull()
+  })
+
+  it('S4 um kind que esta versao nao conhece nao ganha frase: so a nota do cartao', async () => {
+    const unknown = { ...creation, kind: 'split_mission' }
+    mountPanel({ [HISTORY]: historyOf('', unknown) })
+
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).queryByTestId('tutor-message-content')).toBeNull()
+    expect(within(bubble).getByTestId('tutor-proposal-unknown')).toBeInTheDocument()
+  })
+
+  it('S6 antes do done a frase padrao nao existe: so o parcial; depois do done ela aparece', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Cria uma missão')
+    stream.push(sseFrame('user_message', question(1, 'Cria uma missão', 'c1')))
+    stream.push(sseFrame('delta', { text: 'Vou pensar' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-partial')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(en['tutoring.proposal.line.create'])).toBeNull()
+    expect(screen.queryByText('Deixei uma proposta de missão para você revisar.')).toBeNull()
+
+    stream.push(sseFrame('done', { ...answer(2, 1, ''), actions: [creation] }))
+    stream.close()
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+      'Deixei uma proposta de missão para você revisar.',
+    )
+    expect(screen.queryByTestId('tutor-partial')).toBeNull()
+  })
+
+  it.each(['gerando', 'interrompida', 'falhou'] as const)(
+    'S7 resposta %s com acao e sem texto nao ganha a frase padrao',
+    async (status) => {
+      mountPanel({
+        [HISTORY]: () =>
+          Response.json([
+            question(1, 'Cria uma missão', 'c1'),
+            { ...answer(2, 1, '', status), actions: [creation] },
+          ]),
+      })
+
+      const bubble = await waitFor(kairyaMessage)
+      expect(within(bubble).queryByTestId('tutor-message-content')).toBeNull()
+      expect(within(bubble).queryByText(/Deixei uma proposta/)).toBeNull()
+    },
+  )
+
+  it('S5 a resposta ao vivo (done) sem texto e com proposta mostra a frase', async () => {
+    const stream = controlledStream()
+    mountPanel({ [SEND]: () => stream.response })
+
+    await typeAndSend('Cria uma missão')
+    stream.push(sseFrame('user_message', question(1, 'Cria uma missão', 'c1')))
+    stream.push(sseFrame('done', { ...answer(2, 1, ''), actions: [creation] }))
+    stream.close()
+
+    const bubble = await waitFor(kairyaMessage)
+    expect(within(bubble).getByTestId('tutor-message-content')).toHaveTextContent(
+      'Deixei uma proposta de missão para você revisar.',
+    )
+  })
+})
+
 describe('TutorPanel: coordenação do foco responsivo', () => {
   it('transfere o foco removido entre layouts sem abrir uma folha fechada', async () => {
     const { viewport } = mountPanel({})

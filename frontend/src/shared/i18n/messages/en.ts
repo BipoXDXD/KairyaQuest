@@ -256,6 +256,8 @@ export const en = {
   'tutoring.proposal.rejected': 'Proposal declined',
   'tutoring.proposal.boardLink': 'See it at Headquarters',
   'tutoring.proposal.unknown': "This version can't display this proposal.",
+  'tutoring.proposal.line.create': "I've left a mission proposal for you to review.",
+  'tutoring.proposal.line.reschedule': "I've left a new deadline proposal for you to review.",
 
   'tutoring.reschedule.title': 'Rescheduling proposal',
   'tutoring.reschedule.target': 'the rescheduling: {instructions}',

@@ -31,6 +31,28 @@ const STATUS_MARK: Record<MessageStatus, MessageKey | null> = {
   falhou: 'tutoring.message.mark.failed',
 }
 
+/**
+ * A frase da bolha quando a Kairya so chamou a ferramenta e devolveu texto
+ * vazio (ou so espacos): sem ela a bolha mostraria so o cartao, e o leitor de
+ * tela nao leria nada de quem propos. So a resposta `completa` ganha a frase:
+ * a `gerando`, `interrompida` ou `falhou` ja tem a marca do estado. `null` para
+ * quem nao tem proposta, ou tem uma de `kind` que esta versao nao conhece (o cartao ja avisa).
+ */
+function proposalLine(message: MessageRead): MessageKey | null {
+  const [first] = message.actions
+  if (message.status !== 'completa' || message.content.trim() !== '' || first === undefined) {
+    return null
+  }
+  switch (first.kind) {
+    case 'create_mission':
+      return 'tutoring.proposal.line.create'
+    case 'reschedule_mission':
+      return 'tutoring.proposal.line.reschedule'
+    default:
+      return null
+  }
+}
+
 const BUBBLE = {
   user: 'ml-8 rounded-lg bg-slate-800 p-3 text-sm text-slate-100',
   tutor:
@@ -88,14 +110,17 @@ function MessageItem({
 }) {
   const t = useT()
   const mark = STATUS_MARK[message.status]
+  // So proposta, sem texto: a frase padrao ocupa o lugar do texto.
+  const line = proposalLine(message)
+  const text = line === null ? message.content : t(line)
   return (
     <li data-testid="tutor-message" data-message-id={message.id} className={BUBBLE[message.role]}>
       <Author role={message.role} />
       {/* Sem texto (a recusada, ou a falha antes do primeiro pedaco), a bolha
           fica com o autor e a marca: um paragrafo vazio so abriria espaco. */}
-      {message.content !== '' && (
+      {text !== '' && (
         <p data-testid="tutor-message-content" className="wrap-anywhere whitespace-pre-wrap">
-          {message.content}
+          {text}
         </p>
       )}
       {mark !== null && (
