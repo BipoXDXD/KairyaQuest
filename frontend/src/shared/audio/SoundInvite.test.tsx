@@ -19,17 +19,35 @@ function throwingStorage(): Storage {
 }
 
 describe('SoundInvite', () => {
-  it('aparece sem ser modal e sem roubar o foco', () => {
+  const renderPending = () =>
     renderWithI18n(<SoundInvite />, {
       audio: { storage: memoryStorage({}), createElement: fakeAudio },
     })
 
-    const card = screen.getByTestId('sound-invite')
-    expect(card).toBeInTheDocument()
+  it('aparece como região nomeada', () => {
+    renderPending()
+
+    expect(screen.getByRole('region', { name: 'Quer ouvir a Kairya?' })).toBe(
+      screen.getByTestId('sound-invite'),
+    )
+  })
+
+  it('não é modal', () => {
+    renderPending()
+
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(card).not.toHaveAttribute('aria-modal')
+    expect(screen.getByTestId('sound-invite')).not.toHaveAttribute('aria-modal')
+  })
+
+  it('não rouba o foco', () => {
+    renderPending()
+
     expect(document.activeElement).toBe(document.body)
-    expect(screen.getByRole('region', { name: 'Quer ouvir a Kairya?' })).toBe(card)
+  })
+
+  it('não tem heading, para não preceder o h1', () => {
+    renderPending()
+
     expect(screen.queryByRole('heading')).toBeNull()
   })
 
@@ -85,14 +103,24 @@ describe('SoundInvite', () => {
     expect(text).not.toMatch(BANNED)
   })
 
-  it('em inglês, usa o catálogo em inglês', () => {
+  it('em inglês, a região usa o nome do catálogo em inglês', () => {
     renderWithI18n(<SoundInvite />, {
       locale: 'en',
       audio: { storage: memoryStorage({}), createElement: fakeAudio },
     })
 
     expect(screen.getByRole('region', { name: 'Want to hear Kairya?' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Turn on voice and effects' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument()
   })
+
+  it.each([['Turn on voice and effects'], ['Not now']])(
+    'em inglês, o botão "%s" vem do catálogo',
+    (name) => {
+      renderWithI18n(<SoundInvite />, {
+        locale: 'en',
+        audio: { storage: memoryStorage({}), createElement: fakeAudio },
+      })
+
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    },
+  )
 })

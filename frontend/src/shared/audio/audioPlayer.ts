@@ -5,7 +5,7 @@ export const VOICE_VOLUME = 1
 export const SFX_VOLUME = 0.6
 
 export const AUTOPLAY_BLOCKED_WARNING =
-  'kairyaquest: autoplay blocked by the browser; audio waits for a user gesture'
+  'kairyaquest: autoplay blocked by the browser; this audio was not played and will not be retried'
 /** O aviso de indisponível é `${UNAVAILABLE_WARNING_PREFIX} ${src}`. */
 export const UNAVAILABLE_WARNING_PREFIX = 'kairyaquest: audio unavailable for this session:'
 
