@@ -64,6 +64,8 @@ describe('describeActionFailure', () => {
     ['prazo_expirado', 422, { ...EXPIRED, action: 'expired' }],
     ['estimativa_fora_do_limite', 422, { ...ESTIMATE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
     ['prazo_fora_do_limite', 422, { ...DEADLINE_OUT_OF_BOUNDS, action: 'out-of-bounds' }],
+    // Pendencia 47: a acao foi gravada falhou; o texto e o generico.
+    ['proposta_invalida', 422, { ...FAILED, action: 'invalidated' }],
   ])('traduz %s', (code, status, esperado) => {
     for (const attempted of ['confirm', 'reject'] as const) {
       for (const kind of ['create_mission', 'reschedule_mission'] as const) {

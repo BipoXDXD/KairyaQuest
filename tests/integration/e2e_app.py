@@ -21,19 +21,22 @@ from focusquest.modules.tutoring.service import Tutoria
 from integration.relogio_do_e2e import RelogioDoE2E, montar_app_do_e2e
 
 
+def _url_do_falso() -> str:
+    """O endereco do provedor, que so pode ser o falso em loopback."""
+    url = Settings().anthropic_base_url
+    if urlsplit(url).hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise RuntimeError("o E2E so aceita o provedor falso em loopback")
+    return url
+
+
 @cache
 def tutoria_falsa() -> Tutoria:
     settings = Settings()
-    if urlsplit(settings.anthropic_base_url).hostname not in {
-        "127.0.0.1",
-        "localhost",
-        "::1",
-    }:
-        raise RuntimeError("o E2E so aceita o provedor falso em loopback")
+    base_url = _url_do_falso()
     return Tutoria(
         provedor=ProvedorAnthropic(
             chave="e2e-chave-ficticia",
-            base_url=settings.anthropic_base_url,
+            base_url=base_url,
             modelo="claude-opus-5",
             max_tokens=settings.tutor_max_tokens,
             timeout_segundos=settings.tutor_timeout_seconds,
@@ -49,4 +52,4 @@ def tutoria_falsa() -> Tutoria:
 
 
 app_de_producao.dependency_overrides[get_tutoria] = tutoria_falsa
-app = montar_app_do_e2e(app_de_producao, RelogioDoE2E())
+app = montar_app_do_e2e(app_de_producao, RelogioDoE2E(), falso_url=_url_do_falso())

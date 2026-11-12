@@ -424,6 +424,17 @@ mesmos criaram.
   projeto: a galeria sobe em todo `npx playwright test`, mesmo quando só o
   projeto `chromium` roda (alguns segundos e uma porta a mais). As portas de
   desenvolvimento são 8000 e 5173; nenhuma é reaproveitada (README §10).
+- **Reset entre cenarios (`reiniciar()` de `frontend/tests/e2e/falso.ts`).**
+  Passa pela API, em `POST /_e2e/reset` (`tests/integration/reset_do_e2e.py`,
+  so na entrada do E2E; o app de producao responde 404), e nao pelo falso
+  sozinho: libera o que o falso segura, espera a API ficar ociosa (todo pedido
+  em andamento termina contra o roteiro do cenario que o originou) e so entao
+  reinicia o falso. Sem isso, o pedido que um cenario estourado deixou na API
+  chegava ao falso depois do reset, achava o roteiro vazio e gravava `falhou`
+  no banco compartilhado (P-e2e-flaky-1, cascata do cenario (c) da tutoria).
+  Prova deterministica, sem `sleep`: `tests/integration/test_reset_do_e2e.py`.
+  Janela que sobra, por desenho: pedido ainda no navegador ou no proxy do
+  `vite preview`, que nao chegou a API.
 - **Deslocamento das portas por worktree (Frente 0).**
   `FOCUSQUEST_E2E_PORT_OFFSET` (inteiro, padrão 0) soma o mesmo valor às
   quatro portas. `frontend/tests/e2e/servers.ts` é a fonte única: lê e valida a

@@ -145,6 +145,12 @@ class ReagendamentoInvalidoError(DomainError):
     erro subir -- a rota commita e so entao levanta."""
 
 
+class PropostaInvalidaError(DomainError):
+    """A entrada gravada da proposta nao passa mais no esquema atual da
+    ferramenta (pendencia 47). A acao foi GRAVADA como `falhou` antes deste
+    erro subir -- a rota commita e so entao levanta."""
+
+
 class EstimativaForaDoLimite(DomainError):
     """A estimativa da avulsa sai da faixa de negocio (pendencia 26).
 

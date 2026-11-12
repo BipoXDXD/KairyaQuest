@@ -87,6 +87,13 @@ PRAZO_EXPIRADO = "prazo_expirado"
 # (`CodigoDeErro.REAGENDAMENTO_INVALIDO`); um teste de API confere.
 REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
 
+# O `error_code` de uma acao cuja entrada GRAVADA nao passa mais no esquema
+# atual da ferramenta na hora de confirmar: foi proposta antes de um esquema
+# endurecer (um teto de texto novo, um motivo que saiu do enum). Pendencia 47.
+# Mesmo valor do `code` do 422 (`CodigoDeErro.PROPOSTA_INVALIDA`) e do
+# `CodigoDoStream.PROPOSTA_INVALIDA`: e a mesma recusa, so que na confirmacao.
+PROPOSTA_INVALIDA = "proposta_invalida"
+
 # Os `error_code` de uma acao cuja proposta saiu dos limites de negocio da
 # avulsa (pendencia 26): estimativa fora de 1..1440 minutos ou prazo alem de
 # 365 dias. Sao a FONTE dos valores do `code` do 422: o `CodigoDeErro` os
