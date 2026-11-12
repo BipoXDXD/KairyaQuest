@@ -449,3 +449,53 @@ def test_evento_ja_enfileirado_quando_o_tempo_acaba_e_aproveitado(
         "a",
     )
     _esperar_o_leitor_terminar()
+
+
+def test_intermediario_ja_enfileirado_e_entregue_e_depois_a_fila_vazia_estoura(
+    fabrica: sessionmaker[Session], tutoria: Tutoria, conversa: Conversa
+) -> None:
+    # Teste de caracterizacao da drenagem (`get_nowait` depois do teto): com o
+    # tempo esgotado, ha um evento INTERMEDIARIO pronto na fila e, depois dele,
+    # a fila vazia (o provedor travou). O intermediario e entregue; so entao o
+    # stream estoura, e o texto parcial gravado o inclui.
+    provedor = ProvedorRoteirizado(
+        (Delta("a"), Delta("b")),
+        travar_no_fim=True,
+        depois_de_liberado=(Delta("tarde"), Fim()),
+    )
+    relogio = {"agora": 1000.0}
+    esperas: list[float] = []
+
+    def esperar(fila: queue.Queue[object], segundos: float) -> object:
+        esperas.append(segundos)
+        item = fila.get(timeout=ESPERA_DO_LEITOR)
+        # O leitor so seta `travou` depois de enfileirar o `b`: sem sleep, o
+        # `b` ja esta na fila quando o relogio passa do teto.
+        assert provedor.travou.wait(ESPERA_DO_LEITOR)
+        relogio["agora"] += 60.0
+        return item
+
+    espera = Espera(monotonic=lambda: relogio["agora"], esperar=esperar)
+    tutoria = replace(tutoria, provedor=provedor, limite=TETO)
+    preparo = _preparar(fabrica, tutoria, conversa.id("teto-intermediario"))
+
+    eventos = list(
+        transmitir(fabrica, preparo, tutoria, clock=lambda: AGORA, espera=espera)
+    )
+
+    assert eventos[1:] == [
+        Trecho("a"),
+        Trecho("b"),
+        RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO),
+    ]
+    # Uma unica espera real: depois do teto, so `get_nowait`, sem espera nenhuma.
+    assert esperas == [54.0]
+    vista = _resposta(fabrica, preparo.resposta_id)
+    assert (vista.status, vista.content, vista.error_code) == (
+        StatusDaMensagem.FALHOU,
+        "ab",
+        CodigoDoStream.TEMPO_ESGOTADO,
+    )
+    provedor.liberar.set()
+    assert provedor.fechado.wait(ESPERA_DO_LEITOR)
+    _esperar_o_leitor_terminar()

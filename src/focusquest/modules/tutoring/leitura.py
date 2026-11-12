@@ -174,15 +174,23 @@ def _ler(
     espera: Espera,
 ) -> None:
     """A thread do leitor: dona da leitura, do fechamento do stream e da vaga."""
+    # `None` ate o relogio responder: o `finally` externo loga a vida do leitor
+    # e nao pode tropecar numa variavel nunca atribuida.
+    inicio: float | None = None
     try:
-        inicio = espera.monotonic()
         try:
-            for evento in eventos:
-                if cancelado.is_set():
-                    break
-                fila.put(evento)
-            else:
-                fila.put(_Fim())
+            inicio = espera.monotonic()
+            # O consumidor pode ter saido antes do primeiro passo do leitor. O
+            # `for` abaixo ja faria o primeiro `next()` (a chamada paga ao
+            # provedor), entao o cancelamento e conferido ANTES dele: cancelado,
+            # o gerador e fechado sem ser iterado e a vaga volta.
+            if not cancelado.is_set():
+                for evento in eventos:
+                    if cancelado.is_set():
+                        break
+                    fila.put(evento)
+                else:
+                    fila.put(_Fim())
         except BaseException as erro:
             # Repassada ao consumidor, que a relevanta: nada e engolido.
             fila.put(_Falha(erro))
@@ -190,7 +198,7 @@ def _ler(
             eventos.close()
     finally:
         vivos = vaga.liberar()
-        if cancelado.is_set():
+        if cancelado.is_set() and inicio is not None:
             # Sobreviveu ao consumidor: e o que o gauge existe para medir.
             _LOG.info(
                 "leitor da tutoria encerrou depois do consumidor: "
