@@ -34,7 +34,7 @@ test('os volumes dos canais', () => {
 
 test('os textos dos avisos', () => {
   expect(AUTOPLAY_BLOCKED_WARNING).toBe(
-    'kairyaquest: autoplay blocked by the browser; audio waits for a user gesture',
+    'kairyaquest: autoplay blocked by the browser; this audio was not played and will not be retried',
   )
   expect(UNAVAILABLE_WARNING_PREFIX).toBe('kairyaquest: audio unavailable for this session:')
 })

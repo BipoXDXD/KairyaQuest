@@ -10,9 +10,10 @@ import type { Reward } from '../../shared/types/reward'
 import { describeEvaluationErrorCode, type EvaluationFailure } from './evaluationFailure'
 import { RELOAD_WAITING_LABEL } from './reloadWaiting'
 import { RewardAnnouncement } from './RewardAnnouncement'
-import { evaluationEvents, useKairya } from '../kairya'
+import { evaluationEvents, sfxForEvaluation, useKairya } from '../kairya'
 import type { EvaluationResult } from './types'
 import { useRequestEvaluation, type EvaluationRequestState } from './useRequestEvaluation'
+import { useAudio } from '../../shared/audio/useAudio'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import { useT, type Translate } from '../../shared/i18n/useT'
@@ -240,11 +241,15 @@ function EvidenceAndEvaluation({
 }) {
   const t = useT()
   const { dispatchAll } = useKairya()
+  const { playSfx } = useAudio()
   const handleResult = useCallback(
     (result: EvaluationResult) => {
-      dispatchAll(evaluationEvents({ verdict: result.evaluation.verdict, reward: result.reward }))
+      const done = { verdict: result.evaluation.verdict, reward: result.reward }
+      dispatchAll(evaluationEvents(done))
+      const sfx = sfxForEvaluation(done)
+      if (sfx !== null) playSfx(sfx)
     },
-    [dispatchAll],
+    [dispatchAll, playSfx],
   )
   const { state: request, request: requestEvaluation } = useRequestEvaluation(
     mission.id,

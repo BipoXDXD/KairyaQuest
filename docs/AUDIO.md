@@ -129,6 +129,12 @@ Um arquivo por linha (o teste `sfx.assets.test.ts` confere que cada efeito está
 - **Brutos:** `assets-src/audio/raw/sfx/<nome>.{a,b}.mp3`, fora do git.
 - **Escuta do dono:** pendente.
 
+### 2.4 Como o app toca
+
+O som nasce desligado: a primeira visita mostra um convite não modal, e a
+escolha (voz e efeitos, separados) fica em `localStorage` por dispositivo,
+sem passar pela conta. Com a preferência desligada, nenhum arquivo é pedido.
+
 ### Totais
 
 | Item     | Créditos |

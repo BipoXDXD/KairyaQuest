@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { useDailyOpening, type DailyOpeningOptions } from './dailyOpening'
 import type { KairyaEvent } from './events'
 import { KairyaContext, type KairyaContextValue } from './presenceContext'
@@ -31,7 +31,18 @@ export function KairyaPresenceProvider({
   const presence = useKairyaMood({ scheduler, random })
   const onCycleRead = useDailyOpening(presence, { clock, storage })
   const { state, dispatch } = presence
-  const reportStreak = greeting ? onCycleRead : ignoreStreak
+  // A sequência lida mora em ref: a `cue` da saudação não a carrega, e ler
+  // por getter não re-renderiza os consumidores da presença (D18).
+  const lastStreak = useRef<number | null>(null)
+  const reportOpening = useCallback(
+    (streak: number) => {
+      lastStreak.current = streak
+      onCycleRead(streak)
+    },
+    [onCycleRead],
+  )
+  const reportStreak = greeting ? reportOpening : ignoreStreak
+  const readStreak = useCallback(() => lastStreak.current, [])
   const dispatchAll = useCallback(
     (events: readonly KairyaEvent[]) => {
       for (const event of events) dispatch(event)
@@ -39,8 +50,8 @@ export function KairyaPresenceProvider({
     [dispatch],
   )
   const value = useMemo<KairyaContextValue>(
-    () => ({ state, dispatch, dispatchAll, reportStreak }),
-    [state, dispatch, dispatchAll, reportStreak],
+    () => ({ state, dispatch, dispatchAll, reportStreak, readStreak }),
+    [state, dispatch, dispatchAll, reportStreak, readStreak],
   )
   return <KairyaContext value={value}>{children}</KairyaContext>
 }

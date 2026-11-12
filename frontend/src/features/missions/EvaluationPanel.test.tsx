@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { en } from '../../shared/i18n/messages/en'
 import type { EvaluationSummary, Mission } from '../../shared/types/mission'
@@ -695,5 +696,48 @@ describe('EvaluationPanel -- em en', () => {
         name: `Refresh the board (mission: ${comEvidencia.instructions})`,
       }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('EvaluationPanel -- o efeito da avaliacao', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** Pede a avaliacao com o som ligado e devolve os efeitos tocados. */
+  async function evaluateWith(result: EvaluationResult): Promise<(string | undefined)[]> {
+    routeFetch({ [KEY]: () => Response.json(result) })
+    const elements: FakeAudio[] = []
+    renderWithI18n(<EvaluationPanel mission={comEvidencia} />, {
+      audio: {
+        storage: memoryStorage({
+          'kairyaquest.sound': '{"voice":true,"sfx":true}',
+          'kairyaquest.soundInvite': '1',
+        }),
+        createElement: () => {
+          const element = fakeAudio()
+          elements.push(element)
+          return element
+        },
+      },
+    })
+    fireEvent.click(botaoPedir())
+    await screen.findByTestId('evaluation-verdict')
+    return elements.flatMap((element) =>
+      element.play.mock.calls.map(() => /\/audio\/sfx\/(\w+)\.mp3$/.exec(element.src)?.[1]),
+    )
+  }
+
+  it('atende com reward toca xp_tick', async () => {
+    expect(await evaluateWith({ evaluation: avaliacao(), reward: bonus })).toEqual(['xp_tick'])
+  })
+
+  it('atende com nivel novo toca level_up', async () => {
+    const reward = { ...bonus, level_after: 6 }
+    expect(await evaluateWith({ evaluation: avaliacao(), reward })).toEqual(['level_up'])
+  })
+
+  it.each(['parcial', 'nao_atende'] as const)('%s nao cria elemento de efeito', async (verdict) => {
+    expect(await evaluateWith({ evaluation: avaliacao({ verdict }), reward: null })).toEqual([])
   })
 })

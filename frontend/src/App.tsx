@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { Area } from './app/areas'
 import { SideNav } from './app/SideNav'
+import { SoundInvite } from './shared/audio/SoundInvite'
+import { useAudio } from './shared/audio/useAudio'
 import { Campaigns } from './pages/Campaigns'
 import { Headquarters } from './pages/Headquarters'
 import { CAMPAIGNS_HEADING_ID, HEADQUARTERS_HEADING_ID } from './pages/headings'
@@ -29,20 +31,29 @@ const HEADING_OF: Record<Area, string> = {
  */
 function App() {
   const [area, setArea] = useState<Area>('headquarters')
-  const navigate = useCallback((next: Area) => {
-    // `flushSync`: o titulo da area aberta tem de estar no DOM (e visivel)
-    // antes do foco. O foco no titulo e o que anuncia a troca de area ao
-    // leitor de tela -- a URL e o documento nao mudam (decisao K5). O `!`: os
-    // dois titulos existem assim que a area deles e a ativa.
-    flushSync(() => {
-      setArea(next)
-    })
-    document.getElementById(HEADING_OF[next])!.focus()
-  }, [])
+  const { stopVoice } = useAudio()
+  const navigate = useCallback(
+    (next: Area) => {
+      // A bolha do Quartel-General segue montada (oculta) na troca de área, então
+      // só aqui a fala em curso pode ser cortada; ao voltar, a mesma fala não repete.
+      stopVoice()
+      // `flushSync`: o titulo da area aberta tem de estar no DOM (e visivel)
+      // antes do foco. O foco no titulo e o que anuncia a troca de area ao
+      // leitor de tela -- a URL e o documento nao mudam (decisao K5). `?.`: os
+      // dois titulos existem assim que a area deles e a ativa; sem o titulo, a
+      // navegacao segue e so o foco fica de fora.
+      flushSync(() => {
+        setArea(next)
+      })
+      document.getElementById(HEADING_OF[next])?.focus()
+    },
+    [stopVoice],
+  )
   return (
     <div className="min-h-screen bg-bg-canvas text-text-primary lg:flex">
       <SideNav active={area} onNavigate={navigate} />
       <div className="min-w-0 flex-1">
+        <SoundInvite />
         <Headquarters hidden={area !== 'headquarters'} />
         {area === 'campaigns' && (
           <Campaigns

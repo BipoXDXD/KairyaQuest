@@ -78,6 +78,13 @@ export const ptBR = {
   'ui.sound.voice': 'Voz da Kairya',
   'ui.sound.sfx': 'Efeitos sonoros',
 
+  'audio.controls.label': 'Som',
+  'audio.invite.title': 'Quer ouvir a Kairya?',
+  'audio.invite.body':
+    'Voz e efeitos são opcionais e as legendas aparecem sempre. Dá para mudar no menu quando quiser.',
+  'audio.invite.accept': 'Ligar voz e efeitos',
+  'audio.invite.decline': 'Agora não',
+
   'shared.apiError.network.message': 'Não foi possível falar com o servidor.',
   'shared.apiError.network.recovery': 'Confira a conexão e tente de novo.',
   'shared.apiError.timeout.message': 'O servidor demorou demais para responder.',
