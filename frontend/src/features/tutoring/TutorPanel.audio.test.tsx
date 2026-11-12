@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { audioSrc } from '../../shared/audio/audioSrc'
 import { useAudio } from '../../shared/audio/useAudio'
@@ -169,6 +169,11 @@ describe('TutorPanel -- efeitos e voz', () => {
     expect(screen.getByTestId('kairya-bubble-anchor')).toHaveTextContent(
       /Combinado\. Está na sua lista\.|Acordo feito\. Começa por ela quando quiser\./,
     )
+    // Ausência não se espera: o efeito da bolha pode ainda estar pendente
+    // aqui, e "nenhuma voz" passaria vazia. Fechar a folha re-renderiza, e
+    // todo render começa descarregando os efeitos pendentes (com a legenda
+    // ainda sob `inert`); só então a ausência vale, e fechar não retoma a fala.
+    fireEvent.click(screen.getByTestId('tutor-sheet-close'))
     expect(rig.voice()).toBeUndefined()
   })
 
@@ -179,7 +184,12 @@ describe('TutorPanel -- efeitos e voz', () => {
     fireEvent.click(within(card).getByTestId('proposal-confirm'))
 
     await screen.findByTestId('proposal-created')
-    expect(rig.voice()?.src).toMatch(/\/proposal_accepted_[12]\.mp3$/)
+    // O `findBy` resolve quando o DOM muda; a voz toca no efeito passivo da
+    // bolha, que o React descarrega depois desse commit. Esperar o efeito
+    // observável (o `src`), não o DOM, evita a corrida.
+    await waitFor(() => {
+      expect(rig.voice()?.src).toMatch(/\/proposal_accepted_[12]\.mp3$/)
+    })
     expect(rig.voice()?.play).toHaveBeenCalledTimes(1)
   })
 })
