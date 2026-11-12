@@ -737,6 +737,15 @@ describe('EvaluationPanel -- o efeito da avaliacao', () => {
     expect(await evaluateWith({ evaluation: avaliacao(), reward })).toEqual(['level_up'])
   })
 
+  it('o turntable do bonus com nivel novo fica fora da regiao viva; o texto, dentro', async () => {
+    await evaluateWith({ evaluation: avaliacao(), reward: { ...bonus, level_after: 6 } })
+
+    const status = screen.getByTestId('evaluation-status')
+    expect(within(status).getByTestId('reward-level-up')).toBeInTheDocument()
+    const turntable = screen.getByTestId('kairya-turntable-placeholder')
+    expect(status).not.toContainElement(turntable)
+  })
+
   it.each(['parcial', 'nao_atende'] as const)('%s nao cria elemento de efeito', async (verdict) => {
     expect(await evaluateWith({ evaluation: avaliacao({ verdict }), reward: null })).toEqual([])
   })
