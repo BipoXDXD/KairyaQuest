@@ -22,6 +22,11 @@ from fastapi import APIRouter, Body, FastAPI, Response, status
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from focusquest.core.clock import Clock, get_clock, system_now
+from integration.reset_do_e2e import (
+    ContaPedidos,
+    RastreadorDePedidos,
+    roteador_do_reset,
+)
 
 # O prefixo de controle do harness. Fora de `/api`: o `vite preview` do E2E so
 # repassa `/api` para a API, entao o navegador nao alcanca esta rota pela
@@ -87,9 +92,15 @@ def roteador_do_relogio(relogio: RelogioDoE2E) -> APIRouter:
     return router
 
 
-def montar_app_do_e2e(producao: FastAPI, relogio: RelogioDoE2E) -> FastAPI:
-    """O app que o uvicorn do E2E serve: a rota de controle e, sob ela, o app
-    de producao inteiro, com o relogio dele trocado por `relogio`.
+def montar_app_do_e2e(
+    producao: FastAPI, relogio: RelogioDoE2E, *, falso_url: str | None = None
+) -> FastAPI:
+    """O app que o uvicorn do E2E serve: as rotas de controle e, sob elas, o
+    app de producao inteiro, com o relogio dele trocado por `relogio`.
+
+    Com `falso_url`, o app tambem conta os pedidos em andamento e publica o
+    reset do E2E (`integration/reset_do_e2e.py`), que espera a API ficar
+    ociosa antes de reiniciar o servidor falso naquele endereco.
 
     O ciclo de vida e o do app de producao: montado (`mount`), ele nao
     receberia o evento de partida, e o log nao seria configurado.
@@ -101,5 +112,9 @@ def montar_app_do_e2e(producao: FastAPI, relogio: RelogioDoE2E) -> FastAPI:
     producao.dependency_overrides[get_clock] = relogio_controlavel
     externo = FastAPI(lifespan=producao.router.lifespan_context)
     externo.include_router(roteador_do_relogio(relogio))
+    if falso_url is not None:
+        rastreador = RastreadorDePedidos()
+        externo.add_middleware(ContaPedidos, rastreador=rastreador)
+        externo.include_router(roteador_do_reset(rastreador, falso_url))
     externo.mount("/", producao)
     return externo

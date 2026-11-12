@@ -22,11 +22,11 @@ from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import (
     Mission,
     MissionOperation,
-    User,
     WeeklyPlan,
 )
 from focusquest.modules.missions.service import NovaEvidencia, concluir_missao
 from focusquest.modules.progression.models import UserAchievement, XpEntry
+from focusquest.modules.users.models import User
 
 SEGUNDA = date(2026, 9, 21)
 SEGUNDOS_LIMITE = 30

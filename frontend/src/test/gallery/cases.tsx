@@ -14,6 +14,8 @@ import {
   SoundToggleCase,
   SpeechBubbleCase,
   StatusLineCase,
+  WeekPlanEntryCase,
+  WeekPlanFormCase,
 } from './caseComponents'
 import type { GalleryCaseId } from './caseIds'
 
@@ -69,4 +71,9 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
   'sound-toggle-voice-off': () => <SoundToggleCase channel="voice" pressed={false} />,
   'sound-toggle-sfx-on': () => <SoundToggleCase channel="sfx" pressed />,
   'sound-toggle-sfx-off': () => <SoundToggleCase channel="sfx" pressed={false} />,
+  'week-plan-entry': () => <WeekPlanEntryCase />,
+  'week-plan-form-open': () => <WeekPlanFormCase />,
+  'week-plan-form-error': () => <WeekPlanFormCase />,
+  'week-plan-form-sending': () => <WeekPlanFormCase />,
+  'week-plan-form-failure': () => <WeekPlanFormCase />,
 }

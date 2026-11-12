@@ -158,3 +158,4 @@ export type ActionErrorCode =
   | 'reagendamento_invalido'
   | 'estimativa_fora_do_limite'
   | 'prazo_fora_do_limite'
+  | 'proposta_invalida'

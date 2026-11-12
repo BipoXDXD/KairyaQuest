@@ -32,6 +32,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[2]
 INSTALADOR = RAIZ / "scripts" / "instalar-hooks.sh"
 VERIFICADOR = RAIZ / "scripts" / "verificar-hooks.sh"
+BIBLIOTECA = RAIZ / "scripts" / "hooks-venv-lib.sh"
 CONFIGURACAO = RAIZ / ".pre-commit-config.yaml"
 
 HOOKS = ("pre-commit", "pre-merge-commit", "pre-push")
@@ -104,6 +105,7 @@ class Repositorio:
         scripts.mkdir()
         shutil.copy2(INSTALADOR, scripts / "instalar-hooks.sh")
         shutil.copy2(VERIFICADOR, scripts / "verificar-hooks.sh")
+        shutil.copy2(BIBLIOTECA, scripts / "hooks-venv-lib.sh")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "base")
 
@@ -193,11 +195,17 @@ def _instalar_python(hook: Path) -> str:
     return linhas[0].removeprefix("INSTALL_PYTHON=").strip("'\"")
 
 
-def _python_executavel(tmp_path: Path, nome: str = "python-bom") -> Path:
-    caminho = tmp_path / nome
+def _python_executavel(pasta: Path, nome: str = "python-bom") -> Path:
+    caminho = pasta / nome
+    caminho.parent.mkdir(parents=True, exist_ok=True)
     caminho.write_text("#!/bin/sh\nexit 0\n")
     caminho.chmod(0o755)
     return caminho
+
+
+def _python_esperado(repo: Repositorio) -> str:
+    """O unico valor aceito: `<pai do .git comum>/.hooks-venv/bin/python`, existente."""
+    return str(_python_executavel(repo.venv / "bin", "python"))
 
 
 @pytest.fixture
@@ -366,10 +374,8 @@ def test_propaga_a_recusa_do_pre_commit_install(repo: Repositorio) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_verificador_aprova_o_python_fora_de_worktrees(
-    repo: Repositorio, tmp_path: Path
-) -> None:
-    repo.escrever_todos_os_hooks(str(_python_executavel(tmp_path)))
+def test_verificador_aprova_o_python_do_hooks_venv(repo: Repositorio) -> None:
+    repo.escrever_todos_os_hooks(_python_esperado(repo))
 
     resultado = repo.verificar()
 
@@ -378,10 +384,10 @@ def test_verificador_aprova_o_python_fora_de_worktrees(
 
 @pytest.mark.parametrize("hook", HOOKS)
 def test_verificador_reprova_python_dentro_de_claude_worktrees(
-    repo: Repositorio, tmp_path: Path, hook: str
+    repo: Repositorio, hook: str
 ) -> None:
     """A sabotagem do lote 20: o estado em que os hooks reais estavam."""
-    bom = str(_python_executavel(tmp_path))
+    bom = _python_esperado(repo)
     ruim_dir = repo.principal / ".claude" / "worktrees" / "x" / ".venv" / "bin"
     ruim_dir.mkdir(parents=True)
     ruim = ruim_dir / "python"
@@ -399,7 +405,7 @@ def test_verificador_reprova_python_dentro_de_claude_worktrees(
 
 
 def test_verificador_reprova_python_em_worktree_fora_de_claude_worktrees(
-    repo: Repositorio, tmp_path: Path
+    repo: Repositorio,
 ) -> None:
     """Qualquer worktree registrado some quando removido, nao so os de `.claude`."""
     externo = repo.base / "worktree-externo"
@@ -417,9 +423,10 @@ def test_verificador_reprova_python_em_worktree_fora_de_claude_worktrees(
     assert "worktree" in resultado.stderr
 
 
-def test_verificador_reprova_hook_ausente(repo: Repositorio, tmp_path: Path) -> None:
-    repo.escrever_hook("pre-commit", str(_python_executavel(tmp_path)))
-    repo.escrever_hook("pre-push", str(_python_executavel(tmp_path)))
+def test_verificador_reprova_hook_ausente(repo: Repositorio) -> None:
+    esperado = _python_esperado(repo)
+    repo.escrever_hook("pre-commit", esperado)
+    repo.escrever_hook("pre-push", esperado)
 
     resultado = repo.verificar()
 
@@ -450,28 +457,133 @@ def test_verificador_reprova_hook_sem_install_python(repo: Repositorio) -> None:
     assert "INSTALL_PYTHON" in resultado.stderr
 
 
-def test_verificador_le_caminho_com_espaco_entre_aspas(
-    repo: Repositorio, tmp_path: Path
-) -> None:
+def test_verificador_le_caminho_com_espaco_entre_aspas(tmp_path: Path) -> None:
     """O pre-commit grava `shlex.quote(sys.executable)`: com espaco, vem aspado."""
-    com_espaco = tmp_path / "pasta com espaco"
-    com_espaco.mkdir()
-    python = _python_executavel(com_espaco)
-    repo.escrever_todos_os_hooks(f"'{python}'")
+    com_espaco = Repositorio(tmp_path, nome_do_principal="pasta com espaco")
+    python = _python_esperado(com_espaco)
+    com_espaco.escrever_todos_os_hooks(f"'{python}'")
 
-    resultado = repo.verificar()
+    resultado = com_espaco.verificar()
 
     assert resultado.returncode == 0, resultado.stderr
 
 
-def test_verificador_roda_de_dentro_de_um_worktree(
-    repo: Repositorio, tmp_path: Path
-) -> None:
+def test_verificador_roda_de_dentro_de_um_worktree(repo: Repositorio) -> None:
     """Resolve os hooks pelo `.git` comum, nao pelo `.git` do worktree."""
     worktree = repo.novo_worktree(".claude/worktrees/y")
-    repo.escrever_todos_os_hooks(str(_python_executavel(tmp_path)))
+    repo.escrever_todos_os_hooks(_python_esperado(repo))
 
     assert repo.verificar(a_partir_de=worktree).returncode == 0
 
     repo.escrever_hook("pre-push", str(worktree / ".venv" / "bin" / "python"))
     assert repo.verificar(a_partir_de=worktree).returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# verificar-hooks.sh -- regra EXATA (lote 23): o INSTALL_PYTHON dos tres hooks
+# tem de ser `<pai do .git comum>/.hooks-venv/bin/python`, nada mais
+# ---------------------------------------------------------------------------
+
+
+def _afirmar_mensagem_exata(
+    stderr: str, hook: str, encontrado: str, esperado: str
+) -> None:
+    assert f"hook {hook} aponta para {encontrado}; esperado {esperado}" in stderr
+    assert "pre-commit install" in stderr
+    assert "rodado a mao" in stderr
+    assert "scripts/instalar-hooks.sh" in stderr
+    assert "autorizacao do responsavel" in stderr
+
+
+def test_verificador_reprova_pre_commit_install_rodado_de_um_worktree_que_existe(
+    repo: Repositorio,
+) -> None:
+    """O cenario real: o instalador rodou, depois alguem rodou `pre-commit install`
+    de um worktree vivo. O `.venv` dele existe, e antes do lote 23 isso passava
+    despercebido enquanto o worktree nao fosse removido.
+    """
+    assert repo.instalar().returncode == 0
+    assert repo.verificar().returncode == 0
+    worktree = repo.novo_worktree(".claude/worktrees/vivo")
+    do_worktree = _python_executavel(worktree / ".venv" / "bin", "python")
+    for nome in HOOKS:
+        caminho = repo.comum / "hooks" / nome
+        esperado_gravado = _instalar_python(caminho)
+        caminho.write_text(
+            caminho.read_text().replace(
+                f"INSTALL_PYTHON={esperado_gravado}", f"INSTALL_PYTHON={do_worktree}"
+            )
+        )
+    assert set(repo.instalar_python_dos_hooks().values()) == {str(do_worktree)}
+
+    resultado = repo.verificar()
+
+    assert resultado.returncode != 0
+    for nome in HOOKS:
+        _afirmar_mensagem_exata(
+            resultado.stderr, nome, str(do_worktree), str(repo.venv / "bin" / "python")
+        )
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_verificador_reprova_python_existente_fora_de_worktrees_mas_diferente(
+    repo: Repositorio, tmp_path: Path, hook: str
+) -> None:
+    """Um venv qualquer (outro projeto, `uv run` de fora) nao e o `.hooks-venv`."""
+    esperado = _python_esperado(repo)
+    outro = str(_python_executavel(tmp_path / "outro-venv" / "bin", "python"))
+    repo.escrever_todos_os_hooks(esperado)
+    repo.escrever_hook(hook, outro)
+
+    resultado = repo.verificar()
+
+    assert resultado.returncode != 0
+    _afirmar_mensagem_exata(resultado.stderr, hook, outro, esperado)
+    # Os hooks certos nao entram na lista de problemas.
+    for nome in set(HOOKS) - {hook}:
+        assert f"hook {nome} aponta para" not in resultado.stderr
+
+
+def test_verificador_reprova_o_python_do_sistema_mesmo_existindo(
+    repo: Repositorio,
+) -> None:
+    repo.escrever_todos_os_hooks(sys.executable)
+    _python_esperado(repo)
+
+    resultado = repo.verificar()
+
+    assert resultado.returncode != 0
+    for nome in HOOKS:
+        _afirmar_mensagem_exata(
+            resultado.stderr, nome, sys.executable, str(repo.venv / "bin" / "python")
+        )
+
+
+def test_verificador_reprova_o_hooks_venv_de_outro_repositorio(
+    repo: Repositorio, tmp_path: Path
+) -> None:
+    """Igual no nome (`.hooks-venv/bin/python`), mas de outro principal."""
+    esperado = _python_esperado(repo)
+    de_outro = str(
+        _python_executavel(tmp_path / "outro" / ".hooks-venv" / "bin", "python")
+    )
+    repo.escrever_todos_os_hooks(de_outro)
+
+    resultado = repo.verificar()
+
+    assert resultado.returncode != 0
+    _afirmar_mensagem_exata(resultado.stderr, "pre-push", de_outro, esperado)
+
+
+def test_verificador_reprova_quando_o_hooks_venv_esperado_nao_existe(
+    repo: Repositorio,
+) -> None:
+    """Valor certo, venv ausente: o hook cairia no `pre-commit` do PATH."""
+    repo.escrever_todos_os_hooks(str(repo.venv / "bin" / "python"))
+
+    resultado = repo.verificar()
+
+    assert resultado.returncode != 0
+    assert str(repo.venv / "bin" / "python") in resultado.stderr
+    assert "nao existe" in resultado.stderr
+    assert "scripts/instalar-hooks.sh" in resultado.stderr

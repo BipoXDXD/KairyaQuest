@@ -43,7 +43,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.modules.evaluation.service import ResultadoDaAvaliacao, avaliar_missao
 from focusquest.modules.missions.domain import EstadoDaAvaliacao, Veredito
-from focusquest.modules.missions.models import Mission, MissionEvaluation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+)
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
@@ -65,6 +68,7 @@ from focusquest.modules.tutoring.service import (
     Tutoria,
     confirmar_acao,
 )
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 AGORA = datetime(2026, 9, 25, 15, tzinfo=UTC)

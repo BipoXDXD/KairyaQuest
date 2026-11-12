@@ -8,7 +8,10 @@ import { GALLERY_CASES } from './cases'
 // Monta UM caso por página: o `ConfirmDialog` aberto é modal e deixaria o
 // resto inerte. O `<h1>` (só para leitor de tela) é o id do caso, um
 // identificador, e não texto de interface.
-const requested = new URLSearchParams(window.location.search).get('case')
+const params = new URLSearchParams(window.location.search)
+const requested = params.get('case')
+// `&lang=en` monta o caso em inglês; sem ele, em português.
+const locale = params.get('lang') === 'en' ? 'en' : 'pt-BR'
 const root = document.getElementById('root')
 if (root === null) {
   throw new Error('ui-gallery.html sem #root')
@@ -16,7 +19,7 @@ if (root === null) {
 
 createRoot(root).render(
   <StrictMode>
-    <I18nProvider initialLocale="pt-BR">
+    <I18nProvider initialLocale={locale}>
       <main className="p-6">
         {isGalleryCaseId(requested) ? (
           <>

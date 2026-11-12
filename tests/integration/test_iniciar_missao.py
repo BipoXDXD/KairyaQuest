@@ -35,7 +35,6 @@ from focusquest.modules.missions.models import (
     Mission,
     MissionEvidence,
     MissionOperation,
-    User,
 )
 from focusquest.modules.missions.service import (
     NovaEvidencia,
@@ -44,6 +43,7 @@ from focusquest.modules.missions.service import (
     iniciar_missao,
 )
 from focusquest.modules.progression.models import XpEntry
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 OUTRO = 2

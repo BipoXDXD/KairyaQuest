@@ -81,10 +81,19 @@ em `VIRTUAL_ENV`. (Conferido com `uv` real num repositório temporário: o
 `make check` de um hook disparado em `.claude/worktrees/w2` imprimiu o cwd do
 worktree, `VIRTUAL_ENV` vazio e nenhum `pre-commit` no `PATH`.)
 
-`make check-hooks` (`scripts/verificar-hooks.sh`) é o check: reprova se algum
-dos três hooks estiver ausente, sem `INSTALL_PYTHON`, apontando para dentro de
-`.claude/worktrees/` ou de qualquer worktree registrado fora o principal, ou
-para um Python que não existe. Fica **fora** do `make check` de propósito: o
+`make check-hooks` (`scripts/verificar-hooks.sh`) é o check, e a regra é
+**exata** (lote 23): reprova se algum dos três hooks (`pre-commit`,
+`pre-merge-commit`, `pre-push`) estiver ausente, sem `INSTALL_PYTHON`, ou com
+`INSTALL_PYTHON` diferente de `<pai do git-common-dir>/.hooks-venv/bin/python` —
+o mesmo caminho que o `instalar-hooks.sh` grava (os dois leem
+`scripts/hooks-venv-lib.sh`, para não haver dois cálculos). Isso cobre o que a
+regra anterior deixava passar: um `pre-commit install` rodado de um worktree
+**vivo**, do Python do sistema ou do venv de outro projeto grava um
+interpretador que existe e fica fora de `.claude/worktrees/`, mas não é o
+`.hooks-venv`. A mensagem é `hook X aponta para Y; esperado Z`, com a causa
+provável (`pre-commit install` rodado à mão) e o conserto
+(`scripts/instalar-hooks.sh`, que precisa da autorização do responsável). Se o
+valor é o esperado mas o Python não existe, reprova também. Fica **fora** do `make check` de propósito: o
 estado dos hooks é da máquina, não do commit, e o CI não tem hooks. Rode-o
 quando suspeitar, e depois de qualquer instalação.
 
@@ -162,7 +171,7 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
 | `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
-| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação e `scripts/check_wheel.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação, `scripts/check_wheel.py` e `scripts/varrer_traces.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
 | `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-handoff` | `scripts/check-handoff.sh`: reprova a branch cujo `git diff origin/main...HEAD` toca `docs/HANDOFF.md`, exceto as branches `wt/consolidar-handoff*`. A branch vem de `FQ_HANDOFF_BRANCH`, que o `check-push.sh` preenche com a ref enviada (o worktree do push é destacado). O handoff de cada PR mora em `docs/handoff/`. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
@@ -430,6 +439,17 @@ mesmos criaram.
   projeto: a galeria sobe em todo `npx playwright test`, mesmo quando só o
   projeto `chromium` roda (alguns segundos e uma porta a mais). As portas de
   desenvolvimento são 8000 e 5173; nenhuma é reaproveitada (README §10).
+- **Reset entre cenarios (`reiniciar()` de `frontend/tests/e2e/falso.ts`).**
+  Passa pela API, em `POST /_e2e/reset` (`tests/integration/reset_do_e2e.py`,
+  so na entrada do E2E; o app de producao responde 404), e nao pelo falso
+  sozinho: libera o que o falso segura, espera a API ficar ociosa (todo pedido
+  em andamento termina contra o roteiro do cenario que o originou) e so entao
+  reinicia o falso. Sem isso, o pedido que um cenario estourado deixou na API
+  chegava ao falso depois do reset, achava o roteiro vazio e gravava `falhou`
+  no banco compartilhado (P-e2e-flaky-1, cascata do cenario (c) da tutoria).
+  Prova deterministica, sem `sleep`: `tests/integration/test_reset_do_e2e.py`.
+  Janela que sobra, por desenho: pedido ainda no navegador ou no proxy do
+  `vite preview`, que nao chegou a API.
 - **Deslocamento das portas por worktree (Frente 0).**
   `FOCUSQUEST_E2E_PORT_OFFSET` (inteiro, padrão 0) soma o mesmo valor às
   quatro portas. `frontend/tests/e2e/servers.ts` é a fonte única: lê e valida a
@@ -633,7 +653,7 @@ verificação executa **um** alvo, e nada além dele:
 |---|---|---|---|
 | `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
 | `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
-| `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium` | 25 |
+| `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium`; **só em falha:** varredura dos traces e upload (parágrafo abaixo) | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
 | `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
@@ -686,6 +706,43 @@ são óbvios:
 - **As variáveis `FOCUSQUEST_DATABASE_URL` e `FOCUSQUEST_TEST_DATABASE_URL`
   vêm do `env:` do job**, com a credencial local do container de serviço —
   não há segredo do repositório envolvido.
+
+**Traces do E2E em falha (guarda do artefato, não verificação).** Quando o
+`check-e2e` reprova, dois passos **depois** do alvo (`if: failure()`) tratam o
+`frontend/test-results/` do Playwright (`trace: 'retain-on-failure'`): o
+`scripts/varrer_traces.py` varre o diretório e cada zip dentro dele
+(`trace.zip`, recursivamente, em memória) atrás de `sk-`/`sk_`/`tsk_`/`gsk_`
+com token, `Bearer <token>`, `Authorization`, `x-api-key` diferente da chave
+fictícia do E2E e qualquer `Cookie`/`Set-Cookie` com valor (o backend não
+define cookie algum), e só então o `actions/upload-artifact` (fixado por SHA,
+`retention-days: 7`) sobe o diretório. A varredura **falha fechada**: achado,
+diretório inexistente, zip ilegível ou conteúdo acima do teto reprovam o
+passo, e o upload depende de `steps.varredura.outcome == 'success'`. Imprime
+só caminho, padrão e contagem, nunca o valor. Os testes são
+`tests/unit/test_varrer_traces.py`, no `check-api`, e o script entra no mypy
+desse alvo.
+
+Isso **não** quebra a D5: a D5 exige que cada verificação seja um alvo do
+Makefile, e estes passos não verificam nada — o veredito do job já é o do
+`make check-e2e`. Só decidem o que sobe como artefato de uma falha. Um alvo
+`check-traces` seria pior: rodaria localmente e no `make check` sobre um
+`test-results/` que quase nunca existe, e a paridade diria que há uma
+verificação onde há só uma guarda de publicação. A defesa de fundo não é a
+varredura, é o job **não ter segredo**: nenhum `secrets.*`, nenhuma variável
+`*_API_KEY` no `env:`, no Makefile nem no `playwright.config.ts`; o provedor é
+o servidor falso em loopback e a chave é a fictícia imposta por
+`scripts/e2e-env.sh`. A varredura cobre o que a prova de ausência não vê.
+**Limites aceitos:** a varredura procura o texto, e só decodifica zip. Segredo
+em base64, URL-encoded ou comprimido fora de zip (gzip, brotli) não é
+detectado, nem um segredo desenhado numa captura de tela (o app nunca
+renderiza chave). JSON escapado dentro de string é varrido **até quatro níveis
+de escape** (teto de 15 barras, que também impede ReDoS quadrático), e um
+cabeçalho depois de `\r\n`/`\n`/`\t` escapado também é visto; escapes
+unicode (`\u0022`) e níveis mais fundos não. Valores como `"cookie":null`
+casam como achado (falso positivo aceito: falha fechada). E `failure()` não
+vale para job cancelado: **timeout ou cancelamento do job não gera artefato**,
+então um travamento do runner fica sem trace. A defesa real é o job não ter
+segredo.
 
 O job `check-secrets` não precisa de preparo de Node, Python nem instalação
 de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do
@@ -999,7 +1056,9 @@ Sem eufemismo:
   esse worktree derrubaria todo commit e push, de todos. Não há como o git ou
   o `pre-commit` impedir isso (quem roda `install` decide o `INSTALL_PYTHON`);
   as guardas são o instalador único, que usa o venv dedicado, e o
-  `make check-hooks`, que reprova o estado errado — mas ele só roda quando
+  `make check-hooks`, que reprova qualquer `INSTALL_PYTHON` que não seja
+  exatamente o `.hooks-venv` (inclusive de um worktree ainda vivo, que o
+  lote 20 deixava passar até ele ser removido) — mas ele só roda quando
   alguém o chama (e ao fim do instalador), não a cada commit.
 - **Hooks são contornáveis por quem controla o Git.** Mesmo instalados,
   quem tem acesso ao repositório local pode usar `--no-verify`, `SKIP`,

@@ -120,6 +120,10 @@ for (const noPlan of [false, true]) {
     await expect(heading).toBeFocused()
     await page.keyboard.press('Tab')
     if (noPlan) {
+      // A #142 pôs a entrada do formulário do plano sob o aviso de sem plano:
+      // é o primeiro controle depois do título, antes do painel da Kairya.
+      await expect(page.getByTestId('week-plan-open')).toBeFocused()
+      await page.keyboard.press('Tab')
       await expect(page.getByTestId('tutor-panel-toggle')).toBeFocused()
     } else {
       // E/F acrescentaram Evidência e Iniciar antes de Concluir. O foco

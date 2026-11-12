@@ -41,7 +41,6 @@ from focusquest.modules.missions.domain import (
 from focusquest.modules.missions.models import (
     Mission,
     MissionReschedule,
-    User,
     WeeklyPlan,
 )
 from focusquest.modules.missions.service import (
@@ -52,6 +51,7 @@ from focusquest.modules.missions.service import (
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
     PRAZO_FORA_DO_LIMITE,
+    PROPOSTA_INVALIDA,
     REAGENDAMENTO_INVALIDO,
     CodigoDoStream,
     EstadoDaAcao,
@@ -65,6 +65,7 @@ from focusquest.modules.tutoring.service import (
     ForaDoLimite,
     ParaGerar,
     PrazoExpirado,
+    PropostaInvalida,
     ReagendamentoInvalido,
     RespostaConcluida,
     RespostaFalhou,
@@ -75,6 +76,7 @@ from focusquest.modules.tutoring.service import (
     rejeitar_acao,
     transmitir,
 )
+from focusquest.modules.users.models import User
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     Roteiro,
@@ -518,9 +520,12 @@ def _proposta(
     novo: datetime = NOVO_PRAZO,
     motivo: str = "falta_de_tempo",
     cid: str = "reag-1",
-    retrato: dict[str, Any] | None = None,
+    sobrescritas: dict[str, Any] | None = None,
 ) -> TutorAction:
-    """A acao como o `_completar` a grava: entrada normalizada + retrato."""
+    """A acao como o `_completar` a grava: entrada normalizada + retrato.
+
+    `sobrescritas` troca ou acrescenta qualquer campo do payload gravado, do
+    retrato ou da entrada."""
     pergunta = TutorMessage(
         user_id=ESTUDANTE,
         role=Papel.USUARIO,
@@ -547,7 +552,7 @@ def _proposta(
         "reason": motivo,
         "instructions": "Ler o capitulo 3",
         "previous_deadline": PRAZO_ATUAL.isoformat(),
-    } | (retrato or {})
+    } | (sobrescritas or {})
     acao = TutorAction(
         message_id=resposta.id,
         kind=TipoDeAcao.REAGENDAR_MISSAO,
@@ -604,7 +609,7 @@ def test_o_retrato_nao_decide_nada(session: Session) -> None:
     acao = _proposta(
         session,
         missao.id,
-        retrato={"previous_deadline": "2020-01-01T00:00:00Z", "instructions": "x"},
+        sobrescritas={"previous_deadline": "2020-01-01T00:00:00Z", "instructions": "x"},
     )
     assert isinstance(_confirmar(session, acao.id, "op-t7-r"), Executada)
     (linha,) = _linhas(session, missao.id)
@@ -658,6 +663,60 @@ def test_prazo_proposto_alem_de_365_dias_grava_falhou(session: Session) -> None:
     assert _confirmar(session, acao.id, "op-t15-1") == ForaDoLimite(
         acao, PRAZO_FORA_DO_LIMITE
     )
+
+
+@pytest.mark.parametrize(
+    "ajustes",
+    [
+        {"motivo": "motivo_aposentado"},
+        {"sobrescritas": {"campo_antigo": 1}},
+        {"sobrescritas": {"mission_id": "12"}},
+    ],
+    ids=["motivo que saiu do enum", "campo que o esquema nao conhece", "id em texto"],
+)
+def test_proposta_historica_fora_do_esquema_grava_falhou(
+    session: Session, ajustes: dict[str, Any]
+) -> None:
+    """Pendencia 47: a entrada gravada antes de o esquema endurecer nao passa
+    mais na revalidacao. Era `ValidationError` solto (500); agora a falha e
+    gravada na acao e a missao fica como estava."""
+    missao = _avulsa(session)
+    acao = _proposta(session, missao.id, **ajustes)
+    resultado = _confirmar(session, acao.id, "op-p47-1")
+    assert resultado == PropostaInvalida(acao)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PROPOSTA_INVALIDA)
+    assert (acao.operation_id, acao.decided_at) == ("op-p47-1", AGORA)
+    assert acao.mission_id is None
+    assert missao.deadline == PRAZO_ATUAL
+    assert _linhas(session, missao.id) == []
+    assert _confirmar(session, acao.id, "op-p47-1") == PropostaInvalida(acao)
+    with pytest.raises(TransicaoIlegalError):
+        _confirmar(session, acao.id, "op-p47-2")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [[], ["mission_id"], "texto", 7],
+    ids=["lista vazia", "lista", "texto", "numero"],
+)
+def test_proposta_historica_que_nao_e_objeto_grava_falhou(
+    session: Session, payload: Any
+) -> None:
+    """Um payload JSONB que nao e objeto nao passa pela revalidacao. Era
+    `AttributeError` solto (500), antes mesmo do `model_validate`; agora vira
+    a mesma falha gravada da pendencia 47."""
+    missao = _avulsa(session)
+    acao = _proposta(session, missao.id)
+    acao.payload = payload
+    session.flush()
+    resultado = _confirmar(session, acao.id, "op-nd-1")
+    assert resultado == PropostaInvalida(acao)
+    assert (acao.state, acao.error_code) == (EstadoDaAcao.FALHOU, PROPOSTA_INVALIDA)
+    assert (acao.operation_id, acao.decided_at) == ("op-nd-1", AGORA)
+    assert acao.mission_id is None
+    assert missao.deadline == PRAZO_ATUAL
+    assert _linhas(session, missao.id) == []
+    assert _confirmar(session, acao.id, "op-nd-1") == PropostaInvalida(acao)
 
 
 def test_prazo_proposto_no_horizonte_ainda_executa(session: Session) -> None:
@@ -947,6 +1006,25 @@ def test_api_prazo_expirado_e_422_com_a_falha_ja_gravada(
     assert _historico_de(banco_migrado, mission_id) == []
 
 
+def test_api_proposta_historica_invalida_e_422_com_a_falha_ja_gravada(
+    api: TestClient, banco_migrado: Engine, registro: Registro
+) -> None:
+    """Pendencia 47: nunca 500. O 422 sai depois do commit da falha, e o
+    reenvio devolve o mesmo erro."""
+    mission_id, acao_id = _proposta_commitada(
+        banco_migrado, registro, "api-p47", motivo="motivo_aposentado"
+    )
+    url = f"/api/tutoring/actions/{acao_id}/confirm"
+    resposta = api.post(url, json={"operation_id": "op-api-p47"})
+    assert resposta.status_code == 422, resposta.text
+    assert resposta.json()["code"] == "proposta_invalida"
+    acao = _acao_na_conversa(api, acao_id)
+    assert (acao["state"], acao["error_code"]) == ("falhou", "proposta_invalida")
+    de_novo = api.post(url, json={"operation_id": "op-api-p47"})
+    assert (de_novo.status_code, de_novo.json()["code"]) == (422, "proposta_invalida")
+    assert _historico_de(banco_migrado, mission_id) == []
+
+
 def test_api_prazo_fora_do_limite_e_422_com_a_falha_ja_gravada(
     api: TestClient, banco_migrado: Engine, registro: Registro
 ) -> None:
@@ -972,6 +1050,11 @@ def test_api_prazo_fora_do_limite_e_422_com_a_falha_ja_gravada(
 
 def test_o_codigo_do_409_e_o_mesmo_gravado_na_acao() -> None:
     assert CodigoDeErro.REAGENDAMENTO_INVALIDO.value == REAGENDAMENTO_INVALIDO
+
+
+def test_o_codigo_da_proposta_invalida_e_o_mesmo_no_http_no_stream_e_na_acao() -> None:
+    assert CodigoDeErro.PROPOSTA_INVALIDA.value == PROPOSTA_INVALIDA
+    assert CodigoDoStream.PROPOSTA_INVALIDA.value == PROPOSTA_INVALIDA
 
 
 # --- Concorrencia (conexoes reais) -----------------------------------------

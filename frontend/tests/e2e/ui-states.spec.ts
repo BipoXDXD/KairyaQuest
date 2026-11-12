@@ -1,7 +1,11 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type Page } from '@playwright/test'
 import { test } from './saudacaoJaVista'
-import { GALLERY_CASE_IDS, type GalleryCaseId } from '../../src/test/gallery/caseIds'
+import {
+  ENGLISH_CASE_IDS,
+  GALLERY_CASE_IDS,
+  type GalleryCaseId,
+} from '../../src/test/gallery/caseIds'
 
 /**
  * axe sem violacoes e alvos de toque de 44px em cada estado dos componentes de
@@ -34,13 +38,55 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
       'true',
     )
   },
+  'week-plan-form-error': async (page) => {
+    // Envio com tudo em branco: nada sai, o resumo diz quantos faltam e o
+    // primeiro campo ruim recebe o foco.
+    await page.getByTestId('week-plan-submit').click()
+    await expect(page.getByTestId('week-plan-status')).toHaveAttribute('data-tone', 'danger')
+    await expect(page.getByTestId('week-plan-day-0-instructions')).toBeFocused()
+    await expect(page.getByTestId('week-plan-day-0-instructions')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  },
+  'week-plan-form-sending': async (page) => {
+    // O POST nunca responde: o botao fica ocupado.
+    await page.route('**/api/plans', () => new Promise<void>(() => undefined))
+    await preencherPlano(page)
+    await page.getByTestId('week-plan-submit').click()
+    await expect(page.getByTestId('week-plan-submit')).toHaveAttribute('aria-busy', 'true')
+  },
+  'week-plan-form-failure': async (page) => {
+    // 503: o texto de falha aparece na StatusLine danger e o botao volta a servir.
+    await page.route('**/api/plans', (route) => route.fulfill({ status: 503, body: '' }))
+    await preencherPlano(page)
+    await page.getByTestId('week-plan-submit').click()
+    await expect(page.getByTestId('week-plan-status')).toHaveAttribute('data-tone', 'danger')
+    await expect(page.getByTestId('week-plan-status')).toBeVisible()
+    await expect(page.getByTestId('week-plan-submit')).not.toHaveAttribute('aria-busy', 'true')
+  },
+}
+
+/** Segunda e prova preenchidas, e a segunda copiada para o resto: o formulario fica valido. */
+async function preencherPlano(page: Page): Promise<void> {
+  await page.getByTestId('week-plan-day-0-instructions').fill('Resolver listas')
+  await page.getByTestId('week-plan-day-0-criterion').fill('Cinco corrigidos')
+  await page.getByTestId('week-plan-copy-monday').click()
+  await page.getByTestId('week-plan-trial-instructions').fill('Prova simulada')
+  await page.getByTestId('week-plan-trial-criterion').fill('Nota 7')
 }
 
 const ALVO_MINIMO_PX = 44
 
-for (const id of GALLERY_CASE_IDS) {
-  test(`axe sem violações e alvos de 44px: ${id}`, async ({ page }) => {
-    await page.goto(`/ui-gallery.html?case=${id}`)
+// Todo caso em portugues; os do formulario do plano tambem em ingles (`&lang=en`).
+const VARIANTES = [
+  ...GALLERY_CASE_IDS.map((id) => ({ id, query: `case=${id}`, nome: id })),
+  ...ENGLISH_CASE_IDS.map((id) => ({ id, query: `case=${id}&lang=en`, nome: `${id} (en)` })),
+]
+
+for (const { id, query, nome } of VARIANTES) {
+  test(`axe sem violações e alvos de 44px: ${nome}`, async ({ page }) => {
+    await page.goto(`/ui-gallery.html?${query}`)
     const root = page.locator(`[data-gallery-case="${id}"]`)
     // Nao deixa o axe rodar sobre uma pagina vazia. A guarda olha o conteudo, e
     // nao a secao: um <dialog> modal vai para a top layer e deixa a secao com

@@ -65,7 +65,7 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
 # dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
 # mypy de fora era a unica assimetria.
-	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py
+	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py scripts/varrer_traces.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
@@ -106,9 +106,9 @@ check-handoff: ## Reprova a branch que edita docs/HANDOFF.md fora da consolidaca
 # FORA do `check` de proposito: o estado dos hooks e da MAQUINA, nao do commit --
 # o CI nao tem hooks instalados, e um gate que dependesse do .git local
 # reprovaria commits corretos. Quem o roda e o scripts/instalar-hooks.sh (ao
-# terminar) e a pessoa, quando suspeita de hook apontando para um worktree.
+# terminar) e a pessoa, quando suspeita de um "pre-commit install" rodado a mao.
 # So LE; nao invoca o pre-commit (docs/QUALITY.md secao 2).
-check-hooks: ## Reprova se o INSTALL_PYTHON dos hooks instalados aponta para um worktree
+check-hooks: ## Reprova se o INSTALL_PYTHON dos hooks nao for exatamente o .hooks-venv do principal
 	./scripts/verificar-hooks.sh
 
 check-secrets: ## Varredura de segredos no projeto inteiro

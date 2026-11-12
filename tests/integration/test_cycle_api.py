@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_session
 from focusquest.main import app
+from focusquest.modules.missions.cycle_schemas import TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
     FalhaDaAvaliacao,
     MissionType,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation
+from focusquest.modules.missions.models import Mission, MissionEvaluation, WeeklyPlan
 
 SEGUNDA = date(2026, 9, 21)
 QUARTA = SEGUNDA + timedelta(days=2)
@@ -281,6 +282,48 @@ def test_validacao_do_plano_responde_422(
     client: TestClient, relogio: list[datetime], ajuste: dict[str, Any]
 ) -> None:
     assert client.post("/api/plans", json=_corpo(**ajuste)).status_code == 422
+
+
+def _corpo_com_texto(campo: str, texto: str) -> dict[str, Any]:
+    """O corpo valido com UM campo de texto trocado: `days.<i>.<chave>` ou
+    `bonus.<chave>`."""
+    corpo = _corpo()
+    secao, *resto = campo.split(".")
+    alvo = corpo["days"][int(resto[0])] if secao == "days" else corpo["bonus"]
+    alvo[resto[-1]] = texto
+    return corpo
+
+
+CAMPOS_DE_TEXTO_DO_PLANO = [
+    "days.0.instructions",
+    "days.6.completion_criterion",
+    "bonus.instructions",
+    "bonus.completion_criterion",
+]
+
+
+def test_o_teto_do_texto_do_plano_e_500() -> None:
+    # Decisao de produto da #142, espelhada no front (`MAX_TEXT_LENGTH`).
+    assert TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO == 500
+
+
+@pytest.mark.parametrize("campo", CAMPOS_DE_TEXTO_DO_PLANO)
+def test_texto_do_plano_no_teto_e_aceito(
+    client: TestClient, relogio: list[datetime], campo: str
+) -> None:
+    resposta = client.post("/api/plans", json=_corpo_com_texto(campo, "a" * 500))
+    assert resposta.status_code == 201
+
+
+@pytest.mark.parametrize("campo", CAMPOS_DE_TEXTO_DO_PLANO)
+def test_texto_do_plano_acima_do_teto_responde_422_sem_gravar(
+    client: TestClient, session: Session, relogio: list[datetime], campo: str
+) -> None:
+    resposta = client.post("/api/plans", json=_corpo_com_texto(campo, "a" * 501))
+
+    assert resposta.status_code == 422
+    assert session.scalars(select(WeeklyPlan)).all() == []
+    assert session.scalars(select(Mission)).all() == []
 
 
 @pytest.mark.parametrize(

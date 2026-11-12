@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from focusquest.core.usuario_unico import USUARIO_UNICO
-from focusquest.modules.missions.models import User
+from focusquest.modules.users.models import User
 
 from .conftest import alembic_config
 

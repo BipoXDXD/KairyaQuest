@@ -219,6 +219,31 @@ jobs:
         working-directory: frontend
       - name: Gate ponta a ponta
         run: make check-e2e
+      # GUARDA DO ARTEFATO, nao verificacao: so existe para o upload abaixo
+      # (por isso nao tem alvo no Makefile -- docs/QUALITY.md secao 5, D5).
+      # Roda so quando o job falhou; varre o `test-results/` do Playwright (o
+      # trace.zip e os zips dentro dele) atras de padrao de segredo e REPROVA se
+      # achar, se nao conseguir ler ou se o diretorio nao existir. Imprime so
+      # caminho e contagem, nunca o valor. Sem `continue-on-error`: o job ja
+      # esta vermelho, e o upload depende do `outcome` deste passo.
+      - name: Varrer os traces atras de segredo
+        id: varredura
+        if: failure()
+        run: uv run python -I scripts/varrer_traces.py frontend/test-results
+      # Diagnostico da P-e2e-flaky-1: o trace separa parada do runner de espera
+      # no app. SO em falha E so se a varredura passou. O repositorio e PUBLICO:
+      # o artefato e baixavel por quem tiver o link. Este job nao recebe segredo
+      # algum (nenhum `secrets.*`, nenhuma *_API_KEY; o provedor e o falso do
+      # E2E e a chave imposta por scripts/e2e-env.sh e ficticia), e `retention-days`
+      # limita a vida do artefato. Fixado por SHA, como os demais.
+      - name: Subir os traces do Playwright
+        if: failure() && steps.varredura.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   check-secrets:
     runs-on: ubuntu-24.04

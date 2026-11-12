@@ -25,6 +25,13 @@ from focusquest.modules.missions.cycle_service import (
 )
 from focusquest.modules.missions.schemas import DIFICULDADE_MAXIMA, MissionRead
 
+# Teto de cada texto do plano (instrucoes e criterio), decidido na #142 e
+# espelhado em `MAX_TEXT_LENGTH` (frontend/src/features/campaigns/
+# weekPlanDraft.ts); `tests/unit/test_limite_do_texto_do_plano.py` prende os
+# dois. O Pydantic conta pontos de codigo e o front conta unidades UTF-16:
+# fora do BMP o front e mais estrito, entao nunca envia o que o back recusa.
+TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO = 500
+
 
 def _segunda_feira(dia: date) -> date:
     """`week_start` e segunda-feira (C1). E validacao de forma -- nao depende
@@ -43,8 +50,12 @@ class DailyCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    instructions: TextoPersistivel = Field(min_length=1)
-    completion_criterion: TextoPersistivel = Field(min_length=1)
+    instructions: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO
+    )
+    completion_criterion: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO
+    )
     difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
     estimated_minutes: int = Field(gt=0, le=MINUTOS_DO_DIA)
 
@@ -56,8 +67,12 @@ class BonusCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    instructions: TextoPersistivel = Field(min_length=1)
-    completion_criterion: TextoPersistivel = Field(min_length=1)
+    instructions: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO
+    )
+    completion_criterion: TextoPersistivel = Field(
+        min_length=1, max_length=TAMANHO_MAXIMO_DO_TEXTO_DO_PLANO
+    )
     estimated_minutes: int = Field(gt=0, le=MINUTOS_DO_DIA)
 
 

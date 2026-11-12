@@ -1,0 +1,7 @@
+# Formulário do plano da semana (#142) (2026-11-12)
+
+- O QG (`cycle-no-plan`) e a trilha de Campanhas (`trail-no-plan`) ganharam a ação primária "Criar o plano da semana", que abre `WeekPlanForm` no próprio lugar. Ele tem a semana (esta ou a próxima), 7 treinos em `<details>` com dificuldade 2 e 25 minutos por padrão, "Copiar segunda para os outros dias" (só nos dias intocados) e a prova da semana. Zero dependência e zero endpoint novos: o formulário usa o `POST /api/plans`.
+- A validação na fronteira fica em `weekPlanDraft.ts`: todos os campos obrigatórios, até 500 caracteres, sem NUL, minutos 1–1440. No envio com erro, o foco vai para o primeiro campo inválido.
+- Erros: `plano_existente` (na semana atual recarrega e mostra o plano; na próxima, só a mensagem), `semana_encerrada` (marca a próxima semana), `semana_distante`, 422 e transporte, com os dados preservados. No 201 a tela recarrega a própria leitura, o foco vai para o título e a Kairya diz `weekPlanCreated`.
+- Textos PT/EN em `campaigns.form.*`. A galeria `ui-states` ganhou 5 estados × 2 idiomas, com axe e alvos de 44 px. O tracer `tests/e2e/week-plan.spec.ts` cria o plano **pela UI** em PT e EN, em semanas de 2025 com o relógio fixado, sem colidir com a semeadura dos outros specs.
+- **Pendência:** o teto de 500 caracteres existe só no front. O `TextoPersistivel` do back não tem `max_length`; adicioná-lo muda o contrato e pede um teste de concordância.
