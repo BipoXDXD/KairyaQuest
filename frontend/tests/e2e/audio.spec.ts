@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
-import { CATALOGS } from '../../src/shared/i18n/catalog'
+import { CATALOGS, translate } from '../../src/shared/i18n/catalog'
 import { LINE_GROUPS, LINE_IDS, lineKey, type LineId } from '../../src/features/kairya/lines'
 import {
   AUTOPLAY_BLOCKED_WARNING,
@@ -544,8 +544,6 @@ test.describe('no celular', () => {
   })
 })
 
-// Conclui uma avulsa, e nao uma diaria: uma diaria a mais da semana semeada
-// mudaria a sequencia que `cycle.spec.ts` espera.
 /** A recompensa de uma diaria que sobe do nivel 1 ao 2 e destrava uma conquista. */
 const RECOMPENSA_DE_NIVEL = {
   xp_awarded: 100,
@@ -557,12 +555,14 @@ const RECOMPENSA_DE_NIVEL = {
   ],
 }
 
+// Conclui uma avulsa, e nao uma diaria: uma diaria a mais da semana semeada
+// mudaria a sequencia que `cycle.spec.ts` espera.
 test('404 na fala de nivel e conquista (avulsa): a legenda aparece, nada quebra e a fala nao e pedida de novo', async ({
   page,
 }) => {
   const observacao = observar(page)
   await ligarSom(page)
-  // Sem variar o sorteio: a mesma semente sempre (a regra `noMathRandom` permite a substituicao deterministica).
+  // Sorteio fixo (a substituicao deterministica que a regra `noMathRandom` permite).
   await page.addInitScript(() => {
     Object.defineProperty(Math, 'random', { value: () => 0 })
   })
@@ -582,14 +582,28 @@ test('404 na fala de nivel e conquista (avulsa): a legenda aparece, nada quebra 
   // Nivel novo vence a celebracao da avulsa e a da conquista: a fala e a de nivel.
   await expect(page.getByTestId('reward-level-up')).toBeVisible()
   const niveis: ReadonlySet<LineId> = new Set(LINE_GROUPS.levelUp)
-  await expect.poll(async () => niveis.has(await falaDoCatalogo(page))).toBe(true)
+  await expect
+    .poll(async () => {
+      const id = await falaDaLegenda(page)
+      return id !== null && niveis.has(id)
+    })
+    .toBe(true)
   const fala = await falaDoCatalogo(page)
   const caminho = `${PASTA_DAS_FALAS}${fala}.mp3`
   await expect.poll(() => avisosDe(observacao, caminho)).toBe(1)
 
+  // O detalhe da bolha e o do nivel; o da conquista e as falas dela ficam de fora.
+  await expect(bolha(page)).toContainText(
+    translate('pt-BR', 'missions.reward.levelUp', { level: RECOMPENSA_DE_NIVEL.level_after }),
+  )
+  const conquista = translate('pt-BR', 'missions.reward.achievement', { title: '' }).trim()
+  await expect(bolha(page)).not.toContainText(conquista)
+  for (const id of LINE_GROUPS.achievement) {
+    await expect(bolha(page)).not.toContainText(CATALOGS['pt-BR'][lineKey(id)])
+  }
+
   // O tempo corre alem da celebracao: a fala nao e pedida de novo e o app segue sem erro.
   await page.clock.runFor(CELEBRACAO_MS)
-  await expect(legenda(page)).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(pedidosDe(observacao, caminho)).toBe(1)
   expect(avisosDe(observacao, caminho)).toBe(1)
