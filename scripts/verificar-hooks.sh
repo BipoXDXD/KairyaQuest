@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Confere os hooks de git INSTALADOS neste repositorio: o INSTALL_PYTHON que o
-# pre-commit gravou em cada um (pre-commit, pre-merge-commit, pre-push) nao pode
-# apontar para dentro de um worktree.
+# pre-commit gravou em cada um (pre-commit, pre-merge-commit, pre-push) tem de
+# ser EXATAMENTE <pai do git-common-dir>/.hooks-venv/bin/python -- o caminho
+# que scripts/instalar-hooks.sh calcula (as duas usam hooks-venv-lib.sh).
 #
 #   uso: scripts/verificar-hooks.sh
 #
@@ -15,10 +16,13 @@
 #
 # Reprova (exit 1, com uma linha por problema e o conserto no fim):
 #  - hook ausente, ou sem a linha INSTALL_PYTHON= (nao e hook do pre-commit);
-#  - INSTALL_PYTHON dentro de .claude/worktrees/ OU dentro de qualquer worktree
-#    registrado que nao seja o principal (o primeiro de "git worktree list");
-#  - INSTALL_PYTHON que nao existe ou nao e executavel (o hook cairia no
-#    pre-commit do PATH, ou falharia fechado, conforme a maquina).
+#  - INSTALL_PYTHON diferente do esperado, seja qual for: dentro de um worktree
+#    (some quando ele e removido), o python do sistema, o venv de outro
+#    projeto. Lote 23: antes so se reprovava worktree ou caminho inexistente, e
+#    um "pre-commit install" de um worktree VIVO (ou de qualquer outro venv)
+#    passava despercebido. A causa provavel e "pre-commit install" rodado a mao;
+#  - INSTALL_PYTHON certo, mas que nao existe ou nao e executavel (o hook
+#    cairia no pre-commit do PATH, ou falharia fechado, conforme a maquina).
 #
 # Nao e parte do "make check" de proposito: o CI nao tem hooks instalados, e o
 # estado dos hooks e da maquina, nao do commit. E o "make check-hooks".
@@ -28,11 +32,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Relativo ao cwd, por isso o cd antes: o .git comum, nunca o do worktree.
-comum="$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+# shellcheck source=scripts/hooks-venv-lib.sh
+. "${ROOT}/scripts/hooks-venv-lib.sh"
+comum="$(hooks_git_comum "$ROOT")"
+esperado="$(hooks_venv_python "$comum")"
 
 # Worktrees REGISTRADOS fora o principal: o primeiro da lista e o dono do .git
-# (mesmo quando e "bare"), e e onde o venv dedicado mora.
+# (mesmo quando e "bare"), e e onde o venv dedicado mora. So servem para
+# detalhar a mensagem (o valor errado dentro de um worktree some com ele).
 secundarios=""
 while IFS= read -r caminho; do
   [ -n "$caminho" ] || continue
@@ -45,7 +52,7 @@ done < <(git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p' | t
 
 problemas=0
 problema() {
-  echo "!! hook $1: $2" >&2
+  echo "!! hook $1 $2" >&2
   problemas=$((problemas + 1))
 }
 
@@ -86,30 +93,29 @@ for hook in pre-commit pre-merge-commit pre-push; do
       ;;
   esac
 
-  fisico="$(diretorio_fisico "$python")/$(basename "$python")"
-  motivo=""
-  case "${python}|${fisico}" in
-    *"/.claude/worktrees/"*)
-      motivo="INSTALL_PYTHON=${python} aponta para dentro de .claude/worktrees/: remover o worktree quebra o hook de todos"
-      ;;
-  esac
-  if [ -z "$motivo" ]; then
-    while IFS= read -r secundario; do
-      [ -n "$secundario" ] || continue
-      case "$python" in "$secundario"/*) motivo="INSTALL_PYTHON=${python} aponta para dentro do worktree ${secundario}: remover o worktree quebra o hook de todos" ;; esac
-      case "$fisico" in "$secundario"/*) motivo="INSTALL_PYTHON=${python} aponta para dentro do worktree ${secundario}: remover o worktree quebra o hook de todos" ;; esac
-    done <<<"$secundarios"
+  if [ "$python" != "$esperado" ]; then
+    detalhe=""
+    fisico="$(diretorio_fisico "$python")/$(basename "$python")"
+    case "${python}|${fisico}" in
+      *"/.claude/worktrees/"*) detalhe=" (dentro de .claude/worktrees/: remover o worktree quebra o hook de todos)" ;;
+    esac
+    if [ -z "$detalhe" ]; then
+      while IFS= read -r secundario; do
+        [ -n "$secundario" ] || continue
+        case "$python" in "$secundario"/*) detalhe=" (dentro do worktree ${secundario}: remover o worktree quebra o hook de todos)" ;; esac
+        case "$fisico" in "$secundario"/*) detalhe=" (dentro do worktree ${secundario}: remover o worktree quebra o hook de todos)" ;; esac
+      done <<<"$secundarios"
+    fi
+    problema "$hook" "aponta para ${python}; esperado ${esperado}${detalhe}; a causa provavel e 'pre-commit install' rodado a mao"
+    continue
   fi
-  if [ -z "$motivo" ] && [ ! -x "$python" ]; then
-    motivo="INSTALL_PYTHON=${python} nao existe ou nao e executavel"
-  fi
-  if [ -n "$motivo" ]; then
-    problema "$hook" "$motivo"
+  if [ ! -x "$python" ]; then
+    problema "$hook" "INSTALL_PYTHON=${python} e o esperado, mas nao existe ou nao e executavel"
   fi
 done
 
 if [ "$problemas" -gt 0 ]; then
-  echo "!! conserto: rode UMA vez, de qualquer worktree, scripts/instalar-hooks.sh (nunca 'pre-commit install' direto)" >&2
+  echo "!! conserto: scripts/instalar-hooks.sh, de qualquer worktree, que precisa da autorizacao do responsavel (nunca 'pre-commit install' direto)" >&2
   exit 1
 fi
-echo "==> hooks conferidos: INSTALL_PYTHON de pre-commit, pre-merge-commit e pre-push existe e fica fora de worktrees (${python})"
+echo "==> hooks conferidos: INSTALL_PYTHON de pre-commit, pre-merge-commit e pre-push e exatamente ${esperado}"

@@ -106,9 +106,9 @@ check-handoff: ## Reprova a branch que edita docs/HANDOFF.md fora da consolidaca
 # FORA do `check` de proposito: o estado dos hooks e da MAQUINA, nao do commit --
 # o CI nao tem hooks instalados, e um gate que dependesse do .git local
 # reprovaria commits corretos. Quem o roda e o scripts/instalar-hooks.sh (ao
-# terminar) e a pessoa, quando suspeita de hook apontando para um worktree.
+# terminar) e a pessoa, quando suspeita de um "pre-commit install" rodado a mao.
 # So LE; nao invoca o pre-commit (docs/QUALITY.md secao 2).
-check-hooks: ## Reprova se o INSTALL_PYTHON dos hooks instalados aponta para um worktree
+check-hooks: ## Reprova se o INSTALL_PYTHON dos hooks nao for exatamente o .hooks-venv do principal
 	./scripts/verificar-hooks.sh
 
 check-secrets: ## Varredura de segredos no projeto inteiro
