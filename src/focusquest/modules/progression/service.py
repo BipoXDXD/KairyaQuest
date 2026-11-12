@@ -22,7 +22,10 @@ from focusquest.modules.missions.domain import (
     Veredito,
     xp_da_missao,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+)
 from focusquest.modules.progression.domain import (
     CATALOGO,
     PAINEL,
@@ -47,6 +50,7 @@ from focusquest.modules.progression.models import (
 )
 from focusquest.modules.tutoring.domain import EstadoDaAcao, TipoDeAcao
 from focusquest.modules.tutoring.models import TutorAction
+from focusquest.modules.users.models import User
 
 
 @dataclass(frozen=True)

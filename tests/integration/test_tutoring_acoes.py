@@ -21,7 +21,9 @@ from focusquest.core.database import get_engine
 from focusquest.core.errors import AcaoNaoEncontradaError, OperacaoReutilizadaError
 from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, TransicaoIlegalError
-from focusquest.modules.missions.models import Mission, User
+from focusquest.modules.missions.models import (
+    Mission,
+)
 from focusquest.modules.tutoring.domain import (
     ESTIMATIVA_FORA_DO_LIMITE,
     PRAZO_EXPIRADO,
@@ -42,6 +44,7 @@ from focusquest.modules.tutoring.service import (
     confirmar_acao,
     rejeitar_acao,
 )
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 OUTRO = 2

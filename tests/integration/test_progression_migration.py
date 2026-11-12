@@ -22,7 +22,10 @@ from focusquest.modules.missions.cycle_service import (
     criar_plano,
 )
 from focusquest.modules.missions.domain import MissionState, MissionType
-from focusquest.modules.missions.models import Mission, User, WeeklyPlan
+from focusquest.modules.missions.models import (
+    Mission,
+    WeeklyPlan,
+)
 from focusquest.modules.missions.service import concluir_missao, criar_missao
 from focusquest.modules.progression.domain import Codigo
 from focusquest.modules.progression.models import (
@@ -37,6 +40,7 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
+from focusquest.modules.users.models import User
 
 from .conftest import alembic_config
 

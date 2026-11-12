@@ -19,7 +19,7 @@ from focusquest.core.database import get_session
 from focusquest.core.idioma import Idioma
 from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.main import app
-from focusquest.modules.missions.models import User
+from focusquest.modules.users.models import User
 from focusquest.modules.users.service import atualizar_idioma, ler_idioma
 
 # Nenhum usuario tem este id: os testes de defeito nao o criam.

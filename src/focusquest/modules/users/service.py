@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from focusquest.core.idioma import Idioma
-from focusquest.modules.missions.models import User
+from focusquest.modules.users.models import User
 from focusquest.modules.users.schemas import MeRead
 
 # O idioma de quem nunca escolheu, para o back (tutoria e avaliacao). O front

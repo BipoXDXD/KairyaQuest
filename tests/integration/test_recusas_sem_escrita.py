@@ -72,7 +72,6 @@ from focusquest.modules.missions.models import (
     Mission,
     MissionEvidence,
     MissionOperation,
-    User,
     WeeklyPlan,
 )
 from focusquest.modules.missions.service import (
@@ -84,6 +83,7 @@ from focusquest.modules.missions.service import (
     reagendar_missao,
 )
 from focusquest.modules.progression.models import XpEntry
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 OUTRO = 2

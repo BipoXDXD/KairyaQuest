@@ -20,7 +20,10 @@ from focusquest.modules.missions.domain import (
     Veredito,
     xp_da_missao,
 )
-from focusquest.modules.missions.models import Mission, MissionEvaluation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionEvaluation,
+)
 from focusquest.modules.missions.service import (
     concluir_missao,
     criar_missao,
@@ -41,6 +44,7 @@ from focusquest.modules.tutoring.domain import (
     TipoDeAcao,
 )
 from focusquest.modules.tutoring.models import TutorAction, TutorMessage
+from focusquest.modules.users.models import User
 
 ESTUDANTE = 1
 OUTRO = 2
