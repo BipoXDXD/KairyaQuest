@@ -3,7 +3,8 @@
 Revisão-base: `279cd0c` (main). Branch `wt/teto-stream`.
 
 Resolve a **P-orcamento-tempo-1** (`2026-11-11-orcamento-tempo.md`) **para o chat
-da tutoria**. A avaliação continua sem o teto (ver Pendências).
+da tutoria**. A avaliação ganhou o mesmo teto depois, em
+`2026-11-11-teto-avaliar.md`.
 
 ## Decisão da coordenação
 

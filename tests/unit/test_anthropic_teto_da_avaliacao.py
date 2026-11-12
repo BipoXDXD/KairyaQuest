@@ -17,7 +17,7 @@ import logging
 import math
 import queue
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
@@ -304,3 +304,53 @@ def test_o_leitor_devolve_a_vaga_do_gauge_ao_terminar(
     _esperar_o_leitor_terminar()
 
     assert gauge.vivos == 0
+
+
+def test_se_o_corpo_do_laco_lanca_o_leitor_e_cancelado_na_hora(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O corpo do laco de `avaliar` pode lancar (evento fora do formato): o
+    gerador de `ler_com_prazo` tem de ser FECHADO por `avaliar`, e nao largado
+    ao coletor de lixo (o chat fecha num `finally`).
+
+    O teste segura uma referencia ao gerador, o que desliga a finalizacao pela
+    contagem de referencias: so o `close()` explicito cancela o leitor. Provado
+    sem `sleep`: depois do erro o stream destrava com dois eventos; leitor
+    cancelado le o primeiro, ve o cancelamento e sai SEM puxar o segundo.
+    """
+    geradores: list[Generator[Any]] = []
+    real = leitura.ler_com_prazo
+
+    def retendo(*args: Any, **kwargs: Any) -> Generator[Any]:
+        gerador = real(*args, **kwargs)
+        geradores.append(gerador)
+        return gerador
+
+    monkeypatch.setattr(
+        "focusquest.modules.tutoring.anthropic_provider.ler_com_prazo", retendo
+    )
+    puxados: list[str] = []
+    # Sem `delta`: o acesso a `evento.delta.stop_reason` lanca no corpo do laco.
+    malformado = SimpleNamespace(type="message_delta")
+
+    class _Corpo(_Stream):
+        def __iter__(self) -> Iterator[Any]:
+            yield malformado
+            self.travou.set()
+            assert self.liberar.wait(ESPERA_DO_LEITOR), "o teste nao liberou"
+            puxados.append("primeiro")
+            yield _meio()
+            puxados.append("segundo")
+            yield _meio()
+
+    corpo = _Corpo()
+    provedor, _ = _provedor(monkeypatch, corpo, EsperaFalsa(atrasos=(1.0, 1.0, 1.0)))
+
+    with pytest.raises(AttributeError):
+        provedor.avaliar(TURNO, FERRAMENTA)
+
+    corpo.liberar.set()
+    _esperar_o_leitor_terminar()
+    assert len(geradores) == 1
+    assert corpo.fechado.is_set()
+    assert puxados == ["primeiro"]

@@ -373,22 +373,28 @@ class ProvedorAnthropic:
         # teto TOTAL de parede e o mesmo do chat da tutoria (pendencia
         # P-teto-stream-1); estouro vira `TempoEsgotadoError`, que o servico ja
         # grava como `tempo_esgotado`.
-        for evento in ler_com_prazo(
+        eventos = ler_com_prazo(
             self._eventos_da_avaliacao(turno, definicao),
             teto_segundos=self._teto_da_avaliacao,
             espera=self._espera,
             rotulo=ROTULO_DA_AVALIACAO,
-        ):
-            if (
-                evento.type == "content_block_stop"
-                and isinstance(evento.content_block, ToolUseBlock)
-                and evento.content_block.name == ferramenta.nome
-            ):
-                entradas.append(dict(evento.content_block.input))
-            elif evento.type == "message_delta":
-                motivo_da_parada = evento.delta.stop_reason
-            elif evento.type == "message_stop":
-                terminou = True
+        )
+        # Fechado aqui, como o chat faz em `transmitir`: se o corpo lancar, o
+        # leitor e cancelado na hora, e nao quando o coletor largar o gerador.
+        try:
+            for evento in eventos:
+                if (
+                    evento.type == "content_block_stop"
+                    and isinstance(evento.content_block, ToolUseBlock)
+                    and evento.content_block.name == ferramenta.nome
+                ):
+                    entradas.append(dict(evento.content_block.input))
+                elif evento.type == "message_delta":
+                    motivo_da_parada = evento.delta.stop_reason
+                elif evento.type == "message_stop":
+                    terminou = True
+        finally:
+            eventos.close()
         if not terminou:
             raise ProvedorIndisponivelError("o stream terminou sem message_stop")
         if motivo_da_parada != "tool_use":

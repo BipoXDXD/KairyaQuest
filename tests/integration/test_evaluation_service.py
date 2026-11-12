@@ -57,8 +57,9 @@ from focusquest.modules.progression.service import (
     recompensa_do_bonus,
     registrar_bonus,
 )
+from focusquest.modules.tutoring import leitura
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
-from focusquest.modules.tutoring.leitura import Espera
+from focusquest.modules.tutoring.leitura import Espera, LeitoresVivos
 from focusquest.modules.tutoring.provider import (
     EventoDoProvedor,
     Ferramenta,
@@ -562,6 +563,39 @@ def test_a_chamada_que_passa_do_teto_de_parede_e_tempo_esgotado_sem_bonus(
     for leitor in threading.enumerate():
         if leitor.name == "tutoria-leitor":
             leitor.join(timeout=TIMEOUT_FOLGADO)
+
+
+def test_com_o_gauge_cheio_a_avaliacao_grava_provedor_indisponivel_sem_chamar_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P-teto-stream-2 na avaliacao, ponta a ponta com o adaptador REAL: com o
+    gauge de leitores vivos saturado, a chamada paga nem abre. O servico trata
+    como qualquer falha de provedor: `falhou/provedor_indisponivel`, sem bonus
+    e sem XP, e o servidor falso nao recebe pedido nenhum."""
+    cheio = LeitoresVivos(teto=1)
+    assert cheio.reservar()
+    monkeypatch.setattr(leitura, "LEITORES_VIVOS", cheio)
+    mission_id = missoes.concluida()
+    falso.roteiro = _veredito("atende")
+    saldo = _saldo(fabrica)
+
+    with pytest.raises(AvaliacaoFalhouError) as erro:
+        _avaliar(fabrica, tutoria, mission_id)
+
+    assert erro.value.falha is FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
+    gravada = _lida(fabrica, mission_id)
+    assert (gravada.state, gravada.error_code) == (
+        EstadoDaAvaliacao.FALHOU,
+        FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
+    )
+    assert _bonus_gravados(fabrica, mission_id) == 0
+    assert _saldo(fabrica) == saldo
+    assert falso.recebidas == []
+    assert cheio.vivos == 1
 
 
 @dataclass(frozen=True)
