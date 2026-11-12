@@ -1,4 +1,5 @@
 import { achievementText } from '../../shared/i18n/achievementText'
+import { KairyaTurntable } from '../kairya'
 import { useT } from '../../shared/i18n/useT'
 import type { Reward } from '../../shared/types/reward'
 
@@ -25,9 +26,12 @@ export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; 
         {t(bonus ? 'missions.reward.bonusXp' : 'missions.reward.xp', { xp: reward.xp_awarded })}
       </p>
       {reward.level_after > reward.level_before && (
-        <p data-testid="reward-level-up">
-          {t('missions.reward.levelUp', { level: reward.level_after })}
-        </p>
+        <>
+          <p data-testid="reward-level-up">
+            {t('missions.reward.levelUp', { level: reward.level_after })}
+          </p>
+          <KairyaTurntable />
+        </>
       )}
       {reward.achievements_unlocked.length > 0 && (
         <ul role="list">
