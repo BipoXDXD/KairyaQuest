@@ -127,7 +127,12 @@ describe('WeekPlanEntry', () => {
       'Plano da próxima semana criado. Ele começa segunda-feira, 28/09.',
     )
     expect(confirmation).toHaveAttribute('tabindex', '-1')
-    expect(confirmation).toHaveFocus()
+    // O foco vai para a confirmacao num efeito passivo, que o React roda numa
+    // tarefa do Scheduler DEPOIS do commit que o `findBy` ja viu: espera-se o
+    // proprio efeito, nao o tempo.
+    await waitFor(() => {
+      expect(confirmation).toHaveFocus()
+    })
     expect(within(confirmation).getByRole('status')).toHaveAttribute('data-tone', 'success')
     expect(screen.queryByTestId('week-plan-form')).not.toBeInTheDocument()
     expect(screen.getByTestId('week-plan-open')).toBeInTheDocument()

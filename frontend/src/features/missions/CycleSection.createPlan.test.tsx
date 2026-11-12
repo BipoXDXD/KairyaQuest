@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KairyaBubble } from '../kairya'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
@@ -129,7 +129,12 @@ describe('CycleSection: criar o plano da semana', () => {
     fireEvent.click(screen.getByTestId('week-plan-submit'))
     const confirmation = await screen.findByTestId('week-plan-created-next')
     expect(confirmation).toHaveTextContent('Ele começa segunda-feira, 28/09.')
-    expect(confirmation).toHaveFocus()
+    // O foco vai para a confirmacao num efeito passivo, que o React roda numa
+    // tarefa do Scheduler DEPOIS do commit que o `findBy` ja viu: espera-se o
+    // proprio efeito, nao o tempo.
+    await waitFor(() => {
+      expect(confirmation).toHaveFocus()
+    })
     expect(screen.queryByTestId('week-plan-form')).not.toBeInTheDocument()
     expect(screen.getByTestId('cycle-no-plan')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Criar o plano da semana' })).toBeInTheDocument()

@@ -435,9 +435,13 @@ describe('WeekPlanForm: falhas', () => {
       expect(onExists).toHaveBeenCalledTimes(1)
     })
     expect(onCreated).not.toHaveBeenCalled()
-    expect(status()).toHaveTextContent(
-      'O plano não foi criado. Esta semana já tem um plano. Veja o plano abaixo.',
-    )
+    // `onExists` roda antes do commit que desenha o aviso (o React o agenda no
+    // Scheduler): espera-se o aviso, o efeito observavel.
+    await waitFor(() => {
+      expect(status()).toHaveTextContent(
+        'O plano não foi criado. Esta semana já tem um plano. Veja o plano abaixo.',
+      )
+    })
     expect(status()).toHaveAttribute('data-tone', 'danger')
     expect(screen.getByTestId('week-plan-submit')).not.toHaveAttribute('aria-busy')
   })

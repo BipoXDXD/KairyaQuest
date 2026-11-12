@@ -369,7 +369,11 @@ describe('TutorPanel: estados da conversa', () => {
       [HISTORY]: () => Response.json([question(1, 'Oi, Kairya', 'c1'), answer(2, 1, 'Oi!')]),
     })
 
-    const conversa = await screen.findByRole('region', { name: 'Conversa com a Kairya' })
+    // A regiao existe desde o primeiro render, antes de o historico chegar:
+    // `findByRole` resolve nela e o `tutor-messages` ainda nao foi desenhado.
+    // O que se espera e o efeito observavel, a lista, e so entao se olha dentro.
+    await screen.findByTestId('tutor-messages')
+    const conversa = screen.getByRole('region', { name: 'Conversa com a Kairya' })
     expect(conversa).toHaveAttribute('tabindex', '0')
     expect(within(conversa).getByTestId('tutor-messages')).toBeInTheDocument()
     expect(within(conversa).queryAllByRole('button')).toHaveLength(0)
