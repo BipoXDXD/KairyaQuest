@@ -3,10 +3,12 @@ import { expect, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { LOCALE_STORAGE_KEY } from '../../src/shared/i18n/locale'
 import { en } from '../../src/shared/i18n/messages/en'
 import { ptBR } from '../../src/shared/i18n/messages/pt-BR'
 import { definirRoteiro, liberar, reiniciar, requisicoes } from './falso'
-import { test } from './saudacaoJaVista'
+import { diaCivil } from './datas'
+import { CHAVE_DA_SAUDACAO, test } from './saudacaoJaVista'
 import { API_URL, REPO_ROOT, WEB_URL } from './servers'
 import { apagarTeto, semearTeto } from './teto'
 
@@ -192,4 +194,41 @@ test('teto diário em EN mostra quando volta e preserva o histórico', async ({ 
   await semViolacoes(page)
   // O teto barrou antes do provedor: so a pergunta real chegou ao falso.
   expect(await requisicoes()).toHaveLength(1)
+})
+
+test('sem cache local, um navegador novo abre em EN vindo do servidor', async ({
+  page,
+  browser,
+}) => {
+  await abrirPainel(page, ptBR)
+  await trocarParaIngles(page)
+
+  // Contexto novo: pt-BR no navegador e nenhum `LOCALE_STORAGE_KEY`. A saudacao
+  // e o convite de som ja dispensados, como nos demais specs, para o layout
+  // nao mudar. O idioma so pode vir do `GET /api/me`.
+  const limpo = await browser.newContext({
+    baseURL: WEB_URL,
+    locale: 'pt-BR',
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(WEB_URL).origin,
+          localStorage: [
+            { name: CHAVE_DA_SAUDACAO, value: diaCivil(new Date()) },
+            { name: 'kairyaquest.soundInvite', value: '1' },
+          ],
+        },
+      ],
+    },
+  })
+  try {
+    const nova = await limpo.newPage()
+    await nova.goto('/')
+    await expect(nova.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(nova.getByLabel(en['tutoring.input.label'])).toBeVisible()
+    expect(await nova.evaluate((k) => localStorage.getItem(k), LOCALE_STORAGE_KEY)).toBe('en')
+  } finally {
+    await limpo.close()
+  }
 })
