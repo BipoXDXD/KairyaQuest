@@ -56,6 +56,8 @@ export const en = {
   'kairya.face.thinking': 'Kairya thinks, eyes up, fingers on her jade clip',
   'kairya.face.celebrating': 'Kairya celebrates, fist raised, wide smile',
   'kairya.face.concerned': 'Kairya looks on, attentive and concerned, with care',
+  'kairya.turntable.alt': 'Kairya turns around, celebrating your new level',
+  'kairya.turntable.placeholderAlt': 'Kairya celebrates your new level',
   'kairya.speaker': 'Kairya',
   'kairya.bubble.close': "Dismiss Kairya's message",
 

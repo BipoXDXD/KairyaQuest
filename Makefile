@@ -65,7 +65,7 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
 # dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
 # mypy de fora era a unica assimetria.
-	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py
+	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
