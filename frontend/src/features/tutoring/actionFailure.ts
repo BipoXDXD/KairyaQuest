@@ -167,10 +167,10 @@ const FAILED_TEXT: FailureText = {
 
 /**
  * O texto de uma acao que o backend gravou como `falhou`, pelo `error_code`
- * gravado. So os codes que o backend GRAVA na acao (`expired`, `invalidated`,
- * `out-of-bounds`) tem texto proprio -- o mesmo do aviso da confirmacao, para a tela dizer a
- * mesma coisa antes e depois de uma recarga. Qualquer outro cai no generico, e
- * o code cru nunca vai para a tela.
+ * gravado. So os codes cuja saida o backend GRAVA na acao (`RECORDS`: as saidas
+ * `expired`, `invalidated` e `out-of-bounds`) tem texto proprio -- o mesmo do
+ * aviso da confirmacao, para a tela dizer a mesma coisa antes e depois de uma
+ * recarga. Qualquer outro cai no generico, e o code cru nunca vai para a tela.
  */
 export function failedActionText(errorCode: string | null): FailureText {
   if (errorCode === null || !isActionErrorCode(errorCode)) {

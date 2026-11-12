@@ -154,6 +154,6 @@ export function describeStreamFailure(code: string): MessageFailure {
  * derruba o stream numa excecao que viraria resultado desconhecido.
  */
 export function describeStreamErrorEvent(data: unknown): MessageFailure {
-  const code = data === null ? null : (data as { code?: unknown }).code
+  const code = typeof data === 'object' && data !== null && 'code' in data ? data.code : null
   return typeof code === 'string' ? describeStreamFailure(code) : UNRECOGNIZED_FAILURE
 }
