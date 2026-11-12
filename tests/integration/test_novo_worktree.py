@@ -195,7 +195,7 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
     env = (destino / ".env").read_text()
     # So o NOME do banco de teste muda; servidor, credencial e query ficam.
     assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
-        f"{PREFIXO}focusquest_medida_test?options=-c%20x"
+        f"{PREFIXO}focusquest_medida_test"
     )
     # O resto vem do .env.example, nao do .env do principal.
     assert _valor(env, "FOCUSQUEST_DATABASE_URL") == f"{PREFIXO}focusquest"
@@ -264,6 +264,44 @@ def test_o_env_do_worktree_nao_herda_segredo_do_principal(
         assert _valor(env, chave) == ""
 
 
+def test_o_env_do_worktree_nasce_so_do_exemplo_e_passa_no_settings(
+    repo: Repositorio, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nada do `.env` do principal vai para o do worktree: nem a chave que o
+    exemplo nao conhece (`FOCUSQUEST_CHAVE_REMOVIDA` ja foi uma), nem uma variavel
+    qualquer, nem o servidor, a credencial e a query da URL do banco dele. O
+    resultado e carregado pelo `Settings` (`extra="forbid"`)."""
+    from focusquest.core.config import Settings
+
+    canario_removida = f"CANARY-{uuid.uuid4()}"
+    canario_outra = f"CANARY-{uuid.uuid4()}"
+    canario_banco = f"CANARY-{uuid.uuid4()}"
+    (repo.principal / ".env").write_text(
+        f"FOCUSQUEST_CHAVE_REMOVIDA={canario_removida}\n"
+        f"FOCUSQUEST_OUTRA_VARIAVEL={canario_outra}\n"
+        "FOCUSQUEST_TEST_DATABASE_URL=postgresql+psycopg://"
+        f"{canario_banco}:{canario_banco}@{canario_banco}.invalid:5999/"
+        f"focusquest_test?options={canario_banco}\n"
+    )
+
+    resultado = repo.rodar("so-exemplo")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/so-exemplo/.env").read_text()
+    for canario in (canario_removida, canario_outra, canario_banco):
+        assert canario not in env
+        assert canario not in resultado.stdout + resultado.stderr
+    assert "FOCUSQUEST_CHAVE_REMOVIDA" not in env
+    assert "FOCUSQUEST_OUTRA_VARIAVEL" not in env
+    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_so-exemplo_test"
+    )
+    for chave in [c for c in os.environ if c.startswith("FOCUSQUEST_")]:
+        monkeypatch.delenv(chave)
+    settings = Settings(_env_file=repo.principal / ".claude/worktrees/so-exemplo/.env")
+    assert settings.test_database_url.endswith("/focusquest_so-exemplo_test")
+
+
 def test_recusa_se_a_main_nao_tem_env_example(repo: Repositorio) -> None:
     repo.git("rm", "-q", ".env.example")
     repo.git("commit", "-q", "-m", "sem exemplo")
@@ -277,22 +315,40 @@ def test_recusa_se_a_main_nao_tem_env_example(repo: Repositorio) -> None:
     _nada_foi_criado(repo, antes)
 
 
-def test_exemplo_sem_banco_de_teste_ganha_a_linha_do_worktree(
-    repo: Repositorio,
-) -> None:
-    """Sem a linha, o worktree usaria o banco padrao -- o do principal."""
+def test_recusa_se_o_exemplo_nao_tem_banco_de_teste(repo: Repositorio) -> None:
+    """Servidor e credencial do banco vem do exemplo; sem a linha nao ha de
+    onde derivar a URL, e o worktree cairia no banco padrao -- o do principal."""
     (repo.principal / ".env.example").write_text("FOCUSQUEST_ANTHROPIC_API_KEY=\n")
     repo.git("commit", "-q", "-am", "exemplo curto")
     repo.publicar()
+    antes = repo.worktrees()
 
     resultado = repo.rodar("curto")
 
-    assert resultado.returncode == 0, resultado.stderr
-    env = (repo.principal / ".claude/worktrees/curto/.env").read_text()
-    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
-        f"{PREFIXO}focusquest_curto_test?options=-c%20x"
+    assert resultado.returncode != 0
+    assert "FOCUSQUEST_TEST_DATABASE_URL" in resultado.stderr
+    assert ".env.example" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+def test_a_query_da_url_do_exemplo_e_preservada(repo: Repositorio) -> None:
+    exemplo = repo.principal / ".env.example"
+    atual = _valor(exemplo.read_text(), "FOCUSQUEST_TEST_DATABASE_URL")
+    exemplo.write_text(exemplo.read_text().replace(atual, f"{atual}?options=-c%20x"))
+    repo.git("commit", "-q", "-am", "exemplo com query")
+    repo.publicar()
+    # O principal tem outra query: a do worktree so pode vir do exemplo.
+    (repo.principal / ".env").write_text(
+        ENV_PRINCIPAL.replace("?options=-c%20x", "?options=-c%20y")
     )
-    assert _valor(env, "FOCUSQUEST_ANTHROPIC_API_KEY") == ""
+
+    resultado = repo.rodar("com-query")
+
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/com-query/.env").read_text()
+    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_com-query_test?options=-c%20x"
+    )
 
 
 def test_o_deslocamento_automatico_e_o_menor_livre(repo: Repositorio) -> None:
@@ -395,29 +451,35 @@ def test_recusa_deslocamento_fora_da_faixa_ou_em_uso(
     _nada_foi_criado(repo, antes)
 
 
-def test_recusa_sem_env_no_principal(repo: Repositorio) -> None:
+def test_funciona_sem_env_no_principal(repo: Repositorio) -> None:
+    """O `.env` do worktree nasce so do `.env.example` da origin/main: o do
+    principal nao e lido para montar nada, entao a falta dele nao recusa."""
     (repo.principal / ".env").unlink()
-    antes = repo.worktrees()
 
     resultado = repo.rodar("novo")
 
-    assert resultado.returncode != 0
-    assert ".env" in resultado.stderr
-    _nada_foi_criado(repo, antes)
+    assert resultado.returncode == 0, resultado.stderr
+    env = (repo.principal / ".claude/worktrees/novo/.env").read_text()
+    assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
+        f"{PREFIXO}focusquest_novo_test"
+    )
 
 
-def test_recusa_se_o_banco_de_teste_do_principal_nao_termina_em_test(
+def test_recusa_se_o_banco_de_teste_do_exemplo_nao_termina_em_test(
     repo: Repositorio,
 ) -> None:
-    (repo.principal / ".env").write_text(
-        ENV_PRINCIPAL.replace("focusquest_test?", "focusquest?")
-    )
+    exemplo = repo.principal / ".env.example"
+    atual = _valor(exemplo.read_text(), "FOCUSQUEST_TEST_DATABASE_URL")
+    exemplo.write_text(exemplo.read_text().replace(atual, atual.removesuffix("_test")))
+    repo.git("commit", "-q", "-am", "exemplo com banco sem _test")
+    repo.publicar()
     antes = repo.worktrees()
 
     resultado = repo.rodar("novo")
 
     assert resultado.returncode != 0
     assert "_test" in resultado.stderr
+    assert ".env.example" in resultado.stderr
     _nada_foi_criado(repo, antes)
 
 
@@ -583,7 +645,7 @@ def test_nomes_vizinhos_de_push_nao_colidem(repo: Repositorio) -> None:
     for nome in nomes:
         env = (repo.principal / ".claude" / "worktrees" / nome / ".env").read_text()
         assert _valor(env, "FOCUSQUEST_TEST_DATABASE_URL") == (
-            f"{PREFIXO}focusquest_{nome}_test?options=-c%20x"
+            f"{PREFIXO}focusquest_{nome}_test"
         )
 
 
@@ -737,7 +799,7 @@ def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
     assert segundo.as_posix() in repo.worktrees()
     # O servidor do banco de teste e o do principal, nao o de quem chamou.
     assert _valor((segundo / ".env").read_text(), "FOCUSQUEST_TEST_DATABASE_URL") == (
-        f"{PREFIXO}focusquest_segundo_test?options=-c%20x"
+        f"{PREFIXO}focusquest_segundo_test"
     )
     assert _valor((segundo / ".env").read_text(), "FOCUSQUEST_E2E_PORT_OFFSET") == "2"
     assert (

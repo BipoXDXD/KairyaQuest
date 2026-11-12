@@ -21,7 +21,7 @@ sem o remoto `origin`, remoto sem a branch `main`. **Não há fallback para a
 `main` local** (nasceria de uma revisão velha em silêncio, o defeito original) e
 **não se usa uma `origin/main` antiga** que sobrou de um fetch anterior: sem fetch
 bem-sucedido não há base. Custo: o script passa a exigir rede; as recusas
-locais (nome, destino, `.env` do principal, deslocamento, bancos, trava) vêm
+locais (nome, destino, deslocamento, bancos, trava) vêm
 antes do fetch e não dependem dela. `GIT_TERMINAL_PROMPT=0` evita que o git espere credencial.
 
 ## Alterações
@@ -39,6 +39,34 @@ antes do fetch e não dependem dela. `GIT_TERMINAL_PROMPT=0` evita que o git esp
   remoto (e não da `main` local); commit só local não entra; fetch que falha,
   sem remoto `origin` e remoto sem `main` recusam sem criar nada.
 - `docs/QUALITY.md`: parágrafo "A base do worktree é a `origin/main`".
+
+## O `.env` do worktree nasce só do `.env.example` da `origin/main` (extra do #149)
+
+Achado da coordenação: o `.env` do principal ainda tem `FOCUSQUEST_CHAVE_REMOVIDA`, e
+as `Settings` (`extra="forbid"`) recusam chave desconhecida. Auditoria do script:
+a única coisa que ele lia do `.env` do principal para **montar** o `.env` novo era o
+`FOCUSQUEST_TEST_DATABASE_URL` (servidor, credencial e query da URL; só o nome do
+banco era trocado). As demais linhas já vinham do exemplo, e o teste dos canários de
+segredo já cobria isso. O sintoma original (chave de provedor já removido do exemplo) foi do exemplo velho (a `main` local
+parada), não de cópia. Mesmo assim, a URL arrastava a credencial do principal.
+
+Decisão: **nenhuma** linha ou valor do `.env` do principal entra no novo.
+- `FOCUSQUEST_TEST_DATABASE_URL`: derivada da linha do `.env.example` da `origin/main`
+  (só o nome do banco muda). Se o exemplo não a tem, ou o banco dele não termina em
+  `_test`, o script recusa.
+- `FOCUSQUEST_E2E_PORT_OFFSET`: calculado pelo script (primeiro livre).
+- Mais nada é necessário.
+- A recusa "o principal não tem `.env`" **foi removida**: o `.env` do principal não
+  é mais insumo. Ele continua sendo lido (se existir) só pelo laço dos worktrees
+  registrados, para saber que bancos e deslocamentos estão ocupados; nada é copiado.
+- Custo: quem roda o Postgres local com outra porta ou credencial que o exemplo
+  precisa ajustar a URL no `.env` do worktree (o gate do principal usa a dele).
+
+Testes: `test_o_env_do_worktree_nasce_so_do_exemplo_e_passa_no_settings` (canários
+em `FOCUSQUEST_CHAVE_REMOVIDA`, numa variável qualquer e na URL do banco do principal;
+o `.env` gerado carrega no `Settings`), `test_funciona_sem_env_no_principal`,
+`test_a_query_da_url_do_exemplo_e_preservada` e as recusas do exemplo sem URL ou com
+banco sem `_test`.
 
 ## Para a consolidação do `docs/HANDOFF.md`
 

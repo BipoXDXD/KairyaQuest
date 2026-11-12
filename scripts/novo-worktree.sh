@@ -9,15 +9,18 @@
 #  1. cria .claude/worktrees/<nome> dentro do principal numa branch nova,
 #     wt/<nome>, a partir da origin/main -- depois de um "git fetch origin
 #     main" feito pelo proprio script (lote 21, abaixo);
-#  2. escreve o .env dele a partir do .env.example da origin/main (a mesma
-#     revisao do worktree), com o banco de teste do principal trocado para
-#     focusquest_<nome>_test (servidor, credencial e opcoes da URL ficam) e
-#     FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o PRIMEIRO livre de 1 ao teto
-#     (24 por padrao; ver "O que e um deslocamento livre", abaixo);
-#     do .env do principal so a URL do banco de teste e lida. Nenhum outro
-#     valor dele e copiado: as chaves de segredo (FOCUSQUEST_ANTHROPIC_API_KEY e
-#     afins) nascem em branco, como no exemplo, e quem precisar delas no
-#     worktree as preenche a mao;
+#  2. escreve o .env dele SO a partir do .env.example da origin/main (a mesma
+#     revisao do worktree), com duas linhas calculadas: o banco de teste,
+#     focusquest_<nome>_test (servidor, credencial e opcoes da URL sao os do
+#     PROPRIO exemplo), e FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o PRIMEIRO
+#     livre de 1 ao teto (24 por padrao; ver "O que e um deslocamento livre",
+#     abaixo). Nenhuma linha, nenhum valor do .env do principal e lido para
+#     montar o .env novo (lote 21): ele pode ter chave que o exemplo nao conhece
+#     (as Settings recusam chave extra) e segredo real. As chaves de segredo
+#     (FOCUSQUEST_ANTHROPIC_API_KEY e afins) nascem em branco, como no exemplo, e
+#     quem precisar delas no worktree as preenche a mao. O .env do principal so
+#     e lido para saber que bancos e deslocamentos os worktrees registrados
+#     (ele incluso) ja ocupam, sem copiar nada;
 #  3. roda "make bootstrap" nele;
 #  4. imprime os proximos passos.
 #
@@ -35,7 +38,7 @@
 # local: criar dela em silencio reproduziria o defeito sem aviso. A origin/main
 # que sobrou de um fetch antigo tambem nao serve de base -- sem fetch bem
 # sucedido, nao ha base. O fetch roda DEPOIS de todas as recusas locais (nome,
-# destino, .env do principal, deslocamento, bancos, trava) e logo antes de criar
+# destino, deslocamento, bancos, trava) e logo antes de criar
 # o worktree, entao uma recusa que nao precisa de rede nao depende dela. A branch
 # nasce de um sha, e o git nao rastreia um sha: um "git push" sem argumento nao
 # mira a main protegida (partir do nome "origin/main" faria o git configurar o
@@ -98,8 +101,9 @@
 # PostgreSQL); o nome reservado "push"; um nome cujo banco (ou banco do push)
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
 # branch que ja existam; deslocamento fora de 0 ao teto, reivindicado por outro
-# worktree ou com porta em uso; .env do principal ausente ou com um banco de teste que nao termine
-# em _test; fetch da origin/main que falha; origin/main sem .env.example; outra execucao em andamento (a trava). E
+# worktree ou com porta em uso; fetch da origin/main que falha; origin/main sem
+# .env.example, ou com um .env.example sem FOCUSQUEST_TEST_DATABASE_URL ou com um
+# banco que nao termine em _test (o .env do principal nao e necessario); outra execucao em andamento (a trava). E
 # NUNCA escreve por cima de um .env que ja exista no destino.
 #
 # Por que "push" e o UNICO nome reservado (HANDOFF, decisao F12): o banco de
@@ -191,7 +195,6 @@ done
 if git -C "$principal" show-ref --verify --quiet "refs/heads/${branch}"; then
   recusa "a branch ${branch} ja existe; escolha outro nome"
 fi
-[ -f "${principal}/.env" ] || recusa "o principal nao tem .env (${principal}/.env): crie-o com cp .env.example .env"
 # O valor de uma chave num .env, sem executar o arquivo (mesma regra do
 # push-env.sh): ultima ocorrencia, aspas envolventes removidas.
 valor_no_env() {
@@ -351,14 +354,9 @@ ${pulados}remova um worktree antigo (git worktree remove <caminho>) ou encerre o
   fi
 fi
 
-# O banco de teste: so o NOME muda (o ultimo segmento do caminho, antes da
-# query); servidor, credencial e opcoes ficam os do principal.
-url="$(valor_no_env "${principal}/.env" FOCUSQUEST_TEST_DATABASE_URL)"
-base="${url%%\?*}"
-consulta="${url:${#base}}"
-[[ ${base##*/} =~ _test$ ]] || recusa "FOCUSQUEST_TEST_DATABASE_URL do .env do principal nao aponta para um banco que termine em _test"
+# O nome do banco de teste do worktree novo. A URL (servidor, credencial,
+# opcoes) so e montada depois do fetch, a partir do .env.example da origin/main.
 banco="focusquest_${nome}_test"
-url_nova="${base%/*}/${banco}${consulta}"
 
 # O banco novo e o banco do push dele nao podem ser nem o banco nem o banco do
 # push de nenhum worktree registrado (o principal incluido).
@@ -370,7 +368,7 @@ while IFS=' ' read -r ocupado dono; do
 done <<<"$bancos_ocupados"
 
 # A base: a origin/main, buscada AGORA, depois de TODAS as recusas locais
-# (nome, destino, .env do principal, deslocamento, bancos, trava) e logo antes
+# (nome, destino, deslocamento, bancos, trava) e logo antes
 # de criar qualquer coisa -- uma recusa que nao precisa de rede nao depende
 # dela. Dentro da trava, de proposito: ler o remoto fora dela deixaria duas
 # execucoes verem bases diferentes; o custo e que um fetch lento segura a trava
@@ -390,28 +388,36 @@ base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'refs/remotes/o
 exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
   recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
 
+# A URL do banco de teste do worktree: o FOCUSQUEST_TEST_DATABASE_URL do
+# .env.example com so o NOME do banco trocado; servidor, credencial e opcoes
+# ficam os do exemplo. Nada vem do .env do principal (lote 21): copiar dali
+# arrastaria credencial real, e a variavel que o exemplo nao conhece. Sem a
+# linha no exemplo nao ha de onde derivar -- recusa, em vez de cair no banco
+# padrao (o do principal).
+url="$(valor_no_env <(printf '%s\n' "$exemplo") FOCUSQUEST_TEST_DATABASE_URL)"
+[ -n "$url" ] ||
+  recusa "o .env.example da origin/main nao tem FOCUSQUEST_TEST_DATABASE_URL: e dele que o script tira servidor e credencial do banco de teste do worktree"
+base="${url%%\?*}"
+consulta="${url:${#base}}"
+[[ ${base##*/} =~ _test$ ]] ||
+  recusa "FOCUSQUEST_TEST_DATABASE_URL do .env.example da origin/main nao aponta para um banco que termine em _test"
+url_nova="${base%/*}/${banco}${consulta}"
+
 # O .env novo, montado ANTES de criar qualquer coisa: as linhas do
 # .env.example, com o banco de teste trocado e sem deslocamento; o
 # deslocamento do worktree novo vai no fim. Partir do exemplo, e nao do .env
 # do principal, e o que garante que nenhum segredo dele passe para o worktree.
 env_novo=""
-banco_escrito=nao
 while IFS= read -r linha || [ -n "$linha" ]; do
   case "$linha" in
     FOCUSQUEST_TEST_DATABASE_URL=*)
       linha="FOCUSQUEST_TEST_DATABASE_URL=${url_nova}"
-      banco_escrito=sim
       ;;
     FOCUSQUEST_E2E_PORT_OFFSET=*) continue ;;
   esac
   env_novo="${env_novo}${linha}
 "
 done <<<"$exemplo"
-# Sem a linha no exemplo, o worktree cairia no banco padrao, o do principal.
-if [ "$banco_escrito" = nao ]; then
-  env_novo="${env_novo}FOCUSQUEST_TEST_DATABASE_URL=${url_nova}
-"
-fi
 env_novo="${env_novo}
 # Worktree ${nome} (scripts/novo-worktree.sh): banco de teste e portas do E2E
 # proprios, para rodar o gate ao mesmo tempo que os outros worktrees.
