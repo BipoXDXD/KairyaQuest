@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderWithI18n } from '../../test/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
+import { flushPendingEffects } from '../../test/flushEffects'
 import { requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { en } from '../../shared/i18n/messages/en'
 import type { EvaluationSummary, Mission } from '../../shared/types/mission'
@@ -723,6 +724,8 @@ describe('EvaluationPanel -- o efeito da avaliacao', () => {
     })
     fireEvent.click(botaoPedir())
     await screen.findByTestId('evaluation-verdict')
+    // "Não cria elemento" é ausência: descarregue os efeitos pendentes antes de ler.
+    flushPendingEffects()
     return elements.flatMap((element) =>
       element.play.mock.calls.map(() => /\/audio\/sfx\/(\w+)\.mp3$/.exec(element.src)?.[1]),
     )

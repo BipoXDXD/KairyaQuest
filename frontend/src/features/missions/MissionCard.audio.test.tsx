@@ -1,9 +1,10 @@
-import { act, fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission, MissionType } from '../../shared/types/mission'
 import type { MissionCompletion, Reward } from '../../shared/types/reward'
 import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
 import { routeFetch } from '../../test/fetchRoutes'
+import { flushPendingEffects } from '../../test/flushEffects'
 import { renderWithI18n } from '../../test/i18n'
 import { useKairya } from '../kairya'
 import { MissionList } from './MissionList'
@@ -103,7 +104,9 @@ async function completeWith(
   if (options.thinking === true) fireEvent.click(screen.getByTestId('make-thinking'))
   fireEvent.click(await screen.findByTestId('mission-complete'))
   await screen.findByText('Missão concluída.')
-  await act(async () => Promise.resolve())
+  // Efeito pendente não pode esconder um som a mais: as afirmações de "só este
+  // efeito" e de "nenhum elemento" valem depois de descarregá-los.
+  flushPendingEffects()
   return mounted
 }
 

@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeAudio, memoryStorage, type FakeAudio } from '../../test/audioDoubles'
 import { routeFetch } from '../../test/fetchRoutes'
+import { flushPendingEffects } from '../../test/flushEffects'
 import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import type { Availability, Mission } from '../../shared/types/mission'
 import { LanternTrail } from './LanternTrail'
@@ -662,13 +663,14 @@ describe('LanternTrail -- efeitos', () => {
    * o DOM (em outra tarefa, quando o render passa do frame do scheduler). Esperar
    * so o DOM deixa a leitura de `played()` correr contra esse efeito: sob carga
    * ela vem vazia. Por isso espera-se o proprio som e, depois que o React
-   * esvazia a fila, confere-se que nao tocou uma segunda vez.
+   * esvazia a fila (`flushPendingEffects`: `act(async () => {})` nao a esvazia),
+   * confere-se que nao tocou uma segunda vez.
    */
   async function expectPlayedOnce(played: () => (string | undefined)[]) {
     await waitFor(() => {
       expect(played()).toEqual(['weekly_trial_unlocked'])
     })
-    await act(async () => {})
+    flushPendingEffects()
     expect(played()).toEqual(['weekly_trial_unlocked'])
   }
 
@@ -682,6 +684,8 @@ describe('LanternTrail -- efeitos', () => {
   it('a especial que fica disponivel depois da montagem toca weekly_trial_unlocked uma vez', async () => {
     const { played } = mount(especialBloqueada)
     await screen.findByTestId('trail-special-art')
+    // Ausencia: o efeito da montagem pode estar pendente; descarregue antes de afirmar.
+    flushPendingEffects()
     expect(played()).toEqual([])
 
     servir(plano(SEMANA_MISTA, 4, especial('disponivel')))
@@ -696,6 +700,7 @@ describe('LanternTrail -- efeitos', () => {
   it('a especial bloqueada nao toca nada', async () => {
     const { elements } = mount(especialBloqueada)
     await screen.findByTestId('trail-special-art')
+    flushPendingEffects()
 
     expect(elements).toHaveLength(0)
   })

@@ -216,8 +216,11 @@ describe('App', () => {
     })
     await settleHeadquarters()
     await screen.findByRole('figure', { name: 'Kairya' })
+    // A voz sai do efeito da bolha, depois do commit que a mostra: espere-a.
+    await waitFor(() => {
+      expect(elements[0]?.play).toHaveBeenCalledTimes(1)
+    })
     const voice = elements[0]
-    expect(voice?.play).toHaveBeenCalledTimes(1)
     const pausesBefore = voice?.pause.mock.calls.length ?? 0
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
