@@ -24,7 +24,7 @@ function Placeholder(): ReactElement {
 
 /**
  * Com o asset: o video em loop, ou o quadro parado sob movimento reduzido.
- * Se o video falha, volta para o placeholder. Fica separado do
+ * Se o video ou o quadro falha, volta para o placeholder. Fica separado do
  * `KairyaTurntable` para a leitura do `matchMedia` so acontecer quando ha
  * asset.
  */
@@ -45,6 +45,9 @@ function Player({ asset }: { asset: TurntableAsset }): ReactElement {
         width={asset.width}
         height={asset.height}
         className={SIZE_CLASS}
+        onError={() => {
+          setFailed(true)
+        }}
       />
     )
   }

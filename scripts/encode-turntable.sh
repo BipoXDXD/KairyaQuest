@@ -44,7 +44,8 @@ tmp_poster_dir=$(mktemp -d "$(dirname "$out_poster")/.turntable-tmp.XXXXXX")
 trap 'rm -rf "$tmp_webm_dir" "$tmp_poster_dir"' EXIT
 
 ffmpeg -nostdin -y -loglevel error -framerate "$FPS" -i "$frames_dir/frame_%04d.png" \
-  -c:v libvpx-vp9 -b:v 0 -crf "$CRF" -pix_fmt yuv420p -an -r "$FPS" \
+  -c:v libvpx-vp9 -b:v 0 -crf "$CRF" -pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
+  -an -r "$FPS" \
   "$tmp_webm_dir/out.webm"
 magick "$frames_dir/frame_0000.png" -quality 82 "$tmp_poster_dir/poster.webp"
 

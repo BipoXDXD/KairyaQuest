@@ -94,6 +94,7 @@ def _add_light(
     name: str,
     spec: tuple[tuple[float, float, float], float],
     height: float,
+    target: bpy.types.Object,
 ) -> None:
     (x, y, z_fraction), energy = spec
     light = bpy.data.objects.new(name, bpy.data.lights.new(name, "AREA"))
@@ -102,7 +103,7 @@ def _add_light(
     light.location = (x, y, height * z_fraction)
     bpy.context.scene.collection.objects.link(light)
     track = light.constraints.new("TRACK_TO")
-    track.target = bpy.data.objects["target"]
+    track.target = target
     track.track_axis = "TRACK_NEGATIVE_Z"
     track.up_axis = "UP_Y"
 
@@ -121,15 +122,18 @@ def _setup_scene(height: float) -> bpy.types.Object:
     track.up_axis = "UP_Y"
 
     # Tres pontos: principal, preenchimento e contraluz.
-    _add_light("key", KEY_LIGHT, height)
-    _add_light("fill", FILL_LIGHT, height)
-    _add_light("rim", RIM_LIGHT, height)
+    _add_light("key", KEY_LIGHT, height, target)
+    _add_light("fill", FILL_LIGHT, height, target)
+    _add_light("rim", RIM_LIGHT, height, target)
 
     scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x, scene.render.resolution_y = params.RENDER_SIZE
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     scene.render.film_transparent = False
+    # Sem isto o Blender usa AgX e faz tone mapping no fundo.
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
     world = bpy.data.worlds.new("bg")
     world.use_nodes = True
     r, g, b = _hex_to_linear(params.BACKGROUND_HEX)

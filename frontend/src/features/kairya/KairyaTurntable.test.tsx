@@ -92,6 +92,16 @@ describe('KairyaTurntable', () => {
     expect(screen.queryByTestId('kairya-turntable')).not.toBeInTheDocument()
   })
 
+  it('com movimento reduzido, se o poster falha, volta para o placeholder', () => {
+    stubReducedMotion(true)
+    renderWithI18n(<KairyaTurntable asset={ASSET} />)
+
+    fireEvent.error(screen.getByTestId('kairya-turntable-poster'))
+
+    expect(screen.getByTestId('kairya-turntable-placeholder')).toBeInTheDocument()
+    expect(screen.queryByTestId('kairya-turntable-poster')).not.toBeInTheDocument()
+  })
+
   it('em ingles, o alt e o ingles', () => {
     stubReducedMotion(false)
     renderWithI18n(<KairyaTurntable asset={ASSET} />, { locale: 'en' })

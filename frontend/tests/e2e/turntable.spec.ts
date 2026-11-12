@@ -48,6 +48,7 @@ async function forcarNivelNovo(page: Page): Promise<void> {
   await page.route('**/api/missions/*/complete', async (rota) => {
     const resposta = await rota.fetch()
     const corpo = (await resposta.json()) as { reward: Record<string, unknown> | null }
+    expect(corpo.reward, 'complete sem reward').not.toBeNull()
     await rota.fulfill({
       response: resposta,
       json: { ...corpo, reward: { ...corpo.reward, level_before: 1, level_after: 2 } },
