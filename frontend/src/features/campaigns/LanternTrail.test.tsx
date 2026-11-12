@@ -657,11 +657,26 @@ describe('LanternTrail -- efeitos', () => {
     }
   }
 
+  /**
+   * O som sai de um efeito passivo, que o React roda DEPOIS do commit que troca
+   * o DOM (em outra tarefa, quando o render passa do frame do scheduler). Esperar
+   * so o DOM deixa a leitura de `played()` correr contra esse efeito: sob carga
+   * ela vem vazia. Por isso espera-se o proprio som e, depois que o React
+   * esvazia a fila, confere-se que nao tocou uma segunda vez.
+   */
+  async function expectPlayedOnce(played: () => (string | undefined)[]) {
+    await waitFor(() => {
+      expect(played()).toEqual(['weekly_trial_unlocked'])
+    })
+    await act(async () => {})
+    expect(played()).toEqual(['weekly_trial_unlocked'])
+  }
+
   it('a especial disponivel toca weekly_trial_unlocked uma vez por montagem', async () => {
     const { played } = mount(especial('disponivel'))
     await screen.findByTestId('trail-special-art')
 
-    expect(played()).toEqual(['weekly_trial_unlocked'])
+    await expectPlayedOnce(played)
   })
 
   it('a especial que fica disponivel depois da montagem toca weekly_trial_unlocked uma vez', async () => {
@@ -674,10 +689,8 @@ describe('LanternTrail -- efeitos', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
-    await waitFor(() => {
-      expect(screen.getByTestId('trail-special')).toHaveAttribute('data-availability', 'disponivel')
-    })
-    expect(played()).toEqual(['weekly_trial_unlocked'])
+    await expectPlayedOnce(played)
+    expect(screen.getByTestId('trail-special')).toHaveAttribute('data-availability', 'disponivel')
   })
 
   it('a especial bloqueada nao toca nada', async () => {
