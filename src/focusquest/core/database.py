@@ -134,8 +134,10 @@ def descartar_engine() -> None:
     None, e o `get_engine` seguinte cria outra, o que serve ao processo que
     sobe o app mais de uma vez (a suite, com `with TestClient(app)`).
 
-    Roda sob a MESMA trava do `get_engine`, para nao ler `_engine` no meio de
-    uma criacao em andamento.
+    So a leitura e a troca de `_engine` rodam sob a trava do `get_engine`
+    (para nao ler `_engine` no meio de uma criacao em andamento); o `dispose`
+    roda FORA dela, com a engine ja desligada da variavel, para nao segurar a
+    trava enquanto o pool fecha as conexoes.
     """
     global _engine
     with _trava_da_criacao:
