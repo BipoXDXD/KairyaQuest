@@ -1,7 +1,7 @@
 import { achievementText } from '../../shared/i18n/achievementText'
-import { KairyaTurntable } from '../kairya'
 import { useT } from '../../shared/i18n/useT'
 import type { Reward } from '../../shared/types/reward'
+import { KairyaTurntable } from '../kairya'
 
 /**
  * O anuncio da recompensa no cartao concluido (D16). Mora DENTRO da regiao

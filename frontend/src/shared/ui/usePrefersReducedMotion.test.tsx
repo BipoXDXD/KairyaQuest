@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { usePrefersReducedMotion } from './usePrefersReducedMotion'
 
 function stubReducedMotion(initial: boolean) {
@@ -34,6 +34,10 @@ function stubReducedMotion(initial: boolean) {
 }
 
 describe('usePrefersReducedMotion', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('le a preferencia de movimento reduzido', () => {
     const media = stubReducedMotion(true)
 

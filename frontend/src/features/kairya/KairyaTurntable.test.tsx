@@ -1,5 +1,5 @@
 import { fireEvent, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
 import { KairyaTurntable } from './KairyaTurntable'
 import type { TurntableAsset } from './turntable'
@@ -21,6 +21,10 @@ function stubReducedMotion(reduced: boolean) {
 }
 
 describe('KairyaTurntable', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('sem asset, mostra o placeholder com a arte celebrating', () => {
     renderWithI18n(<KairyaTurntable asset={null} />)
 
@@ -49,6 +53,22 @@ describe('KairyaTurntable', () => {
     expect(video).toHaveAttribute('poster', '/art/kairya/turntable.webp')
     expect(video).toHaveAttribute('role', 'img')
     expect(video).toHaveAttribute('aria-label', 'A Kairya gira e comemora o seu novo nível')
+  })
+
+  it.each([['autoplay'], ['playsinline']])('o video tem o atributo %s', (attr) => {
+    stubReducedMotion(false)
+    renderWithI18n(<KairyaTurntable asset={ASSET} />)
+
+    expect(screen.getByTestId('kairya-turntable')).toHaveAttribute(attr)
+  })
+
+  it('o video reserva o espaco com a largura e a altura do asset', () => {
+    stubReducedMotion(false)
+    renderWithI18n(<KairyaTurntable asset={ASSET} />)
+
+    const video = screen.getByTestId('kairya-turntable')
+    expect(video).toHaveAttribute('width', '480')
+    expect(video).toHaveAttribute('height', '600')
   })
 
   it('com movimento reduzido, mostra so o poster, sem video', () => {
