@@ -1,8 +1,10 @@
 /// <reference types="node" />
+import { readdirSync } from 'node:fs'
 import { dirname, join, normalize } from 'node:path/posix'
 import ts from 'typescript'
-import { expect, test } from 'vitest'
-import { listSources, readSource } from './readSource'
+import { describe, expect, test } from 'vitest'
+import { mayContainWord } from './mayContainWord'
+import { listSources, readSource, sourcePath } from './readSource'
 
 /**
  * Regra 1 de `docs/ARCHITECTURE.md` §5: uma feature só importa de outra pelo
@@ -72,9 +74,13 @@ function moduleLiteralsOf(node: ts.Node): ts.StringLiteralLike[] {
   return ts.isCallExpression(node) ? moduleArgumentsOf(node) : []
 }
 
+/** Quantos textos já passaram pelo parse; os testes do filtro leem a diferença. */
+let parsedCount = 0
+
 /** Todo caminho de módulo que o texto referencia, com a linha do especificador. */
 function moduleReferencesIn(path: string, text: string): ModuleReference[] {
   const kind = path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  parsedCount += 1
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind)
   const found: ModuleReference[] = []
   const visit = (node: ts.Node): void => {
@@ -104,8 +110,31 @@ function featureTarget(
   return match?.[1] === undefined ? null : { feature: match[1], rest: match[2] ?? '' }
 }
 
+/** Nomes das pastas de `src/features`, lidos do disco: feature nova entra na regra sem editar este arquivo. */
+const FEATURE_NAMES = readdirSync(sourcePath('src/features'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+
+/**
+ * Filtro barato antes do parse (`mayContainWord`): o arquivo só tem como importar
+ * o interno de outra feature se o texto puder citar o nome dela ou `features`
+ * (caminho até uma pasta que nem existe), escritos por extenso ou com escapes
+ * (`'../\u006bairya/x'`), que a AST lê já decodificados. Sem nenhum dos dois, o
+ * parse não teria o que achar. Condição necessária, nunca suficiente: quem passa
+ * é decidido pela AST. Dentro de uma feature, o nome da própria feature não
+ * conta, porque importá-la é permitido.
+ */
+function mayReferenceOtherFeature(path: string, text: string): boolean {
+  const own = featureOf(path)
+  return (
+    mayContainWord(text, 'features') ||
+    FEATURE_NAMES.some((name) => name !== own && mayContainWord(text, name))
+  )
+}
+
 /** Linhas `arquivo:linha` que importam o interno de OUTRA feature (ou de qualquer feature, fora delas). */
 function offendersIn(path: string, text: string): string[] {
+  if (!mayReferenceOtherFeature(path, text)) return []
   const own = featureOf(path)
   const lines = new Set<number>()
   for (const { specifier, line } of moduleReferencesIn(path, text)) {
@@ -207,6 +236,82 @@ test('import de pacote ou de fora das features não é acusado', () => {
   expect(offendersIn(FEATURE_FILE, "import { x } from '../../shared/api/client'")).toEqual([])
 })
 
+/**
+ * Casos que um filtro textual ingênuo deixaria escapar. O filtro que antecede o
+ * parse procura, no texto, o nome de uma feature alheia; estes casos escondem o
+ * nome (escape), embaralham o caminho (`..` no meio) ou não têm `features` no
+ * texto (arquivo dentro de uma feature que só cita a outra). A regra, que lê a
+ * AST, acusa todos, e o filtro precisa deixá-los passar.
+ */
+test.each([
+  ['import com alias', "import { useKairyaMood as mood } from '../kairya/useKairyaMood'"],
+  ['import de namespace', "import * as k from '../kairya/useKairyaMood'"],
+  ['nome da feature com escape unicode', "import { x } from '../\\u006bairya/x'"],
+  ['nome da feature com escape hexadecimal', "vi.mock('../\\x6bairya/x')"],
+  ['barra escapada', "import { x } from '..\\x2fkairya\\x2fx'"],
+  ['continuação de linha no nome', "import { x } from '../kai\\\nrya/x'"],
+  ['template sem substituição', 'const m = await import(`../kairya/x`)'],
+  ['caminho que sai e entra de novo', "import { x } from '../tutoring/../kairya/x'"],
+  ['caminho pelo diretório features', "import { x } from '../../features/kairya/x'"],
+  [
+    'import depois de muito código sem relação',
+    `${'const a = 1\n'.repeat(300)}import { x } from '../kairya/x'`,
+  ],
+])('a regra acusa %s', (_name, sample) => {
+  expect(offendersIn(FEATURE_FILE, sample)).not.toEqual([])
+})
+
+test('a regra acusa, fora das features, o import que passa por features mesmo sem a pasta existir', () => {
+  expect(offendersIn('src/App.tsx', "import { x } from './features/inexistente/x'")).toEqual([
+    'src/App.tsx:1',
+  ])
+})
+
+test('a regra acusa o import de um arquivo solto em features/ para o interno de uma feature', () => {
+  expect(offendersIn('src/features/a.ts', "import { x } from './kairya/x'")).toEqual([
+    'src/features/a.ts:1',
+  ])
+})
+
+describe('o filtro textual que antecede o parse', () => {
+  /** Quantos parses o `action` provocou. */
+  function parsesDuring(action: () => void): number {
+    const before = parsedCount
+    action()
+    return parsedCount - before
+  }
+
+  test.each([
+    [
+      'só imports locais e de shared',
+      FEATURE_FILE,
+      "import { a } from './b'\nimport { c } from '../../shared/c'",
+    ],
+    ['só a própria feature, citada pelo nome', FEATURE_FILE, "import { a } from '../tutoring/a'"],
+    ['nenhum import', 'src/pages/a.ts', 'export const a = 1'],
+    [
+      'escapes que não formam nome de feature',
+      FEATURE_FILE,
+      "const s = 'a\\nb'; const re = /\\d+/",
+    ],
+  ])('poupa o parse do texto com %s', (_name, path, sample) => {
+    expect(parsesDuring(() => offendersIn(path, sample))).toBe(0)
+  })
+
+  test.each([
+    ['o nome de outra feature', FEATURE_FILE, "import { x } from '../kairya/x'"],
+    [
+      'o nome de uma feature, fora das features',
+      'src/pages/a.ts',
+      "import { x } from '../features/kairya'",
+    ],
+    ['a palavra features', 'src/pages/a.ts', "import { x } from '../features/inexistente'"],
+    ['o nome escrito com escape', FEATURE_FILE, "import { x } from '../\\u006bairya/x'"],
+  ])('faz o parse do texto com %s', (_name, path, sample) => {
+    expect(parsesDuring(() => offendersIn(path, sample))).toBe(1)
+  })
+})
+
 const SELF = 'src/test/noCrossFeatureInternals.test.ts'
 
 /** Todo `src`, menos este arquivo, que tem as amostras. */
@@ -231,7 +336,10 @@ test('a varredura inclui features, pages, shared, app, App, main e src/test', ()
   expect(scannedFiles()).not.toContain(SELF)
 })
 
-test('nenhum arquivo importa o interno de outra feature', () => {
-  const offenders = scannedFiles().flatMap((path) => offendersIn(path, readSource(path)))
+test('nenhum arquivo importa o interno de outra feature, e a varredura só faz o parse de metade dos arquivos, no máximo', () => {
+  const files = scannedFiles()
+  const parsedBefore = parsedCount
+  const offenders = files.flatMap((path) => offendersIn(path, readSource(path)))
   expect(offenders).toEqual([])
+  expect(parsedCount - parsedBefore).toBeLessThanOrEqual(files.length / 2)
 })
