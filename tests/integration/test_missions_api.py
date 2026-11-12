@@ -31,12 +31,16 @@ from focusquest.modules.missions.domain import (
     MissionType,
     xp_para_dificuldade,
 )
-from focusquest.modules.missions.models import Mission, MissionOperation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionOperation,
+)
 from focusquest.modules.missions.schemas import (
     DIFICULDADE_MAXIMA,
     MAIOR_INTEIRO_DA_COLUNA,
     TAMANHO_MAXIMO_DO_IDENTIFICADOR,
 )
+from focusquest.modules.users.models import User
 
 # O usuario unico semeado pela migracao (README s8) -- o mesmo que o router
 # assume enquanto nao houver autenticacao.

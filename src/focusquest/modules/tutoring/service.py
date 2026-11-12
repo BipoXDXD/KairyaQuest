@@ -45,7 +45,10 @@ from focusquest.modules.missions.domain import (
     OrigemDoReagendamento,
     TransicaoIlegalError,
 )
-from focusquest.modules.missions.models import Mission, MissionReschedule, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionReschedule,
+)
 from focusquest.modules.missions.schemas import MissionCreate
 from focusquest.modules.missions.service import (
     criar_missao,
@@ -87,6 +90,7 @@ from focusquest.modules.tutoring.schemas import (
     RescheduleProposal,
     RetratoDoReagendamento,
 )
+from focusquest.modules.users.models import User
 from focusquest.modules.users.service import ler_idioma
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O

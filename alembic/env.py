@@ -10,6 +10,7 @@ from sqlalchemy import pool
 import focusquest.modules.missions.models  # noqa: F401
 import focusquest.modules.progression.models  # noqa: F401
 import focusquest.modules.tutoring.models  # noqa: F401
+import focusquest.modules.users.models  # noqa: F401
 from focusquest.core.base import Base
 from focusquest.core.config import Settings
 from focusquest.core.database import create_engine_from_url

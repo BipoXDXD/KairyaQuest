@@ -11,11 +11,15 @@ from sqlalchemy import Connection, Engine, ExecutionContext, delete, event, sele
 from sqlalchemy.orm import Session
 
 from focusquest.modules.missions.domain import MissionState
-from focusquest.modules.missions.models import Mission, MissionOperation, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionOperation,
+)
 from focusquest.modules.missions.service import concluir_missao, criar_missao
 from focusquest.modules.progression.domain import PAINEL, Codigo, FaixaDoNivel
 from focusquest.modules.progression.models import UserAchievement, XpEntry
 from focusquest.modules.progression.service import Progresso, ler_progresso
+from focusquest.modules.users.models import User
 
 AGORA = datetime(2026, 9, 21, 15, tzinfo=UTC)
 SEGUNDOS_LIMITE = 30

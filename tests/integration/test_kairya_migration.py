@@ -23,7 +23,10 @@ from sqlalchemy.orm import Session
 from focusquest.core.database import get_session
 from focusquest.main import app
 from focusquest.modules.missions.domain import OrigemDoReagendamento
-from focusquest.modules.missions.models import Mission, MissionReschedule, User
+from focusquest.modules.missions.models import (
+    Mission,
+    MissionReschedule,
+)
 from focusquest.modules.missions.service import criar_missao
 from focusquest.modules.progression.domain import Codigo
 from focusquest.modules.progression.models import UserAchievement
@@ -31,6 +34,7 @@ from focusquest.modules.progression.service import (
     ler_progresso,
     recompensa_da_missao,
 )
+from focusquest.modules.users.models import User
 
 from .conftest import alembic_config
 

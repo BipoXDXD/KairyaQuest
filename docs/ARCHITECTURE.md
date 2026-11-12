@@ -105,9 +105,10 @@ Registrado explicitamente, para que ninguém leia ausência como descuido:
   do SQLAlchemy diretamente; a camada de repositório do §2 continua contrato,
   e nasce quando se justificar (README §3: "quando necessário").
 - **Não existe o módulo `progress`.** O módulo `users` nasceu na F3 (idioma
-  e `/api/me`), mas o modelo `User` continua em `modules/missions/models.py`:
-  as tabelas de `missions` apontam para `users.id`, e mudar a classe faria
-  `missions` importar `users` (ver `docs/HANDOFF.md`). O módulo `tutoring`
+  e `/api/me`) e é dono do modelo `User` (`modules/users/models.py`, pendência
+  8). As tabelas de `missions` apontam para `users.id`, e por isso
+  `missions/models.py` importa `users.models` para registrar o alvo da chave
+  estrangeira; `users` não importa `missions`. O módulo `tutoring`
   **nasceu no 1b-1** (backend) e ganhou o lado do frontend
   (`frontend/src/features/tutoring/`) **no 1b-2** — a feature existe hoje,
   não é mais contrato.
@@ -684,7 +685,7 @@ loaders ORM: sua consistência continua em `test_cycle_consistency.py`.
 `state`, mesma rota de conclusão —, e um módulo `cycle` separado fecharia um
 ciclo de import: `missions/service.py` precisa das regras do ciclo dentro de
 `concluir_missao` (a ocultação e a regra do dia), e o ciclo precisa de
-`Mission` e de `User` (que mora em `missions/models.py`, pendência 8). A
+`Mission` (e, à época, de `User`, que morava em `missions/models.py`). A
 convenção de fronteira 2 (§5, "nada de dependência circular") proíbe
 exatamente essa forma. Por isso os quatro arquivos novos entram como
 `cycle_domain.py`/`cycle_service.py`/`cycle_schemas.py`/`cycle_router.py`
@@ -1644,8 +1645,8 @@ IDE (Settings > Languages & Frameworks > Node.js); sem eles, use o terminal
    `modules/missions/cycle_*.py`, e não num módulo `modules/cycle/` próprio
    (decisão P1, `docs/HANDOFF.md`): um módulo separado fecharia o ciclo —
    `missions/service.py` precisa das regras do ciclo dentro de
-   `concluir_missao`, e o ciclo precisa de `Mission` e de `User`, que moram
-   em `missions/models.py`.
+   `concluir_missao`, e o ciclo precisa de `Mission`, que mora em
+   `missions/models.py`.
 3. **Só sobe para `shared/` o que é realmente compartilhado.** O critério é
    uso real por mais de uma feature, não expectativa de reúso futuro. Regra
    específica de uma feature fica na feature — mesmo que pareça genérica.

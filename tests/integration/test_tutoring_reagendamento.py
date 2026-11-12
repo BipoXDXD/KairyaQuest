@@ -41,7 +41,6 @@ from focusquest.modules.missions.domain import (
 from focusquest.modules.missions.models import (
     Mission,
     MissionReschedule,
-    User,
     WeeklyPlan,
 )
 from focusquest.modules.missions.service import (
@@ -77,6 +76,7 @@ from focusquest.modules.tutoring.service import (
     rejeitar_acao,
     transmitir,
 )
+from focusquest.modules.users.models import User
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
     Roteiro,

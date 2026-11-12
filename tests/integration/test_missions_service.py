@@ -23,7 +23,6 @@ from focusquest.modules.missions.models import (
     Mission,
     MissionEvidence,
     MissionOperation,
-    User,
 )
 from focusquest.modules.missions.service import (
     NovaEvidencia,
@@ -32,6 +31,7 @@ from focusquest.modules.missions.service import (
     listar_missoes,
 )
 from focusquest.modules.progression.models import FONTE_CONCLUSAO, XpEntry
+from focusquest.modules.users.models import User
 
 # O usuario unico semeado pela migracao (README s8).
 ESTUDANTE = 1
