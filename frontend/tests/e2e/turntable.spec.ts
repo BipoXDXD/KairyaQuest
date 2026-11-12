@@ -80,9 +80,13 @@ test('nivel novo: o placeholder da Kairya aparece na recompensa, com o alt em pt
   await page.goto('/')
   await concluir(page, instrucao)
 
-  const recompensa = page.getByTestId('reward')
-  const placeholder = recompensa.getByTestId('kairya-turntable-placeholder')
+  // O turntable fica fora da regiao viva da recompensa (role=status), para o
+  // leitor de tela nao reler o anuncio quando o botao de pausa troca o rotulo.
+  const placeholder = page.getByTestId('kairya-turntable-placeholder')
   await expect(placeholder).toBeVisible()
+  await expect(page.getByTestId('reward').getByTestId('kairya-turntable-placeholder')).toHaveCount(
+    0,
+  )
   await expect(placeholder).toHaveAttribute(
     'alt',
     CATALOGS['pt-BR']['kairya.turntable.placeholderAlt'],
@@ -99,7 +103,7 @@ test('movimento reduzido: nenhum video e montado e o placeholder aparece', async
   await page.goto('/')
   await concluir(page, instrucao)
 
-  await expect(page.getByTestId('reward').getByTestId('kairya-turntable-placeholder')).toBeVisible()
+  await expect(page.getByTestId('kairya-turntable-placeholder')).toBeVisible()
   await expect(page.locator('video')).toHaveCount(0)
   await esperarAnimacoesFinitas(page)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
