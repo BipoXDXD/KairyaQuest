@@ -19,6 +19,7 @@ Sem `sleep`: o que precisa esperar espera por `Event` ou por `join` da thread,
 e o relogio do leitor e o falso de `Espera`.
 """
 
+import inspect
 import logging
 import queue
 import threading
@@ -36,7 +37,10 @@ from focusquest.modules.tutoring.leitura import (
     LeitoresVivos,
     ler_com_prazo,
 )
-from focusquest.modules.tutoring.provider import ProvedorIndisponivelError
+from focusquest.modules.tutoring.provider import (
+    ProvedorIndisponivelError,
+    TempoEsgotadoError,
+)
 
 ESPERA_DO_TESTE = 5.0
 TETO_DO_STREAM = 54.0
@@ -467,3 +471,95 @@ def test_o_gauge_global_e_o_que_o_stream_usa_por_padrao(
                 espera=_Relogio().injetavel,
             )
         )
+
+
+def _thread_segurada_ate(
+    liberada: threading.Event,
+) -> type[threading.Thread]:
+    """Uma thread que so comeca a rodar quando o teste manda: o consumidor
+    pode sair ANTES de o leitor dar o primeiro passo, sem corrida."""
+
+    class ThreadSegurada(threading.Thread):
+        def run(self) -> None:
+            assert liberada.wait(ESPERA_DO_TESTE), "o teste nao liberou a thread"
+            super().run()
+
+    return ThreadSegurada
+
+
+def test_leitor_cancelado_antes_do_primeiro_evento_nao_chama_o_provedor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # O consumidor estoura (teto 0) antes de o leitor ler o primeiro evento.
+    # Abrir o gerador do provedor agora seria uma chamada PAGA que ninguem
+    # espera: o leitor confere o cancelamento antes do primeiro `next()`, fecha
+    # o gerador sem iterar e devolve a vaga.
+    leitores = LeitoresVivos(teto=2)
+    liberada = threading.Event()
+    _com_thread(monkeypatch, _thread_segurada_ate(liberada))
+    stream = _Stream(("a",))
+    gerador = stream.gerar()
+
+    with pytest.raises(TempoEsgotadoError):
+        list(
+            ler_com_prazo(
+                gerador,
+                teto_segundos=0,
+                espera=_Relogio().injetavel,
+                leitores=leitores,
+            )
+        )
+    assert leitores.vivos == 1  # o leitor ainda nem comecou, e a vaga e dele
+
+    liberada.set()
+    _esperar_os_leitores()
+
+    assert not stream.iniciou.is_set()  # o corpo do provedor nunca rodou
+    assert inspect.getgeneratorstate(gerador) == inspect.GEN_CLOSED
+    assert leitores.vivos == 0
+
+
+def test_relogio_que_falha_no_leitor_cancelado_devolve_a_vaga_sem_erro_solto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `_ler` mede a vida do leitor para o log. Se o relogio lancar na primeira
+    # leitura com o consumidor ja fora, o `finally` nao pode estourar num
+    # `UnboundLocalError` por causa de uma variavel que nunca foi atribuida:
+    # a vaga volta e nenhuma excecao escapa da thread.
+    leitores = LeitoresVivos(teto=2)
+    liberada = threading.Event()
+    _com_thread(monkeypatch, _thread_segurada_ate(liberada))
+    soltas: list[BaseException] = []
+    monkeypatch.setattr(
+        threading, "excepthook", lambda args: soltas.append(args.exc_value)
+    )
+
+    leituras_do_leitor: list[float] = []
+
+    def relogio_quebrado() -> float:
+        # So a PRIMEIRA leitura do leitor falha (a que atribui o inicio): as
+        # seguintes, como a do log, funcionam.
+        if threading.current_thread().name == "tutoria-leitor":
+            leituras_do_leitor.append(1000.0)
+            if len(leituras_do_leitor) == 1:
+                raise OSError("relogio indisponivel")
+        return 1000.0
+
+    stream = _Stream(("a",))
+    espera = Espera(monotonic=relogio_quebrado, esperar=_Relogio.esperar)
+    with pytest.raises(TempoEsgotadoError):
+        list(
+            ler_com_prazo(
+                stream.gerar(),
+                teto_segundos=0,
+                espera=espera,
+                leitores=leitores,
+            )
+        )
+
+    liberada.set()
+    _esperar_os_leitores()
+
+    assert soltas == []
+    assert not stream.iniciou.is_set()
+    assert leitores.vivos == 0
