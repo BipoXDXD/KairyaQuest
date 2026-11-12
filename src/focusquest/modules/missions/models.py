@@ -70,7 +70,7 @@ _TIPOS_DE_OPERACAO_SQL = ", ".join(f"'{t.value}'" for t in TipoDeOperacao)
 
 
 class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
-    """TEXT no banco, OrigemDoReagendamento no Python (como MissionStateText)."""
+    """TEXT no banco, OrigemDoReagendamento no Python (como `TextoDeEnum`)."""
 
     impl = Text
     cache_ok = True
@@ -78,8 +78,9 @@ class OrigemDoReagendamentoText(TypeDecorator[OrigemDoReagendamento]):
     def process_result_value(
         self, value: Any, dialect: Dialect
     ) -> OrigemDoReagendamento:
-        # Sem tratar None, como MissionStateText: a coluna e NOT NULL e nenhuma
-        # leitura passa por outer join; um NULL aqui e divergencia de esquema.
+        # Sem tratar None, como o `TextoDeEnum` de coluna obrigatoria: a coluna
+        # e NOT NULL e nenhuma leitura passa por outer join; um NULL aqui e
+        # divergencia de esquema.
         return _ORIGENS_ANTIGAS.get(value) or OrigemDoReagendamento(value)
 
 
