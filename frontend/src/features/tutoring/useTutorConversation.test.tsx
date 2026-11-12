@@ -1268,17 +1268,18 @@ describe('useTutorConversation: envio', () => {
     // agenda no Scheduler: `retry` le o estado do ultimo render, entao espera-se
     // o estado (o botao que a pessoa clicaria), nao a ordem dos dois.
     await waitFor(() => {
-      expect(result.current.send.status).toBe('failed')
+      expect(result.current.send).toMatchObject({ status: 'failed', partial: 'Meio' })
     })
     act(() => {
       result.current.retry()
     })
+    // `failed` ja era o estado antes do `retry`: so o parcial do SEGUNDO turno
+    // prova que o reenvio aconteceu e que a segunda falha foi desenhada (o GET
+    // dela, `silent[1]`, sai no mesmo handler que a desenha).
     await waitFor(() => {
-      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
+      expect(result.current.send).toMatchObject({ status: 'failed', partial: 'Outro meio' })
     })
-    await waitFor(() => {
-      expect(result.current.send.status).toBe('failed')
-    })
+    expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
 
     // A mais nova chega primeiro e vale.
     act(() => {
