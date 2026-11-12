@@ -75,6 +75,11 @@ LIMPOS = {
     "authorization citado sem valor": b'o cabecalho "Authorization" nao e enviado',
     "bearer em prosa": b"the bearer of news",
     "gsk_ curto demais": b"gsk_abc",
+    "x-api-key escapado com a ficticia": (rb"{\"x-api-key\":\"e2e-chave-ficticia\"}"),
+    "cookie escapado sem valor": rb"{\"cookie\":\"\"}",
+    "par name/value escapado sem valor": (
+        rb"{\"name\":\"authorization\",\"value\":\"\"}"
+    ),
 }
 
 
@@ -107,6 +112,17 @@ SEGREDOS = {
     "Proxy-Authorization": f"Proxy-Authorization: {CANARIO}",
     "x-api-key diferente da ficticia": f"x-api-key: {CANARIO}",
     "x-api-key no par do trace": f'{{"name":"X-Api-Key","value":"{CANARIO}"}}',
+    # JSON dentro de string JSON (corpo de resposta gravado no trace): as
+    # aspas chegam escapadas, `\\"`.
+    "authorization escapado": rf"{{\"authorization\":\"Basic {CANARIO}\"}}",
+    "authorization escapado em duplo nivel": (
+        rf"{{\\\"authorization\\\":\\\"Basic {CANARIO}\\\"}}"
+    ),
+    "cookie escapado": rf"{{\"cookie\":\"sid={CANARIO}\"}}",
+    "x-api-key escapado": rf"{{\"x-api-key\":\"{CANARIO}\"}}",
+    "par name/value escapado": (
+        rf"{{\"name\":\"Authorization\",\"value\":\"Bearer-{CANARIO}\"}}"
+    ),
     "Cookie em texto": f"Cookie: sessao={CANARIO}",
     "Set-Cookie em texto": f"Set-Cookie: sessao={CANARIO}; HttpOnly",
     "cookie no par do trace": f'{{"name":"cookie","value":"sessao={CANARIO}"}}',

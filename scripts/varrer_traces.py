@@ -74,7 +74,53 @@ TETO_TOTAL = 2 * 1024 * 1024 * 1024
 # `(?<![A-Za-z0-9])` evita casar o meio de uma palavra comum: `task-card-...`
 # contem `sk-card-...`, e nao e chave.
 _ANTES = rb"(?<![A-Za-z0-9])"
-_VALOR_DO_PAR = rb'\s*,\s*"value"\s*:\s*"'
+# Aspas com ZERO OU MAIS barras antes: o trace guarda corpos de requisicao e
+# resposta como TEXTO, e um JSON dentro de uma string JSON chega escapado
+# (`\"authorization\":\"...\"`), ou escapado de novo no aninhamento seguinte.
+# Sem isto, so o JSON "solto" era visto.
+_ASPAS = rb'\\*"'
+_ASPAS_OU_APOSTROFO = rb"""\\*["']"""
+# Primeiro caractere de um valor: nem separador, nem aspas, nem barra -- um
+# valor vazio (`""`, `\"\"`) nao e valor.
+_INICIO_DE_VALOR = rb"""[^\s"',}\\]"""
+_PAR_VALOR = rb"\s*,\s*" + _ASPAS + rb"value" + _ASPAS + rb"\s*:\s*" + _ASPAS
+_FICTICIA = CHAVE_FICTICIA_DO_E2E.encode()
+
+
+def _chave_com_valor(nome: bytes, separador: bytes, *, exceto: bytes = b"") -> bytes:
+    """`nome: valor`, em texto, JSON ou JSON escapado (`nome` pode ter regex)."""
+    return (
+        rb"(?<![A-Za-z0-9-])"
+        + nome
+        + rb"(?:"
+        + _ASPAS_OU_APOSTROFO
+        + rb")?"
+        + separador
+        + rb"(?:"
+        + _ASPAS_OU_APOSTROFO
+        + rb")?"
+        + (rb"(?!" + exceto + rb")" if exceto else b"")
+        + _INICIO_DE_VALOR
+    )
+
+
+def _par_nome_valor(nome: bytes, *, exceto: bytes = b"") -> bytes:
+    """O par `{"name": nome, "value": ...}` do trace, com valor nao vazio."""
+    return (
+        _ASPAS
+        + rb"name"
+        + _ASPAS
+        + rb"\s*:\s*"
+        + _ASPAS
+        + nome
+        + _ASPAS
+        + _PAR_VALOR
+        + (rb"(?!" + exceto + rb")" if exceto else b"")
+        + rb'[^"\\]'
+    )
+
+
+_DOIS_PONTOS_OU_IGUAL = rb"\s*[:=]\s*"
 
 PADROES: dict[str, re.Pattern[bytes]] = {
     "sk-": re.compile(_ANTES + rb"sk-[A-Za-z0-9_-]{8,}"),
@@ -82,23 +128,21 @@ PADROES: dict[str, re.Pattern[bytes]] = {
     "gsk_": re.compile(_ANTES + rb"gsk_[A-Za-z0-9]{8,}"),
     "Bearer": re.compile(_ANTES + rb"bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
     "Authorization": re.compile(
-        rb"(?<![A-Za-z0-9-])(?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?[^\s\"',}]"
-        rb"|\"name\"\s*:\s*\"(?:proxy-)?authorization\"" + _VALOR_DO_PAR + rb'[^"]',
+        _chave_com_valor(rb"(?:proxy-)?authorization", _DOIS_PONTOS_OU_IGUAL)
+        + rb"|"
+        + _par_nome_valor(rb"(?:proxy-)?authorization"),
         re.IGNORECASE,
     ),
     "x-api-key": re.compile(
-        rb"(?<![A-Za-z0-9-])x-api-key[\"']?\s*[:=]\s*[\"']?"
-        rb"(?!" + CHAVE_FICTICIA_DO_E2E.encode() + rb")[^\s\"',}]"
-        rb"|\"name\"\s*:\s*\"x-api-key\""
-        + _VALOR_DO_PAR
-        + rb"(?!"
-        + CHAVE_FICTICIA_DO_E2E.encode()
-        + rb'")[^"]',
+        _chave_com_valor(rb"x-api-key", _DOIS_PONTOS_OU_IGUAL, exceto=_FICTICIA)
+        + rb"|"
+        + _par_nome_valor(rb"x-api-key", exceto=_FICTICIA),
         re.IGNORECASE,
     ),
     "cookie": re.compile(
-        rb"(?<![A-Za-z0-9-])(?:set-)?cookie[\"']?[ \t]*:[ \t]*[\"']?[^\s\"',}]"
-        rb"|\"name\"\s*:\s*\"(?:set-)?cookie\"" + _VALOR_DO_PAR + rb'[^"]',
+        _chave_com_valor(rb"(?:set-)?cookie", rb"[ \t]*:[ \t]*")
+        + rb"|"
+        + _par_nome_valor(rb"(?:set-)?cookie"),
         re.IGNORECASE,
     ),
 }

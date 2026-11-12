@@ -706,8 +706,13 @@ varredura, é o job **não ter segredo**: nenhum `secrets.*`, nenhuma variável
 `*_API_KEY` no `env:`, no Makefile nem no `playwright.config.ts`; o provedor é
 o servidor falso em loopback e a chave é a fictícia imposta por
 `scripts/e2e-env.sh`. A varredura cobre o que a prova de ausência não vê.
-Limite: ela lê texto, não pixels — um segredo desenhado numa captura de tela
-do trace não seria visto (o app nunca renderiza chave).
+**Limites aceitos:** a varredura procura o texto, e só decodifica zip. Segredo
+em base64, URL-encoded ou comprimido fora de zip (gzip, brotli) não é
+detectado, nem um segredo desenhado numa captura de tela (o app nunca
+renderiza chave); JSON escapado dentro de string, em qualquer nível, é
+varrido. E `failure()` não vale para job cancelado: **timeout ou cancelamento
+do job não gera artefato**, então um travamento do runner fica sem trace. A
+defesa real é o job não ter segredo.
 
 O job `check-secrets` não precisa de preparo de Node, Python nem instalação
 de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do
