@@ -20,17 +20,28 @@ Leia, nesta ordem:
 4. `docs/QUALITY.md` — o gate de qualidade, o que ele mede e o que ele
    deliberadamente não mede.
 
-E instale os hooks. **Eles não vêm no clone.** Em cada clone novo e em cada
-worktree novo:
+E instale os hooks. **Eles não vêm no clone**, e moram no `.git` comum:
+**uma vez por clone** (não por worktree), a partir de qualquer worktree já
+com `make bootstrap`:
 
 ```bash
 make bootstrap
-uv run pre-commit install --install-hooks
+scripts/instalar-hooks.sh                         # uma vez por clone; nunca "pre-commit install" direto
 cp .env.example .env
 make db-up
 make migrate-test
 make check
 ```
+
+Um worktree novo criado por `scripts/novo-worktree.sh` **não** repete o
+segundo comando: os hooks do `.git` comum já valem para ele. **Nunca rode
+`pre-commit install` (nem `uv run pre-commit install`) à mão**: ele grava no
+`.git` comum o Python de quem o rodou, e num worktree isso aponta os hooks
+de todos para o `.venv` dele — remover o worktree quebra todos. O script
+usa um ambiente dedicado (`.hooks-venv`, ao lado do `.git` comum, fora de
+qualquer worktree) com o `pre-commit` na versão do `uv.lock`; é idempotente
+e confere o resultado. `make check-hooks` reprova se algum hook apontar para
+dentro de um worktree.
 
 Sem o segundo comando, `git commit` e `git push` funcionam sem nenhuma
 validação e sem nenhum aviso de que o gate não está ativo. Sem o `.env` e
@@ -103,8 +114,10 @@ abra a fonte de verdade, ela decide, e corrija os dois.
   o gate isoladamente (no CI, ou dentro do worktree do `pre-push`). Motivo
   completo em `docs/QUALITY.md` §2.
   **Fonte de verdade:** `Makefile` e `.pre-commit-config.yaml`. Arbitrável com
-  `grep -rn "pre-commit" Makefile scripts/` — as ocorrências em `scripts/` são
-  comentários, não invocações.
+  `grep -rn "pre-commit" Makefile scripts/` — as ocorrências são comentários,
+  com uma exceção: `scripts/instalar-hooks.sh`, o instalador, roda
+  `pre_commit install` — e nenhum alvo do Makefile o chama (nem o `bootstrap`,
+  que roda dentro do worktree do `pre-push`); `make check-hooks` só lê os hooks.
 - **Paridade 1:1 entre job do CI e alvo do Makefile.** Cada job de verificação
   do `.github/workflows/quality.yml` executa **um** alvo e nada além dele; o
   que o job faz a mais é preparação de ambiente, não verificação. Quando

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-handoff check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
+.PHONY: help bootstrap check check-handoff check-hooks check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -102,6 +102,14 @@ reset-test-db: ## DESTRUTIVO: cria se faltar, recria o banco de TESTE do zero e 
 
 check-handoff: ## Reprova a branch que edita docs/HANDOFF.md fora da consolidacao
 	./scripts/check-handoff.sh
+
+# FORA do `check` de proposito: o estado dos hooks e da MAQUINA, nao do commit --
+# o CI nao tem hooks instalados, e um gate que dependesse do .git local
+# reprovaria commits corretos. Quem o roda e o scripts/instalar-hooks.sh (ao
+# terminar) e a pessoa, quando suspeita de hook apontando para um worktree.
+# So LE; nao invoca o pre-commit (docs/QUALITY.md secao 2).
+check-hooks: ## Reprova se o INSTALL_PYTHON dos hooks instalados aponta para um worktree
+	./scripts/verificar-hooks.sh
 
 check-secrets: ## Varredura de segredos no projeto inteiro
 	./scripts/install-gitleaks.sh
