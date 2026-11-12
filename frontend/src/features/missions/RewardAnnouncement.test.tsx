@@ -45,6 +45,26 @@ describe('RewardAnnouncement', () => {
     expect(screen.queryByTestId('reward-level-up')).not.toBeInTheDocument()
   })
 
+  it('com subida de nivel, mostra o turntable (placeholder ate o asset existir)', () => {
+    renderWithI18n(<RewardAnnouncement reward={reward({ level_before: 4, level_after: 5 })} />)
+
+    expect(screen.getByTestId('kairya-turntable-placeholder')).toBeInTheDocument()
+  })
+
+  it('sem subida de nivel, nao ha turntable', () => {
+    renderWithI18n(<RewardAnnouncement reward={reward({ level_before: 4, level_after: 4 })} />)
+
+    expect(screen.queryByTestId('kairya-turntable-placeholder')).not.toBeInTheDocument()
+  })
+
+  it('o bonus com subida de nivel mostra o turntable uma vez', () => {
+    renderWithI18n(
+      <RewardAnnouncement reward={reward({ level_before: 4, level_after: 5 })} bonus />,
+    )
+
+    expect(screen.getAllByTestId('kairya-turntable-placeholder')).toHaveLength(1)
+  })
+
   it('lista as conquistas destravadas pelo titulo', () => {
     renderWithI18n(
       <RewardAnnouncement
