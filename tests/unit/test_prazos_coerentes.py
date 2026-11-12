@@ -27,8 +27,8 @@ parede (`tutoring/leitura.py`) igual a `tutor_timeout_seconds`, contado do
 inicio da chamada e conferido sem depender de evento. O teto, mais as fases que
 nao sao leitura (que entram na contagem), cabe em `proxy_read_timeout -
 FOLGA_DO_ORFAO`: e o que o teste do teto prova abaixo, a partir das constantes
-reais. A avaliacao NAO tem esse teto (ela le o stream inteiro por dentro do
-adaptador); fica registrado em `docs/handoff/2026-11-11-teto-stream.md`.
+reais. A avaliacao (`ProvedorAnthropic.avaliar`) le o stream pelo mesmo leitor
+e tem o mesmo teto (P-teto-stream-1, `docs/handoff/2026-11-11-teto-avaliar.md`).
 """
 
 import re
@@ -105,8 +105,8 @@ def test_o_proxy_espera_o_modelo_mais_a_folga_do_orfao() -> None:
     # O `tempo_esgotado` que o backend grava deveria sair em torno de
     # `tutor_timeout_seconds`; o proxy so pode cortar depois, ou o 504 do nginx
     # (sem `code`) venceria o do backend (com `code`). O teto TOTAL do stream da
-    # tutoria vale sem evento chegando (`tutoring/leitura.py`, handoff
-    # 2026-11-11-teto-stream); a avaliacao ainda so o confere na volta da chamada.
+    # tutoria e o da avaliacao valem sem evento chegando (`tutoring/leitura.py`,
+    # handoffs 2026-11-11-teto-stream e 2026-11-11-teto-avaliar).
     # A folga e a mesma do corte do orfao: ate la a avaliacao ainda pode estar
     # em curso, e o reenvio recebe 409.
     folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
@@ -180,6 +180,16 @@ def _pior_caso_do_cliente_ms(provedor: ProvedorAnthropic) -> int:
     return round((por_tentativa * (1 + cliente.max_retries) + backoff) * 1000)
 
 
+def _fases_fora_da_leitura_ms() -> int:
+    """Conexao + escrita + fila do pool do cliente real, em ms."""
+    prazo = _provedor_com_os_padroes()._cliente.timeout
+    assert not isinstance(prazo, int | float | None), "o cliente tem fases nomeadas"
+    assert prazo.connect is not None
+    assert prazo.write is not None
+    assert prazo.pool is not None
+    return round((prazo.connect + prazo.write + prazo.pool) * 1000)
+
+
 def test_o_pior_caso_do_provedor_sai_antes_do_corte_do_proxy_com_folga() -> None:
     # Com os retries do SDK e um timeout igual para as quatro fases, o pior caso
     # era de ~181 s (pendencia P-prazo-medido-1), acima dos 90 s do nginx: o
@@ -199,19 +209,26 @@ def test_o_teto_de_parede_do_stream_cabe_no_corte_do_proxy_com_folga() -> None:
     # contado do ultimo evento). A conta e CONSERVADORA: a conexao, a escrita e
     # a fila do pool ja estao dentro do teto (ele conta do inicio da chamada), e
     # mesmo assim sao somadas de novo.
-    cliente = _provedor_com_os_padroes()._cliente
-    prazo = cliente.timeout
-    assert not isinstance(prazo, int | float | None), "o cliente tem fases nomeadas"
-    assert prazo.connect is not None
-    assert prazo.write is not None
-    assert prazo.pool is not None
-    fases_fora_da_leitura_ms = round((prazo.connect + prazo.write + prazo.pool) * 1000)
     folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
 
     assert (
-        _tutor_timeout_ms() + fases_fora_da_leitura_ms
+        _tutor_timeout_ms() + _fases_fora_da_leitura_ms()
         <= _proxy_read_timeout_ms() - folga_ms
     )
+
+
+def test_o_teto_de_parede_da_avaliacao_e_o_da_tutoria_e_cabe_no_corte_do_proxy() -> (
+    None
+):
+    # `avaliar` consome um stream, nao uma resposta unica: o timeout por leitura
+    # do SDK nao o limita (o `ping` reinicia o relogio do socket). O teto do
+    # adaptador e o mesmo `tutor_timeout_seconds` do chat, com a mesma conta
+    # conservadora das fases fora da leitura.
+    folga_ms = round(FOLGA_DO_ORFAO.total_seconds() * 1000)
+    teto_ms = round(_provedor_com_os_padroes()._teto_da_avaliacao * 1000)
+
+    assert teto_ms == _tutor_timeout_ms()
+    assert teto_ms + _fases_fora_da_leitura_ms() <= _proxy_read_timeout_ms() - folga_ms
 
 
 def test_o_cliente_do_provedor_nao_repete_a_chamada() -> None:

@@ -9,6 +9,7 @@ from typing import Any, Literal
 import anthropic
 import httpx2
 from anthropic import omit
+from anthropic.lib.streaming import ParsedMessageStreamEvent
 from anthropic.types import MessageParam, ToolParam, ToolUseBlock
 from anthropic.types.beta import (
     BetaFallbackBlock,
@@ -21,6 +22,12 @@ from anthropic.types.beta import (
 )
 
 from focusquest.modules.tutoring.domain import TipoDeAcao
+from focusquest.modules.tutoring.leitura import (
+    ESPERA_REAL,
+    ROTULO_DA_AVALIACAO,
+    Espera,
+    ler_com_prazo,
+)
 from focusquest.modules.tutoring.provider import (
     Delta,
     EventoDoProvedor,
@@ -233,6 +240,7 @@ class ProvedorAnthropic:
         fallback: bool,
         esforco: Esforco,
         esforco_da_avaliacao: Esforco,
+        espera: Espera = ESPERA_REAL,
     ) -> None:
         # A chave e o endereco SEMPRE explicitos: sem eles o SDK procura
         # credencial e endereco no ambiente sozinho (medido).
@@ -258,6 +266,8 @@ class ProvedorAnthropic:
         # `Settings.evaluation_effort` decidem.
         self._esforco = esforco
         self._esforco_da_avaliacao = esforco_da_avaliacao
+        self._teto_da_avaliacao = timeout_segundos
+        self._espera = espera
 
     @property
     def modelo(self) -> str:
@@ -344,7 +354,8 @@ class ProvedorAnthropic:
         configurado. Quem manda o modelo chamar `record_evaluation`
         e o sistema da avaliacao; se ele nao chamar, o resultado e `None`, que
         o servico grava como `avaliacao_invalida`. `strict` faz a entrada
-        obedecer ao esquema. O stream e consumido inteiro por dentro; so
+        obedecer ao esquema. O stream e consumido inteiro por dentro, sob o teto
+        TOTAL de parede (`ler_com_prazo`, estouro = `TempoEsgotadoError`); so
         `message_stop` prova que a resposta terminou, como na conversa.
         """
         definicao: ToolParam = {
@@ -356,6 +367,50 @@ class ProvedorAnthropic:
         entradas: list[dict[str, Any]] = []
         terminou = False
         motivo_da_parada: str | None = None
+        # O stream e lido por `ler_com_prazo`: o timeout do SDK limita o silencio
+        # entre bytes, e o `ping` (descartado pelo SDK, mas que conta como byte)
+        # ou um evento a cada 50 s mantem a chamada viva alem do orcamento. O
+        # teto TOTAL de parede e o mesmo do chat da tutoria (pendencia
+        # P-teto-stream-1); estouro vira `TempoEsgotadoError`, que o servico ja
+        # grava como `tempo_esgotado`.
+        for evento in ler_com_prazo(
+            self._eventos_da_avaliacao(turno, definicao),
+            teto_segundos=self._teto_da_avaliacao,
+            espera=self._espera,
+            rotulo=ROTULO_DA_AVALIACAO,
+        ):
+            if (
+                evento.type == "content_block_stop"
+                and isinstance(evento.content_block, ToolUseBlock)
+                and evento.content_block.name == ferramenta.nome
+            ):
+                entradas.append(dict(evento.content_block.input))
+            elif evento.type == "message_delta":
+                motivo_da_parada = evento.delta.stop_reason
+            elif evento.type == "message_stop":
+                terminou = True
+        if not terminou:
+            raise ProvedorIndisponivelError("o stream terminou sem message_stop")
+        if motivo_da_parada != "tool_use":
+            # `max_tokens` (ou outra parada) deixa um `input` possivelmente
+            # parcial: nao o entrega como se fosse uma avaliacao valida.
+            return None
+        # Duas chamadas da ferramenta sao ambiguas (qual veredito vale?) e a
+        # requisicao ja manda `disable_parallel_tool_use`: invalida, em vez de
+        # "o ultimo vence" (decisao da coordenacao, pendencia 97/c1).
+        return entradas[0] if len(entradas) == 1 else None
+
+    def _eventos_da_avaliacao(
+        self, turno: Turno, definicao: ToolParam
+    ) -> Generator[ParsedMessageStreamEvent[None]]:
+        """Os eventos do stream da avaliacao, abertos E fechados pelo leitor.
+
+        A abertura (`with`) fica aqui dentro para que a thread do leitor seja a
+        dona do stream do inicio ao fim: um `close()` vindo de outra thread em
+        cima de uma leitura em curso nao acorda o socket (ver `leitura.py`).
+        Os erros do SDK e do transporte sao traduzidos na propria thread e
+        chegam ao consumidor ja como os erros do provedor.
+        """
         with (
             _traduzir_erros(),
             self._cliente.messages.stream(
@@ -369,24 +424,4 @@ class ProvedorAnthropic:
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
             ) as stream,
         ):
-            for evento in stream:
-                if (
-                    evento.type == "content_block_stop"
-                    and isinstance(evento.content_block, ToolUseBlock)
-                    and evento.content_block.name == ferramenta.nome
-                ):
-                    entradas.append(dict(evento.content_block.input))
-                elif evento.type == "message_delta":
-                    motivo_da_parada = evento.delta.stop_reason
-                elif evento.type == "message_stop":
-                    terminou = True
-        if not terminou:
-            raise ProvedorIndisponivelError("o stream terminou sem message_stop")
-        if motivo_da_parada != "tool_use":
-            # `max_tokens` (ou outra parada) deixa um `input` possivelmente
-            # parcial: nao o entrega como se fosse uma avaliacao valida.
-            return None
-        # Duas chamadas da ferramenta sao ambiguas (qual veredito vale?) e a
-        # requisicao ja manda `disable_parallel_tool_use`: invalida, em vez de
-        # "o ultimo vence" (decisao da coordenacao, pendencia 97/c1).
-        return entradas[0] if len(entradas) == 1 else None
+            yield from stream
