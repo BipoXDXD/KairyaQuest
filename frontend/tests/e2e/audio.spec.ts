@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
-import { CATALOGS } from '../../src/shared/i18n/catalog'
+import { CATALOGS, translate } from '../../src/shared/i18n/catalog'
 import { LINE_GROUPS, LINE_IDS, lineKey, type LineId } from '../../src/features/kairya/lines'
 import {
   AUTOPLAY_BLOCKED_WARNING,
@@ -52,6 +52,9 @@ const DIAS = [1, 2, 3, 4, 5, 6, 7].map(diaria)
 function manhaDoDia(indice: number): string {
   return new Date(Date.UTC(2025, 2, 3 + indice, 12)).toISOString().replace('.000Z', 'Z')
 }
+
+/** As falas de conclusao de missao avulsa. */
+const FALAS_DE_CONCLUSAO: ReadonlySet<LineId> = new Set(LINE_GROUPS.missionDone)
 
 /** As falas da legenda pelo texto pt-BR: a bolha nao carrega o id da fala. */
 const FALA_PELO_TEXTO = new Map<string, LineId>(
@@ -190,6 +193,13 @@ async function falaDaLegenda(page: Page): Promise<LineId | null> {
   return FALA_PELO_TEXTO.get(texto) ?? null
 }
 
+/** Como `falaDaLegenda`, mas falha se a legenda nao for uma fala do catalogo. */
+async function falaDoCatalogo(page: Page): Promise<LineId> {
+  const fala = await falaDaLegenda(page)
+  if (fala === null) throw new Error('a legenda nao e uma fala do catalogo')
+  return fala
+}
+
 async function concluirADiaria(page: Page, indice: number): Promise<void> {
   const ciclo = page.getByTestId('cycle')
   const { instructions } = diaria(indice + 1)
@@ -219,6 +229,38 @@ async function concluirAvulsa(page: Page, instrucao: string): Promise<void> {
   })
   await item.getByRole('button', { name: `Concluir a missão: ${instrucao}` }).click()
   await expect(item.getByTestId('mission-state')).toHaveText('Concluída')
+}
+
+/**
+ * Conclui a avulsa e devolve a fala de conclusao que a legenda passa a mostrar:
+ * uma de `missionDone`, diferente da `anterior` e, se `repetir`, igual a ela.
+ * Depois anda os 3 s da celebracao, que segurariam a fala seguinte.
+ */
+async function concluirEOuvirAvulsa(
+  page: Page,
+  instrucao: string,
+  regra: { anterior: LineId | null; repetir: LineId | null },
+): Promise<LineId> {
+  await concluirAvulsa(page, instrucao)
+  await expect
+    .poll(
+      async () => {
+        const id = await falaDaLegenda(page)
+        return (
+          id !== null &&
+          FALAS_DE_CONCLUSAO.has(id) &&
+          id !== regra.anterior &&
+          (regra.repetir === null || id === regra.repetir)
+        )
+      },
+      {
+        message: 'a fala da conclusao nao seguiu a alternancia A, B, A: o sorteio fixado quebrou',
+      },
+    )
+    .toBe(true)
+  const fala = await falaDoCatalogo(page)
+  await page.clock.runFor(CELEBRACAO_MS)
+  return fala
 }
 
 const pedidosDe = (observacao: Observacao, caminho: string) =>
@@ -340,8 +382,7 @@ for (const falha of FALHAS) {
 
     // A saudacao: a legenda aparece mesmo com a voz falhando.
     await expect(legenda(page)).toBeVisible()
-    const saudacao = await falaDaLegenda(page)
-    if (saudacao === null) throw new Error('a legenda da saudacao nao e uma fala do catalogo')
+    const saudacao = await falaDoCatalogo(page)
     await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${saudacao}.mp3`)).toBe(1)
 
     await concluirADiaria(page, falha.dia)
@@ -351,45 +392,31 @@ for (const falha of FALHAS) {
     await page.clock.runFor(CELEBRACAO_MS)
 
     // Evento repetido, sem recarregar: A, B, A e depois uma fala nova (D).
-    const falas: LineId[] = []
-    for (const [indice, instrucao] of avulsas.entries()) {
-      await concluirAvulsa(page, instrucao)
-      const anterior = falas.at(-1)
-      const esperada = indice === 2 ? falas[0] : undefined
-      await expect
-        .poll(
-          async () => {
-            const id = await falaDaLegenda(page)
-            return (
-              id !== null &&
-              (LINE_GROUPS.missionDone as readonly LineId[]).includes(id) &&
-              id !== anterior &&
-              (esperada === undefined || id === esperada)
-            )
-          },
-          {
-            message:
-              'a fala da conclusao nao seguiu a alternancia A, B, A: o sorteio fixado quebrou',
-          },
-        )
-        .toBe(true)
-      const fala = await falaDaLegenda(page)
-      if (fala === null) throw new Error('a legenda da conclusao saiu do catalogo')
-      falas.push(fala)
-      await page.clock.runFor(CELEBRACAO_MS)
-      if (indice !== 2) {
-        await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${fala}.mp3`)).toBe(1)
-      }
-    }
-    const [primeira, segunda, terceira, quarta] = falas
+    const [instrucaoA, instrucaoB, instrucaoC, instrucaoD] = avulsas
+    const primeira = await concluirEOuvirAvulsa(page, instrucaoA, { anterior: null, repetir: null })
+    await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${primeira}.mp3`)).toBe(1)
+    const segunda = await concluirEOuvirAvulsa(page, instrucaoB, {
+      anterior: primeira,
+      repetir: null,
+    })
+    await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${segunda}.mp3`)).toBe(1)
+    const terceira = await concluirEOuvirAvulsa(page, instrucaoC, {
+      anterior: segunda,
+      repetir: primeira,
+    })
+    const quarta = await concluirEOuvirAvulsa(page, instrucaoD, {
+      anterior: terceira,
+      repetir: null,
+    })
+    await expect.poll(() => avisosDe(observacao, `${PASTA_DAS_FALAS}${quarta}.mp3`)).toBe(1)
     expect(terceira, 'a 3a conclusao devia repetir a fala da 1a').toBe(primeira)
     expect(segunda).not.toBe(primeira)
     expect([primeira, segunda]).not.toContain(quarta)
     assertSameLineIsNotRetried(
       observacao,
-      `${PASTA_DAS_FALAS}${primeira ?? ''}.mp3`,
-      `${PASTA_DAS_FALAS}${segunda ?? ''}.mp3`,
-      `${PASTA_DAS_FALAS}${quarta ?? ''}.mp3`,
+      `${PASTA_DAS_FALAS}${primeira}.mp3`,
+      `${PASTA_DAS_FALAS}${segunda}.mp3`,
+      `${PASTA_DAS_FALAS}${quarta}.mp3`,
     )
 
     // Cada fala que falhou avisou uma unica vez na sessao.
@@ -442,8 +469,7 @@ test('autoplay bloqueado: um unico aviso, uma tentativa por fala e nenhum erro',
   await page.goto('/')
 
   await expect(bolha(page)).toBeVisible()
-  const saudacao = await falaDaLegenda(page)
-  if (saudacao === null) throw new Error('a legenda da saudacao nao e uma fala do catalogo')
+  const saudacao = await falaDoCatalogo(page)
   const jogadasDe = async (caminho: string) =>
     (await page.evaluate(() => window.__audioLog)).filter(
       (entrada) => entrada === `play ${caminho}`,
@@ -460,7 +486,7 @@ test('autoplay bloqueado: um unico aviso, uma tentativa por fala e nenhum erro',
       return atual !== null && atual !== saudacao
     })
     .toBe(true)
-  const posterior = `${PASTA_DAS_FALAS}${(await falaDaLegenda(page)) ?? ''}.mp3`
+  const posterior = `${PASTA_DAS_FALAS}${await falaDoCatalogo(page)}.mp3`
   await expect.poll(() => jogadasDe(posterior)).toBe(1)
 
   // Sem laco: cada fala tentou uma vez e o aviso continua um so.
@@ -516,4 +542,70 @@ test.describe('no celular', () => {
     expect(await jogadas()).toBe(antes)
     expect(observacao.erros).toEqual([])
   })
+})
+
+/** A recompensa de uma diaria que sobe do nivel 1 ao 2 e destrava uma conquista. */
+const RECOMPENSA_DE_NIVEL = {
+  xp_awarded: 100,
+  xp_total: 300,
+  level_before: 1,
+  level_after: 2,
+  achievements_unlocked: [
+    { code: 'first_week', title: 'Primeira semana', description: 'Uma semana completa' },
+  ],
+}
+
+// Conclui uma avulsa, e nao uma diaria: uma diaria a mais da semana semeada
+// mudaria a sequencia que `cycle.spec.ts` espera.
+test('404 na fala de nivel e conquista (avulsa): a legenda aparece, nada quebra e a fala nao e pedida de novo', async ({
+  page,
+}) => {
+  const observacao = observar(page)
+  await ligarSom(page)
+  // Sorteio fixo (a substituicao deterministica que a regra `noMathRandom` permite).
+  await page.addInitScript(() => {
+    Object.defineProperty(Math, 'random', { value: () => 0 })
+  })
+  await page.route('**/api/missions/*/complete', async (rota) => {
+    const resposta = await rota.fetch()
+    const corpo = (await resposta.json()) as Record<string, unknown>
+    await rota.fulfill({ response: resposta, json: { ...corpo, reward: RECOMPENSA_DE_NIVEL } })
+  })
+  await page.route(`**${PASTA_DAS_FALAS}**`, (rota) => rota.fulfill({ status: 404, body: '' }))
+  await instalarRelogio(page, manhaDoDia(DIA_PADRAO))
+  const avulsa = await semearAvulsa('Avulsa da recompensa de nivel')
+  await page.goto('/')
+  await expect(legenda(page)).toBeVisible()
+
+  await concluirAvulsa(page, avulsa)
+
+  // Nivel novo vence a celebracao da avulsa e a da conquista: a fala e a de nivel.
+  await expect(page.getByTestId('reward-level-up')).toBeVisible()
+  const niveis: ReadonlySet<LineId> = new Set(LINE_GROUPS.levelUp)
+  await expect
+    .poll(async () => {
+      const id = await falaDaLegenda(page)
+      return id !== null && niveis.has(id)
+    })
+    .toBe(true)
+  const fala = await falaDoCatalogo(page)
+  const caminho = `${PASTA_DAS_FALAS}${fala}.mp3`
+  await expect.poll(() => avisosDe(observacao, caminho)).toBe(1)
+
+  // O detalhe da bolha e o do nivel; o da conquista e as falas dela ficam de fora.
+  await expect(bolha(page)).toContainText(
+    translate('pt-BR', 'missions.reward.levelUp', { level: RECOMPENSA_DE_NIVEL.level_after }),
+  )
+  const conquista = translate('pt-BR', 'missions.reward.achievement', { title: '' }).trim()
+  await expect(bolha(page)).not.toContainText(conquista)
+  for (const id of LINE_GROUPS.achievement) {
+    await expect(bolha(page)).not.toContainText(CATALOGS['pt-BR'][lineKey(id)])
+  }
+
+  // O tempo corre alem da celebracao: a fala nao e pedida de novo e o app segue sem erro.
+  await page.clock.runFor(CELEBRACAO_MS)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(pedidosDe(observacao, caminho)).toBe(1)
+  expect(avisosDe(observacao, caminho)).toBe(1)
+  expect(observacao.erros).toEqual([])
 })
