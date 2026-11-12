@@ -71,15 +71,23 @@ PROFUNDIDADE_MAXIMA = 6
 TETO_DO_MEMBRO = 512 * 1024 * 1024
 TETO_TOTAL = 2 * 1024 * 1024 * 1024
 
-# `(?<![A-Za-z0-9])` evita casar o meio de uma palavra comum: `task-card-...`
-# contem `sk-card-...`, e nao e chave.
-_ANTES = rb"(?<![A-Za-z0-9])"
-# Aspas com ZERO OU MAIS barras antes: o trace guarda corpos de requisicao e
+# FRONTEIRA do que vem antes de um nome ou de uma chave: nao ser o meio de uma
+# palavra comum (`task-card-...` contem `sk-card-...`, e nao e chave). Um
+# corpo gravado no trace como string JSON traz a quebra de linha como DUAS
+# letras, barra + `n` (`\r\n`, `\n`, `\t`): a letra nao pode bloquear a
+# fronteira, senao um cabecalho colado depois da quebra passa batido.
+_ANTES = rb"(?:(?<![A-Za-z0-9])|(?<=\\[rnt]))"
+_ANTES_DE_CHAVE = rb"(?:(?<![A-Za-z0-9-])|(?<=\\[rnt]))"
+# Aspas com ATE 15 barras antes: o trace guarda corpos de requisicao e
 # resposta como TEXTO, e um JSON dentro de uma string JSON chega escapado
-# (`\"authorization\":\"...\"`), ou escapado de novo no aninhamento seguinte.
-# Sem isto, so o JSON "solto" era visto.
-_ASPAS = rb'\\*"'
-_ASPAS_OU_APOSTROFO = rb"""\\*["']"""
+# (`\"authorization\":\"...\"`), e escapado de novo a cada aninhamento: 0, 1,
+# 3, 7, 15 barras = ate QUATRO niveis. O teto e de proposito: `\\*"` sem teto,
+# em entrada com milhares de barras e sem aspas, e QUADRATICO (cada posicao
+# tenta consumir todas as barras e recuar; 80 mil barras levaram 7 s). Com
+# teto, cada posicao custa no maximo 16 tentativas.
+_BARRAS = rb"\\{0,15}"
+_ASPAS = _BARRAS + rb'"'
+_ASPAS_OU_APOSTROFO = _BARRAS + rb"""["']"""
 # Primeiro caractere de um valor: nem separador, nem aspas, nem barra -- um
 # valor vazio (`""`, `\"\"`) nao e valor.
 _INICIO_DE_VALOR = rb"""[^\s"',}\\]"""
@@ -90,7 +98,7 @@ _FICTICIA = CHAVE_FICTICIA_DO_E2E.encode()
 def _chave_com_valor(nome: bytes, separador: bytes, *, exceto: bytes = b"") -> bytes:
     """`nome: valor`, em texto, JSON ou JSON escapado (`nome` pode ter regex)."""
     return (
-        rb"(?<![A-Za-z0-9-])"
+        _ANTES_DE_CHAVE
         + nome
         + rb"(?:"
         + _ASPAS_OU_APOSTROFO

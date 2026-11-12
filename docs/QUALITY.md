@@ -720,10 +720,14 @@ o servidor falso em loopback e a chave é a fictícia imposta por
 **Limites aceitos:** a varredura procura o texto, e só decodifica zip. Segredo
 em base64, URL-encoded ou comprimido fora de zip (gzip, brotli) não é
 detectado, nem um segredo desenhado numa captura de tela (o app nunca
-renderiza chave); JSON escapado dentro de string, em qualquer nível, é
-varrido. E `failure()` não vale para job cancelado: **timeout ou cancelamento
-do job não gera artefato**, então um travamento do runner fica sem trace. A
-defesa real é o job não ter segredo.
+renderiza chave). JSON escapado dentro de string é varrido **até quatro níveis
+de escape** (teto de 15 barras, que também impede ReDoS quadrático), e um
+cabeçalho depois de `\r\n`/`\n`/`\t` escapado também é visto; escapes
+unicode (`\u0022`) e níveis mais fundos não. Valores como `"cookie":null`
+casam como achado (falso positivo aceito: falha fechada). E `failure()` não
+vale para job cancelado: **timeout ou cancelamento do job não gera artefato**,
+então um travamento do runner fica sem trace. A defesa real é o job não ter
+segredo.
 
 O job `check-secrets` não precisa de preparo de Node, Python nem instalação
 de nenhuma ferramenta: `make check-secrets` já baixa o próprio binário do

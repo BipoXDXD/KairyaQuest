@@ -123,6 +123,15 @@ SEGREDOS = {
     "par name/value escapado": (
         rf"{{\"name\":\"Authorization\",\"value\":\"Bearer-{CANARIO}\"}}"
     ),
+    # Cabecalhos colados num corpo gravado como string JSON: a quebra de
+    # linha chega como `\\r\\n` (barra + letra), e a letra nao e fronteira.
+    "authorization e cookie apos CRLF escapado": (
+        rf"texto\r\nauthorization: Basic {CANARIO}\r\ncookie: sid={CANARIO}"
+    ),
+    "Cookie apos LF escapado": rf"texto\nCookie: sid={CANARIO}",
+    "x-api-key apos CRLF escapado": rf"texto\r\nx-api-key: {CANARIO}",
+    "sk- apos LF escapado": rf"texto\nsk-ant-api03-{CANARIO}",
+    "Bearer apos LF escapado": rf"texto\nBearer {CANARIO}",
     "Cookie em texto": f"Cookie: sessao={CANARIO}",
     "Set-Cookie em texto": f"Set-Cookie: sessao={CANARIO}; HttpOnly",
     "cookie no par do trace": f'{{"name":"cookie","value":"sessao={CANARIO}"}}',
@@ -168,6 +177,59 @@ def test_dois_padroes_no_mesmo_arquivo_saem_separados(tmp_path: Path) -> None:
     assert "padrao Bearer x1" in processo.stdout
     assert "padrao cookie x1" in processo.stdout
     assert CANARIO not in _saida(processo)
+
+
+# --- tempo: entrada patologica nao pode travar a varredura ------------------
+
+TETO_DE_TEMPO_S = 1.0
+# Margem do processo que cronometra: se a varredura travar, o filho e morto
+# por `subprocess.run(timeout=...)` -- o teste reprova em vez de pendurar.
+TETO_DO_PROCESSO_S = 20
+
+_CRONOMETRO = """
+import importlib.util, sys, time
+spec = importlib.util.spec_from_file_location("varrer_traces", sys.argv[1])
+modulo = importlib.util.module_from_spec(spec)
+sys.modules["varrer_traces"] = modulo
+spec.loader.exec_module(modulo)
+dados = open(sys.argv[2], "rb").read()
+inicio = time.perf_counter()
+modulo.contar_padroes(dados)
+print(time.perf_counter() - inicio)
+"""
+
+PATOLOGICAS = {
+    "barras invertidas puras": b"\\" * 1_000_000,
+    "barras com aspas intercaladas": (b"\\" * 999 + b'"') * 1_000,
+    "barra-aspas repetidas": b'\\"' * 400_000,
+    "barras antes de name": (b"\\" * 5_000 + b"name") * 200,
+    "barras depois de authorization": b"authorization" + b"\\" * 1_000_000,
+    "espacos depois de authorization": b"authorization" + b" " * 1_000_000,
+    "espacos depois de bearer": b"bearer" + b" " * 1_000_000,
+    "aspas e espacos no par": (b'"name"' + b" " * 1_000) * 1_000,
+}
+
+
+@pytest.mark.parametrize("dados", PATOLOGICAS.values(), ids=PATOLOGICAS.keys())
+def test_entrada_patologica_e_varrida_em_menos_de_um_segundo(
+    tmp_path: Path, dados: bytes
+) -> None:
+    entrada = tmp_path / "patologica.bin"
+    entrada.write_bytes(dados)
+
+    try:
+        processo = subprocess.run(
+            [sys.executable, "-I", "-c", _CRONOMETRO, str(SCRIPT), str(entrada)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=TETO_DO_PROCESSO_S,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"a varredura passou de {TETO_DO_PROCESSO_S} s (ReDoS)")
+
+    assert processo.returncode == 0, processo.stderr
+    assert float(processo.stdout) < TETO_DE_TEMPO_S
 
 
 # --- zip ---------------------------------------------------------------------
