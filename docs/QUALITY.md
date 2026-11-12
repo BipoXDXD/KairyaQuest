@@ -842,9 +842,12 @@ Sem eufemismo:
   `git fetch origin main` sairia com 0 e deixaria a `origin/main` velha) e cria
   `wt/<nome>` a partir do sha da `origin/main`, que o git não rastreia, e o
   `.env` vem do `.env.example` desse mesmo sha. **Se o fetch falhar** (sem rede, sem o
-  remoto `origin`, sem a branch `main` nele), o script **recusa sem criar nada**
-  e mostra o erro do git; não há fallback para a `main` local, nem uso de uma
-  `origin/main` antiga. O fetch roda depois de todas as recusas locais
+  remoto `origin`, sem a branch `main` nele), o script **recusa sem criar worktree,
+  branch, ledger nem `.env`** e mostra o erro do git, com a credencial da URL do
+  remoto mascarada (`://usuario:senha@` vira `://***@`); não há fallback para a
+  `main` local, nem uso de uma `origin/main` antiga. Ressalva: um fetch bem-sucedido
+  avança `refs/remotes/origin/main` mesmo que uma recusa posterior aborte o script
+  (é só o efeito de um `git fetch`). O fetch roda depois de todas as recusas locais
   (nome, destino, deslocamento, bancos, trava) e logo antes
   de criar o worktree, dentro da trava. Provado em `tests/integration/test_novo_worktree.py`
   (`test_o_worktree_nasce_da_origin_main_buscada_pelo_script` e vizinhos).

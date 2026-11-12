@@ -999,7 +999,10 @@ def test_o_fetch_atualiza_a_origin_main_mesmo_sem_refspec_de_fetch(
 
 @pytest.mark.parametrize(
     ("argumentos", "trecho"),
-    [(("99",), "deslocamento"), (("1",), "deslocamento 1 ")],
+    [
+        (("99",), "deslocamento invalido '99'"),
+        (("1",), "o deslocamento 1 nao esta livre"),
+    ],
     ids=["fora-da-faixa", "reivindicado"],
 )
 def test_as_recusas_locais_vem_antes_do_fetch(
@@ -1029,6 +1032,60 @@ def test_recusa_da_trava_vem_antes_do_fetch(repo: Repositorio) -> None:
     assert resultado.returncode != 0
     assert "outra execucao" in resultado.stderr
     assert RECUSA_DO_FETCH not in resultado.stderr
+
+
+def test_recusa_de_banco_ocupado_vem_antes_do_fetch(repo: Repositorio) -> None:
+    assert repo.rodar("a").returncode == 0
+    _trocar_banco(repo.principal / ".claude" / "worktrees" / "a", "focusquest_c_test")
+    repo.git("remote", "set-url", "origin", str(repo.base / "nao-existe.git"))
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("c")
+
+    assert resultado.returncode != 0
+    assert "ja e usado por" in resultado.stderr
+    assert RECUSA_DO_FETCH not in resultado.stderr
+    assert repo.worktrees() == antes
+
+
+def test_a_trava_e_liberada_depois_de_uma_recusa_de_fetch(repo: Repositorio) -> None:
+    repo.git("remote", "set-url", "origin", str(repo.base / "nao-existe.git"))
+
+    resultado = repo.rodar("offline")
+
+    assert RECUSA_DO_FETCH in resultado.stderr
+    assert not _trava(repo).exists()
+
+
+def test_a_recusa_do_fetch_nao_vaza_credencial_da_url_do_remoto(
+    repo: Repositorio,
+) -> None:
+    """O git costuma repetir a URL do remoto no erro; se ela leva usuario e
+    senha, a mensagem do script nao pode carrega-los. Um `git` falso, so para o
+    fetch, imprime a URL com o canario -- sem depender de como cada versao do git
+    a escreve."""
+    canario = f"CANARY-{uuid.uuid4()}"
+    git_real = shutil.which("git", path=os.environ["PATH"])
+    falso = repo.base / "bin" / "git"
+    falso.write_text(
+        "#!/bin/sh\n"
+        'case " $* " in *" fetch "*)\n'
+        f"  echo \"fatal: unable to access 'https://{canario}:{canario}"
+        "@h.invalid/r.git/': boom\" >&2\n"
+        "  exit 128 ;;\n"
+        "esac\n"
+        f'exec "{git_real}" "$@"\n'
+    )
+    falso.chmod(0o755)
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("vazamento")
+
+    assert resultado.returncode != 0
+    assert RECUSA_DO_FETCH in resultado.stderr
+    assert canario not in resultado.stdout + resultado.stderr
+    assert "https://***@h.invalid/r.git/" in resultado.stderr
+    _nada_foi_criado(repo, antes)
 
 
 # ---------------------------------------------------------------------------

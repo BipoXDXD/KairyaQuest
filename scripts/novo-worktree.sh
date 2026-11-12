@@ -34,7 +34,11 @@
 # lembrar de buscar.
 #
 # Se o fetch falhar (sem rede, sem remoto origin, sem a branch main no remoto),
-# o script RECUSA, sem criar nada, e diz o que fazer. Nao ha fallback para a main
+# o script RECUSA, sem criar worktree, branch, ledger nem .env, e diz o que fazer.
+# (Unico efeito que sobra de uma recusa depois de um fetch bem-sucedido: a ref
+# refs/remotes/origin/main ja avancou, mesmo se uma recusa posterior abortar. E o
+# que um "git fetch" faz, e nao muda nada que o usuario tenha.) O erro do git vai
+# junto na mensagem, com a credencial da URL do remoto mascarada. Nao ha fallback para a main
 # local: criar dela em silencio reproduziria o defeito sem aviso. A origin/main
 # que sobrou de um fetch antigo tambem nao serve de base -- sem fetch bem
 # sucedido, nao ha base. O fetch roda DEPOIS de todas as recusas locais (nome,
@@ -380,6 +384,9 @@ done <<<"$bancos_ocupados"
 # bare, esta parada). GIT_TERMINAL_PROMPT=0 impede o git de esperar uma
 # credencial que ninguem vai digitar.
 if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' 2>&1)"; then
+  # O git repete a URL do remoto no erro, e ela pode levar usuario e senha:
+  # "://usuario:senha@" vira "://***@" antes de a mensagem sair.
+  erro_do_fetch="$(printf '%s' "$erro_do_fetch" | sed -E 's#(://)[^/@[:space:]]*@#\1***@#g')"
   recusa "o fetch de origin/main falhou (sem rede, sem o remoto origin ou sem a branch main nele?); o worktree nasce da origin/main atualizada e nunca da main local, entao nada foi criado. Erro do git: ${erro_do_fetch:-<sem mensagem>}"
 fi
 base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}')" ||

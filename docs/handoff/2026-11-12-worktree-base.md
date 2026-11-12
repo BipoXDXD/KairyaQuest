@@ -16,13 +16,17 @@ gerado de um exemplo velho que as Settings recusavam. Revisão-base: `ba7b389`
 
 ## Decisão: o que acontece se o fetch falhar
 
-**O script recusa, sem criar nada**, e mostra o erro do git. Vale para: sem rede,
+**O script recusa, sem criar worktree, branch, ledger nem `.env`**, e mostra o erro do git com a credencial da URL do remoto mascarada (`://usuario:senha@` vira `://***@`; testado com um `git` falso e um canário). Vale para: sem rede,
 sem o remoto `origin`, remoto sem a branch `main`. **Não há fallback para a
 `main` local** (nasceria de uma revisão velha em silêncio, o defeito original) e
 **não se usa uma `origin/main` antiga** que sobrou de um fetch anterior: sem fetch
 bem-sucedido não há base. Custo: o script passa a exigir rede; as recusas
 locais (nome, destino, deslocamento, bancos, trava) vêm
 antes do fetch e não dependem dela. `GIT_TERMINAL_PROMPT=0` evita que o git espere credencial.
+
+Ressalva: um fetch bem-sucedido avança `refs/remotes/origin/main` mesmo se uma recusa
+posterior (por exemplo, exemplo sem `.env.example`) abortar o script; é o efeito normal
+de um `git fetch` e não muda nada do usuário.
 
 ## Alterações
 
@@ -67,6 +71,13 @@ em `FOCUSQUEST_CHAVE_REMOVIDA`, numa variável qualquer e na URL do banco do pri
 o `.env` gerado carrega no `Settings`), `test_funciona_sem_env_no_principal`,
 `test_a_query_da_url_do_exemplo_e_preservada` e as recusas do exemplo sem URL ou com
 banco sem `_test`.
+
+## Pendência nova (fora do escopo deste PR)
+
+- **P-worktree-base-2** — pré-existente: uma falha **depois** do `git worktree add`
+  (escrita do `.env`, link do ledger, `make bootstrap`) deixa para trás o worktree, a
+  branch `wt/<nome>` e o ledger, sem rollback. O script só diz o que fazer à mão. Não
+  corrigido aqui.
 
 ## Para a consolidação do `docs/HANDOFF.md`
 
