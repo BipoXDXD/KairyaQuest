@@ -950,10 +950,12 @@ O caminho, em três passos (`evaluation/service.py`, E9):
    FOLGA_DO_ORFAO)`; no corte exato ainda está em andamento. **O corte não é uma
    fronteira segura:** o SDK não repete a chamada (`TENTATIVAS = 0`, ver
    "Retentativas HTTP"), mas o timeout dele é por leitura e, na avaliação, o
-   total só é conferido quando a resposta chega (o chat da tutoria ganhou um
-   teto de parede independente de evento, ver "Retentativas HTTP"); uma parada
-   no meio do stream da avaliação deixa a tentativa viva além do corte, e um
-   novo pedido a retoma como órfã, com uma segunda chamada paga e sem
+   total só era conferido quando a resposta chega (o chat da tutoria e a
+   avaliação têm um teto de parede independente de evento, ver "Retentativas
+   HTTP"); o teto grava `tempo_esgotado` dentro do prazo, mas a thread
+   leitora da chamada cortada sobrevive até o próximo evento do provedor
+   (gauge de leitores vivos). A órfã de verdade (processo morto no meio) segue
+   sendo retomada por um novo pedido, com uma segunda chamada paga e sem
    corromper nada (pendência 106).
 3. **Fora de transação**, `tutoria.provedor.avaliar(turno, ferramenta)`; o
    turno é uma mensagem única, sem histórico da conversa. Depois, **transação 2**
@@ -1840,8 +1842,10 @@ o leitor que termina depois do consumidor (`vida_ms`, `leitores_vivos`), nunca o
 texto (`docs/handoff/2026-11-11-leitores-vivos.md`). O
 teto, somado às fases que não são leitura, cabe em `proxy_read_timeout` menos
 `FOLGA_DO_ORFAO`, conferido por `tests/unit/test_prazos_coerentes.py`. A
-avaliação (`avaliar`) não tem esse teto: ver
-`docs/handoff/2026-11-11-teto-stream.md`.
+avaliação tem o mesmo teto: `ProvedorAnthropic.avaliar` consome um stream (não
+uma resposta única) e o lê pelo mesmo `ler_com_prazo`, com o mesmo gauge e a
+mesma recusa; estouro vira `TempoEsgotadoError`, que o serviço já grava como
+`tempo_esgotado`, sem bônus (`docs/handoff/2026-11-11-teto-avaliar.md`).
 
 ## Prova sequencial de reuso com evidência — 2026-10-05
 

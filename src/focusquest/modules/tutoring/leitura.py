@@ -1,5 +1,8 @@
 """Le o stream do provedor com um teto de tempo TOTAL, medido de parede.
 
+Serve o chat da tutoria (`transmitir`) e a avaliacao (`ProvedorAnthropic.avaliar`,
+que consome um stream por dentro): o mesmo leitor, o mesmo gauge, o mesmo teto.
+
 O timeout do SDK e por LEITURA (a espera entre dois chunks): um provedor que
 manda um evento a cada 50 s o mantem vivo para sempre, e um que cala depois de
 um evento so e cortado `timeout` depois dele, qualquer que seja o momento
@@ -40,6 +43,11 @@ from focusquest.modules.tutoring.provider import (
 )
 
 _LOG = logging.getLogger(__name__)
+
+# Como o log chama o que esta sendo lido: o chat da tutoria (padrao) e a
+# avaliacao, que reaproveita o mesmo leitor, o mesmo gauge e o mesmo teto.
+ROTULO_DO_STREAM = "stream da tutoria"
+ROTULO_DA_AVALIACAO = "stream da avaliacao"
 
 
 # O recurso protegido e o do processo: cada leitor orfao ocupa uma thread, um
@@ -198,6 +206,7 @@ def ler_com_prazo[E](
     teto_segundos: float,
     espera: Espera = ESPERA_REAL,
     leitores: LeitoresVivos | None = None,
+    rotulo: str = ROTULO_DO_STREAM,
 ) -> Generator[E]:
     """Os eventos de `eventos`, com `teto_segundos` de parede para o stream todo.
 
@@ -229,7 +238,8 @@ def ler_com_prazo[E](
     if not vaga.reservar():
         eventos.close()
         _LOG.warning(
-            "stream da tutoria recusado: leitores_vivos=%d teto=%d",
+            "%s recusado: leitores_vivos=%d teto=%d",
+            rotulo,
             leitores.vivos,
             leitores.teto,
         )
@@ -257,8 +267,8 @@ def ler_com_prazo[E](
                     item = espera.esperar(fila, restante)
             except queue.Empty:
                 _LOG.warning(
-                    "stream da tutoria passou do teto: "
-                    "decorrido_ms=%d teto_ms=%d eventos=%d",
+                    "%s passou do teto: decorrido_ms=%d teto_ms=%d eventos=%d",
+                    rotulo,
                     round((espera.monotonic() - inicio) * 1000),
                     round(teto_segundos * 1000),
                     entregues,

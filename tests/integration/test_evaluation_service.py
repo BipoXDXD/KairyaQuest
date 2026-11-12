@@ -11,6 +11,8 @@ direto, na sessao com rollback.
 
 import dataclasses
 import json
+import queue
+import threading
 from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -55,6 +57,9 @@ from focusquest.modules.progression.service import (
     recompensa_do_bonus,
     registrar_bonus,
 )
+from focusquest.modules.tutoring import leitura
+from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.leitura import Espera, LeitoresVivos
 from focusquest.modules.tutoring.provider import (
     EventoDoProvedor,
     Ferramenta,
@@ -504,6 +509,93 @@ def test_no_limite_exato_ainda_vale(
     resultado = _avaliar(fabrica, lenta, mission_id, instante)
     assert resultado.avaliacao.state is EstadoDaAvaliacao.CONCLUIDA
     assert resultado.avaliacao.finished_at == AGORA + tutoria.limite
+
+
+def test_a_chamada_que_passa_do_teto_de_parede_e_tempo_esgotado_sem_bonus(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+) -> None:
+    """P-teto-stream-1, ponta a ponta com o adaptador REAL: a resposta so sairia
+    DEPOIS do teto (os cabecalhos demoram, e o SDK, com 30 s de leitura, nao
+    cortaria). O relogio da espera e falso e anda o teto inteiro de uma vez: a
+    avaliacao volta sem esperar a resposta, gravada como `tempo_esgotado`, sem
+    XP. A chamada fica fora do relogio do servico (`clock`), que nao anda."""
+    mission_id = missoes.concluida()
+    falso.roteiro = Roteiro(
+        blocos=(ChamadaDeFerramenta({"verdict": "atende"}, nome="record_evaluation"),),
+        atrasar_cabecalhos=TIMEOUT_DA_DEMORA * 3,
+    )
+    relogio = [1000.0]
+
+    def esperar(fila: queue.Queue[object], segundos: float) -> object:
+        relogio[0] += segundos
+        raise queue.Empty
+
+    assert isinstance(tutoria.provedor, ProvedorAnthropic)
+    com_teto = dataclasses.replace(
+        tutoria,
+        provedor=ProvedorAnthropic(
+            chave="sk-ant-teste",
+            base_url=falso.url,
+            modelo="claude-opus-5",
+            max_tokens=256,
+            timeout_segundos=TIMEOUT_FOLGADO,
+            fallback=True,
+            esforco="low",
+            esforco_da_avaliacao="medium",
+            espera=Espera(monotonic=lambda: relogio[0], esperar=esperar),
+        ),
+    )
+
+    with pytest.raises(AvaliacaoFalhouError) as erro:
+        _avaliar(fabrica, com_teto, mission_id)
+
+    assert erro.value.falha is FalhaDaAvaliacao.TEMPO_ESGOTADO
+    assert relogio[0] == 1000.0 + TIMEOUT_FOLGADO
+    gravada = _lida(fabrica, mission_id)
+    assert (gravada.state, gravada.error_code) == (
+        EstadoDaAvaliacao.FALHOU,
+        FalhaDaAvaliacao.TEMPO_ESGOTADO,
+    )
+    assert _bonus_gravados(fabrica, mission_id) == 0
+    for leitor in threading.enumerate():
+        if leitor.name == "tutoria-leitor":
+            leitor.join(timeout=TIMEOUT_FOLGADO)
+
+
+def test_com_o_gauge_cheio_a_avaliacao_grava_provedor_indisponivel_sem_chamar_o_modelo(
+    fabrica: sessionmaker[Session],
+    tutoria: Tutoria,
+    falso: ServidorAnthropicFalso,
+    missoes: Missoes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P-teto-stream-2 na avaliacao, ponta a ponta com o adaptador REAL: com o
+    gauge de leitores vivos saturado, a chamada paga nem abre. O servico trata
+    como qualquer falha de provedor: `falhou/provedor_indisponivel`, sem bonus
+    e sem XP, e o servidor falso nao recebe pedido nenhum."""
+    cheio = LeitoresVivos(teto=1)
+    assert cheio.reservar()
+    monkeypatch.setattr(leitura, "LEITORES_VIVOS", cheio)
+    mission_id = missoes.concluida()
+    falso.roteiro = _veredito("atende")
+    saldo = _saldo(fabrica)
+
+    with pytest.raises(AvaliacaoFalhouError) as erro:
+        _avaliar(fabrica, tutoria, mission_id)
+
+    assert erro.value.falha is FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
+    gravada = _lida(fabrica, mission_id)
+    assert (gravada.state, gravada.error_code) == (
+        EstadoDaAvaliacao.FALHOU,
+        FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
+    )
+    assert _bonus_gravados(fabrica, mission_id) == 0
+    assert _saldo(fabrica) == saldo
+    assert falso.recebidas == []
+    assert cheio.vivos == 1
 
 
 @dataclass(frozen=True)
