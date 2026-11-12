@@ -7,6 +7,7 @@ import {
   type ReactElement,
   type Ref,
 } from 'react'
+import { WeekPlanEntry } from '../campaigns'
 import { useKairya } from '../kairya'
 import { formatCivilDate } from '../../shared/lib/civilDate'
 import { saoPauloCivilDate } from '../../shared/lib/deadline'
@@ -75,6 +76,14 @@ function remainingText(days: number, locale: Locale, t: Translate): string {
   return t(plural(locale, days, forms), { count: days })
 }
 
+/** O que a entrada do formulario de plano pede a esta secao (#142). */
+interface PlanEntryProps {
+  /** O plano foi criado: recarrega o ciclo e leva o foco ao titulo. */
+  onCreated: () => void
+  /** A semana ja tinha plano: so recarrega. */
+  onExists: () => void
+}
+
 interface CardProps {
   registry: CompletionRegistry
   onReload: () => void
@@ -105,11 +114,13 @@ function CycleLoaded({
   refreshFailed,
   card,
   dailyRef,
+  planEntry,
 }: {
   dailyRef: Ref<HTMLUListElement>
   cycle: Cycle
   refreshFailed: boolean
   card: CardProps
+  planEntry: PlanEntryProps
 }) {
   const t = useT()
   const { locale } = useLocale()
@@ -121,9 +132,12 @@ function CycleLoaded({
         {t('missions.cycle.today', { date: formatCivilDate(cycle.today, locale) })}
       </p>
       {cycle.mission === null ? (
-        <p data-testid="cycle-no-plan" className="text-sm text-slate-300">
-          {t('missions.cycle.noPlan')}
-        </p>
+        <>
+          <p data-testid="cycle-no-plan" className="text-sm text-slate-300">
+            {t('missions.cycle.noPlan')}
+          </p>
+          <WeekPlanEntry onCreated={planEntry.onCreated} onExists={planEntry.onExists} />
+        </>
       ) : (
         <ul key={cycle.mission.id} ref={dailyRef} role="list" className="flex flex-col gap-3">
           {/* A chave pela ID da missao, e nao pela POSICAO. Sem ela, um
@@ -223,10 +237,12 @@ function CycleContent({
   state,
   card,
   dailyRef,
+  planEntry,
 }: {
   state: CycleState
   card: CardProps
   dailyRef: Ref<HTMLUListElement>
+  planEntry: PlanEntryProps
 }): ReactElement {
   const t = useT()
   switch (state.status) {
@@ -267,6 +283,7 @@ function CycleContent({
           refreshFailed={state.refreshFailed}
           card={card}
           dailyRef={dailyRef}
+          planEntry={planEntry}
         />
       )
   }
@@ -353,6 +370,13 @@ export function CycleSection({
     onRewarded: onMissionCompleted,
     reloadLabel: 'missions.reload.today',
   }
+  const planEntry: PlanEntryProps = {
+    onCreated: () => {
+      refresh()
+      heading.current?.focus()
+    },
+    onExists: refresh,
+  }
   return (
     <section aria-labelledby="cycle-heading" data-testid="cycle" className="rpg-cycle mb-8">
       <h2
@@ -363,7 +387,7 @@ export function CycleSection({
       >
         {t('missions.cycle.title')}
       </h2>
-      <CycleContent state={state} card={card} dailyRef={dailyRef} />
+      <CycleContent state={state} card={card} dailyRef={dailyRef} planEntry={planEntry} />
     </section>
   )
 }
