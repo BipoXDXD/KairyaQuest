@@ -191,6 +191,7 @@ describe('describeStreamErrorEvent', () => {
     ['um code nulo', { code: null }],
     ['um code que nao e texto', { code: 5 }],
     ['um corpo nulo', null],
+    ['um corpo ausente', undefined],
     ['um corpo que nao e objeto', 'tempo_esgotado'],
   ])('%s cai na falha generica', (_caso, data) => {
     expect(describeStreamErrorEvent(data)).toBe(UNRECOGNIZED_FAILURE)

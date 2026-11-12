@@ -1,7 +1,8 @@
 # Lote 14: ressalvas Minor acumuladas — 2026-11-11
 
-Branch `wt/ressalvas-minor`. Só tipos, comentários, docstrings e docs: nenhuma
-mudança de comportamento, nenhum teste alterado. `docs/HANDOFF.md` fica intocado.
+Branch `wt/ressalvas-minor`. Tipos, comentários, docstrings e docs, com uma
+única mudança de comportamento (item 2, corpo `undefined`), coberta por um caso
+novo no `it.each`. `docs/HANDOFF.md` fica intocado.
 
 **Por item** (cada um conferido no código da `main` antes de mexer):
 
@@ -13,8 +14,12 @@ mudança de comportamento, nenhum teste alterado. `docs/HANDOFF.md` fica intocad
    que descreve o que aquele PR removeu e fica como está.
 2. `messageFailure.ts` (`describeStreamErrorEvent`): o `data as { code?: unknown }`
    virou narrowing real (`typeof data === 'object' && data !== null && 'code' in data`).
-   Os seis casos do `it.each` existente (objeto sem `code`, `code` nulo, de outro
-   tipo, corpo nulo, corpo que não é objeto) cobrem todos os ramos.
+   Os casos do `it.each` (`code` desconhecido, objeto sem `code`, `code` nulo,
+   `code` de outro tipo, corpo nulo, corpo ausente, corpo que não é objeto) cobrem
+   todos os ramos. Única mudança de comportamento: com corpo `undefined` o `as`
+   antigo lançava `TypeError` (`undefined.code`); agora cai em
+   `UNRECOGNIZED_FAILURE`, como a docstring promete ("nunca derruba o stream").
+   O caso "corpo ausente" foi acrescentado para fixar isso.
 3. `messageFailure.test.ts`: já resolvido antes (#110, "o teste afirma o texto"). O
    teste "a falha generica diz que a pergunta nao foi respondida…" afirma hoje o
    texto resolvido em pt-BR e en, e "as chaves de %s existem no catalogo" promete
