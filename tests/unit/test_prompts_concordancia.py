@@ -106,6 +106,38 @@ def test_ferramentas_ficam_nas_secoes_4_e_5(idioma: Idioma) -> None:
     assert "reschedule_mission" in s["5"]
 
 
+# A proposta nunca vem muda: medido com a API real, "cria uma missao" chamava a
+# ferramenta e devolvia texto vazio (bolha vazia; leitor de tela sem nada).
+# Caso do "test set" dos prompts, na forma do repo: o trecho literal que manda
+# dizer, em uma frase curta, o porque da proposta, por ferramenta e idioma.
+FRASE_COM_A_PROPOSTA: dict[str, dict[Idioma, str]] = {
+    "create_mission": {
+        Idioma.PT_BR: "escreva sempre, na mesma resposta, uma frase curta com o porquê",
+        Idioma.EN: "always write, in the same reply, one short sentence saying why",
+    },
+    "reschedule_mission": {
+        Idioma.PT_BR: "escreva sempre, na mesma resposta, uma frase curta com o porquê",
+        Idioma.EN: "always write, in the same reply, one short sentence saying why",
+    },
+}
+
+
+@pytest.mark.parametrize("idioma", list(Idioma))
+@pytest.mark.parametrize(
+    ("ferramenta", "secao"), [("create_mission", "4"), ("reschedule_mission", "5")]
+)
+def test_a_proposta_sempre_vem_com_uma_frase(
+    ferramenta: str, secao: str, idioma: Idioma
+) -> None:
+    corpo = secoes(persona_do_idioma(idioma))[secao]
+    item = next(
+        linha
+        for linha in corpo.splitlines()
+        if FRASE_COM_A_PROPOSTA[ferramenta][idioma] in linha
+    )
+    assert ferramenta in item
+
+
 @pytest.mark.parametrize("idioma", list(Idioma))
 def test_listas_do_contexto_sao_nomeadas_pela_chave_json(idioma: Idioma) -> None:
     """As chaves do contexto (`context.py`) sao contrato: a persona as cita
