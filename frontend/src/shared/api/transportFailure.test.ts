@@ -14,7 +14,13 @@ describe('transportFailureOf', () => {
     ],
     ['a rede fora', new ApiError('x', null, null), 'network'],
     ['um status recebido', new ApiError('x', 409, null), null],
+    // Qualquer status recebido e resposta: o codigo nao distingue faixas
+    // (so `status === null` e transporte), entao as bordas 4xx/5xx/600 saem iguais.
+    ['o ultimo 4xx (499)', new ApiError('x', 499, null), null],
+    ['o primeiro 5xx (500)', new ApiError('x', 500, null), null],
     ['um 5xx', new ApiError('x', 503, null), null],
+    ['o ultimo 5xx (599)', new ApiError('x', 599, null), null],
+    ['um status fora do 5xx (600)', new ApiError('x', 600, null), null],
     // Um TypeError cru (por exemplo de JSON.parse) nao e rede: so o cliente
     // sabe que nao houve resposta, e ele sempre o diz com um ApiError.
     ['um erro que nao e ApiError', new TypeError('Failed to fetch'), null],
@@ -39,8 +45,8 @@ describe('leadFor', () => {
     expect(leadFor(new ApiError('x', null, null), lead)).toBe(lead.network)
   })
 
-  it('o resto usa a abertura do chamador', () => {
-    expect(leadFor(new ApiError('x', 500, null), lead)).toBe(lead.fallback)
+  it.each([499, 500, 503, 599, 600])('o status %i usa a abertura do chamador', (status) => {
+    expect(leadFor(new ApiError('x', status, null), lead)).toBe(lead.fallback)
   })
 })
 
