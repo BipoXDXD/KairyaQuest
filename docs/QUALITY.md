@@ -126,13 +126,19 @@ make check
 ```
 
 O script cria `<principal>/.claude/worktrees/<nome>` na branch nova `wt/<nome>` (a partir da
-`main`), gera o `.env` a partir do `.env.example` da `main` com um banco de
-teste próprio (`focusquest_<nome>_test`, no servidor e com a credencial e as
-opções da URL de teste do principal) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre
+`origin/main`, que ele mesmo busca), gera o `.env` **só a partir do `.env.example` da
+`origin/main`**, com duas linhas calculadas: um banco de teste próprio
+(`focusquest_<nome>_test`; servidor, credencial e opções da URL são os do próprio
+`FOCUSQUEST_TEST_DATABASE_URL` do exemplo) e um `FOCUSQUEST_E2E_PORT_OFFSET` livre
 (o primeiro, de 1 ao teto, que passa nos dois testes descritos abaixo), e roda
-`make bootstrap`. Do `.env` do principal só a URL do banco de teste é
-lida: as chaves de segredo (`FOCUSQUEST_ANTHROPIC_API_KEY` e afins) nascem em
-branco no worktree e, se necessárias lá, são preenchidas à mão. O banco nasce sozinho no primeiro uso. Os hooks já
+`make bootstrap`. **Nada do `.env` do principal é copiado nem usado para montar o novo**
+(lote 21): ele pode ter chave que o exemplo não conhece (as `Settings` recusam chave
+extra: o `FOCUSQUEST_CHAVE_REMOVIDA` já quebrou um worktree assim) e segredo real. As
+chaves de segredo (`FOCUSQUEST_ANTHROPIC_API_KEY` e afins) nascem em branco no worktree e,
+se necessárias lá, são preenchidas à mão. O script também não exige `.env` no principal;
+ele só lê o dele, se existir, para saber que bancos e deslocamentos já estão ocupados.
+Se o exemplo não tiver `FOCUSQUEST_TEST_DATABASE_URL`, ou o banco dele não terminar em
+`_test`, o script recusa. O banco nasce sozinho no primeiro uso. Os hooks já
 valem (moram no `.git` comum, com o Python do `.hooks-venv`): **não rode
 `pre-commit install` no worktree novo**, nem `scripts/instalar-hooks.sh` — ele
 é por clone, não por worktree. **Não rode `make db-up` fora do principal**: o
@@ -885,6 +891,23 @@ Sem eufemismo:
   acumula dados). Testado sem push nem worktree em
   `tests/integration/test_push_env.py`, com uma mutação reprovando cada
   guarda.
+- **A base do worktree é a `origin/main`, buscada pelo script** (lote 21,
+  P-worktree-base-1). O principal é um repositório bare: ali `git fetch` só
+  atualiza a `origin/main`, e a `main` local fica parada no último commit feito
+  nele. O `scripts/novo-worktree.sh` roda `git fetch origin +refs/heads/main:refs/remotes/origin/main` sozinho (refspec
+  explícito: vale também num principal sem `remote.origin.fetch`, onde um
+  `git fetch origin main` sairia com 0 e deixaria a `origin/main` velha) e cria
+  `wt/<nome>` a partir do sha da `origin/main`, que o git não rastreia, e o
+  `.env` vem do `.env.example` desse mesmo sha. **Se o fetch falhar** (sem rede, sem o
+  remoto `origin`, sem a branch `main` nele), o script **recusa sem criar worktree,
+  branch, ledger nem `.env`** e mostra o erro do git, com a credencial da URL do
+  remoto mascarada (`://usuario:senha@` vira `://***@`); não há fallback para a
+  `main` local, nem uso de uma `origin/main` antiga. Ressalva: um fetch bem-sucedido
+  avança `refs/remotes/origin/main` mesmo que uma recusa posterior aborte o script
+  (é só o efeito de um `git fetch`). O fetch roda depois de todas as recusas locais
+  (nome, destino, deslocamento, bancos, trava) e logo antes
+  de criar o worktree, dentro da trava. Provado em `tests/integration/test_novo_worktree.py`
+  (`test_o_worktree_nasce_da_origin_main_buscada_pelo_script` e vizinhos).
 - **O que é um deslocamento "livre" no `scripts/novo-worktree.sh`** (lote
   19b). O script aloca o **primeiro** deslocamento de 1 ao teto que passa nos
   dois testes, nesta ordem: (1) **nenhum worktree registrado o reivindica** no
