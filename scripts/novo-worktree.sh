@@ -423,5 +423,5 @@ nao rode "make db-up" neste worktree: o PostgreSQL e o do principal, e o compose
 recriaria o container (docs/QUALITY.md secao 6). Os hooks de git moram no .git
 comum e ja valem aqui: nao rode "pre-commit install" neste worktree. Para
 instalar ou atualizar os hooks, use scripts/instalar-hooks.sh (uma vez por
-clone); "make check-hooks" confere se eles apontam para fora de worktrees.
+clone); "make check-hooks" confere se eles apontam exatamente para o .hooks-venv.
 FIM

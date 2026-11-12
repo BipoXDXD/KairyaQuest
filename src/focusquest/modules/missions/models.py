@@ -20,8 +20,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+# Importado pelo efeito colateral de registrar `users` no `Base.metadata`: as
+# tabelas daqui apontam para `users.id`, e sem o alvo registrado a
+# configuracao dos mappers levanta NoReferencedTableError no primeiro uso.
+import focusquest.modules.users.models  # noqa: F401
 from focusquest.core.base import Base
-from focusquest.core.idioma import Idioma
 from focusquest.core.texto_de_enum import TextoDeEnum
 from focusquest.modules.missions.domain import (
     EstadoDaAvaliacao,
@@ -42,9 +45,6 @@ from focusquest.modules.missions.domain import (
 # migracao vai ver o PostgreSQL recusar o estado novo -- falha alta, e no
 # lugar certo, porque o modelo nao cria esquema nenhum.
 _ESTADOS_SQL = ", ".join(f"'{estado.value}'" for estado in MissionState)
-
-# Mesmo motivo de _ESTADOS_SQL, para o CHECK `ck_users_locale` (migracao 0009).
-_IDIOMAS_SQL = ", ".join(f"'{idioma.value}'" for idioma in Idioma)
 
 # Mesmo motivo de _ESTADOS_SQL: o modelo DESCREVE a tabela de hoje, e por isso
 # deriva do enum -- o CHECK que vive no banco so muda por migracao a mao.
@@ -110,46 +110,6 @@ class WeeklyPlan(Base):
             "EXTRACT(ISODOW FROM week_start) = 1",
             name="ck_weekly_plans_week_start_segunda",
         ),
-    )
-
-
-class User(Base):
-    """Usuario dono das missoes.
-
-    Existe por uma razao estrutural, e nao de negocio:
-    `Mission.user_id` e `ForeignKey("users.id")`, e o SQLAlchemy resolve esse
-    alvo procurando a tabela em `Base.metadata`. Sem `users` registrada, a
-    configuracao dos mappers levanta NoReferencedTableError no primeiro uso
-    de Mission -- o mapeamento inteiro nao carrega.
-
-    Fica neste modulo, e nao em um `users` proprio, porque o incremento 1a
-    nao tem modulo de usuario: o usuario unico e DECLARADO e semeado pela
-    migracao (README s8). Declarar a tabela ao lado da chave estrangeira
-    garante que quem importa o mapeamento da missao sempre tenha o alvo dela
-    resolvido. Quando houver autenticacao, esta classe se muda para o modulo
-    de usuario e `missions/models.py` passa a importa-la.
-
-    O modulo `users` (F3) existe e mesmo assim NAO recebe a classe: as tabelas
-    de `missions` apontam para `users.id`, e com a classe em `users` o
-    `missions` passaria a importar `users` so para resolver a chave
-    estrangeira. `users.service` le `display_name` e `locale` e escreve so
-    `locale`.
-
-    `locale` e `NULL` enquanto o usuario nunca escolheu (migracao 0009). O
-    fallback para `pt-BR` mora em `users.service.ler_idioma`, e so la.
-    """
-
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    display_name: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    locale: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        CheckConstraint(f"locale IN ({_IDIOMAS_SQL})", name="ck_users_locale"),
     )
 
 

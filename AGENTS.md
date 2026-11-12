@@ -40,8 +40,12 @@ segundo comando: os hooks do `.git` comum já valem para ele. **Nunca rode
 de todos para o `.venv` dele — remover o worktree quebra todos. O script
 usa um ambiente dedicado (`.hooks-venv`, ao lado do `.git` comum, fora de
 qualquer worktree) com o `pre-commit` na versão do `uv.lock`; é idempotente
-e confere o resultado. `make check-hooks` reprova se algum hook apontar para
-dentro de um worktree.
+e confere o resultado. `make check-hooks` reprova se o `INSTALL_PYTHON` de
+algum dos três hooks (`pre-commit`, `pre-merge-commit`, `pre-push`) não for
+**exatamente** `<pai do git-common-dir>/.hooks-venv/bin/python` — worktree vivo,
+Python do sistema, venv de outro projeto: qualquer outro valor reprova, com a
+causa provável (`pre-commit install` rodado à mão) e o conserto
+(`scripts/instalar-hooks.sh`, que precisa da autorização do responsável).
 
 Sem o segundo comando, `git commit` e `git push` funcionam sem nenhuma
 validação e sem nenhum aviso de que o gate não está ativo. Sem o `.env` e
