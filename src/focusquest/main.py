@@ -38,6 +38,7 @@ from focusquest.core.errors import (
     PrazoExpiradoError,
     PrazoForaDoLimite,
     PrazoInalteradoError,
+    PropostaInvalidaError,
     ProvedorNaoConfiguradoError,
     ReagendamentoInvalidoError,
     SemanaDistanteError,
@@ -159,6 +160,7 @@ class CodigoDeErro(StrEnum):
     PRAZO_DERIVADO = "prazo_derivado"
     PRAZO_INALTERADO = "prazo_inalterado"
     REAGENDAMENTO_INVALIDO = "reagendamento_invalido"
+    PROPOSTA_INVALIDA = "proposta_invalida"
     MISSAO_EXPIRADA = "missao_expirada"
     PLANO_EXISTENTE = "plano_existente"
     SEMANA_ENCERRADA = "semana_encerrada"
@@ -388,6 +390,16 @@ def _reagendamento_invalido(
     acao; a saida da tela e pedir outra proposta."""
     return _erro(
         status.HTTP_409_CONFLICT, str(exc), CodigoDeErro.REAGENDAMENTO_INVALIDO
+    )
+
+
+@app.exception_handler(PropostaInvalidaError)
+def _proposta_invalida(request: Request, exc: PropostaInvalidaError) -> JSONResponse:
+    """422: a entrada gravada da proposta nao passa mais no esquema atual
+    (pendencia 47). A falha ja foi gravada na acao; a saida da tela e pedir
+    outra proposta. Nunca 500."""
+    return _erro(
+        status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc), CodigoDeErro.PROPOSTA_INVALIDA
     )
 
 

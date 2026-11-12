@@ -313,8 +313,11 @@ describe('useDecideAction', () => {
     expect(result.current.keys.operationIdFor(5)).toBe(K2)
   })
 
-  it('D10 reagendamento_invalido marca a acao como falhou com esse code, e solta a chave', async () => {
-    const fetchMock = routeFetch({ [CONFIRM]: withCode(409, 'reagendamento_invalido') })
+  it.each([
+    [409, 'reagendamento_invalido'],
+    [422, 'proposta_invalida'],
+  ])('D10 %i %s marca a acao como falhou com esse code, e solta a chave', async (status, code) => {
+    const fetchMock = routeFetch({ [CONFIRM]: withCode(status, code) })
     const { changed, missionCreated, result } = mount()
 
     act(() => {
@@ -327,7 +330,7 @@ describe('useDecideAction', () => {
     expect(changed).toHaveBeenCalledExactlyOnceWith({
       ...proposta(5),
       state: 'falhou',
-      error_code: 'reagendamento_invalido',
+      error_code: code,
     })
     expect(missionCreated).not.toHaveBeenCalled()
     expect(result.current.decision.state).toMatchObject({
