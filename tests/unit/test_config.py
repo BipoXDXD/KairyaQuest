@@ -2,6 +2,7 @@
 
 import os
 import re
+import uuid
 from pathlib import Path
 
 import pytest
@@ -272,7 +273,9 @@ def test_limites_da_tutoria_recusam_zero(
         _settings_do_arquivo(monkeypatch, tmp_path, linha + "\n")
 
 
-def test_a_suite_nunca_aponta_para_a_anthropic() -> None:
+def test_a_suite_nunca_aponta_para_a_anthropic(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A guarda de `tests/conftest.py` vale para todo teste.
 
     A chave de verdade mora no Keychain do macOS, nunca no .env (decisao
@@ -281,17 +284,21 @@ def test_a_suite_nunca_aponta_para_a_anthropic() -> None:
     Com a guarda, um teste que esquecesse o override do provedor bateria numa
     porta fechada, e nao numa chamada paga.
     """
-    assert Settings().anthropic_base_url == "http://127.0.0.1:9"
+    # Sem o .env do repositorio: o teste prova a guarda do AMBIENTE, e um .env
+    # local com chave desconhecida o derrubaria por outro motivo.
+    _ambiente_minimo(monkeypatch, tmp_path)
+    assert Settings(_env_file=None).anthropic_base_url == "http://127.0.0.1:9"
 
 
 def test_a_guarda_vale_com_a_chave_exportada_no_ambiente(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A chave real vive no Keychain e entra no AMBIENTE dos comandos manuais.
     Um `make check` rodado num shell que a exportou herda a
     variavel: o provedor da suite tem de continuar numa porta fechada."""
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-api03-parece-de-verdade")
-    settings = Settings()
+    _ambiente_minimo(monkeypatch, tmp_path)
+    settings = Settings(_env_file=None)
     assert settings.anthropic_api_key is not None
     assert settings.anthropic_base_url == "http://127.0.0.1:9"
 
@@ -382,3 +389,39 @@ def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
     limites = Settings.model_fields["e2e_port_offset"].metadata
     teto = next(m.le for m in limites if hasattr(m, "le"))
     assert 2 * reserva - 1 == teto
+
+
+def _ambiente_minimo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/d")
+    monkeypatch.setenv(
+        "FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/t"
+    )
+    monkeypatch.chdir(tmp_path)
+
+
+def test_o_erro_de_variavel_desconhecida_nao_imprime_o_valor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """O valor pode ser um segredo: ele nao pode ir parar no terminal nem no log."""
+    canario = f"CANARY-{uuid.uuid4()}"
+    _ambiente_minimo(monkeypatch, tmp_path)
+    # O pydantic-settings so trata chave extra vinda de um arquivo dotenv; o
+    # `os.environ` nao a produz. Por isso o canario vai num .env temporario.
+    arquivo = tmp_path / "canario.env"
+    arquivo.write_text(f"FOCUSQUEST_VARIAVEL_INEXISTENTE={canario}\n")
+    with pytest.raises(ValidationError) as erro:
+        Settings(_env_file=arquivo)
+    assert "extra_forbidden" in str(erro.value)
+    assert canario not in str(erro.value)
+
+
+def test_o_erro_de_valor_invalido_nao_imprime_o_valor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    canario = f"CANARY-{uuid.uuid4()}"
+    _ambiente_minimo(monkeypatch, tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DB_PORT", canario)
+    with pytest.raises(ValidationError) as erro:
+        Settings(_env_file=None)
+    assert "db_port" in str(erro.value)
+    assert canario not in str(erro.value)
