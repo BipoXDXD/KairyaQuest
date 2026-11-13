@@ -13,6 +13,7 @@ promete e testado aqui, pelo processo de verdade:
 
 import importlib.util
 import random
+import signal
 import subprocess
 import sys
 import zipfile
@@ -210,6 +211,11 @@ PISO_DE_CUSTO_S = 1e-4
 # pendurar a suite.
 TETO_DE_CPU_S = 10
 TETO_DO_PROCESSO_S = 60
+# Como o RLIMIT_CPU mata o filho. Com o limite brando igual ao rigido, o
+# sistema pode entregar qualquer um dos dois (no Linux, SIGXCPU no brando e
+# SIGKILL no rigido; no macOS, SIGXCPU). Qualquer outro codigo de saida e
+# falha comum do filho, nao ReDoS.
+MORTES_POR_CPU = frozenset({-signal.SIGXCPU, -signal.SIGKILL})
 
 _CRONOMETRO = """
 import importlib.util, resource, sys, time
@@ -254,7 +260,8 @@ def _medir_custos(
 ) -> tuple[float, float] | None:
     """Custo de CPU minimo de `contar_padroes` em (pequena, grande).
 
-    None quando o filho morre (RLIMIT_CPU estourado: retrocesso catastrofico).
+    None quando o filho morre pelo RLIMIT_CPU (retrocesso catastrofico).
+    Qualquer outra saida diferente de 0 reprova o teste com o stderr do filho.
     """
     arquivo_pequeno = diretorio / "pequena.bin"
     arquivo_pequeno.write_bytes(pequena)
@@ -280,8 +287,13 @@ def _medir_custos(
         )
     except subprocess.TimeoutExpired:
         pytest.fail(f"a varredura passou de {TETO_DO_PROCESSO_S} s de parede (ReDoS)")
-    if processo.returncode != 0:
+    if processo.returncode in MORTES_POR_CPU:
         return None
+    if processo.returncode != 0:
+        pytest.fail(
+            f"o filho da medicao saiu com {processo.returncode} sem estourar a CPU:\n"
+            f"{processo.stderr}"
+        )
     custo_pequena, custo_grande = (float(campo) for campo in processo.stdout.split())
     return custo_pequena, custo_grande
 
@@ -330,6 +342,19 @@ def test_medicao_reprova_varredor_vulneravel_a_redos(tmp_path: Path) -> None:
         or _razao(*custos) >= RAZAO_MAXIMA
     )
     assert reprovaria
+
+
+def test_medicao_reprova_filho_que_quebra_por_outro_motivo(tmp_path: Path) -> None:
+    # Um filho que morre por erro comum (aqui, `ImportError` ao carregar o
+    # varredor) nao mediu nada: nao pode passar por ReDoS, senao a sabotagem
+    # acima passaria sem medir.
+    quebrado = tmp_path / "varredor_quebrado.py"
+    quebrado.write_text("import modulo_que_nao_existe_7f3a\n")
+
+    with pytest.raises(pytest.fail.Exception) as falha:
+        _medir_custos(quebrado, b"a", b"aaaa", tmp_path, TETO_DE_CPU_S)
+
+    assert "modulo_que_nao_existe_7f3a" in str(falha.value)
 
 
 # --- zip ---------------------------------------------------------------------
