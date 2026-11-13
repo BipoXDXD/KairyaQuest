@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mission } from '../../shared/types/mission'
-import { useMissions } from './useMissions'
+import { MISSIONS_PAGE_SIZE, useMissions } from './useMissions'
 
 /** O 503 vira o texto do catalogo pelo `kind`; a `message` de depuracao nao sai do hook. */
 const HTTP_FAILURE = {
@@ -329,5 +329,196 @@ describe('useMissions', () => {
     )
     await act(async () => failOld(new Error('falha antiga')))
     expect(result.current.state).toEqual({ status: 'loaded', missions: [missao] })
+  })
+
+  describe('paginas seguintes (#182)', () => {
+    /** Uma pagina cheia: `MISSIONS_PAGE_SIZE` missoes com ids a partir de `first`. */
+    function fullPage(first: number): Mission[] {
+      return Array.from({ length: MISSIONS_PAGE_SIZE }, (_, i) => ({ ...missao, id: first + i }))
+    }
+
+    it('pagina mais curta que o tamanho e a ultima: nao ha mais', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([missao])))
+
+      const { result } = renderHook(() => useMissions())
+
+      await waitFor(() => {
+        expect(result.current.state.status).toBe('loaded')
+      })
+      expect(result.current.more).toEqual({ status: 'none' })
+    })
+
+    it('carrega a pagina seguinte com o cursor da ultima missao e junta as duas', async () => {
+      const primeira = fullPage(1)
+      const ultima = { ...missao, id: 99, deadline: '2026-09-21T13:00:00+00:00' }
+      const segunda = [ultima]
+      primeira[primeira.length - 1] = { ...missao, id: 50, deadline: '2026-09-20T10:00:00-03:00' }
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json(primeira))
+        .mockResolvedValueOnce(Response.json(segunda))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'available' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+      expect(result.current.more).toEqual({ status: 'loading' })
+
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'loaded',
+          missions: [...primeira, ultima],
+        })
+      })
+      expect(result.current.more).toEqual({ status: 'none' })
+      // O `+` do offset vai codificado: cru, o servidor o leria como espaco.
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        '/api/missions?limit=50&after_deadline=2026-09-20T10%3A00%3A00-03%3A00&after_id=50',
+      )
+    })
+
+    it('missao reagendada entre as paginas aparece uma vez so, na versao nova', async () => {
+      // A missao 2 foi reagendada para depois do cursor entre os dois pedidos:
+      // o servidor a devolve de novo na pagina seguinte. Sem dedupe por id, a
+      // lista teria duas linhas com a mesma chave.
+      const primeira = fullPage(1)
+      const reagendada = { ...missao, id: 2, deadline: '2026-12-01T12:00:00+00:00' }
+      const nova = { ...missao, id: 51 }
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(primeira))
+          .mockResolvedValueOnce(Response.json([reagendada, nova])),
+      )
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'available' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'loaded',
+          missions: [...primeira.filter((m) => m.id !== 2), reagendada, nova],
+        })
+      })
+    })
+
+    it('outra pagina cheia mantem o carregar mais disponivel', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(fullPage(1)))
+          .mockResolvedValueOnce(Response.json(fullPage(51))),
+      )
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'available' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+
+      await waitFor(() => {
+        expect(
+          result.current.state.status === 'loaded' && result.current.state.missions,
+        ).toHaveLength(2 * MISSIONS_PAGE_SIZE)
+      })
+      expect(result.current.more).toEqual({ status: 'available' })
+    })
+
+    it('falha ao carregar mais preserva a lista e mostra o erro so no rodape', async () => {
+      const primeira = fullPage(1)
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(primeira))
+          .mockResolvedValueOnce(Response.json({ detail: 'Banco indisponivel.' }, { status: 503 })),
+      )
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'available' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'error', failure: HTTP_FAILURE })
+      })
+      expect(result.current.state).toEqual({ status: 'loaded', missions: primeira })
+    })
+
+    it('carregar mais fora de loaded nao faz pedido', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(Response.json([]))
+      vi.stubGlobal('fetch', fetchMock)
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.state).toEqual({ status: 'empty' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(result.current.more).toEqual({ status: 'none' })
+    })
+
+    it.each(['success', 'error'] as const)(
+      'a recarga descarta o %s da pagina seguinte que chega depois dela',
+      async (outcome) => {
+        let finishMore!: (response: Response) => void
+        let failMore!: (error: Error) => void
+        vi.stubGlobal(
+          'fetch',
+          vi
+            .fn()
+            .mockResolvedValueOnce(Response.json(fullPage(1)))
+            .mockImplementationOnce(
+              () =>
+                new Promise<Response>((resolve, reject) => {
+                  finishMore = resolve
+                  failMore = reject
+                }),
+            )
+            .mockResolvedValueOnce(Response.json([missao])),
+        )
+        const { result } = renderHook(() => useMissions())
+        await waitFor(() => {
+          expect(result.current.more).toEqual({ status: 'available' })
+        })
+        act(() => {
+          result.current.loadMore()
+        })
+        act(() => {
+          result.current.reload()
+        })
+        await waitFor(() => {
+          expect(result.current.state).toEqual({ status: 'loaded', missions: [missao] })
+        })
+
+        await act(async () => {
+          if (outcome === 'success') finishMore(Response.json(fullPage(51)))
+          else failMore(new Error('falha antiga'))
+        })
+
+        expect(result.current.state).toEqual({ status: 'loaded', missions: [missao] })
+        expect(result.current.more).toEqual({ status: 'none' })
+      },
+    )
   })
 })

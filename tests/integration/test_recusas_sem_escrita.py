@@ -39,7 +39,7 @@ from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Connection, Engine, delete, event, inspect, select, text
+from sqlalchemy import Engine, delete, event, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -84,6 +84,7 @@ from focusquest.modules.missions.service import (
 )
 from focusquest.modules.progression.models import XpEntry
 from focusquest.modules.users.models import User
+from integration.foto_do_banco import Foto, foto_do_banco
 
 ESTUDANTE = 1
 OUTRO = 2
@@ -114,32 +115,9 @@ SUFIXO_DA_ROTA: dict[Operacao, str] = {
     "reagendar": "reschedule",
 }
 
-Foto = dict[str, list[str]]
-
 
 def _relogio() -> datetime:
     return AGORA
-
-
-def _foto(conexao: Connection) -> Foto:
-    """Todas as linhas de todas as tabelas do esquema, como texto JSON ordenado.
-
-    Descobre as tabelas pelo proprio banco: uma tabela nova entra na prova
-    sozinha, sem ninguem lembrar de acrescenta-la. So `alembic_version` fica de
-    fora (nao e dado do produto).
-    """
-    citar = conexao.dialect.identifier_preparer.quote
-    tabelas = sorted(
-        nome for nome in inspect(conexao).get_table_names() if nome != "alembic_version"
-    )
-    return {
-        nome: sorted(
-            conexao.execute(
-                text(f"SELECT to_jsonb(t)::text FROM {citar(nome)} AS t")
-            ).scalars()
-        )
-        for nome in tabelas
-    }
 
 
 def _executar(
@@ -228,7 +206,7 @@ class Cenario:
     def foto(self) -> Foto:
         """O banco como UMA conexao nova o ve: so o que foi commitado."""
         with self.engine.connect() as conexao:
-            return _foto(conexao)
+            return foto_do_banco(conexao)
 
     def avulsa(self, user_id: int = ESTUDANTE) -> int:
         with self.sessao() as sessao:
@@ -637,7 +615,9 @@ def test_a_recusa_nao_escreve_nada(cenario: Cenario, nome: str) -> None:
         # que enxerga o que ainda nao foi commitado. Uma escrita antes da
         # recusa aparece aqui, e so aqui: o rollback a esconderia.
         sessao.flush()
-        assert _foto(sessao.connection()) == antes, "a recusa escreveu antes de recusar"
+        assert foto_do_banco(sessao.connection()) == antes, (
+            "a recusa escreveu antes de recusar"
+        )
 
         sessao.rollback()
 

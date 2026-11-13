@@ -92,8 +92,15 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
     argumentos_do_pool = (
         {"pool_timeout": POOL_TIMEOUT_SEGUNDOS} if poolclass is None else {}
     )
+    # `hide_parameters`: a mensagem de um erro de banco traria os valores
+    # ligados a instrucao -- o texto da missao, a pergunta --, e essa mensagem
+    # chega ao log de um 500 (#166).
     engine = create_engine(
-        url, pool_pre_ping=True, poolclass=poolclass, **argumentos_do_pool
+        url,
+        pool_pre_ping=True,
+        poolclass=poolclass,
+        hide_parameters=True,
+        **argumentos_do_pool,
     )
     event.listen(engine, "connect", _fixar_sessao_em_utc)
     return engine
