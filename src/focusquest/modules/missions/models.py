@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     UniqueConstraint,
+    Uuid,
     func,
     text,
 )
@@ -378,5 +380,38 @@ class MissionEvaluation(Base):
         CheckConstraint(
             "(state = 'avaliando') = (finished_at IS NULL)",
             name="ck_mission_evaluations_avaliando_sem_fim",
+        ),
+    )
+
+
+class IdempotencyKey(Base):
+    """A reserva de uma `Idempotency-Key` do POST /api/missions.
+
+    `mission_id` so e NULL dentro da transacao que reserva: a linha nasce
+    antes da missao (e a reserva que serializa os pedidos concorrentes) e
+    recebe o id no mesmo `flush` da criacao. Nenhum commit sai com NULL.
+
+    `created_at` vem do relogio injetado, e nao do `now()` do banco: aqui ele
+    e regra (a validade de 24 h), nao auditoria.
+    """
+
+    __tablename__ = "idempotency_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    key: Mapped[UUID] = mapped_column(Uuid)
+    request_fingerprint: Mapped[str] = mapped_column(Text)
+    mission_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "key", name="uq_idempotency_keys_user_id_key"),
+        CheckConstraint(
+            "request_fingerprint ~ '^[0-9a-f]{64}$'",
+            name="ck_idempotency_keys_request_fingerprint",
         ),
     )
