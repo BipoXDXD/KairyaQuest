@@ -107,8 +107,12 @@ def avaliar_missao(
         # Qualquer outra excecao do provedor (um defeito do SDK, um erro de
         # decodificacao) tambem e falha do outro lado: gravada, para a
         # tentativa nao ficar `avaliando` ate o corte do orfao com todo pedido
-        # recebendo 409. O rastro vai para o log, e a causa fica no erro.
-        _log.exception("excecao inesperada do provedor na avaliacao")
+        # recebendo 409. So o TIPO vai para o log, como no adaptador do
+        # provedor: a mensagem e o traceback podem carregar o texto da
+        # entrega (#166). A causa completa segue encadeada no erro.
+        _log.error(
+            "excecao inesperada do provedor na avaliacao: %s", type(erro).__name__
+        )
         falha = FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL
         inesperada = erro
     else:

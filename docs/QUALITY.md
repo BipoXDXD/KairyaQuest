@@ -272,11 +272,17 @@ excluído deliberadamente, nunca por dificuldade de testar.
 
 **Fora** (excluído do denominador, com a justificativa de cada exclusão):
 
+Toda exclusão de `coverage.exclude` precisa casar com ao menos um arquivo
+de `frontend/src`: uma exclusão sem efeito tiraria do denominador,
+sem justificativa, o primeiro arquivo futuro que casasse com ela.
+`tests/unit/test_exclusoes_de_cobertura.py` reprova a exclusão morta. Um
+`.d.ts` que apareça em `frontend/src` entra no denominador até ganhar
+exclusão própria, com justificativa nesta tabela.
+
 | Exclusão | Justificativa |
 |---|---|
 | `frontend/src/**/*.test.{ts,tsx}` | São os próprios testes; cobrança de cobertura sobre o teste que mede a cobertura é circular. |
 | `frontend/src/test/**` | Infraestrutura de teste, não código de aplicação: nenhum destes arquivos implementa comportamento do produto, só monta o ambiente ou fabrica dados falsos para outros testes consumirem. `setup.ts` liga o modo de teste do React (`IS_REACT_ACT_ENVIRONMENT`) e limpa o DOM entre testes. `sse.ts` monta quadros e corpos SSE falsos, usados pelo cliente HTTP e pelos hooks da tutoria (mais de um arquivo de teste). `fetchRoutes.ts` (`routeFetch`) é um `fetch` falso roteado por método e URL, que devolve um `Response` **novo** a cada chamada — existe porque o painel da Kairya busca três recursos na montagem e um `Response` só serve uma leitura (o corpo é consumido na primeira). `viewport.ts` (`stubViewport`) fabrica um `matchMedia` falso, porque o jsdom não implementa `window.matchMedia` e o painel decide entre lateral e folha por media query. `readSource.ts` (`readSource`, `sourceExists`, `sourceSize`, `listSources`) lê arquivos-fonte de verdade com `node:fs`, relativos a `frontend/`, e trata arquivo vazio como erro (o `sourceSize`, coberto por `readSource.test.ts`, mede binários como a arte de `public/art/`); existe porque o `?raw` de CSS não serve no Vitest 5.0.1: ele passa pelo plugin `vitest:css-empty-post` e devolve `""`, o que deixaria vácuo todo teste que inspeciona CSS (o `vite.config.ts` não define `test.css`, e mudá-lo mexeria na fonte de verdade da config). A raiz sai de `fileURLToPath(import.meta.url)` + `node:path`, porque o Vite reescreve a forma literal `new URL('../../', import.meta.url)` como URL `http://localhost:3000/@fs/...` e o `fileURLToPath` a recusa. Todo teste que lê CSS tem a sentinela `o CSS lido não está vazio`. `dialog.ts` preenche `HTMLDialogElement.prototype.showModal` e `close`, que o jsdom 30 não implementa (medido: os dois são `undefined`), e só quando ausentes; não simula o `inert` nem o Esc do navegador, que o projeto `ui-states` do Playwright verifica. `audioDoubles.ts` (`fakeAudio`, `memoryStorage`) fabrica dublês de `HTMLAudioElement` e de `Storage` usados por vários arquivos de teste do áudio: o jsdom não implementa mídia (`play` lança "not implemented") e o `localStorage` do jsdom é global, então cada teste de som precisa de um storage isolado; o `renderWithI18n` (`i18n.ts`) o usa para montar o `AudioProvider` com o convite de som já dispensado. `gallery/` (`caseIds.ts`, `cases.tsx`, `caseComponents.tsx`, `main.tsx`) é a galeria de estados servida por `frontend/ui-gallery.html` só ao projeto `ui-states`: monta um caso de `shared/ui/` por página para o axe; o `ui-gallery.html` fica fora do build de produção (o `vite build` só lê o `index.html`). |
-| `frontend/src/**/*.d.ts` | Arquivos de declaração de tipos, sem instruções executáveis — não há linha para cobrir. |
 | `frontend/tests/e2e/**` | Cenários do Playwright; nunca estiveram no denominador, que é `src/**`. Inclui o `ui-states.spec.ts` (Tarefa 4.3): axe e alvo de 44px por estado de cada componente de `shared/ui/`, no projeto `ui-states`, com servidor `vite` próprio na porta da galeria (`GALERIA_URL` em `servers.ts`, deslocada pelo `FOCUSQUEST_E2E_PORT_OFFSET` como as demais); o projeto `chromium` o ignora. |
 | Dependências (`node_modules/`, `.venv/`, `uv.lock`, `package-lock.json`) | Código de terceiros; o projeto não pode garantir cobertura sobre o que não escreveu. |
 | Artefatos gerados (`frontend/dist/`, `frontend/coverage/`, `.tools/`) | Saída de build/instalação, recriada a cada execução; não é código-fonte. |
@@ -1122,6 +1128,22 @@ Sem eufemismo:
   Keychain do macOS, fora do repositório (ver `docs/HANDOFF.md`). O
   `.gitleaks.toml` **não** mudou para acomodar isso: nenhuma exceção nova
   foi aberta.
+- **A suíte do Vitest tolera um Scheduler do React atrasado até 250 ms por
+  tarefa, e não além de 500 ms.** A reprodução (o `setImmediate` que o
+  Scheduler captura trocado por um `setTimeout` de N ms, fora do repositório;
+  técnica em `docs/handoff/2026-11-12-flaky-latente.md`) atrasa igualmente
+  cada tarefa. Uma atualização que chega de fora do `act` (um `fetch`
+  resolvido) custa no mínimo **duas** tarefas até ficar observável: o commit
+  e, depois, os efeitos passivos — e o `renderHook` da Testing Library só
+  publica `result.current` num efeito passivo. Com N ≥ 500 ms, duas tarefas
+  já somam o prazo padrão de 1000 ms de `findBy`/`waitFor`, e o teste cuja
+  espera atravessa essas duas tarefas só passaria aumentando o prazo
+  (proibido), com retry ou com sleep. Medido nos três arquivos que reprovavam
+  (`Headquarters.test.tsx`, `App.test.tsx`, `useTutorConversation.test.tsx`):
+  400 ms, 100 de 100 passam; 500 ms, 40 reprovam e 60 passam; 600 ms, 42
+  reprovam e 58 passam. A
+  suíte inteira passa a 250 ms. É um limite do cenário artificial, não race
+  de produção: no produto cada tarefa leva microssegundos.
 
 ## 7. Como atualizar o Gitleaks
 

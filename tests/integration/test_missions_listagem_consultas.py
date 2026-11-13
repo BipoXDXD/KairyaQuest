@@ -27,6 +27,7 @@ from focusquest.modules.missions.domain import (
 )
 from focusquest.modules.missions.models import MissionEvaluation
 from focusquest.modules.missions.router import listar
+from focusquest.modules.missions.schemas import MissionListQuery
 from focusquest.modules.missions.service import (
     NovaEvidencia,
     concluir_missao,
@@ -126,7 +127,7 @@ def test_a_listagem_custa_um_numero_fixo_de_consultas(
     conexao = session.connection()
 
     with contando_consultas(conexao) as consultas:
-        lidas = listar(session)
+        lidas = listar(session, MissionListQuery())
 
     assert len(lidas) == quantas
     assert len(consultas) == CONSULTAS_DA_LISTAGEM, consultas
@@ -139,7 +140,7 @@ def test_a_listagem_carregada_de_uma_vez_traz_evidencia_e_avaliacao_certas(
     de outra, nem perder a avaliacao ou o historico de prazos."""
     _povoar(session, 4)
 
-    lidas = listar(session)
+    lidas = listar(session, MissionListQuery())
 
     assert [m.instructions for m in lidas] == [f"Missao {i}" for i in range(4)]
     assert [m.evidence is None for m in lidas] == [True, True, False, False]

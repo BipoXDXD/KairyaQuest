@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, type ReactElement, type Ref } from 'react'
 import { MissionCard } from './MissionCard'
 import { useCompletionRegistry, type CompletionRegistry } from './useCompletionRegistry'
-import { useMissions, type MissionsState } from './useMissions'
+import { useMissions, type MissionsState, type MoreMissionsState } from './useMissions'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import { useT } from '../../shared/i18n/useT'
 
@@ -15,14 +15,18 @@ import { useT } from '../../shared/i18n/useT'
  */
 function MissionsContent({
   state,
+  more,
   registry,
   onReload,
+  onLoadMore,
   reloadWaiting,
   onMissionCompleted,
 }: {
   state: MissionsState
+  more: MoreMissionsState
   registry: CompletionRegistry
   onReload: () => void
+  onLoadMore: () => void
   reloadWaiting: boolean
   onMissionCompleted?: () => void
 }): ReactElement {
@@ -82,19 +86,96 @@ function MissionsContent({
         // role implicita do `<ul>` e a consulta por role passa mesmo sem o
         // atributo. O axe em Chromium tambem nao o acusa, porque o defeito e
         // do Safari. Ver MissionList.test.tsx.
-        <ul role="list" data-testid="missions-list" className="flex flex-col gap-3">
-          {state.missions.map((mission) => (
-            <MissionCard
-              key={mission.id}
-              mission={mission}
-              registry={registry}
-              onReload={onReload}
-              reloadWaiting={reloadWaiting}
-              onCompleted={onMissionCompleted}
-              onRewarded={onMissionCompleted}
+        <>
+          <ul role="list" data-testid="missions-list" className="flex flex-col gap-3">
+            {state.missions.map((mission) => (
+              <MissionCard
+                key={mission.id}
+                mission={mission}
+                registry={registry}
+                onReload={onReload}
+                reloadWaiting={reloadWaiting}
+                onCompleted={onMissionCompleted}
+                onRewarded={onMissionCompleted}
+              />
+            ))}
+          </ul>
+          <MoreMissions more={more} onLoadMore={onLoadMore} />
+        </>
+      )
+  }
+}
+
+const LOAD_MORE_BUTTON =
+  'mt-3 rounded border border-slate-500 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70'
+
+/**
+ * O rodape da lista: pedir a pagina seguinte (#182). A falha daqui nao troca
+ * a lista pelo erro -- as missoes ja carregadas continuam na tela, e so o
+ * rodape avisa e oferece a nova tentativa.
+ */
+function MoreMissions({
+  more,
+  onLoadMore,
+}: {
+  more: MoreMissionsState
+  onLoadMore: () => void
+}): ReactElement | null {
+  const t = useT()
+  switch (more.status) {
+    case 'none':
+      return null
+
+    case 'available':
+      return (
+        <button
+          type="button"
+          data-testid="missions-load-more"
+          onClick={onLoadMore}
+          className={LOAD_MORE_BUTTON}
+        >
+          {t('missions.list.loadMore')}
+        </button>
+      )
+
+    // O botao fica no lugar, desabilitado, para o foco nao cair no `body`
+    // enquanto a pagina chega.
+    case 'loading':
+      return (
+        <button
+          type="button"
+          data-testid="missions-load-more"
+          disabled
+          aria-busy="true"
+          className={LOAD_MORE_BUTTON}
+        >
+          {t('missions.list.loadingMore')}
+        </button>
+      )
+
+    case 'error':
+      return (
+        <div
+          role="alert"
+          data-testid="missions-load-more-error"
+          className="mt-3 rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
+        >
+          <p className="font-semibold">{t('missions.list.loadMoreFailed')}</p>
+          <p className="mt-1">
+            <LoadFailureMessage
+              failure={more.failure}
+              unexpected="missions.list.unexpectedFailure"
             />
-          ))}
-        </ul>
+          </p>
+          <button
+            type="button"
+            data-testid="missions-load-more-retry"
+            onClick={onLoadMore}
+            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
+          >
+            {t('missions.action.retryLoad')}
+          </button>
+        </div>
       )
   }
 }
@@ -140,7 +221,7 @@ export function MissionList({
   onMissionCompleted?: () => void
 }) {
   const t = useT()
-  const { state, reload } = useMissions()
+  const { state, more, reload, loadMore } = useMissions()
   const { registry, reload: requestReload, waitingForCompletion } = useCompletionRegistry(reload)
   // O `requestReload`, e nao o `reload` cru: com uma conclusao em voo, a
   // recarga pedida de fora ESPERA, como o "Atualizar o quadro" (Incremento A).
@@ -170,8 +251,10 @@ export function MissionList({
       </p>
       <MissionsContent
         state={state}
+        more={more}
         registry={registry}
         onReload={requestReload}
+        onLoadMore={loadMore}
         reloadWaiting={waitingForCompletion}
         onMissionCompleted={onMissionCompleted}
       />
