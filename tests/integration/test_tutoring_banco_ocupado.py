@@ -19,8 +19,9 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Connection, Engine, create_engine, select, text
+from sqlalchemy import Connection, Engine, create_engine, event, select, text
 from sqlalchemy.exc import InternalError
+from sqlalchemy.exc import TimeoutError as PoolEsgotadoError
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.clock import get_clock
@@ -40,6 +41,7 @@ from focusquest.modules.tutoring.provider import (
 from focusquest.modules.tutoring.service import (
     EventoDoTurno,
     ParaGerar,
+    RespostaConcluida,
     RespostaFalhou,
     Tutoria,
     preparar_turno,
@@ -264,6 +266,46 @@ def test_a_segunda_tentativa_grava_falhou_e_o_reenvio_e_aceito(
 
     assert reenvio.status_code == 200
     assert [nome for nome, _ in _eventos(reenvio.text)][-1] == "done"
+
+
+def test_pool_esgotado_depois_do_commit_nao_desmente_a_resposta_completa(
+    banco_migrado: Engine, settings: Settings, conversa: Conversa
+) -> None:
+    """Depois do commit que grava `completa`, nada mais pede conexao ao pool.
+
+    Um pedido a mais esbarraria no pool esgotado, justo sob carga, com a linha
+    ja commitada: o stream diria `banco_ocupado` sobre uma resposta gravada, e
+    o "Tentar de novo" de uma `interrompida` gastaria mais um turno pago."""
+    cid = conversa.id("banco-ocupado-depois-do-commit")
+    tutoria = _tutoria(None)
+    with _engine_com_trava_curta(settings) as engine:
+        preparo = _preparar(engine, cid, tutoria)
+        pedidos = 0
+
+        def pool_so_tem_uma(*_: object) -> None:
+            nonlocal pedidos
+            pedidos += 1
+            if pedidos > 1:
+                raise PoolEsgotadoError("pool esgotado (simulado)")
+
+        event.listen(engine, "checkout", pool_so_tem_uma)
+        eventos = list(
+            transmitir(
+                sessionmaker(bind=engine, expire_on_commit=False),
+                preparo,
+                tutoria,
+                clock=lambda: AGORA,
+            )
+        )
+
+    final = eventos[-1]
+    assert isinstance(final, RespostaConcluida)
+    assert (final.mensagem.status, final.mensagem.content) == (
+        StatusDaMensagem.COMPLETA,
+        TRECHO,
+    )
+    assert pedidos == 1
+    assert _resposta_de(banco_migrado, cid).status is StatusDaMensagem.COMPLETA
 
 
 def test_erro_de_banco_nao_transitorio_continua_propagando(

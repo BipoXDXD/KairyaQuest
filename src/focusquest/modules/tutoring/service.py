@@ -981,8 +981,12 @@ def _completar(
         resposta.status = status
         resposta.error_code = motivo
         resposta.fallback_model = substituto
-        session.commit()
+        # O refresh vem antes do commit, na mesma conexao: depois do commit,
+        # ele pediria outra ao pool, que sob carga pode estar esgotado -- e o
+        # stream diria `banco_ocupado` sobre uma resposta ja gravada.
+        session.flush()
         session.refresh(resposta)
+        session.commit()
         return resposta
 
 
