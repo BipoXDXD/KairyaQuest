@@ -1,3 +1,4 @@
+import { MAX_DIFFICULTY } from '../../shared/types/mission'
 import type { WeekChoice } from './planDates'
 import type { PlanCreateBody } from './types'
 
@@ -13,8 +14,13 @@ export const MAX_TEXT_LENGTH = 500
 export const COUNTER_VISIBLE_FROM = (MAX_TEXT_LENGTH * 9) / 10
 
 export const DAYS_IN_PLAN = 7
+/**
+ * Os pisos espelham `DIFICULDADE_MINIMA` e `MINUTOS_MINIMOS` do backend, e o
+ * teto de minutos, `MINUTOS_DO_DIA`; o teto da dificuldade e o
+ * `MAX_DIFFICULTY` de `shared/types/mission.ts`, a unica declaracao dele no
+ * front. `tests/unit/test_paridade_dos_limites.py` prende todos.
+ */
 export const MIN_DIFFICULTY = 1
-export const MAX_DIFFICULTY = 5
 export const MIN_MINUTES = 1
 /** Minutos de um dia (`MINUTOS_DO_DIA`, no backend). */
 export const MAX_MINUTES = 1440

@@ -36,6 +36,20 @@ class OperacaoReutilizadaError(DomainError):
     """
 
 
+class ChaveDeIdempotenciaInvalidaError(DomainError):
+    """O cabecalho `Idempotency-Key` veio, mas nao e um UUID na forma canonica."""
+
+
+class ChaveDeIdempotenciaReutilizadaError(DomainError):
+    """A `Idempotency-Key` ja foi usada, por este usuario, com OUTRO corpo.
+
+    Mesma distincao de `OperacaoReutilizadaError`: o reenvio do mesmo pedido
+    devolve a missao ja criada; a mesma chave com outro corpo e uso indevido,
+    e devolver a missao antiga como sucesso esconderia que o pedido novo nao
+    foi atendido.
+    """
+
+
 class MensagemEmAndamentoError(DomainError):
     """Ja existe uma resposta da Kairya sendo gerada.
 

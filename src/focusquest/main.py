@@ -26,6 +26,8 @@ from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
     CampoDesconhecidoError,
+    ChaveDeIdempotenciaInvalidaError,
+    ChaveDeIdempotenciaReutilizadaError,
     EstimativaForaDoLimite,
     LimiteDiarioDaTutoriaError,
     MensagemEmAndamentoError,
@@ -178,6 +180,8 @@ class CodigoDeErro(StrEnum):
     ESTIMATIVA_FORA_DO_LIMITE = tutoring_domain.ESTIMATIVA_FORA_DO_LIMITE
     PRAZO_FORA_DO_LIMITE = tutoring_domain.PRAZO_FORA_DO_LIMITE
     CAMPO_DESCONHECIDO = "campo_desconhecido"
+    CHAVE_DE_IDEMPOTENCIA_INVALIDA = "chave_de_idempotencia_invalida"
+    CHAVE_DE_IDEMPOTENCIA_REUTILIZADA = "chave_de_idempotencia_reutilizada"
 
 
 @app.exception_handler(RequestValidationError)
@@ -365,6 +369,33 @@ def _prazo_fora_do_limite(request: Request, exc: PrazoForaDoLimite) -> JSONRespo
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         str(exc),
         CodigoDeErro.PRAZO_FORA_DO_LIMITE,
+    )
+
+
+@app.exception_handler(ChaveDeIdempotenciaInvalidaError)
+def _chave_de_idempotencia_invalida(
+    request: Request, exc: ChaveDeIdempotenciaInvalidaError
+) -> JSONResponse:
+    """422 com `code`: o cabecalho veio e nao e um UUID. Nao e o 422 nativo
+    porque o cabecalho e lido a mao (ver `missions/idempotency.py`), e o
+    `code` permite ao cliente distinguir a chave ruim de um corpo ruim."""
+    return _erro(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        str(exc),
+        CodigoDeErro.CHAVE_DE_IDEMPOTENCIA_INVALIDA,
+    )
+
+
+@app.exception_handler(ChaveDeIdempotenciaReutilizadaError)
+def _chave_de_idempotencia_reutilizada(
+    request: Request, exc: ChaveDeIdempotenciaReutilizadaError
+) -> JSONResponse:
+    """409, pelas razoes de `_operacao_reutilizada`: o corpo seria aceito com
+    outra chave; o conflito e com a reserva que ja existe."""
+    return _erro(
+        status.HTTP_409_CONFLICT,
+        str(exc),
+        CodigoDeErro.CHAVE_DE_IDEMPOTENCIA_REUTILIZADA,
     )
 
 
