@@ -90,8 +90,10 @@ def _reservar_janela_de_portas() -> tuple[tuple[int, int, int, int], IO[str]]:
     sistema, da a cada janela um dono so entre processos; quem chega depois
     pula para a proxima. A trava devolvida vale ate ser fechada no teardown.
     """
-    for inicio in range(20000, 30000, 211):
-        caminho = Path(tempfile.gettempdir()) / f"kairyaquest-portas-{inicio}.lock"
+    inicios = range(20000, 30000, 211)
+    prefixo = Path(tempfile.gettempdir()) / "kairyaquest-portas-"
+    for inicio in inicios:
+        caminho = Path(f"{prefixo}{inicio}.lock")
         trava = caminho.open("a")
         try:
             fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -102,7 +104,11 @@ def _reservar_janela_de_portas() -> tuple[tuple[int, int, int, int], IO[str]]:
         if _janela_esta_livre(bases):
             return bases, trava
         trava.close()
-    raise AssertionError("nenhuma janela de portas livre para os testes")
+    raise AssertionError(
+        f"nenhuma janela de portas livre para os testes: as {len(inicios)} janelas"
+        f" estao travadas por outro processo ({prefixo}<inicio>.lock) ou tem"
+        " porta ocupada; espere os outros gates terminarem"
+    )
 
 
 class Repositorio:
@@ -110,14 +116,25 @@ class Repositorio:
 
     def __init__(self, tmp_path: Path) -> None:
         self.bases, self._trava_das_portas = _reservar_janela_de_portas()
+        # Uma construcao que quebra no meio nao chega ao teardown da fixture:
+        # sem isto, a janela ficaria travada ate o processo acabar (issue #196).
+        try:
+            self._montar(tmp_path)
+        except BaseException:
+            self._trava_das_portas.close()
+            raise
+
+    def _montar(self, tmp_path: Path) -> None:
         self.base = tmp_path
         self.principal = tmp_path / "FocusQuest"
         self.registro_do_make = tmp_path / "make-chamado"
         bin_falso = tmp_path / "bin"
         bin_falso.mkdir()
-        make_falso = bin_falso / "make"
-        make_falso.write_text(f'#!/bin/sh\necho "$@" >> "{self.registro_do_make}"\n')
-        make_falso.chmod(0o755)
+        self._make_falso = bin_falso / "make"
+        self._make_falso.write_text(
+            f'#!/bin/sh\necho "$@" >> "{self.registro_do_make}"\n'
+        )
+        self._make_falso.chmod(0o755)
         self.ambiente = {
             chave: valor
             for chave, valor in os.environ.items()
@@ -138,6 +155,12 @@ class Repositorio:
         (self.principal / ".gitignore").write_text(".env\n.claude/\n.superpowers/\n")
         (self.principal / "README.md").write_text("principal\n")
         shutil.copy2(EXEMPLO, self.principal / ".env.example")
+        # O script e a biblioteca entram VERSIONADOS: o script so roda se a
+        # copia dele for a da origin/main (issue #194).
+        scripts = self.principal / "scripts"
+        scripts.mkdir()
+        shutil.copy2(SCRIPT, scripts / "novo-worktree.sh")
+        shutil.copy2(BIBLIOTECA, scripts / "push-env.sh")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "base")
         # O remoto: um bare ao lado do principal, ja com a main empurrada.
@@ -145,10 +168,6 @@ class Repositorio:
         self.git("init", "-q", "--bare", "-b", "main", str(self.remoto))
         self.git("remote", "add", "origin", str(self.remoto))
         self.publicar()
-        scripts = self.principal / "scripts"
-        scripts.mkdir()
-        shutil.copy2(SCRIPT, scripts / "novo-worktree.sh")
-        shutil.copy2(BIBLIOTECA, scripts / "push-env.sh")
         (self.principal / ".env").write_text(ENV_PRINCIPAL)
 
     def git(self, *argumentos: str, onde: Path | None = None) -> str:
@@ -176,6 +195,22 @@ class Repositorio:
             text=True,
             check=False,
             timeout=timeout,
+        )
+
+    def falhar_o_bootstrap(self, antes_de_falhar: str = "") -> None:
+        """O `make` falso passa a registrar a chamada, rodar `antes_de_falhar`
+        (shell, no diretorio do `-C`) e sair com 2, como um bootstrap que
+        quebra no meio."""
+        self._make_falso.write_text(
+            "#!/bin/sh\n"
+            f'echo "$@" >> "{self.registro_do_make}"\n'
+            f'cd "$2" && {antes_de_falhar or ":"}\n'
+            "exit 2\n"
+        )
+
+    def consertar_o_bootstrap(self) -> None:
+        self._make_falso.write_text(
+            f'#!/bin/sh\necho "$@" >> "{self.registro_do_make}"\n'
         )
 
     def liberar_portas(self) -> None:
@@ -805,9 +840,6 @@ def test_recusa_destino_link_quebrado(repo: Repositorio) -> None:
 
 
 def test_chamada_por_outro_worktree_usa_principal(repo: Repositorio) -> None:
-    repo.git("add", "scripts")
-    repo.git("commit", "-q", "-m", "script")
-    repo.publicar()
     assert repo.rodar("primeiro").returncode == 0
     primeiro = repo.principal / ".claude/worktrees/primeiro"
     env = primeiro / ".env"
@@ -1397,3 +1429,193 @@ def test_as_portas_base_do_script_sao_as_do_servers_ts() -> None:
 
     assert padrao is not None
     assert [int(porta) for porta in padrao.group(1).split()] == do_servers
+
+
+# ---------------------------------------------------------------------------
+# A logica que roda e a da origin/main (issue #194)
+# ---------------------------------------------------------------------------
+#
+# Quem roda e a copia do script do checkout de onde ele e chamado. Num checkout
+# parado numa branch antiga, uma versao antiga criava o worktree da base errada.
+# Depois do fetch o script compara a propria copia (e a da biblioteca que ele
+# carrega) com a da origin/main e recusa se divergirem.
+
+
+def _checkout_numa_branch_antiga(repo: Repositorio) -> str:
+    """Poe o principal numa branch `antiga`, parada no commit atual, e anda a
+    origin/main com um commit novo. Devolve o sha novo do remoto."""
+    repo.git("switch", "-q", "-c", "antiga")
+    return _avancar_o_remoto(repo)
+
+
+def test_de_uma_branch_antiga_o_worktree_nasce_da_origin_main(
+    repo: Repositorio,
+) -> None:
+    no_remoto = _checkout_numa_branch_antiga(repo)
+
+    resultado = repo.rodar("fresco")
+
+    assert resultado.returncode == 0, resultado.stderr
+    destino = repo.principal / ".claude/worktrees/fresco"
+    assert repo.git("rev-parse", "HEAD", onde=destino) == no_remoto
+    assert repo.git("rev-parse", "--abbrev-ref", "HEAD") == "antiga"
+
+
+@pytest.mark.parametrize("arquivo", ["novo-worktree.sh", "push-env.sh"])
+def test_recusa_se_a_copia_que_roda_diverge_da_origin_main(
+    repo: Repositorio, arquivo: str
+) -> None:
+    _checkout_numa_branch_antiga(repo)
+    copia = repo.principal / "scripts" / arquivo
+    copia.write_text(copia.read_text() + "# versao antiga\n")
+    repo.git("commit", "-q", "-am", "script antigo")
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("velho")
+
+    assert resultado.returncode != 0
+    assert f"scripts/{arquivo}" in resultado.stderr
+    assert "origin/main" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+    assert not (repo.principal / ".superpowers/sdd/worktree-ledgers/velho").exists()
+    assert not _trava(repo).exists()
+
+
+def test_recusa_se_a_origin_main_nao_tem_o_script(repo: Repositorio) -> None:
+    outro = repo.base / "outro-clone"
+    repo.git("clone", "-q", str(repo.remoto), str(outro))
+    repo.git("rm", "-q", "scripts/novo-worktree.sh", onde=outro)
+    repo.git("commit", "-q", "-m", "sem script", onde=outro)
+    repo.git("push", "-q", "origin", "main", onde=outro)
+    antes = repo.worktrees()
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "scripts/novo-worktree.sh" in resultado.stderr
+    _nada_foi_criado(repo, antes)
+
+
+# ---------------------------------------------------------------------------
+# Falha no bootstrap nao deixa registro orfao (issue #194)
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_que_falha_desfaz_worktree_branch_e_ledger(
+    repo: Repositorio,
+) -> None:
+    repo.falhar_o_bootstrap()
+    antes = repo.worktrees()
+    destino = repo.principal / ".claude/worktrees/novo"
+    ledger = repo.principal / ".superpowers/sdd/worktree-ledgers/novo"
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "make bootstrap falhou" in resultado.stderr
+    assert repo.make_chamado() == [f"-C {destino} bootstrap"]
+    assert repo.worktrees() == antes
+    assert repo.git("branch", "--list", "wt/*") == ""
+    assert not destino.exists()
+    assert not ledger.exists()
+    assert not _trava(repo).exists()
+
+    # O mesmo nome volta a servir: era o que o ledger orfao impedia.
+    repo.consertar_o_bootstrap()
+    de_novo = repo.rodar("novo")
+    assert de_novo.returncode == 0, de_novo.stderr
+    assert destino.as_posix() in repo.worktrees()
+
+
+def test_bootstrap_que_falha_preserva_o_que_alguem_escreveu(
+    repo: Repositorio,
+) -> None:
+    """O desfazer nao apaga trabalho: um arquivo nao rastreado no worktree faz
+    o `git worktree remove` (sem --force) recusar, e um ledger com conteudo
+    fica. O script mantem os dois e diz como retomar."""
+    repo.falhar_o_bootstrap(
+        "echo meu > rascunho.txt && echo nota > .superpowers/sdd/nota.txt"
+    )
+    destino = repo.principal / ".claude/worktrees/novo"
+    ledger = repo.principal / ".superpowers/sdd/worktree-ledgers/novo"
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert "make bootstrap falhou" in resultado.stderr
+    assert (destino / "rascunho.txt").read_text() == "meu\n"
+    assert (ledger / "nota.txt").read_text() == "nota\n"
+    assert destino.as_posix() in repo.worktrees()
+    assert repo.git("branch", "--list", "wt/novo") != ""
+    assert f"git worktree remove {destino}" in resultado.stderr
+    assert "git branch -D wt/novo" in resultado.stderr
+    assert str(ledger) in resultado.stderr
+    assert not _trava(repo).exists()
+
+
+# ---------------------------------------------------------------------------
+# A trava da janela de portas da fixture (issue #196)
+# ---------------------------------------------------------------------------
+
+
+def _janela_esta_travada(trava: IO[str]) -> bool:
+    """Tenta travar o MESMO arquivo por outro descritor: o `flock` conflita
+    entre descritores abertos separadamente, ate dentro do mesmo processo."""
+    with Path(trava.name).open("a") as outra:
+        try:
+            fcntl.flock(outra, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(outra, fcntl.LOCK_UN)
+        return False
+
+
+def test_o_teardown_libera_a_trava_da_janela(tmp_path: Path) -> None:
+    repositorio = Repositorio(tmp_path)
+    trava = repositorio._trava_das_portas
+    assert _janela_esta_travada(trava)
+
+    repositorio.liberar_portas()
+
+    assert not _janela_esta_travada(trava)
+
+
+def test_falha_na_construcao_libera_a_trava_da_janela(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reservadas: list[IO[str]] = []
+    original = _reservar_janela_de_portas
+
+    def reservar_e_guardar() -> tuple[tuple[int, int, int, int], IO[str]]:
+        bases, trava = original()
+        reservadas.append(trava)
+        return bases, trava
+
+    def copia_quebrada(*_argumentos: object, **_opcoes: object) -> None:
+        raise OSError("disco cheio simulado")
+
+    monkeypatch.setattr(f"{__name__}._reservar_janela_de_portas", reservar_e_guardar)
+    monkeypatch.setattr(shutil, "copy2", copia_quebrada)
+
+    with pytest.raises(OSError, match="disco cheio simulado"):
+        Repositorio(tmp_path)
+
+    assert len(reservadas) == 1
+    assert not _janela_esta_travada(reservadas[0])
+
+
+def test_sem_janela_livre_a_mensagem_diz_onde_estao_as_travas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def tudo_ocupado(_arquivo: object, _operacao: int) -> None:
+        raise BlockingIOError
+
+    monkeypatch.setattr(fcntl, "flock", tudo_ocupado)
+
+    with pytest.raises(AssertionError) as erro:
+        _reservar_janela_de_portas()
+
+    mensagem = str(erro.value)
+    assert "nenhuma janela de portas livre" in mensagem
+    assert str(Path(tempfile.gettempdir()) / "kairyaquest-portas-") in mensagem
+    assert "48 janelas" in mensagem

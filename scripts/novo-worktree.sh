@@ -21,8 +21,13 @@
 #     quem precisar delas no worktree as preenche a mao. O .env do principal so
 #     e lido para saber que bancos e deslocamentos os worktrees registrados
 #     (ele incluso) ja ocupam, sem copiar nada;
-#  3. roda "make bootstrap" nele;
+#  3. roda "make bootstrap" nele -- se falhar, desfaz worktree, branch e
+#     ledger (sem apagar trabalho de ninguem; ver desfazer_apos_bootstrap);
 #  4. imprime os proximos passos.
+#
+# Depois do fetch, e antes de criar qualquer coisa, confere que a copia deste
+# script (e a da biblioteca push-env.sh) e a da origin/main, e recusa se nao
+# for (issue #194).
 #
 # A base e a origin/main, nunca a main local (lote 21, P-worktree-base-1). O
 # principal deste projeto e um repositorio bare: ali "git fetch" so atualiza a
@@ -105,7 +110,8 @@
 # PostgreSQL); o nome reservado "push"; um nome cujo banco (ou banco do push)
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
 # branch que ja existam; deslocamento fora de 0 ao teto, reivindicado por outro
-# worktree ou com porta em uso; fetch da origin/main que falha; origin/main sem
+# worktree ou com porta em uso; fetch da origin/main que falha; copia deste
+# script ou do push-env.sh diferente da origin/main; origin/main sem
 # .env.example, ou com um .env.example sem FOCUSQUEST_TEST_DATABASE_URL ou com um
 # banco que nao termine em _test (o .env do principal nao e necessario); outra execucao em andamento (a trava). E
 # NUNCA escreve por cima de um .env que ja exista no destino.
@@ -391,6 +397,19 @@ if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet or
 fi
 base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}')" ||
   recusa "depois do fetch, origin/main nao resolve para um commit"
+
+# A logica que roda tem de ser a da origin/main (issue #194). Quem roda e a
+# copia do checkout de onde o script foi chamado; num checkout parado numa
+# branch antiga, era uma versao antiga, com regras antigas (base, .env,
+# recusas). A conferencia so cabe depois do fetch, e por isso as recusas
+# locais acima sao as da copia que roda. Vale tambem para a biblioteca que o
+# script carrega. Comparar o conteudo, e nao o commit do checkout, deixa
+# chamar de qualquer branch cuja copia seja a da origin/main.
+for proprio in scripts/novo-worktree.sh scripts/push-env.sh; do
+  if ! cmp -s "${ROOT}/${proprio}" <(git -C "$principal" show "${base_da_branch}:${proprio}" 2>/dev/null); then
+    recusa "a copia de ${proprio} em ${ROOT} difere da origin/main (ou a origin/main nao a tem); o script so roda com a logica da origin/main, entao nada foi criado. Atualize esse checkout com a origin/main, ou chame o script de um checkout que esteja nela"
+  fi
+done
 # O modelo do .env novo: o .env.example da origin/main, de onde o worktree nasce.
 exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
   recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
@@ -460,7 +479,38 @@ ln -s "../../../../.superpowers/sdd/worktree-ledgers/${nome}" "${destino}/.super
 liberar_trava
 trap - EXIT
 
-make -C "$destino" bootstrap
+# Um bootstrap que falha desfaz o que o script criou (issue #194): sem isso, o
+# ledger e o destino orfaos faziam a tentativa seguinte, com o mesmo nome,
+# recusar. O desfazer nunca apaga trabalho de ninguem: o "git worktree remove"
+# vai SEM --force, entao recusa se houver arquivo nao rastreado ou alteracao
+# (os ignorados, como .venv e node_modules do proprio bootstrap, saem junto);
+# a branch so e apagada se o worktree saiu; o ledger sai com rmdir, so vazio.
+# O que nao sai fica, e a mensagem diz como terminar a mao. Limites (SIGKILL,
+# ignorados de terceiros): docs/QUALITY.md secao 6.
+desfazer_apos_bootstrap() {
+  local sobrou=""
+  if git -C "$principal" worktree remove "$destino" 2>/dev/null; then
+    git -C "$principal" branch --quiet -D "$branch" ||
+      sobrou="${sobrou}    git -C ${principal} branch -D ${branch}
+"
+  else
+    sobrou="${sobrou}    git worktree remove ${destino}   (tem arquivo nao rastreado ou alterado: confira antes)
+    git branch -D ${branch}
+"
+  fi
+  rmdir "$ledger" 2>/dev/null ||
+    sobrou="${sobrou}    ${ledger}   (o ledger tem conteudo: confira e apague a mao)
+"
+  if [ -n "$sobrou" ]; then
+    recusa "make bootstrap falhou; o que dava para desfazer sem perder dados foi desfeito. Para liberar o nome '${nome}', termine a mao:
+${sobrou}"
+  fi
+  recusa "make bootstrap falhou; worktree ${destino}, branch ${branch} e ledger desfeitos -- corrija a causa (saida acima) e rode de novo com o mesmo nome"
+}
+
+if ! make -C "$destino" bootstrap; then
+  desfazer_apos_bootstrap
+fi
 
 cat <<FIM
 ==> worktree pronto: ${destino} (branch ${branch})

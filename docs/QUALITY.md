@@ -908,6 +908,15 @@ Sem eufemismo:
   (nome, destino, deslocamento, bancos, trava) e logo antes
   de criar o worktree, dentro da trava. Provado em `tests/integration/test_novo_worktree.py`
   (`test_o_worktree_nasce_da_origin_main_buscada_pelo_script` e vizinhos).
+  **A lógica que roda também é a da `origin/main`** (issue #194): quem roda é a
+  cópia do script do checkout de onde ele é chamado, e um checkout parado numa
+  branch antiga rodava uma versão antiga. Logo depois do fetch, o script
+  compara a própria cópia e a do `scripts/push-env.sh` (que ele carrega) com as
+  da `origin/main` e **recusa, sem criar nada**, se alguma divergir ou faltar.
+  Compara conteúdo, não commit: chamar de uma branch antiga cuja cópia seja a
+  da `origin/main` funciona. Limite: as recusas locais anteriores ao fetch
+  (nome, destino, deslocamento, bancos, trava) são as da cópia que roda, e uma
+  cópia anterior a esta conferência não a tem.
 - **O que é um deslocamento "livre" no `scripts/novo-worktree.sh`** (lote
   19b). O script aloca o **primeiro** deslocamento de 1 ao teto que passa nos
   dois testes, nesta ordem: (1) **nenhum worktree registrado o reivindica** no
@@ -957,7 +966,36 @@ Sem eufemismo:
   um worktree criado sem o script, fica fora da trava e pode escolher um
   deslocamento ou banco já em uso — a conferência só vale no momento da
   criação; (3) mudar depois o `.env` do principal (ou de qualquer worktree)
-  não reconfere nada.
+  não reconfere nada. Não há detecção automática de trava órfã pelo PID: um
+  PID pode ser reutilizado por outro processo, e apagar a trava de uma
+  execução viva reabriria a corrida; a decisão de apagar fica com quem lê a
+  mensagem.
+- **O que o `scripts/novo-worktree.sh` desfaz quando falha** (issues #194 e
+  #169). Toda recusa **antes** do `git worktree add` não cria nada (só o
+  fetch pode ter avançado a `origin/main`). Depois dele:
+  - **`make bootstrap` falhou:** o script desfaz worktree, branch `wt/<nome>`
+    e ledger, e o mesmo nome volta a servir. O desfazer não apaga trabalho:
+    `git worktree remove` roda **sem `--force`** e recusa se o worktree tiver
+    arquivo não rastreado ou alteração; a branch só sai se o worktree saiu; o
+    ledger sai com `rmdir`, só vazio. O que não sai fica, e a mensagem lista
+    os comandos para terminar à mão. Testado em
+    `test_bootstrap_que_falha_desfaz_worktree_branch_e_ledger` e
+    `test_bootstrap_que_falha_preserva_o_que_alguem_escreveu`.
+  - **`.env` já existente no destino, `.env` que não pôde ser escrito, ou
+    scratch `.superpowers/sdd` trazido pelo checkout:** o worktree e a branch
+    **ficam** (o ledger ainda não existe), de propósito — num deles há dados
+    que o script não escreveu e não deve apagar. A mensagem diz que o
+    bootstrap não rodou; para liberar o nome, confira o destino e rode
+    `git worktree remove <destino>` e `git branch -D wt/<nome>`.
+  - **Limites:** (1) `SIGKILL` (ou queda da máquina) não executa `trap`
+    nenhum: a trava `novo-worktree.lock` e o que já tiver sido criado ficam, e
+    a limpeza é manual (`rmdir` da trava, mais os dois comandos acima e o
+    `rmdir` do ledger); um Ctrl-C durante o `make bootstrap` também não
+    desfaz nada. (2) Arquivos **ignorados** pelo git (`.venv`,
+    `node_modules`, `.env`) saem junto no `git worktree remove`, inclusive os
+    que outra ferramenta tenha criado no worktree recém-nascido entre a
+    criação e a falha do bootstrap — só não rastreados e alterações
+    bloqueiam a remoção.
 - **`make db-up` fora do worktree principal recria o container do
   PostgreSQL.** O `compose.yaml` monta `./scripts/init-test-db.sql` por
   caminho relativo; chamado de outro worktree, o bind aponta para outro
