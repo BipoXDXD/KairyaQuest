@@ -16,15 +16,22 @@ FRONT = RAIZ / "frontend"
 _BLOCO_DE_COBERTURA = re.compile(
     r"coverage:\s*\{.*?exclude:\s*\[(?P<lista>[^\]]*)\]", re.S
 )
-_TEXTO_ENTRE_ASPAS = re.compile(r"'([^']*)'")
+# Aspas simples ou duplas, fechadas pela mesma que abriu.
+_TEXTO_ENTRE_ASPAS = re.compile(r"""(['"])(?P<texto>.*?)\1""")
 _CHAVES = re.compile(r"\{([^{}]*)\}")
 
 
 def _exclusoes_de_cobertura() -> list[str]:
-    configuracao = (FRONT / "vite.config.ts").read_text(encoding="utf-8")
+    return _ler_exclusoes((FRONT / "vite.config.ts").read_text(encoding="utf-8"))
+
+
+def _ler_exclusoes(configuracao: str) -> list[str]:
     bloco = _BLOCO_DE_COBERTURA.search(configuracao)
     assert bloco is not None, "coverage.exclude nao encontrado no vite.config.ts"
-    return _TEXTO_ENTRE_ASPAS.findall(bloco.group("lista"))
+    return [
+        achado.group("texto")
+        for achado in _TEXTO_ENTRE_ASPAS.finditer(bloco.group("lista"))
+    ]
 
 
 def _expandir_chaves(padrao: str) -> list[str]:
@@ -45,7 +52,10 @@ def _arquivos_de_src() -> list[PurePosixPath]:
 
     Lidos do disco, e nao do `git ls-files`: dentro do hook de commit o git
     exporta `GIT_DIR`/`GIT_INDEX_FILE`, e o `ls-files` rodado em `frontend/`
-    nao devolvia nada (medido: todas as exclusoes pareciam mortas).
+    nao devolvia nada (medido: todas as exclusoes pareciam mortas). Limite
+    aceito: localmente, um arquivo nao rastreado em `frontend/src` mantem viva
+    uma exclusao morta (erro no sentido permissivo); a garantia final vem do
+    CI, que roda num checkout limpo.
     """
     return [
         PurePosixPath(arquivo.relative_to(FRONT).as_posix())
@@ -58,6 +68,14 @@ def test_o_parser_le_as_exclusoes_conhecidas() -> None:
     # Sentinela: sem ela, um parser que nao achasse nada aprovaria o teste
     # abaixo por vacuidade.
     assert "src/test/**" in _exclusoes_de_cobertura()
+
+
+def test_o_parser_le_aspas_simples_e_duplas() -> None:
+    # Uma exclusao nova escrita com aspas duplas nao pode ser ignorada em
+    # silencio: a fitness function aprovaria por omissao.
+    configuracao = "coverage: { exclude: ['src/a/**', \"src/**/*.gen.ts\"] }"
+
+    assert _ler_exclusoes(configuracao) == ["src/a/**", "src/**/*.gen.ts"]
 
 
 def test_a_expansao_de_chaves_gera_cada_opcao() -> None:

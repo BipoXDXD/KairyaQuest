@@ -40,6 +40,9 @@ Revisão-base: `0067e2f` (origin/main).
 - `frontend/vite.config.ts`: sem `src/**/*.d.ts` em `coverage.exclude`.
 - `docs/QUALITY.md`: linha da tabela do §3 removida, parágrafo da regra nova
   no §3 e o limite do Scheduler lento no §6.
+- Revisão do PR: o parser de `coverage.exclude` lê aspas simples e duplas
+  (`test_o_parser_le_aspas_simples_e_duplas`, vermelho antes), e o §6 do
+  `docs/QUALITY.md` traz os números medidos em vez da inferência.
 
 ## Comandos
 - `uv run pytest -q --no-cov tests/unit/test_varrer_traces.py -k medicao` (vermelho antes da correção: `DID NOT RAISE Failed`).
@@ -59,3 +62,6 @@ O resultado do `make check` está no PR (rodado pelo hook do commit).
 ## Pendências
 - A config lenta continua fora do repositório; um teste novo com espera
   encadeada só será pego por quem a rodar de novo.
+- Limitação aceita: a lista de arquivos vem do disco, então um arquivo local
+  não rastreado mantém viva uma exclusão morta nesta máquina; o CI parte de
+  checkout limpo e é a garantia final.

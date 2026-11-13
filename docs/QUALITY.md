@@ -1092,11 +1092,12 @@ Sem eufemismo:
   resolvido) custa no mínimo **duas** tarefas até ficar observável: o commit
   e, depois, os efeitos passivos — e o `renderHook` da Testing Library só
   publica `result.current` num efeito passivo. Com N ≥ 500 ms, duas tarefas
-  já somam o prazo padrão de 1000 ms de `findBy`/`waitFor`, então nenhum teste
-  que espere uma atualização assíncrona passa sem aumentar o prazo (proibido),
-  sem retry e sem sleep. Medido nos três arquivos que reprovavam
+  já somam o prazo padrão de 1000 ms de `findBy`/`waitFor`, e o teste cuja
+  espera atravessa essas duas tarefas só passaria aumentando o prazo
+  (proibido), com retry ou com sleep. Medido nos três arquivos que reprovavam
   (`Headquarters.test.tsx`, `App.test.tsx`, `useTutorConversation.test.tsx`):
-  400 ms, 100 de 100 passam; 500 ms, 40 reprovam; 600 ms, 42 reprovam. A
+  400 ms, 100 de 100 passam; 500 ms, 40 reprovam e 60 passam; 600 ms, 42
+  reprovam e 58 passam. A
   suíte inteira passa a 250 ms. É um limite do cenário artificial, não race
   de produção: no produto cada tarefa leva microssegundos.
 
