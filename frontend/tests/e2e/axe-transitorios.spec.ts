@@ -658,11 +658,26 @@ for (const ambiente of AMBIENTES) {
               })
               .click()
 
-            await expect(cartao.getByTestId('mission-start')).toBeDisabled()
+            // O estado em voo foi CAPTURADO: o rotulo do botao e a regiao viva
+            // dizem "Iniciando" e o botao esta desabilitado. Sem isso, o
+            // `toBeDisabled` sozinho passaria tambem num botao desabilitado
+            // por outro motivo.
+            const botao = cartao.getByTestId('mission-start')
+            const status = cartao.getByTestId('mission-start-status')
+            await expect(botao).toHaveText(/^Iniciando…/)
+            await expect(botao).toBeDisabled()
+            await expect(status).toHaveText('Iniciando a missão…')
+            await expect(status).toHaveAttribute('role', 'status')
+
             await semViolacoes(page)
 
+            // E o estado ainda era o em voo DEPOIS do axe: a auditoria rodou
+            // nele, e nao depois de ele ter passado.
+            await expect(status).toHaveText('Iniciando a missão…')
+            await expect(botao).toBeDisabled()
+
             soltar()
-            await expect(cartao.getByTestId('mission-start-status')).toHaveText('Missão iniciada.')
+            await expect(status).toHaveText('Missão iniciada.')
           },
         )
       })
