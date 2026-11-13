@@ -1664,6 +1664,11 @@ describe('useTutorConversation: decisões durante a leitura do histórico', () =
     })
     stream.push(sseFrame('done', complete))
     stream.close()
+    // O `done` pede outra recarga: o GET sai num efeito, depois do commit do
+    // `loading`, e só então o histórico volta a `loaded`.
+    await waitFor(() => {
+      expect(requestsTo(fetchMock, HISTORY)).toHaveLength(3)
+    })
     await waitFor(() => {
       expect(result.current.history.status).toBe('loaded')
     })

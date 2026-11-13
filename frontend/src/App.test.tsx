@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { Cycle } from './features/missions'
@@ -7,6 +7,7 @@ import type { Mission } from './shared/types/mission'
 import { controlledStream, sseFrame } from './test/sse'
 import { requestsTo, routeFetch } from './test/fetchRoutes'
 import { fakeAudio, memoryStorage, type FakeAudio } from './test/audioDoubles'
+import { flushPendingEffects } from './test/flushEffects'
 import { renderWithI18n } from './test/i18n'
 import { stubViewport } from './test/viewport'
 
@@ -215,6 +216,9 @@ describe('App', () => {
       },
     })
     await settleHeadquarters()
+    // A bolha sai de um efeito do commit que trouxe o ciclo: descarregue-o em
+    // vez de pagar, tarefa a tarefa, a cadeia efeito -> estado -> efeito.
+    flushPendingEffects()
     await screen.findByRole('figure', { name: 'Kairya' })
     // A voz sai do efeito da bolha, depois do commit que a mostra: espere-a.
     await waitFor(() => {
@@ -288,9 +292,9 @@ describe('App', () => {
     await settleHeadquarters()
 
     fireEvent.click(screen.getByTestId('nav-campaigns'))
-    const botao = await screen.findByRole('button', {
-      name: 'Ir ao Quartel-General',
-    })
+    const botao = await within(await screen.findByTestId('campaigns')).findByTestId(
+      'trail-go-headquarters',
+    )
 
     await act(async () => {
       fireEvent.click(botao)

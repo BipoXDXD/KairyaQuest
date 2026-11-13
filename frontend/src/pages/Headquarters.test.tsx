@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Progress } from '../features/progression'
@@ -6,6 +6,7 @@ import type { ActionRead, MessageRead } from '../features/tutoring'
 import type { Mission } from '../shared/types/mission'
 import type { MissionCompletion, Reward } from '../shared/types/reward'
 import { useKairya } from '../features/kairya'
+import { flushPendingEffects } from '../test/flushEffects'
 import { requestsTo, routeFetch, type Route } from '../test/fetchRoutes'
 import { memoryStorage } from '../test/audioDoubles'
 import { renderWithI18n } from '../test/i18n'
@@ -348,15 +349,13 @@ describe('Headquarters', () => {
     })
 
     renderWithI18n(<Headquarters />)
-    await screen.findByTestId('missions-list')
+    const list = await screen.findByTestId('missions-list')
     await screen.findByTestId('tutor-greeting')
     await screen.findByTestId('cycle-no-plan')
     await screen.findByTestId('progress-level')
     expect(screen.getByTestId('progress-total')).toHaveTextContent('20 XP no total')
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${avulsa.instructions}` }),
-    )
+    fireEvent.click(await within(list).findByTestId('mission-complete'))
 
     // O segundo GET /api/progress ja foi pedido (o `refresh` que a conclusao
     // disparou), mas ainda esta em voo -- e e justo AQUI, com ele pendente,
@@ -450,9 +449,7 @@ describe('Headquarters', () => {
     await screen.findByTestId('progress-level')
     expect(screen.getByTestId('progress-total')).toHaveTextContent('20 XP no total')
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
-    )
+    fireEvent.click(await within(screen.getByTestId('cycle')).findByTestId('mission-complete'))
 
     await waitFor(() => {
       expect(screen.getByTestId('progress-total')).toHaveTextContent('60 XP no total')
@@ -541,9 +538,7 @@ describe('Headquarters: a celebracao da Kairya', () => {
 
     renderWithI18n(<Headquarters />)
     await settle()
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
-    )
+    fireEvent.click(await within(screen.getByTestId('cycle')).findByTestId('mission-complete'))
 
     const bubble = await screen.findByRole('figure', { name: 'Kairya' })
     expect(bubble).toHaveAttribute('data-tone', 'celebrating')
@@ -562,11 +557,9 @@ describe('Headquarters: a celebracao da Kairya', () => {
     })
 
     renderWithI18n(<Headquarters />)
-    await screen.findByTestId('missions-list')
+    const list = await screen.findByTestId('missions-list')
     await screen.findByTestId('progress-level')
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${base.instructions}` }),
-    )
+    fireEvent.click(await within(list).findByTestId('mission-complete'))
 
     const bubble = await screen.findByRole('figure', { name: 'Kairya' })
     expect(bubble).toHaveTextContent('Feito. Isso é treino de verdade.')
@@ -770,6 +763,18 @@ describe('Headquarters: saudação do dia', () => {
     })
   }
 
+  /**
+   * A bolha da saudação sai de um efeito, depois do commit que traz o ciclo.
+   * Espera o ciclo (o dado observável), descarrega os efeitos desse commit e só
+   * então espera a bolha: a cadeia efeito -> estado -> efeito não paga, uma a
+   * uma, as tarefas do Scheduler, e o teste não depende da velocidade dele.
+   */
+  async function findGreeting() {
+    await screen.findByTestId('cycle-today')
+    flushPendingEffects()
+    return screen.findByRole('figure', { name: 'Kairya' })
+  }
+
   function presence(clock: () => Date, storage: Storage | null) {
     return { presence: { greeting: true, clock, storage, random: () => 0 } }
   }
@@ -780,7 +785,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    const bubble = await findGreeting()
     expect(bubble).toHaveTextContent('Bom dia. Qual é o primeiro passo de hoje?')
     expect(screen.getByTestId('kairya-announcement')).toHaveTextContent(
       'Bom dia. Qual é o primeiro passo de hoje?',
@@ -800,7 +805,7 @@ describe('Headquarters: saudação do dia', () => {
       presence(() => new Date(`2026-11-10T${hour}`), memoryStorage()),
     )
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent(text)
+    expect(await findGreeting()).toHaveTextContent(text)
     await settle()
   })
 
@@ -808,17 +813,21 @@ describe('Headquarters: saudação do dia', () => {
     stubCycle([3])
     const storage = memoryStorage()
     const first = renderWithI18n(<Headquarters />, presence(MORNING, storage))
-    await screen.findByRole('figure', { name: 'Kairya' })
+    await findGreeting()
     await settle()
     first.unmount()
 
     const same = renderWithI18n(<Headquarters />, presence(MORNING, storage))
     await settle()
+    // Ausência: só vale depois de o ciclo ter chegado (o `settle` não o espera) e
+    // de os efeitos desse commit terem rodado.
+    await screen.findByTestId('cycle-today')
+    flushPendingEffects()
     expect(screen.queryByRole('figure', { name: 'Kairya' })).toBeNull()
     same.unmount()
 
     renderWithI18n(<Headquarters />, presence(NEXT_DAY, storage))
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -878,10 +887,8 @@ describe('Headquarters: saudação do dia', () => {
     const setItem = vi.spyOn(storage, 'setItem')
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
-    await screen.findByRole('figure', { name: 'Kairya' })
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${diaria.instructions}` }),
-    )
+    await findGreeting()
+    fireEvent.click(await within(screen.getByTestId('cycle')).findByTestId('mission-complete'))
 
     await waitFor(() => {
       expect(storage.getItem('kairyaquest.lastStreak')).toBe('4')
@@ -899,7 +906,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    const bubble = await screen.findByRole('figure', { name: 'Kairya' })
+    const bubble = await findGreeting()
     expect(bubble).toHaveTextContent(
       'A sequência zerou. O que você aprendeu, não. Vamos de novo hoje?',
     )
@@ -919,7 +926,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -928,7 +935,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, null))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     await settle()
   })
 
@@ -938,7 +945,7 @@ describe('Headquarters: saudação do dia', () => {
 
     renderWithI18n(<Headquarters />, presence(MORNING, storage))
 
-    expect(await screen.findByRole('figure', { name: 'Kairya' })).toHaveTextContent('Bom dia.')
+    expect(await findGreeting()).toHaveTextContent('Bom dia.')
     expect(storage.getItem('kairyaquest.lastGreeting')).toBe('2026-11-10')
     await settle()
   })
