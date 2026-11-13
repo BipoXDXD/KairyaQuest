@@ -16,6 +16,7 @@ import random
 import subprocess
 import sys
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -180,56 +181,155 @@ def test_dois_padroes_no_mesmo_arquivo_saem_separados(tmp_path: Path) -> None:
 
 
 # --- tempo: entrada patologica nao pode travar a varredura ------------------
-
+#
+# Duas garantias, ambas em tempo de CPU do processo filho
+# (`time.process_time`, que nao conta a espera na fila do escalonador, entao a
+# carga da maquina nao reprova o teste sem haver ReDoS):
+#
+# 1. Teto absoluto: a entrada de 1 MB e varrida em menos de TETO_DE_TEMPO_S
+#    de CPU. Pega regressao de custo constante que a escala nao ve.
+# 2. Forma do custo: com a entrada de tamanho n e 4n, o custo cresce no
+#    maximo RAZAO_MAXIMA vezes. Linear cresce 4x; quadratico, 16x; 8 e a
+#    media geometrica, a mesma folga (2x) para os dois lados. Medido: de 3,5
+#    a 4,4 com e sem 20 processos `yes` em 10 nucleos
+#    (docs/handoff/2026-11-12-varrer-custo-escala.md).
+#
+# O minimo de REPETICOES medidas descarta interrupcoes isoladas.
+FATOR_DE_ESCALA = 4
+RAZAO_MAXIMA = 8.0
+TAMANHO_BASE = 250_000
 TETO_DE_TEMPO_S = 1.0
-# Margem do processo que cronometra: se a varredura travar, o filho e morto
-# por `subprocess.run(timeout=...)` -- o teste reprova em vez de pendurar.
-TETO_DO_PROCESSO_S = 20
+REPETICOES = 3
+# Custo minimo assumido para a entrada pequena: evita divisao por zero quando
+# a varredura e rapida demais para a resolucao do relogio. O teto absoluto
+# continua cobrindo a entrada grande.
+PISO_DE_CUSTO_S = 1e-4
+# Retrocesso catastrofico (exponencial) nao chega a dar razao: o filho queima
+# CPU ate o RLIMIT_CPU e o sistema o mata. O limite e de CPU, e nao de
+# parede, para que a carga nao o dispare. O timeout de parede so evita
+# pendurar a suite.
+TETO_DE_CPU_S = 10
+TETO_DO_PROCESSO_S = 60
 
 _CRONOMETRO = """
-import importlib.util, sys, time
+import importlib.util, resource, sys, time
+teto = int(sys.argv[4])
+resource.setrlimit(resource.RLIMIT_CPU, (teto, teto))
 spec = importlib.util.spec_from_file_location("varrer_traces", sys.argv[1])
 modulo = importlib.util.module_from_spec(spec)
 sys.modules["varrer_traces"] = modulo
 spec.loader.exec_module(modulo)
-dados = open(sys.argv[2], "rb").read()
-inicio = time.perf_counter()
-modulo.contar_padroes(dados)
-print(time.perf_counter() - inicio)
+pequena = open(sys.argv[2], "rb").read()
+grande = open(sys.argv[3], "rb").read()
+
+def custo(dados):
+    inicio = time.process_time()
+    modulo.contar_padroes(dados)
+    return time.process_time() - inicio
+
+custos_pequena, custos_grande = [], []
+for _ in range(int(sys.argv[5])):
+    custos_pequena.append(custo(pequena))
+    custos_grande.append(custo(grande))
+print(min(custos_pequena), min(custos_grande))
 """
 
-PATOLOGICAS = {
-    "barras invertidas puras": b"\\" * 1_000_000,
-    "barras com aspas intercaladas": (b"\\" * 999 + b'"') * 1_000,
-    "barra-aspas repetidas": b'\\"' * 400_000,
-    "barras antes de name": (b"\\" * 5_000 + b"name") * 200,
-    "barras depois de authorization": b"authorization" + b"\\" * 1_000_000,
-    "espacos depois de authorization": b"authorization" + b" " * 1_000_000,
-    "espacos depois de bearer": b"bearer" + b" " * 1_000_000,
-    "aspas e espacos no par": (b'"name"' + b" " * 1_000) * 1_000,
+# Cada caso e gerado no tamanho pedido. Nos casos em blocos, cresce o bloco e
+# nao a quantidade de blocos: um custo quadratico DENTRO de cada bloco ficaria
+# linear se so a quantidade dobrasse.
+PATOLOGICAS: dict[str, Callable[[int], bytes]] = {
+    "barras invertidas puras": lambda n: b"\\" * n,
+    "barras com aspas intercaladas": lambda n: (b"\\" * (n // 1_000) + b'"') * 1_000,
+    "barra-aspas repetidas": lambda n: b'\\"' * (n // 2),
+    "barras antes de name": lambda n: (b"\\" * (n // 200) + b"name") * 200,
+    "barras depois de authorization": lambda n: b"authorization" + b"\\" * n,
+    "espacos depois de authorization": lambda n: b"authorization" + b" " * n,
+    "espacos depois de bearer": lambda n: b"bearer" + b" " * n,
+    "aspas e espacos no par": lambda n: (b'"name"' + b" " * (n // 1_000)) * 1_000,
 }
 
 
-@pytest.mark.parametrize("dados", PATOLOGICAS.values(), ids=PATOLOGICAS.keys())
-def test_entrada_patologica_e_varrida_em_menos_de_um_segundo(
-    tmp_path: Path, dados: bytes
-) -> None:
-    entrada = tmp_path / "patologica.bin"
-    entrada.write_bytes(dados)
+def _medir_custos(
+    script: Path, pequena: bytes, grande: bytes, diretorio: Path, teto_de_cpu_s: int
+) -> tuple[float, float] | None:
+    """Custo de CPU minimo de `contar_padroes` em (pequena, grande).
 
+    None quando o filho morre (RLIMIT_CPU estourado: retrocesso catastrofico).
+    """
+    arquivo_pequeno = diretorio / "pequena.bin"
+    arquivo_pequeno.write_bytes(pequena)
+    arquivo_grande = diretorio / "grande.bin"
+    arquivo_grande.write_bytes(grande)
     try:
         processo = subprocess.run(
-            [sys.executable, "-I", "-c", _CRONOMETRO, str(SCRIPT), str(entrada)],
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                _CRONOMETRO,
+                str(script),
+                str(arquivo_pequeno),
+                str(arquivo_grande),
+                str(teto_de_cpu_s),
+                str(REPETICOES),
+            ],
             capture_output=True,
             text=True,
             check=False,
             timeout=TETO_DO_PROCESSO_S,
         )
     except subprocess.TimeoutExpired:
-        pytest.fail(f"a varredura passou de {TETO_DO_PROCESSO_S} s (ReDoS)")
+        pytest.fail(f"a varredura passou de {TETO_DO_PROCESSO_S} s de parede (ReDoS)")
+    if processo.returncode != 0:
+        return None
+    custo_pequena, custo_grande = (float(campo) for campo in processo.stdout.split())
+    return custo_pequena, custo_grande
 
-    assert processo.returncode == 0, processo.stderr
-    assert float(processo.stdout) < TETO_DE_TEMPO_S
+
+def _razao(custo_pequena: float, custo_grande: float) -> float:
+    return custo_grande / max(custo_pequena, PISO_DE_CUSTO_S)
+
+
+@pytest.mark.parametrize("gerar", PATOLOGICAS.values(), ids=PATOLOGICAS.keys())
+def test_entrada_patologica_de_1_mb_e_varrida_em_custo_linear_e_abaixo_do_teto(
+    tmp_path: Path, gerar: Callable[[int], bytes]
+) -> None:
+    custos = _medir_custos(
+        SCRIPT,
+        gerar(TAMANHO_BASE),
+        gerar(FATOR_DE_ESCALA * TAMANHO_BASE),
+        tmp_path,
+        TETO_DE_CPU_S,
+    )
+
+    assert custos is not None, f"a varredura passou de {TETO_DE_CPU_S} s de CPU (ReDoS)"
+    custo_pequena, custo_grande = custos
+    assert custo_grande < TETO_DE_TEMPO_S
+    assert _razao(custo_pequena, custo_grande) < RAZAO_MAXIMA
+
+
+def test_medicao_reprova_varredor_vulneravel_a_redos(tmp_path: Path) -> None:
+    # Sabotagem: um varredor com retrocesso exponencial tem de ser reprovado
+    # pela mesma medicao. Se passar, ela deixou de enxergar ReDoS.
+    vulneravel = tmp_path / "varredor_vulneravel.py"
+    vulneravel.write_text(
+        "import re\n"
+        "_PADRAO = re.compile(rb'(\\\\+)+$')\n"
+        "def contar_padroes(dados):\n"
+        "    return sum(1 for _ in _PADRAO.finditer(dados))\n"
+    )
+    teto_curto_de_cpu_s = 2
+
+    custos = _medir_custos(
+        vulneravel, b"\\" * 16 + b"x", b"\\" * 64 + b"x", tmp_path, teto_curto_de_cpu_s
+    )
+
+    reprovaria = (
+        custos is None
+        or custos[1] >= TETO_DE_TEMPO_S
+        or _razao(*custos) >= RAZAO_MAXIMA
+    )
+    assert reprovaria
 
 
 # --- zip ---------------------------------------------------------------------
