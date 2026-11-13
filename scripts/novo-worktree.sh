@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cria um worktree interno ao principal, pronto para rodar o gate AO MESMO TEMPO
-# que o principal e que os outros worktrees (pendencia 19, docs/QUALITY.md
+# que o principal e que os outros worktrees (docs/QUALITY.md
 # secao 4).
 #
 #   uso: scripts/novo-worktree.sh <nome> [deslocamento]
@@ -8,23 +8,28 @@
 # O que faz, nesta ordem, e so depois de validar TUDO:
 #  1. cria .claude/worktrees/<nome> dentro do principal numa branch nova,
 #     wt/<nome>, a partir da origin/main -- depois de um "git fetch origin
-#     main" feito pelo proprio script (lote 21, abaixo);
+#     main" feito pelo proprio script (abaixo);
 #  2. escreve o .env dele SO a partir do .env.example da origin/main (a mesma
 #     revisao do worktree), com duas linhas calculadas: o banco de teste,
 #     focusquest_<nome>_test (servidor, credencial e opcoes da URL sao os do
 #     PROPRIO exemplo), e FOCUSQUEST_E2E_PORT_OFFSET -- o passado, ou o PRIMEIRO
 #     livre de 1 ao teto (24 por padrao; ver "O que e um deslocamento livre",
 #     abaixo). Nenhuma linha, nenhum valor do .env do principal e lido para
-#     montar o .env novo (lote 21): ele pode ter chave que o exemplo nao conhece
+#     montar o .env novo: ele pode ter chave que o exemplo nao conhece
 #     (as Settings recusam chave extra) e segredo real. As chaves de segredo
 #     (FOCUSQUEST_ANTHROPIC_API_KEY e afins) nascem em branco, como no exemplo, e
 #     quem precisar delas no worktree as preenche a mao. O .env do principal so
 #     e lido para saber que bancos e deslocamentos os worktrees registrados
 #     (ele incluso) ja ocupam, sem copiar nada;
-#  3. roda "make bootstrap" nele;
+#  3. roda "make bootstrap" nele -- se falhar, desfaz worktree, branch e
+#     ledger (sem apagar trabalho de ninguem; ver desfazer_apos_bootstrap);
 #  4. imprime os proximos passos.
 #
-# A base e a origin/main, nunca a main local (lote 21, P-worktree-base-1). O
+# Depois do fetch, e antes de criar qualquer coisa, confere que a copia deste
+# script (e a da biblioteca push-env.sh) e a da origin/main, e recusa se nao
+# for (issue #194).
+#
+# A base e a origin/main, nunca a main local. O
 # principal deste projeto e um repositorio bare: ali "git fetch" so atualiza a
 # origin/main, e a main local fica parada no ultimo commit feito nele. Nascer
 # dela dava um worktree numa revisao velha, com um .env.example velho (e um .env
@@ -58,11 +63,11 @@
 #  - nao instala hooks, e nunca deve rodar "pre-commit install": eles moram no
 #    .git comum e ja valem para o worktree novo. Um "pre-commit install" aqui
 #    gravaria no .git comum o .venv DESTE worktree, e remove-lo quebraria os
-#    hooks de todos (lote 20). Quem instala ou atualiza os hooks e o script
+#    hooks de todos. Quem instala ou atualiza os hooks e o script
 #    unico scripts/instalar-hooks.sh, uma vez por clone, com um venv dedicado
 #    fora de qualquer worktree.
 #
-# O que e um deslocamento livre (lote 19b). Os dois testes valem, nesta ordem:
+# O que e um deslocamento livre. Os dois testes valem, nesta ordem:
 #  1. nenhum worktree registrado o reivindica no .env dele (um worktree parado
 #     nao escuta porta nenhuma, e dois parados nao podem levar o mesmo valor);
 #  2. nenhuma das QUATRO portas que ele implica -- API, frontend, falso da
@@ -105,12 +110,13 @@
 # PostgreSQL); o nome reservado "push"; um nome cujo banco (ou banco do push)
 # ja seja o banco, ou o banco do push, de um worktree registrado; destino ou
 # branch que ja existam; deslocamento fora de 0 ao teto, reivindicado por outro
-# worktree ou com porta em uso; fetch da origin/main que falha; origin/main sem
+# worktree ou com porta em uso; fetch da origin/main que falha; copia deste
+# script ou do push-env.sh diferente da origin/main; origin/main sem
 # .env.example, ou com um .env.example sem FOCUSQUEST_TEST_DATABASE_URL ou com um
 # banco que nao termine em _test (o .env do principal nao e necessario); outra execucao em andamento (a trava). E
 # NUNCA escreve por cima de um .env que ja exista no destino.
 #
-# Por que "push" e o UNICO nome reservado (HANDOFF, decisao F12): o banco de
+# Por que "push" e o UNICO nome reservado (docs/HANDOFF.md): o banco de
 # um worktree e focusquest_<nome>_test, e o gate do push de quem tem o banco
 # R_test usa R_push_test (banco_do_push, em push-env.sh). Os dois so coincidem
 # se "focusquest_<nome>" terminar em "_push"; como <nome> nao tem "_", o unico
@@ -391,13 +397,26 @@ if ! erro_do_fetch="$(GIT_TERMINAL_PROMPT=0 git -C "$principal" fetch --quiet or
 fi
 base_da_branch="$(git -C "$principal" rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}')" ||
   recusa "depois do fetch, origin/main nao resolve para um commit"
+
+# A logica que roda tem de ser a da origin/main (issue #194). Quem roda e a
+# copia do checkout de onde o script foi chamado; num checkout parado numa
+# branch antiga, era uma versao antiga, com regras antigas (base, .env,
+# recusas). A conferencia so cabe depois do fetch, e por isso as recusas
+# locais acima sao as da copia que roda. Vale tambem para a biblioteca que o
+# script carrega. Comparar o conteudo, e nao o commit do checkout, deixa
+# chamar de qualquer branch cuja copia seja a da origin/main.
+for proprio in scripts/novo-worktree.sh scripts/push-env.sh; do
+  if ! cmp -s "${ROOT}/${proprio}" <(git -C "$principal" show "${base_da_branch}:${proprio}" 2>/dev/null); then
+    recusa "a copia de ${proprio} em ${ROOT} difere da origin/main (ou a origin/main nao a tem); o script so roda com a logica da origin/main, entao nada foi criado. Atualize esse checkout com a origin/main, ou chame o script de um checkout que esteja nela"
+  fi
+done
 # O modelo do .env novo: o .env.example da origin/main, de onde o worktree nasce.
 exemplo="$(git -C "$principal" show "${base_da_branch}:.env.example" 2>/dev/null)" ||
   recusa "a origin/main nao tem .env.example: o .env do worktree e gerado a partir dele"
 
 # A URL do banco de teste do worktree: o FOCUSQUEST_TEST_DATABASE_URL do
 # .env.example com so o NOME do banco trocado; servidor, credencial e opcoes
-# ficam os do exemplo. Nada vem do .env do principal (lote 21): copiar dali
+# ficam os do exemplo. Nada vem do .env do principal: copiar dali
 # arrastaria credencial real, e a variavel que o exemplo nao conhece. Sem a
 # linha no exemplo nao ha de onde derivar -- recusa, em vez de cair no banco
 # padrao (o do principal).
@@ -460,7 +479,43 @@ ln -s "../../../../.superpowers/sdd/worktree-ledgers/${nome}" "${destino}/.super
 liberar_trava
 trap - EXIT
 
-make -C "$destino" bootstrap
+# Um bootstrap que falha desfaz o que o script criou (issue #194): sem isso, o
+# ledger e o destino orfaos faziam a tentativa seguinte, com o mesmo nome,
+# recusar. O desfazer nunca apaga trabalho de ninguem: o "git worktree remove"
+# vai SEM --force, entao recusa se houver arquivo nao rastreado ou alteracao
+# (os ignorados, como .venv e node_modules do proprio bootstrap, saem junto);
+# a branch so e apagada se o worktree saiu; o ledger sai com rmdir, so vazio.
+# O que nao sai fica, e a mensagem diz como terminar a mao. Limites (SIGKILL,
+# ignorados de terceiros): docs/QUALITY.md secao 6.
+desfazer_apos_bootstrap() {
+  local sobrou="" motivo_do_git
+  # O motivo de uma remocao recusada e o do proprio git (nao rastreado,
+  # worktree travado, permissao...), e nao um palpite do script.
+  if motivo_do_git="$(git -C "$principal" worktree remove "$destino" 2>&1)"; then
+    git -C "$principal" branch --quiet -D "$branch" ||
+      sobrou="${sobrou}    git -C ${principal} branch -D ${branch}
+"
+    rmdir "$ledger" 2>/dev/null ||
+      sobrou="${sobrou}    ${ledger}   (o ledger tem conteudo: confira e apague a mao)
+"
+  else
+    # O worktree ficou: a branch e o ledger ficam com ele. Sem o ledger, o
+    # .superpowers/sdd do worktree viraria um link quebrado.
+    sobrou="${sobrou}    git -C ${principal} worktree remove ${destino}   (o git recusou: ${motivo_do_git:-<sem mensagem>}; confira antes)
+    git -C ${principal} branch -D ${branch}
+    rmdir ${ledger}   (so se estiver vazio; se nao, confira e apague a mao)
+"
+  fi
+  if [ -n "$sobrou" ]; then
+    recusa "make bootstrap falhou; o que dava para desfazer sem perder dados foi desfeito. Para liberar o nome '${nome}', termine a mao:
+${sobrou}"
+  fi
+  recusa "make bootstrap falhou; worktree ${destino}, branch ${branch} e ledger desfeitos -- corrija a causa (saida acima) e rode de novo com o mesmo nome"
+}
+
+if ! make -C "$destino" bootstrap; then
+  desfazer_apos_bootstrap
+fi
 
 cat <<FIM
 ==> worktree pronto: ${destino} (branch ${branch})
