@@ -133,7 +133,10 @@ class MissionListQuery(BaseModel):
     O cursor e o par `(deadline, id)` da ULTIMA missao da pagina anterior --
     exatamente a chave da ordenacao (`listar_missoes`), e por isso keyset: a
     pagina seguinte comeca depois dele, sem `OFFSET`, e uma missao criada ou
-    concluida no meio da navegacao nao faz a lista repetir nem pular linhas.
+    removida no meio da navegacao nao desloca as outras. Mudar o PRAZO no
+    meio da navegacao muda a posicao da missao: reagendada para depois do
+    cursor, ela volta numa pagina seguinte (o cliente deduplica por `id`);
+    para antes dele, ela nao aparece nas paginas seguintes.
     Ele nao e opaco porque o cliente ja tem os dois campos na missao que
     recebeu; um token codificado seria um formato a mais para validar.
 

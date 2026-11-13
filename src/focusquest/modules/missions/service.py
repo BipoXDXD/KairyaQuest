@@ -188,8 +188,10 @@ def listar_pagina_de_missoes(
     depois do cursor `(deadline, id)`, na mesma ordem.
 
     A comparacao de linha `(deadline, id) > (:prazo, :id)` e a propria ordem
-    da listagem, entao o cursor nunca repete nem pula uma missao, e dois
-    prazos iguais na fronteira de pagina desempatam pelo `id`. O prazo da
+    da listagem, entao, com os prazos parados, o cursor nao repete nem pula
+    uma missao, e dois prazos iguais na fronteira de pagina desempatam pelo
+    `id`. Um reagendamento no meio da navegacao move a missao na ordem e
+    pode repeti-la ou tira-la das paginas seguintes (ver `MissionListQuery`). O prazo da
     avulsa e `NOT NULL` (`ck_missions_prazo_do_tipo`): nao ha NULL para
     quebrar a comparacao.
     """

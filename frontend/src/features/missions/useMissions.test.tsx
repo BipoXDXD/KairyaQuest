@@ -382,6 +382,37 @@ describe('useMissions', () => {
       )
     })
 
+    it('missao reagendada entre as paginas aparece uma vez so, na versao nova', async () => {
+      // A missao 2 foi reagendada para depois do cursor entre os dois pedidos:
+      // o servidor a devolve de novo na pagina seguinte. Sem dedupe por id, a
+      // lista teria duas linhas com a mesma chave.
+      const primeira = fullPage(1)
+      const reagendada = { ...missao, id: 2, deadline: '2026-12-01T12:00:00+00:00' }
+      const nova = { ...missao, id: 51 }
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(primeira))
+          .mockResolvedValueOnce(Response.json([reagendada, nova])),
+      )
+      const { result } = renderHook(() => useMissions())
+      await waitFor(() => {
+        expect(result.current.more).toEqual({ status: 'available' })
+      })
+
+      act(() => {
+        result.current.loadMore()
+      })
+
+      await waitFor(() => {
+        expect(result.current.state).toEqual({
+          status: 'loaded',
+          missions: [...primeira.filter((m) => m.id !== 2), reagendada, nova],
+        })
+      })
+    })
+
     it('outra pagina cheia mantem o carregar mais disponivel', async () => {
       vi.stubGlobal(
         'fetch',

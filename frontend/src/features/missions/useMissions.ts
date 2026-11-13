@@ -120,7 +120,13 @@ export function useMissions(): UseMissionsResult {
         if (requestId.current !== id) {
           return
         }
-        setState({ status: 'loaded', missions: [...loaded, ...page] })
+        // O cursor `(deadline, id)` acompanha o prazo: uma missao reagendada
+        // para depois dele entre dois pedidos volta na pagina seguinte. A
+        // versao da pagina e a mais nova (prazo atual e posicao certa na
+        // ordem), entao a copia antiga sai.
+        const fresh = new Set(page.map((mission) => mission.id))
+        const kept = loaded.filter((mission) => !fresh.has(mission.id))
+        setState({ status: 'loaded', missions: [...kept, ...page] })
         setMore(moreAfter(page))
       })
       .catch((error: unknown) => {

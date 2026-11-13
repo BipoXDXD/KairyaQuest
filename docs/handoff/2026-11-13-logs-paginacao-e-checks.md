@@ -31,6 +31,12 @@ nos textos da missão avulsa).
   Falha ao carregar mais mantém a lista e oferece nova tentativa. Trade-offs
   aceitos: recarregar volta à página 1; uma última página exatamente cheia
   mostra o botão uma vez a mais, e esse pedido volta vazio.
+- **#182 — dedupe por `id` ao juntar páginas (revisão do PR).** O cursor
+  acompanha o prazo: uma missão reagendada para depois dele entre dois
+  pedidos volta na página seguinte. `loadMore` descarta a cópia antiga e
+  fica com a da página (prazo atual, posição certa). Reagendada para antes
+  do cursor, ela não aparece nas páginas seguintes até recarregar; as
+  docstrings de `MissionListQuery` e `listar_pagina_de_missoes` dizem isso.
 - **#178 — casos `rejeitar-*` criados.** Não existiam no repositório. Cada
   recusa (inexistente, alheia, executada, falhou) compara a foto do banco
   antes e depois, na mesma transação e depois de `flush`. `foto_do_banco` foi
