@@ -14,13 +14,13 @@ import { plural } from '../../shared/i18n/plural'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT, type Translate } from '../../shared/i18n/useT'
 import { formatCivilDate } from '../../shared/lib/civilDate'
+import { MAX_DIFFICULTY } from '../../shared/types/mission'
 import { Badge, Button, Field, Panel, StatusLine, type StatusTone } from '../../shared/ui'
 import { addCivilDays, weekStartsOf, type WeekChoice } from './planDates'
 import { describePlanFailure, type PlanFailure } from './planFailure'
 import type { Plan } from './types'
 import {
   COUNTER_VISIBLE_FROM,
-  MAX_DIFFICULTY,
   MAX_MINUTES,
   MAX_TEXT_LENGTH,
   MIN_DIFFICULTY,
