@@ -20,16 +20,19 @@ Nenhum teste conecta em banco: o script so ESCREVE o nome do banco no `.env`;
 quem o cria e o gate, no primeiro uso (`test_banco_de_teste.py`).
 """
 
+import fcntl
 import os
 import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
+from typing import IO
 
 import pytest
 
@@ -64,23 +67,41 @@ def _porta_esta_livre(porta: int) -> bool:
     return True
 
 
-def _bases_de_porta_livres() -> tuple[int, int, int, int]:
-    """Quatro portas-base cujas janelas de 0 a 24 estao inteiras livres AGORA.
+def _janela_esta_livre(bases: tuple[int, int, int, int]) -> bool:
+    return all(
+        _porta_esta_livre(base + deslocamento)
+        for base in bases
+        for deslocamento in range(TETO_DOS_WORKTREES + 1)
+    )
+
+
+def _reservar_janela_de_portas() -> tuple[tuple[int, int, int, int], IO[str]]:
+    """Quatro portas-base cujas janelas de 0 a 24 estao livres, ja reservadas.
 
     O script sonda as portas de verdade; com as bases reais (8100, 5273...) o
     resultado dependeria do que a maquina roda. Os testes apontam o script
     (`FQ_PORTAS_BASE_E2E`) para uma janela propria, abaixo da faixa das portas
     efemeras, e checam por bind que nada a ocupa. Nenhum teste encosta nas
     portas reais do projeto.
+
+    Por que a trava (issue #167): "livre agora" nao basta. Gates de worktrees
+    diferentes rodam ao mesmo tempo, e um teste do outro processo pode ocupar a
+    MESMA janela depois da sondagem. Um `flock` por janela, no temporario do
+    sistema, da a cada janela um dono so entre processos; quem chega depois
+    pula para a proxima. A trava devolvida vale ate ser fechada no teardown.
     """
     for inicio in range(20000, 30000, 211):
+        caminho = Path(tempfile.gettempdir()) / f"kairyaquest-portas-{inicio}.lock"
+        trava = caminho.open("a")
+        try:
+            fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            trava.close()
+            continue
         bases = (inicio, inicio + 40, inicio + 80, inicio + 120)
-        if all(
-            _porta_esta_livre(base + deslocamento)
-            for base in bases
-            for deslocamento in range(TETO_DOS_WORKTREES + 1)
-        ):
-            return bases
+        if _janela_esta_livre(bases):
+            return bases, trava
+        trava.close()
     raise AssertionError("nenhuma janela de portas livre para os testes")
 
 
@@ -88,7 +109,7 @@ class Repositorio:
     """O principal temporario, o `make` falso e o jeito de rodar o script."""
 
     def __init__(self, tmp_path: Path) -> None:
-        self.bases = _bases_de_porta_livres()
+        self.bases, self._trava_das_portas = _reservar_janela_de_portas()
         self.base = tmp_path
         self.principal = tmp_path / "FocusQuest"
         self.registro_do_make = tmp_path / "make-chamado"
@@ -157,6 +178,9 @@ class Repositorio:
             timeout=timeout,
         )
 
+    def liberar_portas(self) -> None:
+        self._trava_das_portas.close()
+
     def make_chamado(self) -> list[str]:
         if not self.registro_do_make.exists():
             return []
@@ -171,8 +195,10 @@ class Repositorio:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Repositorio:
-    return Repositorio(tmp_path)
+def repo(tmp_path: Path) -> Iterator[Repositorio]:
+    repositorio = Repositorio(tmp_path)
+    yield repositorio
+    repositorio.liberar_portas()
 
 
 def _valor(env: str, chave: str) -> str:
@@ -1126,6 +1152,19 @@ def _reivindicar_a_mao(repo: Repositorio, nome: str, deslocamento: int) -> Path:
         f"FOCUSQUEST_E2E_PORT_OFFSET={deslocamento}\n"
     )
     return destino
+
+
+def test_dois_repositorios_vivos_nunca_dividem_a_janela_de_portas(
+    repo: Repositorio, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Enquanto um repositorio de teste vive, a janela dele nao e entregue a
+    outro -- nem a outro processo pytest, que e o caso real (gates de worktrees
+    diferentes ao mesmo tempo; issue #167)."""
+    (tmp_path / "vizinho").mkdir()
+    vizinho = Repositorio(tmp_path / "vizinho")
+    request.addfinalizer(vizinho.liberar_portas)
+
+    assert set(vizinho.bases).isdisjoint(repo.bases)
 
 
 def test_sem_nada_em_uso_o_primeiro_deslocamento_livre_e_1(repo: Repositorio) -> None:
