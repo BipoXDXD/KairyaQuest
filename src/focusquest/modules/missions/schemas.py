@@ -133,7 +133,7 @@ class MissionListQuery(BaseModel):
     O cursor e o par `(deadline, id)` da ULTIMA missao da pagina anterior --
     exatamente a chave da ordenacao (`listar_missoes`), e por isso keyset: a
     pagina seguinte comeca depois dele, sem `OFFSET`, e uma missao criada ou
-    removida no meio da navegacao nao desloca as outras. Mudar o PRAZO no
+    concluida no meio da navegacao nao desloca as outras. Mudar o PRAZO no
     meio da navegacao muda a posicao da missao: reagendada para depois do
     cursor, ela volta numa pagina seguinte (o cliente deduplica por `id`);
     para antes dele, ela nao aparece nas paginas seguintes.
