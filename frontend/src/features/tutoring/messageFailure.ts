@@ -1,5 +1,10 @@
 import { ApiError } from '../../shared/api/client'
-import { dailyLimitText, type FailureText } from '../../shared/i18n/failureText'
+import {
+  dailyLimitText,
+  type FailureText,
+  SERVER_BUSY_TEXT,
+  serverBusyText,
+} from '../../shared/i18n/failureText'
 import type { PreStreamErrorCode, StreamErrorCode } from './types'
 
 /**
@@ -104,6 +109,9 @@ export const STREAM_FAILURE_BY_CODE: Readonly<Record<StreamErrorCode, MessageFai
     action: 'retry',
     discardsPartial: true,
   },
+  // A gravacao final esbarrou no banco ocupado. O backend tenta gravar a
+  // resposta como `falhou`, entao repetir com o MESMO id e o caminho certo.
+  banco_ocupado: { ...SERVER_BUSY_TEXT, action: 'retry' },
 }
 
 const REJECTED_BODY: MessageFailure = {
@@ -128,6 +136,11 @@ function isStreamCode(code: string): code is StreamErrorCode {
 export function describePreStreamFailure(error: unknown): MessageFailure {
   if (!(error instanceof ApiError)) {
     return UNKNOWN_RESULT
+  }
+  // Banco ocupado antes do stream: nada foi gravado, e o mesmo id e seguro.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'retry' }
   }
   if (error.code === 'limite_diario_da_tutoria') {
     return { ...dailyLimitText(error), action: 'daily-limit' }

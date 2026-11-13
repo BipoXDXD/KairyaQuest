@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError, type ApiErrorKind } from '../api/client'
-import { apiErrorText, dailyLimitText, loadFailureFor } from './failureText'
+import { apiErrorText, dailyLimitText, loadFailureFor, serverBusyText } from './failureText'
 import { en } from './messages/en'
 import { ptBR } from './messages/pt-BR'
 
@@ -77,5 +77,38 @@ describe('loadFailureFor', () => {
 
   it('o que nao e ApiError e defeito nosso, sem texto: quem traduz e a tela', () => {
     expect(loadFailureFor(new SyntaxError('Unexpected token'))).toEqual({ kind: 'unexpected' })
+  })
+})
+
+describe('banco_ocupado (503, issue #176)', () => {
+  const busy = new ApiError('O servidor respondeu 503.', 503, 'banco_ocupado', {
+    retryAfterSeconds: 2,
+  })
+  const SERVER_BUSY = {
+    message: 'shared.apiError.serverBusy.message',
+    recovery: 'shared.apiError.serverBusy.recovery',
+  }
+
+  it('apiErrorText decide pelo code antes do kind', () => {
+    expect(apiErrorText(busy)).toEqual(SERVER_BUSY)
+  })
+
+  it('loadFailureFor de uma carga de tela usa o mesmo texto', () => {
+    expect(loadFailureFor(busy)).toEqual({ kind: 'api', text: SERVER_BUSY })
+  })
+
+  it('serverBusyText reconhece so o banco_ocupado', () => {
+    expect(serverBusyText(busy)).toEqual(SERVER_BUSY)
+    expect(serverBusyText(new ApiError('x', 503, null))).toBeNull()
+    expect(serverBusyText(new ApiError('x', 409, 'operacao_reutilizada'))).toBeNull()
+    expect(serverBusyText(new Error('banco_ocupado'))).toBeNull()
+  })
+
+  it.each([
+    [ptBR, 'O servidor está ocupado agora.', 'Tente de novo em alguns segundos.'],
+    [en, 'The server is busy right now.', 'Try again in a few seconds.'],
+  ])('o texto e transitorio e nao culpa a pessoa', (catalog, message, recovery) => {
+    expect(catalog['shared.apiError.serverBusy.message']).toBe(message)
+    expect(catalog['shared.apiError.serverBusy.recovery']).toBe(recovery)
   })
 })

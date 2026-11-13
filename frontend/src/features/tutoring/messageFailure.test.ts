@@ -197,3 +197,26 @@ describe('describeStreamErrorEvent', () => {
     expect(describeStreamErrorEvent(data)).toBe(UNRECOGNIZED_FAILURE)
   })
 })
+
+// 503 `banco_ocupado` (issue #176): o banco cortou uma espera e a transacao foi
+// revertida. Chaves escritas por extenso, e nao importadas do modulo.
+const BUSY_ERROR = new ApiError('O servidor respondeu 503.', 503, 'banco_ocupado', {
+  retryAfterSeconds: 2,
+})
+const SERVER_BUSY = {
+  message: 'shared.apiError.serverBusy.message',
+  recovery: 'shared.apiError.serverBusy.recovery',
+}
+
+describe('banco_ocupado na tutoria (issues #176 e #177)', () => {
+  it('antes do stream: nada foi gravado, e repetir usa o mesmo id', () => {
+    expect(describePreStreamFailure(BUSY_ERROR)).toEqual({ ...SERVER_BUSY, action: 'retry' })
+  })
+
+  it('no evento error do stream: a falha foi gravada, e repetir usa o mesmo id', () => {
+    expect(describeStreamErrorEvent({ code: 'banco_ocupado' })).toEqual({
+      ...SERVER_BUSY,
+      action: 'retry',
+    })
+  })
+})

@@ -92,7 +92,7 @@ def test_get_engine_depois_do_descarte_cria_outra(
     monkeypatch.setattr(
         database,
         "create_engine_from_url",
-        lambda url, poolclass=None: como_engine(fila.pop(0)),
+        lambda url, poolclass=None, limites=None: como_engine(fila.pop(0)),
     )
 
     antes = database.get_engine()
@@ -159,7 +159,7 @@ def test_lifespan_descarta_mesmo_quando_o_corpo_levanta(
 def test_liveness_continua_sem_criar_engine_nem_ler_o_banco(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def proibido(url: str, poolclass: object = None) -> object:
+    def proibido(url: str, poolclass: object = None, limites: object = None) -> object:
         raise AssertionError("a liveness e a partida nao criam engine")
 
     monkeypatch.setattr(database, "create_engine_from_url", proibido)

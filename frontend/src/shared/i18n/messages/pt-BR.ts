@@ -99,6 +99,8 @@ export const ptBR = {
   'shared.apiError.format.recovery': 'Tente de novo.',
   'shared.apiError.interrupted.message': 'A resposta foi interrompida no caminho.',
   'shared.apiError.interrupted.recovery': 'Tente de novo.',
+  'shared.apiError.serverBusy.message': 'O servidor está ocupado agora.',
+  'shared.apiError.serverBusy.recovery': 'Tente de novo em alguns segundos.',
 
   'missions.state.pending': 'Pendente',
   'missions.state.inProgress': 'Em andamento',

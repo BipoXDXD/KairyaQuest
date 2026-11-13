@@ -465,6 +465,8 @@ medição em `docs/HANDOFF.md`, pendência 29.
 | `GET /health` | `200 {"status": "ok"}` | Liveness. Não toca no banco. |
 | `GET /ready` | `200` ou `503` | Readiness. Executa `SELECT 1`. Três casos: `200` quando o banco responde; `503` com `{"status": "unavailable", "database": "unavailable"}` quando o banco está configurado mas não responde; `503` com `{"status": "unavailable", "database": "not_configured"}` quando **falta a `database_url`** (sem `FOCUSQUEST_DATABASE_URL` no ambiente nem no `.env` do diretório corrente). Qualquer outro erro do `Settings` — um campo inválido como `FOCUSQUEST_TUTOR_MAX_TOKENS=0`, uma chave desconhecida, a `FOCUSQUEST_TEST_DATABASE_URL` ausente — continua respondendo `500`, com o traceback que nomeia o campo: não é "banco não configurado". Até a pendência 28 este terceiro caso era `500`: a rota dependia de `get_engine`, e o `ValidationError` do `Settings` estourava na resolução da dependência; agora ela depende de `get_engine_se_configurada` (`core/database.py`), que devolve `None` só quando os `errors()` do `ValidationError` trazem a `database_url` como `missing`. As rotas de negócio continuam em `get_engine` e respondem `500` sem configuração. |
 
+Qualquer rota que toca o banco pode responder `503` com `{"code": "banco_ocupado"}` e `Retry-After: 2` quando o PostgreSQL corta a espera por um teto da sessão (trava, comando, deadlock ou transação ociosa) ou o pool está esgotado; nada é gravado. Decisão e tetos em `docs/adr/0001-tetos-de-sessao-do-banco.md`.
+
 - **Usuário único, declarado** (decisão A2): as rotas de missão usam a
   constante `USUARIO_UNICO = 1` de `core/usuario_unico.py` (desde o E; até
   o D morava em `missions/router.py`). Não há autenticação, sessão

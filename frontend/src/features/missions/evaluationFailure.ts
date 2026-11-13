@@ -1,7 +1,7 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MessageKey } from '../../shared/i18n/catalog'
-import type { FailureText } from '../../shared/i18n/failureText'
+import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
 import type { EvaluationErrorCode } from './types'
 
 /**
@@ -110,6 +110,11 @@ function knownFailure(code: string | null): EvaluationFailure | null {
 export function describeEvaluationFailure(error: unknown): EvaluationFailure {
   if (!(error instanceof ApiError)) {
     return generic(GENERIC_LEAD.fallback)
+  }
+  // Banco ocupado: nada foi gravado, e repetir e seguro.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'retry' }
   }
   const known = knownFailure(error.code)
   if (known !== null) {

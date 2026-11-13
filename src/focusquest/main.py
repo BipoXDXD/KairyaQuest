@@ -18,10 +18,17 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, InternalError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolEsgotadoError
 
 from focusquest.core.config import ConfiguracaoDeLog
-from focusquest.core.database import descartar_engine, get_engine_se_configurada
+from focusquest.core.database import (
+    SQLSTATE_DA_TRANSACAO_OCIOSA,
+    descartar_engine,
+    e_falha_transitoria_do_banco,
+    get_engine_se_configurada,
+    sqlstate_de,
+)
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     AvaliacaoEmAndamentoError,
@@ -182,6 +189,7 @@ class CodigoDeErro(StrEnum):
     CAMPO_DESCONHECIDO = "campo_desconhecido"
     CHAVE_DE_IDEMPOTENCIA_INVALIDA = "chave_de_idempotencia_invalida"
     CHAVE_DE_IDEMPOTENCIA_REUTILIZADA = "chave_de_idempotencia_reutilizada"
+    BANCO_OCUPADO = "banco_ocupado"
 
 
 @app.exception_handler(RequestValidationError)
@@ -508,6 +516,63 @@ def _avaliacao_falhou(request: Request, exc: AvaliacaoFalhouError) -> JSONRespon
     """A falha ja gravada na avaliacao, com o `code` igual ao `error_code` da
     linha: a tela traduz os dois pelo mesmo mapa."""
     return _erro(_STATUS_DA_FALHA[exc.falha], str(exc), CodigoDeErro(exc.falha.value))
+
+
+# Quais falhas sao transitorias: `SQLSTATES_TRANSITORIOS`, em `core/database.py`.
+SEGUNDOS_ATE_TENTAR_DE_NOVO = 2
+BANCO_OCUPADO = "banco de dados ocupado; tente de novo em instantes"
+
+
+# Duas classes porque o psycopg segue a classe do SQLSTATE: 55, 57 e 40 viram
+# `OperationalError`, e 25 (estado de transacao) vira `InternalError` (medido
+# em `tests/integration/test_tetos_do_banco.py`).
+@app.exception_handler(OperationalError)
+@app.exception_handler(InternalError)
+def _banco_ocupado(request: Request, exc: DBAPIError) -> JSONResponse:
+    """503 so para o corte transitorio; qualquer outro erro do banco e relancado
+    e continua 500 com traceback, porque repetir nao o resolve.
+
+    O 25P03 tambem e 503, mas loga `error`: numa rota ele so aparece se a
+    propria requisicao deixou a transacao ociosa alem do teto, o que e defeito
+    (ADR 0001).
+
+    O log leva o SQLSTATE, o metodo e o caminho, nunca o SQL nem os parametros.
+    """
+    if not e_falha_transitoria_do_banco(exc):
+        raise exc
+    sqlstate = sqlstate_de(exc)
+    if sqlstate == SQLSTATE_DA_TRANSACAO_OCIOSA:
+        _log.error(
+            "transacao ociosa encerrada pelo teto (sqlstate %s) em %s %s;"
+            " indica defeito na rota, repetir nao resolve",
+            sqlstate,
+            request.method,
+            request.url.path,
+        )
+    else:
+        _log.warning(
+            "banco ocupado (sqlstate %s) em %s %s",
+            sqlstate,
+            request.method,
+            request.url.path,
+        )
+    return _resposta_de_banco_ocupado()
+
+
+@app.exception_handler(PoolEsgotadoError)
+def _pool_esgotado(request: Request, exc: PoolEsgotadoError) -> JSONResponse:
+    """O pool nao entregou conexao no `pool_timeout`. Nao e `DBAPIError`, por
+    isso o handler proprio; a resposta e a mesma do banco ocupado."""
+    _log.warning("pool do banco esgotado em %s %s", request.method, request.url.path)
+    return _resposta_de_banco_ocupado()
+
+
+def _resposta_de_banco_ocupado() -> JSONResponse:
+    resposta = _erro(
+        status.HTTP_503_SERVICE_UNAVAILABLE, BANCO_OCUPADO, CodigoDeErro.BANCO_OCUPADO
+    )
+    resposta.headers["Retry-After"] = str(SEGUNDOS_ATE_TENTAR_DE_NOVO)
+    return resposta
 
 
 @app.get("/health")

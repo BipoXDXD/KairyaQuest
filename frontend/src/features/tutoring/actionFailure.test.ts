@@ -239,3 +239,29 @@ describe('failedActionText', () => {
     expect(Object.hasOwn(ptBR, FAILED.recovery)).toBe(true)
   })
 })
+
+// 503 `banco_ocupado` (issue #176): o banco cortou uma espera e a transacao foi
+// revertida. Chaves escritas por extenso, e nao importadas do modulo.
+const BUSY_ERROR = new ApiError('O servidor respondeu 503.', 503, 'banco_ocupado', {
+  retryAfterSeconds: 2,
+})
+const SERVER_BUSY = {
+  message: 'shared.apiError.serverBusy.message',
+  recovery: 'shared.apiError.serverBusy.recovery',
+}
+
+describe('describeActionFailure com 503 banco_ocupado', () => {
+  it.each([
+    ['confirm', 'create_mission'],
+    ['confirm', 'reschedule_mission'],
+    ['reject', 'create_mission'],
+  ] as const)(
+    '%s de %s diz que o servidor esta ocupado e oferece tentar de novo',
+    (attempted, kind) => {
+      expect(describeActionFailure(BUSY_ERROR, attempted, kind)).toEqual({
+        ...SERVER_BUSY,
+        action: 'retry',
+      })
+    },
+  )
+})

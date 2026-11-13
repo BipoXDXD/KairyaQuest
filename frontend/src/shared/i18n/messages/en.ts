@@ -98,6 +98,8 @@ export const en = {
   'shared.apiError.interrupted.message':
     "The response didn't arrive in full. The connection dropped midway.",
   'shared.apiError.interrupted.recovery': 'Try again.',
+  'shared.apiError.serverBusy.message': 'The server is busy right now.',
+  'shared.apiError.serverBusy.recovery': 'Try again in a few seconds.',
 
   'missions.state.pending': 'Pending',
   'missions.state.inProgress': 'In progress',

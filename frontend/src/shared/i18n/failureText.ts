@@ -33,11 +33,34 @@ const API_ERROR_TEXT: Record<ApiErrorKind, FailureText> = {
 }
 
 /**
- * O texto generico de uma falha de API, pelo `kind`. A `message` do erro e de
- * depuracao e nunca chega a tela.
+ * O texto do 503 `banco_ocupado`: o banco cortou uma espera (teto de sessao)
+ * ou o pool se esgotou. A transacao foi revertida e repetir pode dar certo,
+ * entao o texto diz so que e passageiro -- nao afirma que o pedido se perdeu
+ * nem culpa a pessoa.
+ */
+export const SERVER_BUSY_TEXT: FailureText = {
+  message: 'shared.apiError.serverBusy.message',
+  recovery: 'shared.apiError.serverBusy.recovery',
+}
+
+/** O `code` do 503 do banco ocupado, igual em toda rota que toca o banco. */
+const SERVER_BUSY_CODE = 'banco_ocupado'
+
+/**
+ * O texto do banco ocupado, ou `null` se a falha e outra. Ponto unico do
+ * mapeamento: o `code` e transversal (qualquer rota que toca o banco), e cada
+ * tradutor de tela so escolhe a acao que acompanha o texto.
+ */
+export function serverBusyText(error: unknown): FailureText | null {
+  return error instanceof ApiError && error.code === SERVER_BUSY_CODE ? SERVER_BUSY_TEXT : null
+}
+
+/**
+ * O texto generico de uma falha de API: o do banco ocupado, ou o do `kind`. A
+ * `message` do erro e de depuracao e nunca chega a tela.
  */
 export function apiErrorText(error: ApiError): FailureText {
-  return API_ERROR_TEXT[error.kind]
+  return serverBusyText(error) ?? API_ERROR_TEXT[error.kind]
 }
 
 /**

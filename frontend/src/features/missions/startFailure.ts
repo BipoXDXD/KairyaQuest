@@ -1,6 +1,6 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
-import type { FailureText } from '../../shared/i18n/failureText'
+import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
 import type { StartErrorCode } from './types'
 
 /**
@@ -83,6 +83,11 @@ function isStartErrorCode(code: string): code is StartErrorCode {
  * so por ele: a `message` do `ApiError` e tecnica e o `detail` nem chega aqui.
  */
 export function describeStartFailure(error: unknown): StartFailure {
+  // Banco ocupado: nada foi gravado, e o reenvio com a mesma chave e seguro.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'retry' }
+  }
   if (error instanceof ApiError && error.code !== null && isStartErrorCode(error.code)) {
     return START_FAILURE_BY_CODE[error.code]
   }

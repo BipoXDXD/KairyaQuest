@@ -123,3 +123,11 @@ class Settings(ConfiguracaoDeLog):
     # `budget_tokens`): chat curto em `low`, a avaliacao da rubrica em `medium`.
     tutor_effort: Literal["low", "medium", "high"] = "low"
     evaluation_effort: Literal["low", "medium", "high"] = "medium"
+    # Tetos da sessao do banco, em milissegundos (ADR 0001). So a engine da
+    # aplicacao os recebe (`core/database.py`); o Alembic fica sem eles. Regra:
+    # teto do servidor < timeout do cliente (20 s do navegador). `ge=1` porque
+    # zero DESLIGA o teto no PostgreSQL. Os numeros sao julgamento, sem medida;
+    # `tests/unit/test_prazos_coerentes.py` confere a relacao com o frontend.
+    db_lock_timeout_ms: int = Field(default=5_000, ge=1)
+    db_statement_timeout_ms: int = Field(default=15_000, ge=1)
+    db_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1)
