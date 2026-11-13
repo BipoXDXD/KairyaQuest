@@ -12,7 +12,7 @@ e o quarto endpoint esqueceria dela.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import SessaoDaRequisicao
@@ -24,6 +24,7 @@ from focusquest.modules.missions.schemas import (
     MissionComplete,
     MissionCompletionRead,
     MissionCreate,
+    MissionListQuery,
     MissionRead,
     MissionRescheduleIn,
     MissionStart,
@@ -33,7 +34,7 @@ from focusquest.modules.missions.service import (
     concluir_missao,
     criar_missao,
     iniciar_missao,
-    listar_missoes,
+    listar_pagina_de_missoes,
     reagendar_missao,
     validar_limites_da_avulsa,
 )
@@ -85,17 +86,30 @@ def criar(
 
 
 @router.get("")
-def listar(session: SessaoDaRequisicao) -> list[MissionRead]:
-    """Lista as missoes do usuario. Colecao vazia e `[]` com 200, nao 404: a
-    colecao existe, so esta sem itens -- e a tela precisa distinguir "nenhuma
-    missao" de "deu erro".
+def listar(
+    session: SessaoDaRequisicao,
+    consulta: Annotated[MissionListQuery, Query()],
+) -> list[MissionRead]:
+    """Lista UMA PAGINA das missoes do usuario (#182). Colecao vazia e `[]`
+    com 200, nao 404: a colecao existe, so esta sem itens -- e a tela precisa
+    distinguir "nenhuma missao" de "deu erro".
+
+    A resposta continua sendo a lista, e sem parametro e a primeira pagina no
+    tamanho padrao: mudanca aditiva, sem envelope. A pagina mais curta que o
+    `limit` e a ultima; a seguinte se pede com o `(deadline, id)` da ultima
+    missao recebida (`MissionListQuery`).
 
     Nao ha `commit`: uma leitura nao tem nada para tornar permanente, e a
     transacao aberta pela sessao morre no fim da requisicao.
     """
     return [
         MissionRead.da_leitura(leitura_da_avulsa(missao))
-        for missao in listar_missoes(session, USUARIO_UNICO)
+        for missao in listar_pagina_de_missoes(
+            session,
+            USUARIO_UNICO,
+            limite=consulta.limit,
+            depois_de=consulta.depois_de(),
+        )
     ]
 
 

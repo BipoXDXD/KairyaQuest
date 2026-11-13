@@ -340,6 +340,10 @@ export const ptBR = {
   'missions.list.loadFailed': 'Falha ao carregar as missões.',
   'missions.list.unexpectedFailure': 'Falha inesperada ao carregar as missões.',
   'missions.list.reloadWaiting': 'Aguardando o pedido em andamento para atualizar o quadro.',
+  'missions.list.loadMore': 'Carregar mais missões',
+  'missions.list.loadingMore': 'Carregando mais missões…',
+  'missions.list.loadMoreFailed':
+    'Falha ao carregar mais missões. As que já estão no quadro continuam aqui.',
 
   'missions.cycle.title': 'Missão de hoje — sua diária',
   'missions.cycle.loading': 'Consultando o ciclo…',
