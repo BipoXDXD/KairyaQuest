@@ -74,6 +74,13 @@ from focusquest.modules.progression.schemas import RewardRead
 # com dificuldade maior continuariam sendo lidas e precificadas normalmente.
 DIFICULDADE_MAXIMA = 5
 
+# Os pisos da dificuldade e da estimativa, nomeados para o front poder
+# espelha-los (`MIN_DIFFICULTY` e `MIN_MINUTES`) e o teste de paridade os
+# prender (`tests/unit/test_paridade_dos_limites.py`, #187). Para inteiro,
+# `ge=1` e o mesmo que o `gt=0` de antes.
+DIFICULDADE_MINIMA = 1
+MINUTOS_MINIMOS = 1
+
 # O maior inteiro que cabe numa coluna `Integer` do PostgreSQL (int4). E um teto
 # TECNICO, nao de negocio: acima dele o INSERT estoura a coluna e a API
 # responderia 500 (medido: `estimated_minutes` de 3_000_000_000 e de 2**63, e
@@ -107,8 +114,9 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
     test_sessao_em_utc.py`).
     """
-    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica;
-    # o valor devolvido e o ORIGINAL, com o offset que o cliente mandou.
+    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica.
+    # A borda devolve o valor ORIGINAL, com o offset do cliente; quem normaliza
+    # para UTC antes de gravar e o servico (`criar_missao`, reagendamento).
     prazo_em_utc(prazo)
     return prazo
 
@@ -178,12 +186,12 @@ class MissionCreate(BaseModel):
     422. O motivo e um defeito medido, nao purismo. A coluna e `timestamptz`,
     entao a leitura seguinte sai com fuso -- sempre com `Z`, porque
     `core/database.py` fixa a sessao do PostgreSQL em UTC. Com
-    `expire_on_commit=False`, o 201 serializa o objeto como ele CHEGOU no
-    pedido, com o offset que o cliente mandou. Aceitar naive fazia o mesmo
-    prazo sair em duas serializacoes diferentes -- `"...T10:00:00"` no 201 e
-    `"...T10:00:00Z"` no GET --, e em JavaScript `new Date("...T10:00:00")` e
-    hora LOCAL enquanto `new Date("...T10:00:00Z")` e UTC. O mesmo campo
-    viraria dois instantes.
+    `expire_on_commit=False`, o 201 serializa o objeto em memoria -- por isso
+    `criar_missao` normaliza o prazo para UTC antes de gravar. Aceitar naive
+    fazia o mesmo prazo sair em duas serializacoes diferentes --
+    `"...T10:00:00"` no 201 e `"...T10:00:00Z"` no GET --, e em JavaScript
+    `new Date("...T10:00:00")` e hora LOCAL enquanto
+    `new Date("...T10:00:00Z")` e UTC. O mesmo campo viraria dois instantes.
 
     A alternativa -- normalizar naive para UTC em silencio -- foi recusada: quem
     manda "10:00" sem dizer onde nao informou o instante, e assumir um fuso por
@@ -193,8 +201,8 @@ class MissionCreate(BaseModel):
 
     instructions: TextoPersistivel = Field(min_length=1)
     completion_criterion: TextoPersistivel = Field(min_length=1)
-    difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
-    estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
+    difficulty: int = Field(ge=DIFICULDADE_MINIMA, le=DIFICULDADE_MAXIMA)
+    estimated_minutes: int = Field(ge=MINUTOS_MINIMOS, le=MAIOR_INTEIRO_DA_COLUNA)
     deadline: PrazoComFuso
 
 

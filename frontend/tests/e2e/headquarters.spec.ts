@@ -94,11 +94,10 @@ const PEDIDOS: readonly PedidoDeMissao[] = [
     completion_criterion: `Dez exercicios corrigidos (e2e ${EXECUCAO})`,
     difficulty: 5,
     estimated_minutes: 90,
-    // Prazo com deslocamento -03:00, e nao `Z`: o 201 devolve o prazo como ele
-    // chegou, com `-03:00`, e a listagem o le do banco, com `Z` (a API fixa a
-    // sessao do PostgreSQL em UTC). Sao duas grafias do mesmo instante, e e a
-    // igualdade de INSTANTES -- nao de strings -- que a conferencia do
-    // `dateTime` abaixo comprova.
+    // Prazo com deslocamento -03:00, e nao `Z`: a API normaliza o prazo para
+    // UTC e o devolve com `Z` (no 201 e na listagem). Sao duas grafias do mesmo
+    // instante, e e a igualdade de INSTANTES -- nao de strings -- que a
+    // conferencia do `dateTime` abaixo comprova.
     deadline: isoSaoPaulo(PRAZOS[0]),
   },
   {

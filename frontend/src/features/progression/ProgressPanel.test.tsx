@@ -167,6 +167,39 @@ describe('ProgressPanel', () => {
     expect(await screen.findByTestId('progress-error')).toHaveTextContent(HTTP_FAILURE_TEXT.en)
   })
 
+  it.each([
+    ['pt-BR', 'A resposta chegou num formato inesperado.'],
+    ['en', "The response couldn't be read. It arrived in an unexpected format."],
+  ] as const)(
+    'em %s, custo de nivel zero mostra a falha de formato do catalogo, sem barra',
+    async (locale, texto) => {
+      serve(progress(300, 3, 300, 300))
+      renderWithI18n(<ProgressPanel />, { locale })
+
+      expect(await screen.findByTestId('progress-error')).toHaveTextContent(texto)
+      expect(screen.queryByTestId('progress-bar')).toBeNull()
+    },
+  )
+
+  it('a queda da rede no meio do corpo mostra o texto de interrupcao do catalogo', async () => {
+    routeFetch({
+      'GET /api/progress': () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError('network error'))
+            },
+          }),
+          { status: 200 },
+        ),
+    })
+    renderWithI18n(<ProgressPanel />)
+
+    expect(await screen.findByTestId('progress-error')).toHaveTextContent(
+      'A resposta foi interrompida no caminho.',
+    )
+  })
+
   it('erro com Tentar novamente refaz o pedido', async () => {
     const mock = routeFetch({
       'GET /api/progress': (_init, call) =>

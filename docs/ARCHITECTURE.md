@@ -457,7 +457,7 @@ medição em `docs/HANDOFF.md`, pendência 29.
 
 | Método e caminho | Sucesso | O que faz |
 |---|---|---|
-| `POST /api/missions` | `201` com a missão criada | Cria uma missão `pendente` para o usuário único. |
+| `POST /api/missions` | `201` com a missão criada | Cria uma missão `pendente` para o usuário único. Cabeçalho opcional `Idempotency-Key` (UUID canônico, escopo usuário + chave, validade de 24 h, tabela `idempotency_keys`): o reenvio do mesmo corpo devolve `201` com a mesma missão; outro corpo, `409 chave_de_idempotencia_reutilizada`; chave que não é UUID, `422 chave_de_idempotencia_invalida`. Sem o cabeçalho, nada muda (`missions/idempotency.py`). |
 | `GET /api/missions` | `200` com a lista | Lista as missões **avulsas** do usuário único (desde o Incremento B; ver "O contrato HTTP do ciclo diário", abaixo), em ordem de prazo (`deadline`, com `id` como desempate). Coleção vazia é `[]` com 200, não 404. |
 | `POST /api/missions/{mission_id}/complete` | `200` com a missão | Conclui a missão, de forma idempotente pelo `operation_id` do corpo: o reenvio do mesmo identificador devolve 200 de novo, com o mesmo corpo. |
 | `POST /api/missions/{mission_id}/start` | `200` com a missão | **Desde o F.** Inicia a missão (`pendente → em_andamento`, `started_at` = o relógio lido depois da trava), de forma idempotente pelo `operation_id`. Contrato completo em "O contrato HTTP do acompanhamento", abaixo. |
@@ -522,10 +522,10 @@ medição em `docs/HANDOFF.md`, pendência 29.
   bastava: com a sessão em `Asia/Tokyo` o último instante aceito, e com ela
   em `America/Sao_Paulo` o primeiro, deixavam a listagem em 500 (medido;
   `tests/integration/test_sessao_em_utc.py`).
-  **Exceção:** o 201 da criação serializa o prazo como ele chegou no pedido,
-  com o offset que o cliente mandou (`-03:00` entra e sai `-03:00`); só a
-  leitura seguinte o devolve com `Z`. O instante é o mesmo; quem consome
-  compara instantes, não strings.
+  O 201 da criação também devolve o prazo com `Z`: `criar_missao` normaliza
+  o prazo para UTC antes de gravar, e o reenvio idempotente devolve os mesmos
+  bytes da primeira resposta. Um prazo enviado com `-03:00` volta com `Z`, no
+  mesmo instante; quem consome compara instantes, não strings.
 - **Saída** (`MissionRead`): `id`, `instructions`, `completion_criterion`,
   `difficulty`, `estimated_minutes`, `deadline`, `state`, `started_at`,
   `completed_at`, mais dois campos **derivados, nunca gravados**: `xp`

@@ -12,13 +12,19 @@ e o quarto endpoint esqueceria dela.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Header, Path, Query, status
 
 from focusquest.core.clock import Clock, get_clock
 from focusquest.core.database import SessaoDaRequisicao
 from focusquest.core.usuario_unico import USUARIO_UNICO
 from focusquest.modules.missions.cycle_service import leitura_da_avulsa, ler_missao
 from focusquest.modules.missions.domain import OrigemDoReagendamento
+from focusquest.modules.missions.idempotency import (
+    criar_com_chave,
+    impressao_do_pedido,
+    ler_chave,
+)
+from focusquest.modules.missions.models import Mission
 from focusquest.modules.missions.schemas import (
     MAIOR_INTEIRO_DA_COLUNA,
     MissionComplete,
@@ -56,6 +62,7 @@ def criar(
     dados: MissionCreate,
     session: SessaoDaRequisicao,
     clock: Annotated[Clock, Depends(get_clock)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> MissionRead:
     """Cria a missao e devolve 201 com o recurso criado.
 
@@ -64,6 +71,11 @@ def criar(
     os tetos tecnicos, porque nao le hora. A recusa sobe como erro de dominio e
     `main.py` a traduz em 422 com `code`.
 
+    Com `Idempotency-Key` (opcional), o reenvio do mesmo corpo devolve a mesma
+    missao com 201, e outro corpo responde 409 (`missions/idempotency.py`).
+    O cabecalho chega como texto e e lido a mao: o `UUID` do FastAPI daria o
+    422 nativo, sem `code`. Sem o cabecalho, nada muda.
+
     Os argumentos sao passados um por um, e nao com `**dados.model_dump()`: o
     servico declarou `difficulty` e `estimated_minutes` como somente-nomeados
     justamente para que uma troca entre eles fosse impossivel, e um `**` de
@@ -71,15 +83,32 @@ def criar(
     no schema passaria a chegar como argumento inesperado em tempo de execucao,
     nao no mypy.
     """
-    validar_limites_da_avulsa(dados.estimated_minutes, dados.deadline, clock())
-    missao = criar_missao(
-        session,
-        user_id=USUARIO_UNICO,
-        instructions=dados.instructions,
-        completion_criterion=dados.completion_criterion,
-        difficulty=dados.difficulty,
-        estimated_minutes=dados.estimated_minutes,
-        deadline=dados.deadline,
+    chave = ler_chave(idempotency_key)
+    agora = clock()
+
+    def nova() -> Mission:
+        validar_limites_da_avulsa(dados.estimated_minutes, dados.deadline, agora)
+        return criar_missao(
+            session,
+            user_id=USUARIO_UNICO,
+            instructions=dados.instructions,
+            completion_criterion=dados.completion_criterion,
+            difficulty=dados.difficulty,
+            estimated_minutes=dados.estimated_minutes,
+            deadline=dados.deadline,
+        )
+
+    missao = (
+        nova()
+        if chave is None
+        else criar_com_chave(
+            session,
+            user_id=USUARIO_UNICO,
+            chave=chave,
+            impressao=impressao_do_pedido(dados),
+            agora=agora,
+            criar=nova,
+        )
     )
     session.commit()
     return MissionRead.da_leitura(leitura_da_avulsa(missao))
