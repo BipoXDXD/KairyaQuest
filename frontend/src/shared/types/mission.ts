@@ -43,8 +43,9 @@ export type Availability =
 export const DAYS_PER_MILESTONE = 7
 
 /**
- * A dificuldade maxima. Espelha `DIFICULDADE_MAXIMA`, em
- * src/focusquest/modules/missions/schemas.py, a mao. A trilha
+ * A dificuldade maxima, declarada so aqui no front. Espelha
+ * `DIFICULDADE_MAXIMA`, em src/focusquest/modules/missions/schemas.py, e
+ * `tests/unit/test_paridade_dos_limites.py` prende os dois. A trilha
  * (`features/campaigns/`), o cartao de `features/missions/MissionCard.tsx` e o
  * de proposta da tutoria (`features/tutoring/ProposalCard.tsx`) escrevem o
  * "de N" a partir desta constante.
@@ -102,10 +103,9 @@ export interface Mission {
   instructions: string
   completion_criterion: string
   /**
-   * De 1 a 5; o teto e imposto pela API. O 5 espelha `DIFICULDADE_MAXIMA`, em
-   * src/focusquest/modules/missions/schemas.py, e nada amarra os dois: quem
-   * mudar la tem de mudar aqui (`MAX_DIFFICULTY`), que os tres
-   * lugares da tela usam.
+   * De 1 a 5; o teto e imposto pela API. O 5 e `MAX_DIFFICULTY`, que espelha
+   * `DIFICULDADE_MAXIMA` (src/focusquest/modules/missions/schemas.py), preso
+   * pelo teste de paridade dos limites.
    */
   difficulty: number
   estimated_minutes: number

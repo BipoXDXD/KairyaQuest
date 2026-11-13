@@ -73,6 +73,13 @@ from focusquest.modules.progression.schemas import RewardRead
 # com dificuldade maior continuariam sendo lidas e precificadas normalmente.
 DIFICULDADE_MAXIMA = 5
 
+# Os pisos da dificuldade e da estimativa, nomeados para o front poder
+# espelha-los (`MIN_DIFFICULTY` e `MIN_MINUTES`) e o teste de paridade os
+# prender (`tests/unit/test_paridade_dos_limites.py`, #187). Para inteiro,
+# `ge=1` e o mesmo que o `gt=0` de antes.
+DIFICULDADE_MINIMA = 1
+MINUTOS_MINIMOS = 1
+
 # O maior inteiro que cabe numa coluna `Integer` do PostgreSQL (int4). E um teto
 # TECNICO, nao de negocio: acima dele o INSERT estoura a coluna e a API
 # responderia 500 (medido: `estimated_minutes` de 3_000_000_000 e de 2**63, e
@@ -143,8 +150,8 @@ class MissionCreate(BaseModel):
 
     instructions: TextoPersistivel = Field(min_length=1)
     completion_criterion: TextoPersistivel = Field(min_length=1)
-    difficulty: int = Field(ge=1, le=DIFICULDADE_MAXIMA)
-    estimated_minutes: int = Field(gt=0, le=MAIOR_INTEIRO_DA_COLUNA)
+    difficulty: int = Field(ge=DIFICULDADE_MINIMA, le=DIFICULDADE_MAXIMA)
+    estimated_minutes: int = Field(ge=MINUTOS_MINIMOS, le=MAIOR_INTEIRO_DA_COLUNA)
     deadline: PrazoComFuso
 
 

@@ -5,15 +5,16 @@ import type { EvidenceDraft } from './types'
  * O tamanho maximo do texto da evidencia, em pontos de codigo.
  *
  * Espelha `TAMANHO_MAXIMO_DA_EVIDENCIA`, em
- * src/focusquest/modules/missions/schemas.py, e nada amarra os dois (pendencia
- * 32). Quem mudar la muda aqui.
+ * src/focusquest/modules/missions/schemas.py; os dois, e o CHECK do banco,
+ * estao presos por `tests/unit/test_paridade_dos_limites.py` e
+ * `tests/integration/test_checks_da_evidencia.py`.
  */
 export const MAX_EVIDENCE_LENGTH = 4000
 
 /**
  * O tamanho maximo do link, em pontos de codigo.
  *
- * Espelha `TAMANHO_MAXIMO_DO_LINK`, no mesmo arquivo, a mao (pendencia 32).
+ * Espelha `TAMANHO_MAXIMO_DO_LINK`, no mesmo arquivo, com as mesmas amarras.
  */
 export const MAX_LINK_LENGTH = 2000
 
