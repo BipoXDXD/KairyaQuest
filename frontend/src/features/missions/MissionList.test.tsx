@@ -3087,3 +3087,68 @@ describe('o reagendamento aberto sai do registro quando perde o sentido', () => 
     expect(registry().rescheduleDraftFor(7)).toBeNull()
   })
 })
+
+describe('MissionList -- carregar mais (#182)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const PROXIMA = 'GET /api/missions?limit=50&after_deadline=2026-09-20T13%3A00%3A00Z&after_id=50'
+  const primeira: Mission[] = Array.from({ length: 50 }, (_, i) => ({ ...pendente, id: i + 1 }))
+  const extra: Mission = { ...pendente, id: 51, instructions: 'Missao da segunda pagina' }
+
+  it('sem pagina cheia nao mostra o botao', async () => {
+    routeFetch({ 'GET /api/missions': () => Response.json([pendente]) })
+    renderWithI18n(<MissionList />)
+    await screen.findByTestId('missions-list')
+
+    expect(screen.queryByTestId('missions-load-more')).not.toBeInTheDocument()
+  })
+
+  it('com a pagina cheia, o botao traz a seguinte e junta ao fim da lista', async () => {
+    let entregar!: (response: Response) => void
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json(primeira),
+      [PROXIMA]: () =>
+        new Promise<Response>((resolve) => {
+          entregar = resolve
+        }),
+    })
+    renderWithI18n(<MissionList />)
+    const botao = await screen.findByTestId('missions-load-more')
+    expect(botao).toHaveTextContent('Carregar mais missões')
+
+    fireEvent.click(botao)
+
+    expect(screen.getByTestId('missions-load-more')).toBeDisabled()
+    expect(screen.getByTestId('missions-load-more')).toHaveTextContent('Carregando mais missões…')
+    await act(async () => {
+      entregar(Response.json([extra]))
+    })
+    expect(await screen.findByText('Missao da segunda pagina')).toBeInTheDocument()
+    expect(within(screen.getByTestId('missions-list')).getAllByRole('listitem')).toHaveLength(51)
+    expect(screen.queryByTestId('missions-load-more')).not.toBeInTheDocument()
+    expect(requestsTo(fetchMock, PROXIMA)).toHaveLength(1)
+  })
+
+  it('a falha ao carregar mais mantem a lista e a nova tentativa funciona', async () => {
+    const fetchMock = routeFetch({
+      'GET /api/missions': () => Response.json(primeira),
+      [PROXIMA]: (_init, call) =>
+        call === 1 ? Response.json({}, { status: 503 }) : Response.json([extra]),
+    })
+    renderWithI18n(<MissionList />)
+    fireEvent.click(await screen.findByTestId('missions-load-more'))
+
+    const erro = await screen.findByTestId('missions-load-more-error')
+    expect(erro).toHaveTextContent('Falha ao carregar mais missões.')
+    expect(erro).toHaveTextContent(HTTP_FAILURE_TEXT['pt-BR'])
+    expect(within(screen.getByTestId('missions-list')).getAllByRole('listitem')).toHaveLength(50)
+
+    fireEvent.click(within(erro).getByTestId('missions-load-more-retry'))
+
+    expect(await screen.findByText('Missao da segunda pagina')).toBeInTheDocument()
+    expect(screen.queryByTestId('missions-load-more-error')).not.toBeInTheDocument()
+    expect(requestsTo(fetchMock, PROXIMA)).toHaveLength(2)
+  })
+})

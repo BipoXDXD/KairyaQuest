@@ -10,7 +10,7 @@ tornar tudo permanente para o dono da transacao.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import Select, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -180,20 +180,46 @@ def listar_missoes(session: Session, user_id: int) -> list[Mission]:
     mais. Assim a listagem custa quatro consultas, qualquer que seja o tamanho
     dela.
     """
-    return list(
-        session.scalars(
-            select(Mission)
-            .options(
-                selectinload(Mission.evidence),
-                selectinload(Mission.evaluation),
-                selectinload(Mission.reschedules),
-            )
-            .where(
-                Mission.user_id == user_id,
-                Mission.mission_type == MissionType.AVULSA,
-            )
-            .order_by(Mission.deadline, Mission.id)
+    return list(session.scalars(_avulsas_em_ordem(user_id)))
+
+
+def listar_pagina_de_missoes(
+    session: Session,
+    user_id: int,
+    *,
+    limite: int,
+    depois_de: tuple[datetime, int] | None,
+) -> list[Mission]:
+    """Uma pagina de `listar_missoes`, por keyset: ate `limite` missoes
+    depois do cursor `(deadline, id)`, na mesma ordem.
+
+    A comparacao de linha `(deadline, id) > (:prazo, :id)` e a propria ordem
+    da listagem, entao, com os prazos parados, o cursor nao repete nem pula
+    uma missao, e dois prazos iguais na fronteira de pagina desempatam pelo
+    `id`. Um reagendamento no meio da navegacao move a missao na ordem e
+    pode repeti-la ou tira-la das paginas seguintes (ver
+    `MissionListQuery`). O prazo da avulsa e `NOT NULL`
+    (`ck_missions_prazo_do_tipo`): nao ha NULL para quebrar a comparacao.
+    """
+    consulta = _avulsas_em_ordem(user_id)
+    if depois_de is not None:
+        consulta = consulta.where(tuple_(Mission.deadline, Mission.id) > depois_de)
+    return list(session.scalars(consulta.limit(limite)))
+
+
+def _avulsas_em_ordem(user_id: int) -> Select[Mission]:
+    return (
+        select(Mission)
+        .options(
+            selectinload(Mission.evidence),
+            selectinload(Mission.evaluation),
+            selectinload(Mission.reschedules),
         )
+        .where(
+            Mission.user_id == user_id,
+            Mission.mission_type == MissionType.AVULSA,
+        )
+        .order_by(Mission.deadline, Mission.id)
     )
 
 

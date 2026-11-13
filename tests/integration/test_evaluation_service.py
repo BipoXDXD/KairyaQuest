@@ -13,6 +13,7 @@ import dataclasses
 import json
 import queue
 import threading
+import uuid
 from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -760,7 +761,12 @@ class _ProvedorQueQuebra:
         return self.real.responder(turno)
 
     def avaliar(self, turno: Turno, ferramenta: Ferramenta) -> dict[str, Any] | None:
-        raise RuntimeError("falha inesperada do provedor")
+        raise RuntimeError(f"falha inesperada do provedor {CANARIO_DA_EXCECAO}")
+
+
+# A mensagem da excecao original pode carregar o texto da entrega (o SDK
+# devolve trechos da requisicao no erro): so o TIPO vai para o log (#166).
+CANARIO_DA_EXCECAO = f"CANARY-{uuid.uuid4()}"
 
 
 def test_excecao_inesperada_do_provedor_e_gravada(
@@ -768,6 +774,7 @@ def test_excecao_inesperada_do_provedor_e_gravada(
     tutoria: Tutoria,
     missoes: Missoes,
     caplog: pytest.LogCaptureFixture,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     mission_id = missoes.concluida()
     quebrado = dataclasses.replace(
@@ -782,7 +789,11 @@ def test_excecao_inesperada_do_provedor_e_gravada(
         EstadoDaAvaliacao.FALHOU,
         FalhaDaAvaliacao.PROVEDOR_INDISPONIVEL,
     )
-    assert "falha inesperada do provedor" in caplog.text
+    assert "RuntimeError" in caplog.text
+    capturado = capfd.readouterr()
+    for saida in (caplog.text, capturado.out, capturado.err):
+        assert CANARIO_DA_EXCECAO not in saida
+        assert "Traceback" not in saida
 
 
 def test_reconstruir_sem_a_missao_e_nao_encontrada(

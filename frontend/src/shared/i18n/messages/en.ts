@@ -360,6 +360,10 @@ export const en = {
   'missions.list.loadFailed': "Couldn't load your missions.",
   'missions.list.unexpectedFailure': 'Something unexpected went wrong while loading. Try again.',
   'missions.list.reloadWaiting': 'Waiting for the current request to refresh the board.',
+  'missions.list.loadMore': 'Load more missions',
+  'missions.list.loadingMore': 'Loading more missions…',
+  'missions.list.loadMoreFailed':
+    "Couldn't load more missions. The ones on the board are still here.",
 
   'missions.cycle.title': "Today's mission — your daily",
   'missions.cycle.loading': 'Checking your cycle…',

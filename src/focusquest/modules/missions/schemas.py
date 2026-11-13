@@ -24,6 +24,7 @@ from pydantic import (
     Field,
     StringConstraints,
     computed_field,
+    model_validator,
 )
 
 from focusquest.core.validation import TextoPersistivel
@@ -123,6 +124,55 @@ def _instante_representavel(prazo: datetime) -> datetime:
 # O instante com fuso e representavel em UTC: a regra do `deadline` da criacao,
 # com nome, porque o reagendamento (F9) e a proposta da Kairya (F15) usam a MESMA.
 PrazoComFuso = Annotated[AwareDatetime, AfterValidator(_instante_representavel)]
+
+
+# O tamanho da pagina do `GET /api/missions` (#182): o padrao, quando o cliente
+# nao pede outro, e o teto. O frontend pede o padrao explicitamente
+# (`MISSIONS_PAGE_SIZE`, frontend/src/features/missions/useMissions.ts). O teto
+# limita o custo de UMA leitura (quatro consultas, ver `listar_missoes`), nao o
+# total: a pessoa ainda chega a todas as missoes, pagina a pagina.
+TAMANHO_PADRAO_DA_PAGINA = 50
+TAMANHO_MAXIMO_DA_PAGINA = 100
+
+
+class MissionListQuery(BaseModel):
+    """A query string do `GET /api/missions`: o tamanho da pagina e o cursor.
+
+    O cursor e o par `(deadline, id)` da ULTIMA missao da pagina anterior --
+    exatamente a chave da ordenacao (`listar_missoes`), e por isso keyset: a
+    pagina seguinte comeca depois dele, sem `OFFSET`, e uma missao criada ou
+    concluida no meio da navegacao nao desloca as outras. Mudar o PRAZO no
+    meio da navegacao muda a posicao da missao: reagendada para depois do
+    cursor, ela volta numa pagina seguinte (o cliente deduplica por `id`);
+    para antes dele, ela nao aparece nas paginas seguintes.
+    Ele nao e opaco porque o cliente ja tem os dois campos na missao que
+    recebeu; um token codificado seria um formato a mais para validar.
+
+    Os dois campos do cursor andam juntos: so um deles nao identifica posicao
+    nenhuma, e e 422 (nao um "ignora e devolve a primeira pagina", que
+    esconderia o defeito de quem chamou). Parametro desconhecido tambem e 422,
+    pela mesma regra dos corpos de entrada.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    limit: int = Field(
+        default=TAMANHO_PADRAO_DA_PAGINA, ge=1, le=TAMANHO_MAXIMO_DA_PAGINA
+    )
+    after_deadline: PrazoComFuso | None = None
+    after_id: int | None = Field(default=None, ge=1, le=MAIOR_INTEIRO_DA_COLUNA)
+
+    @model_validator(mode="after")
+    def _cursor_completo(self) -> MissionListQuery:
+        if (self.after_deadline is None) != (self.after_id is None):
+            raise ValueError("after_deadline e after_id vao juntos, ou nenhum dos dois")
+        return self
+
+    def depois_de(self) -> tuple[datetime, int] | None:
+        """O cursor como par, ou `None` na primeira pagina."""
+        if self.after_deadline is None or self.after_id is None:
+            return None
+        return (self.after_deadline, self.after_id)
 
 
 class MissionCreate(BaseModel):
