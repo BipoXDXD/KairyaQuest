@@ -107,3 +107,19 @@ describe('describeStartFailure', () => {
     expect(describeStartFailure(new SyntaxError('Unexpected token'))).toEqual(UNCONFIRMED)
   })
 })
+
+// 503 `banco_ocupado` (issue #176): o banco cortou uma espera e a transacao foi
+// revertida. Chaves escritas por extenso, e nao importadas do modulo.
+const BUSY_ERROR = new ApiError('O servidor respondeu 503.', 503, 'banco_ocupado', {
+  retryAfterSeconds: 2,
+})
+const SERVER_BUSY = {
+  message: 'shared.apiError.serverBusy.message',
+  recovery: 'shared.apiError.serverBusy.recovery',
+}
+
+describe('describeStartFailure com 503 banco_ocupado', () => {
+  it('diz que o servidor esta ocupado e oferece tentar de novo', () => {
+    expect(describeStartFailure(BUSY_ERROR)).toEqual({ ...SERVER_BUSY, action: 'retry' })
+  })
+})

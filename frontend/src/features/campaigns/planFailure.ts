@@ -1,6 +1,7 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MessageKey } from '../../shared/i18n/catalog'
+import { serverBusyText } from '../../shared/i18n/failureText'
 import type { WeekChoice } from './planDates'
 import type { PlanErrorCode } from './types'
 
@@ -63,6 +64,11 @@ function isPlanErrorCode(code: string): code is PlanErrorCode {
  * gravou, o novo pedido volta `plano_existente`.
  */
 export function describePlanFailure(error: unknown, week: WeekChoice): PlanFailure {
+  // Banco ocupado: nada foi gravado; os dados ficam no formulario para repetir.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'none' }
+  }
   if (error instanceof ApiError && error.code !== null && isPlanErrorCode(error.code)) {
     if (error.code === 'plano_existente' && week === 'next') {
       return EXISTING_NEXT_WEEK

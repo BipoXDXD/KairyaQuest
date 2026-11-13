@@ -704,6 +704,49 @@ describe('TutorPanel: o envio', () => {
     expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
   })
 
+  it('P39 banco ocupado no stream: texto transitorio e Tentar de novo com o mesmo id', async () => {
+    const q1 = question(1, 'Pergunta', 'c1')
+    const { fetchMock } = mountPanel({
+      [SEND]: (_init, call) =>
+        call === 1
+          ? streamResponse([
+              sseFrame('user_message', q1),
+              sseFrame('error', { code: 'banco_ocupado' }),
+            ])
+          : streamResponse([sseFrame('user_message', q1), sseFrame('done', answer(2, 1, 'Ok'))]),
+    })
+
+    await typeAndSend('Pergunta')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'O servidor está ocupado agora. Tente de novo em alguns segundos.',
+    )
+    fireEvent.click(screen.getByTestId('tutor-retry'))
+    await waitFor(() => {
+      expect(screen.getByTestId('tutor-live')).toHaveTextContent('Kairya terminou de responder.')
+    })
+    expect(sent(fetchMock, 2).client_message_id).toBe(sent(fetchMock, 1).client_message_id)
+  })
+
+  it('P39b banco ocupado antes do stream, em ingles: texto transitorio e Tentar de novo', async () => {
+    mountPanel(
+      { [SEND]: preStreamError(503, { code: 'banco_ocupado' }, { 'Retry-After': '2' }) },
+      'desktop',
+      vi.fn(),
+      'en',
+    )
+
+    await readyEn()
+    typeEn('One more')
+    fireEvent.click(sendButton())
+
+    expect(await screen.findByTestId('tutor-failure')).toHaveTextContent(
+      'The server is busy right now. Try again in a few seconds.',
+    )
+    expect(screen.getByTestId('tutor-retry')).toBeInTheDocument()
+    expect(inputEn()).toHaveValue('One more')
+  })
+
   it('P37 a resposta servida pelo modelo substituto traz a nota com o modelo; a do pedido, nao', async () => {
     // Pendencia 174: o fallback do servidor refez a resposta noutro modelo.
     const history = [

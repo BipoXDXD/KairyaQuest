@@ -62,6 +62,7 @@ def run_migrations_online() -> None:
     conexao que a aplicacao usa -- a sessao em UTC, hoje. O `alembic.ini` nao
     tem chave `sqlalchemy.*` nenhuma (a URL vem de `_url()`), entao o
     `engine_from_config` do template nao trazia nada que se perca aqui."""
+    # Sem `limites`, de proposito: a migracao nao tem tetos de sessao (ADR 0001).
     connectable = create_engine_from_url(_url(), poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

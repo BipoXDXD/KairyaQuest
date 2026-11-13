@@ -15,20 +15,60 @@ pertence a camada que abre a conexao, nao a cada modulo que a usa.
 
 import threading
 from collections.abc import Iterator
+from dataclasses import dataclass
+from functools import partial
 from typing import Annotated, Any
 
 from fastapi import Depends
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import TimeoutError as PoolEsgotadoError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import ConnectionPoolEntry, Pool
 
 from focusquest.core.config import Settings
 
 
-def _fixar_sessao_em_utc(conexao_dbapi: Any, _registro: ConnectionPoolEntry) -> None:
-    """Poe a sessao do PostgreSQL em UTC, em toda conexao nova do pool.
+@dataclass(frozen=True)
+class LimitesDaSessao:
+    """Os tetos que o PostgreSQL impoe a cada sessao da aplicacao, em ms.
+
+    Decisao e valores em `docs/adr/0001-tetos-de-sessao-do-banco.md`. Quem
+    estoura um deles recebe 55P03 (trava), 57014 (comando) ou 25P03
+    (transacao ociosa): `main.py` os traduz em 503 `banco_ocupado` e a
+    tutoria, com o stream ja aberto, no evento `error` de mesmo codigo
+    (`e_falha_transitoria_do_banco`).
+    """
+
+    lock_timeout_ms: int
+    statement_timeout_ms: int
+    idle_in_transaction_timeout_ms: int
+
+    @classmethod
+    def da_configuracao(cls, settings: Settings) -> LimitesDaSessao:
+        return cls(
+            lock_timeout_ms=settings.db_lock_timeout_ms,
+            statement_timeout_ms=settings.db_statement_timeout_ms,
+            idle_in_transaction_timeout_ms=settings.db_idle_in_transaction_timeout_ms,
+        )
+
+
+def _configurar_sessao(
+    conexao_dbapi: Any,
+    _registro: ConnectionPoolEntry,
+    *,
+    limites: LimitesDaSessao | None,
+) -> None:
+    """Poe a sessao do PostgreSQL em UTC e, com `limites`, aplica os tetos,
+    em toda conexao nova do pool.
+
+    Os tetos vao por `set_config(..., false)` (valor da SESSAO), com o numero
+    como parametro: o `SET` nao aceita parametro, e montar a string seria
+    abrir uma injecao por configuracao. Numero sem unidade e lido em ms. Rodam
+    no mesmo bloco em `autocommit` do fuso, pelo mesmo motivo (abaixo): o
+    rollback do pool nao os desfaz. Sem `limites` (Alembic, suite), nenhum teto.
 
     O `timestamptz` volta no `TimeZone` da SESSAO, e o psycopg nao le um
     instante que, nesse fuso, cai fora dos anos 1 a 9999: com a sessao em
@@ -55,25 +95,78 @@ def _fixar_sessao_em_utc(conexao_dbapi: Any, _registro: ConnectionPoolEntry) -> 
     try:
         with conexao_dbapi.cursor() as cursor:
             cursor.execute("SET TIME ZONE 'UTC'")
+            if limites is not None:
+                cursor.execute(
+                    "SELECT set_config('lock_timeout', %s, false),"
+                    " set_config('statement_timeout', %s, false),"
+                    " set_config('idle_in_transaction_session_timeout', %s, false)",
+                    (
+                        str(limites.lock_timeout_ms),
+                        str(limites.statement_timeout_ms),
+                        str(limites.idle_in_transaction_timeout_ms),
+                    ),
+                )
     finally:
         conexao_dbapi.autocommit = autocommit_anterior
+
+
+# As falhas em que o banco cortou uma espera por um teto da sessao (ADR 0001):
+# 55P03 lock_not_available, 57014 query_canceled (statement_timeout), 40P01
+# deadlock_detected e 25P03 idle_in_transaction_session_timeout. A transacao
+# foi revertida, nada foi gravado, e repetir pode dar certo. Moram aqui, e nao
+# em `main.py`, porque dois consumidores as classificam: os handlers HTTP e a
+# gravacao final da tutoria, que roda dentro de um stream ja aberto (#177) e
+# nao pode importar `main.py`.
+SQLSTATE_DA_TRANSACAO_OCIOSA = "25P03"
+SQLSTATES_TRANSITORIOS = frozenset(
+    {"55P03", "57014", "40P01", SQLSTATE_DA_TRANSACAO_OCIOSA}
+)
+
+
+def sqlstate_de(erro: BaseException) -> str | None:
+    """O SQLSTATE do erro do driver, ou None quando nao ha um."""
+    if not isinstance(erro, DBAPIError):
+        return None
+    return getattr(erro.orig, "sqlstate", None)
+
+
+def e_falha_transitoria_do_banco(erro: BaseException) -> bool:
+    """Um corte por teto da sessao, ou o pool que nao entregou conexao no
+    `pool_timeout` -- o `TimeoutError` do pool nao e `DBAPIError`, mas e o
+    mesmo "tente de novo em instantes"."""
+    return (
+        isinstance(erro, PoolEsgotadoError)
+        or sqlstate_de(erro) in SQLSTATES_TRANSITORIOS
+    )
+
+
+def motivo_da_falha_transitoria(erro: BaseException) -> str:
+    """O que um log pode dizer da falha: so o SQLSTATE, ou "pool esgotado".
+
+    Nunca `str(erro)`: a mensagem do SQLAlchemy traz a instrucao SQL."""
+    sqlstate = sqlstate_de(erro)
+    return "pool esgotado" if sqlstate is None else f"sqlstate {sqlstate}"
 
 
 # Quanto uma rota espera por uma conexao quando o pool (5 + 10 de overflow) esta
 # esgotado, antes de falhar. O padrao do SQLAlchemy e 30 s, acima dos 20 s que
 # o navegador da as rotas de leitura e mutacao: ele desistiria primeiro, e a
-# rota ainda esperaria. 10 s deixa metade dessa janela para a consulta e a volta
-# pela rede depois que a conexao chega. Julgamento, sem medida;
-# `tests/unit/test_prazos_coerentes.py` confere a relacao com os prazos do
-# frontend.
-POOL_TIMEOUT_SEGUNDOS = 10
+# rota ainda esperaria. 4 s porque a espera do pool soma com o
+# `statement_timeout` (15 s) de um comando: 19 s, ainda abaixo dos 20 s (ADR
+# 0001). Julgamento, sem medida; `tests/unit/test_prazos_coerentes.py` confere
+# a relacao com os prazos do frontend.
+POOL_TIMEOUT_SEGUNDOS = 4
 
 
-def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Engine:
+def create_engine_from_url(
+    url: str,
+    poolclass: type[Pool] | None = None,
+    limites: LimitesDaSessao | None = None,
+) -> Engine:
     """Cria a engine -- e e o UNICO lugar onde uma engine desta base nasce: a
     aplicacao, a suite de testes e o Alembic passam por aqui, e por isso
     conectam todos com a mesma configuracao (sessao em UTC, ver
-    `_fixar_sessao_em_utc`). Uma engine montada por outro caminho seria uma
+    `_configurar_sessao`). Uma engine montada por outro caminho seria uma
     configuracao que os testes nao exercitam.
 
     `pool_pre_ping` testa a `connection` antes de entrega-la: sem isso o pool
@@ -82,6 +175,9 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
     `NullPool` -- um processo de migracao nao tem por que manter conexao
     aberta; `None` fica com o pool padrao do dialeto, com o `pool_timeout` de
     `POOL_TIMEOUT_SEGUNDOS`.
+
+    `limites` so chega preenchido por `get_engine`: a aplicacao tem tetos de
+    sessao, e o Alembic e a suite nao (uma migracao longa nao pode ser cortada).
 
     O listener nao abre conexao: roda so quando o pool cria uma. A engine
     continua preguicosa, e os testes que dependem disso (a guarda do banco de
@@ -102,7 +198,7 @@ def create_engine_from_url(url: str, poolclass: type[Pool] | None = None) -> Eng
         hide_parameters=True,
         **argumentos_do_pool,
     )
-    event.listen(engine, "connect", _fixar_sessao_em_utc)
+    event.listen(engine, "connect", partial(_configurar_sessao, limites=limites))
     return engine
 
 
@@ -128,7 +224,11 @@ def get_engine() -> Engine:
     if _engine is None:
         with _trava_da_criacao:
             if _engine is None:
-                _engine = create_engine_from_url(Settings().database_url)
+                settings = Settings()
+                _engine = create_engine_from_url(
+                    settings.database_url,
+                    limites=LimitesDaSessao.da_configuracao(settings),
+                )
     return _engine
 
 

@@ -43,7 +43,9 @@ def test_chamadas_simultaneas_criam_uma_unica_engine(
     criadas: list[object] = []
     segunda_criacao_comecou = threading.Event()
 
-    def criar_e_esperar_a_proxima(url: str, poolclass: object = None) -> object:
+    def criar_e_esperar_a_proxima(
+        url: str, poolclass: object = None, limites: object = None
+    ) -> object:
         # Sem a trava, a primeira criacao segura aqui ate a segunda thread
         # tambem ver `_engine is None` -- e a corrida fica deterministica.
         criadas.append(engine := object())

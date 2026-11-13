@@ -13,6 +13,7 @@ seguro:
 Nenhuma funcao daqui conhece HTTP, e nenhuma conhece o SDK.
 """
 
+import logging
 import math
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -20,10 +21,15 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import TimeoutError as PoolEsgotadoError
 from sqlalchemy.orm import Session, aliased
 
 from focusquest.core.clock import Clock
+from focusquest.core.database import (
+    e_falha_transitoria_do_banco,
+    motivo_da_falha_transitoria,
+)
 from focusquest.core.errors import (
     AcaoNaoEncontradaError,
     EstimativaForaDoLimite,
@@ -92,6 +98,8 @@ from focusquest.modules.tutoring.schemas import (
 )
 from focusquest.modules.users.models import User
 from focusquest.modules.users.service import ler_idioma
+
+_LOG = logging.getLogger(__name__)
 
 # A folga sobre o limite da resposta antes de uma `gerando` virar orfa. O
 # limite total vale mesmo sem evento chegando (`leitura.py`): o stream sai do ar
@@ -323,6 +331,13 @@ def transmitir(
 
     O `RespostaConcluida` sai depois do commit, e o `RespostaFalhou` depois de
     a falha estar gravada: o cliente nunca age sobre algo que o banco nao tem.
+    A excecao e o `banco_ocupado` (#177): a gravacao final falhou por uma
+    falha transitoria do banco (teto da sessao, pool esgotado), e o
+    `RespostaFalhou` sai mesmo que a segunda tentativa -- gravar `falhou` com
+    o codigo -- tambem falhe. Ai a linha fica `gerando` ate o recolhimento de
+    orfaos, e o "Tentar de novo" antes dele recebe 409; nada foi gravado como
+    `completa`, entao o cliente continua sem agir sobre o que o banco nao tem.
+    Erro de banco nao transitorio se propaga, como qualquer outro.
     A mensagem do `RespostaConcluida` e `completa` ou, quando um limite de
     tamanho cortou a resposta (`Parada.CORTADA`, pendencias 45 e 120),
     `interrompida` com `error_code` `resposta_longa`, o texto parcial e sem
@@ -420,25 +435,95 @@ def transmitir(
         if dados is None:
             codigo = CodigoDoStream.PROPOSTA_INVALIDA
 
+    try:
+        final = _gravar_o_final(
+            fabrica,
+            preparo.resposta_id,
+            texto,
+            codigo,
+            dados,
+            clock,
+            cortada,
+            substituto,
+        )
+    except (DBAPIError, PoolEsgotadoError) as erro:
+        if not e_falha_transitoria_do_banco(erro):
+            raise
+        _falhar_por_banco_ocupado(fabrica, preparo.resposta_id, texto, erro)
+        final = RespostaFalhou(CodigoDoStream.BANCO_OCUPADO)
+    yield final
+
+
+def _gravar_o_final(
+    fabrica: Callable[[], Session],
+    resposta_id: int,
+    texto: str,
+    codigo: CodigoDoStream | None,
+    dados: DadosDaProposta | None,
+    clock: Clock,
+    cortada: bool,
+    substituto: str | None,
+) -> RespostaConcluida | RespostaFalhou:
+    """Grava o desfecho do turno e devolve o evento que o anuncia.
+
+    O relogio so e lido quando ha acao a datar, no `_completar`."""
     if codigo is not None:
-        _encerrar(fabrica, preparo.resposta_id, texto, StatusDaMensagem.FALHOU, codigo)
-        yield RespostaFalhou(codigo)
-        return
+        _encerrar(fabrica, resposta_id, texto, StatusDaMensagem.FALHOU, codigo)
+        return RespostaFalhou(codigo)
 
     status = StatusDaMensagem.INTERROMPIDA if cortada else StatusDaMensagem.COMPLETA
     motivo = RESPOSTA_LONGA if cortada else None
     desfecho = _completar(
-        fabrica, preparo.resposta_id, texto, dados, clock(), status, motivo, substituto
+        fabrica, resposta_id, texto, dados, clock(), status, motivo, substituto
     )
     if isinstance(desfecho, _Recolhida):
         # Recolhida como orfa enquanto gerava: ela ja esta `interrompida`.
-        yield RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
-        return
+        return RespostaFalhou(CodigoDoStream.TEMPO_ESGOTADO)
     if isinstance(desfecho, _PreCondicaoRecusada):
         # Gravada `falhou` pelo `_completar`, ja commitada.
-        yield RespostaFalhou(CodigoDoStream.PROPOSTA_INVALIDA)
-        return
-    yield RespostaConcluida(desfecho)
+        return RespostaFalhou(CodigoDoStream.PROPOSTA_INVALIDA)
+    return RespostaConcluida(desfecho)
+
+
+def _falhar_por_banco_ocupado(
+    fabrica: Callable[[], Session],
+    resposta_id: int,
+    texto: str,
+    erro: DBAPIError | PoolEsgotadoError,
+) -> None:
+    """Tenta UMA vez, best-effort, gravar `falhou`/`banco_ocupado` (#177).
+
+    Com a resposta `falhou`, o "Tentar de novo" com o mesmo
+    `client_message_id` gera de novo; sem isso esbarraria no 409
+    `mensagem_em_andamento` ate o recolhimento de orfaos. Se a segunda
+    tentativa tambem cortar de forma transitoria, a linha fica para o
+    recolhimento -- o banco segue ocupado, e insistir aqui seguraria o stream.
+
+    O log leva so o motivo (SQLSTATE ou pool) e o id: a mensagem do erro traz
+    o SQL, e o traceback tambem (#166).
+    """
+    _LOG.warning(
+        "banco ocupado (%s) ao gravar o final da resposta %s",
+        motivo_da_falha_transitoria(erro),
+        resposta_id,
+    )
+    try:
+        _encerrar(
+            fabrica,
+            resposta_id,
+            texto,
+            StatusDaMensagem.FALHOU,
+            CodigoDoStream.BANCO_OCUPADO,
+        )
+    except (DBAPIError, PoolEsgotadoError) as segundo:
+        if not e_falha_transitoria_do_banco(segundo):
+            raise
+        _LOG.warning(
+            "banco ocupado (%s) ao gravar a falha da resposta %s;"
+            " fica para o recolhimento de orfaos",
+            motivo_da_falha_transitoria(segundo),
+            resposta_id,
+        )
 
 
 def _validar_proposta(proposta: Proposta) -> DadosDaProposta | None:
@@ -896,8 +981,12 @@ def _completar(
         resposta.status = status
         resposta.error_code = motivo
         resposta.fallback_model = substituto
-        session.commit()
+        # O refresh vem antes do commit, na mesma conexao: depois do commit,
+        # ele pediria outra ao pool, que sob carga pode estar esgotado -- e o
+        # stream diria `banco_ocupado` sobre uma resposta ja gravada.
+        session.flush()
         session.refresh(resposta)
+        session.commit()
         return resposta
 
 

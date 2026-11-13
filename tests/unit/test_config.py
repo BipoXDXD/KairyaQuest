@@ -445,3 +445,42 @@ def test_o_erro_de_valor_invalido_nao_imprime_o_valor(
         Settings(_env_file=None)
     assert "db_port" in str(erro.value)
     assert canario not in str(erro.value)
+
+
+def test_padroes_dos_tetos_do_banco(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Os tetos da sessao do banco (ADR 0001): 5 s de trava, 15 s de comando e
+    60 s de transacao ociosa, em milissegundos, como o PostgreSQL os le."""
+    settings = _settings_do_arquivo(monkeypatch, tmp_path, "")
+    assert settings.db_lock_timeout_ms == 5_000
+    assert settings.db_statement_timeout_ms == 15_000
+    assert settings.db_idle_in_transaction_timeout_ms == 60_000
+
+
+@pytest.mark.parametrize("valor", ["0", "-1"])
+@pytest.mark.parametrize(
+    ("variavel", "campo"),
+    [
+        ("FOCUSQUEST_DB_LOCK_TIMEOUT_MS", "db_lock_timeout_ms"),
+        ("FOCUSQUEST_DB_STATEMENT_TIMEOUT_MS", "db_statement_timeout_ms"),
+        (
+            "FOCUSQUEST_DB_IDLE_IN_TRANSACTION_TIMEOUT_MS",
+            "db_idle_in_transaction_timeout_ms",
+        ),
+    ],
+)
+def test_tetos_do_banco_recusam_zero_e_negativo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    variavel: str,
+    campo: str,
+    valor: str,
+) -> None:
+    """Zero DESLIGA o teto no PostgreSQL: a regra e nunca ficar sem teto. O erro
+    nomeia o campo e nao imprime o valor recebido."""
+    with pytest.raises(ValidationError) as erro:
+        _settings_do_arquivo(monkeypatch, tmp_path, f"{variavel}={valor}\n")
+    (falha,) = erro.value.errors()
+    assert falha["loc"] == (campo,)
+    assert "input_value" not in str(erro.value)

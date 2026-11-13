@@ -144,7 +144,11 @@ export type PreStreamErrorCode =
  * no `CodigoDeErro` porque nao passam por handler HTTP.
  */
 export type StreamErrorCode =
-  'provedor_indisponivel' | 'tempo_esgotado' | 'proposta_invalida' | 'resposta_recusada'
+  | 'provedor_indisponivel'
+  | 'tempo_esgotado'
+  | 'proposta_invalida'
+  | 'resposta_recusada'
+  | 'banco_ocupado'
 
 /**
  * Os `code` de confirmar e recusar uma proposta (spec, "Confirmar e recusar").

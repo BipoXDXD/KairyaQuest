@@ -117,3 +117,24 @@ describe('PLAN_FAILURE_BY_CODE', () => {
     }
   })
 })
+
+// 503 `banco_ocupado` (issue #176): o banco cortou uma espera e a transacao foi
+// revertida. Chaves escritas por extenso, e nao importadas do modulo.
+const BUSY_ERROR = new ApiError('O servidor respondeu 503.', 503, 'banco_ocupado', {
+  retryAfterSeconds: 2,
+})
+const SERVER_BUSY = {
+  message: 'shared.apiError.serverBusy.message',
+  recovery: 'shared.apiError.serverBusy.recovery',
+}
+
+describe('describePlanFailure com 503 banco_ocupado', () => {
+  it('diz que o servidor esta ocupado, nos dois idiomas, sem acao fora do formulario', () => {
+    const failure = describePlanFailure(BUSY_ERROR, 'current')
+    expect(failure).toEqual({ ...SERVER_BUSY, action: 'none' })
+    expect(textOf(failure, 'pt-BR')).toBe(
+      'O servidor está ocupado agora. Tente de novo em alguns segundos.',
+    )
+    expect(textOf(failure, 'en')).toBe('The server is busy right now. Try again in a few seconds.')
+  })
+})

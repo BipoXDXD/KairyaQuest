@@ -31,6 +31,7 @@ reais. A avaliacao (`ProvedorAnthropic.avaliar`) le o stream pelo mesmo leitor
 e tem o mesmo teto (P-teto-stream-1, `docs/handoff/2026-11-11-teto-avaliar.md`).
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -45,6 +46,7 @@ from focusquest.modules.tutoring.service import FOLGA_DO_ORFAO
 RAIZ = Path(__file__).resolve().parents[2]
 CLIENTE = RAIZ / "frontend/src/shared/api/client.ts"
 NGINX = RAIZ / "docker/nginx.conf"
+ENV_DO_ALEMBIC = RAIZ / "alembic/env.py"
 
 # Julgamento, sem medida: o que sobra, depois do corte do proxy, para o navegador
 # receber a resposta (gravacao final e volta pela rede). E a mesma margem que o
@@ -259,3 +261,69 @@ def test_o_pool_do_alembic_continua_sem_pool_nenhum() -> None:
     engine = create_engine_from_url(_URL_SEM_BANCO, poolclass=NullPool)
 
     assert isinstance(engine.pool, NullPool)
+
+
+def _teto_do_banco_ms(campo: str) -> int:
+    padrao = Settings.model_fields[campo].default
+    assert isinstance(padrao, int), f"`Settings.{campo}` perdeu o padrao inteiro"
+    return padrao
+
+
+def test_o_teto_do_comando_no_banco_vence_antes_do_navegador() -> None:
+    # Regra do ADR 0001: teto do servidor < timeout do cliente. Com o
+    # `statement_timeout` acima dos 20 s do navegador, o 503 `banco_ocupado`
+    # chegaria depois de a tela ja ter mostrado um `ApiTimeoutError` sem `code`.
+    rota_mais_curta_ms = min(
+        _prazo_do_front("READ_TIMEOUT_MS"), _prazo_do_front("MUTATION_TIMEOUT_MS")
+    )
+
+    assert _teto_do_banco_ms("db_statement_timeout_ms") < rota_mais_curta_ms
+
+
+def test_trava_e_pool_cabem_na_rota_de_mutacao() -> None:
+    # A pior espera antes de a mutacao comecar a trabalhar: a fila do pool e,
+    # depois dela, a trava da linha. As duas juntas ainda devolvem o 503 com
+    # `code` antes de o navegador desistir.
+    pool = create_engine_from_url(_URL_SEM_BANCO).pool
+    assert isinstance(pool, QueuePool)
+    espera_ms = _teto_do_banco_ms("db_lock_timeout_ms") + pool.timeout() * 1000
+
+    assert espera_ms < _prazo_do_front("MUTATION_TIMEOUT_MS")
+
+
+def test_pool_e_comando_juntos_vencem_antes_do_navegador() -> None:
+    # A pior requisicao de UM comando: espera o pool ate o fim e depois roda
+    # ate o `statement_timeout`. Ainda assim o servidor desiste antes dos 20 s
+    # do navegador e o 503 `banco_ocupado` chega com `code`. Varios comandos
+    # lentos na mesma requisicao sao risco aceito no ADR 0001.
+    pool = create_engine_from_url(_URL_SEM_BANCO).pool
+    assert isinstance(pool, QueuePool)
+    rota_mais_curta_ms = min(
+        _prazo_do_front("READ_TIMEOUT_MS"), _prazo_do_front("MUTATION_TIMEOUT_MS")
+    )
+    espera_ms = pool.timeout() * 1000 + _teto_do_banco_ms("db_statement_timeout_ms")
+
+    assert espera_ms < rota_mais_curta_ms
+
+
+def _chamadas_de_criacao_da_engine(fonte: str) -> list[ast.Call]:
+    return [
+        no
+        for no in ast.walk(ast.parse(fonte))
+        if isinstance(no, ast.Call)
+        and isinstance(no.func, ast.Name)
+        and no.func.id == "create_engine_from_url"
+    ]
+
+
+def test_o_alembic_cria_a_engine_sem_tetos_de_sessao() -> None:
+    # ADR 0001: uma migracao longa nao pode ser cortada pelo `statement_timeout`.
+    # `**argumentos` esconderia um `limites`, entao tambem e recusado.
+    chamadas = _chamadas_de_criacao_da_engine(ENV_DO_ALEMBIC.read_text("utf-8"))
+
+    assert chamadas, "o `alembic/env.py` deixou de criar a engine pela fabrica"
+    for chamada in chamadas:
+        nomes = [argumento.arg for argumento in chamada.keywords]
+        assert "limites" not in nomes
+        assert None not in nomes, "`**argumentos` pode esconder `limites`"
+        assert len(chamada.args) <= 2, "`limites` posicional e o terceiro argumento"

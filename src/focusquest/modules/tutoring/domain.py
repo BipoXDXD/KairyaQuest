@@ -65,6 +65,10 @@ class CodigoDoStream(StrEnum):
     # classificadores de seguranca do provedor ou pelo proprio modelo. O
     # texto parcial e descartado.
     RESPOSTA_RECUSADA = "resposta_recusada"
+    # O banco cortou a gravacao final por um teto da sessao (ADR 0001) ou o
+    # pool nao entregou conexao, ja com o stream aberto (#177). Mesmo valor
+    # do `code` do 503 (`CodigoDeErro.BANCO_OCUPADO`); um teste confere.
+    BANCO_OCUPADO = "banco_ocupado"
 
 
 # O `error_code` de uma resposta `interrompida` porque um limite de tamanho a

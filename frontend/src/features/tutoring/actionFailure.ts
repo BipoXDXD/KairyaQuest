@@ -1,7 +1,7 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MessageKey } from '../../shared/i18n/catalog'
-import type { FailureText } from '../../shared/i18n/failureText'
+import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
 import type { ActionErrorCode, ActionRead } from './types'
 
 /**
@@ -162,6 +162,11 @@ export function describeActionFailure(
 ): ActionFailure {
   if (error instanceof ApiError && error.code !== null && isActionErrorCode(error.code)) {
     return ACTION_FAILURE_BY_CODE[error.code]
+  }
+  // Banco ocupado: a decisao nao foi gravada, e repetir e seguro.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'retry' }
   }
   // A abertura nomeia a acao e a causa quando ela e de transporte (`leadFor`); o
   // `recovery` segue dizendo que repetir e seguro.

@@ -1,6 +1,6 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
-import type { FailureText } from '../../shared/i18n/failureText'
+import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
 import type { MissionErrorCode } from './types'
 
 /**
@@ -116,6 +116,11 @@ function isMissionErrorCode(code: string): code is MissionErrorCode {
  * ao `ApiError`.
  */
 export function describeCompletionFailure(error: unknown): CompletionFailure {
+  // Banco ocupado: nada foi gravado, e o reenvio com a mesma chave e seguro.
+  const busy = serverBusyText(error)
+  if (busy !== null) {
+    return { ...busy, action: 'retry' }
+  }
   if (error instanceof ApiError && error.code !== null && isMissionErrorCode(error.code)) {
     return COMPLETION_FAILURE_BY_CODE[error.code]
   }
