@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MessageRead } from '../features/tutoring'
 import type { Mission } from '../shared/types/mission'
@@ -111,13 +111,14 @@ describe('Headquarters -- a jornada com o som desligado', () => {
         },
       },
     })
-    await screen.findByTestId('missions-list')
+    const list = await screen.findByTestId('missions-list')
     await screen.findByTestId('progress-level')
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: `Concluir a missão: ${avulsa.instructions}` }),
-    )
-    await screen.findByText('Missão concluída.')
+    // Escopado na lista, que so tem esta avulsa: o nome acessivel do botao e
+    // provado em MissionList.test.tsx, e calcula-lo na pagina inteira a cada
+    // poll e o que estourava o prazo sob carga.
+    fireEvent.click(await within(list).findByTestId('mission-complete'))
+    await within(list).findByText('Missão concluída.')
 
     const field = screen.getByLabelText('Sua mensagem para a Kairya')
     await waitFor(() => {
