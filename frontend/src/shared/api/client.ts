@@ -225,7 +225,33 @@ async function open(
  */
 async function send<T>(path: string, init: RequestInit, onErrorStatus?: () => void): Promise<T> {
   const response = await open(path, init, onErrorStatus)
-  return (await response.json()) as T
+  return (await readJsonBody(response)) as T
+}
+
+/**
+ * Le o corpo JSON de uma resposta de sucesso. A falha de LEITURA (a rede caiu
+ * no meio do corpo, o pedido foi abortado) vira `ApiError` `interrupted`, como
+ * no `postStream`: os cabecalhos chegaram, entao o `status` e o da resposta e
+ * o `code` e nulo. Sem isso, o `TypeError` cru do `fetch` escapava ate a tela,
+ * que so sabe mostrar `ApiError`.
+ *
+ * O `SyntaxError` de um corpo que chegou inteiro mas nao e JSON NAO e queda:
+ * e defeito de contrato, e segue como esta, para a tela o tratar como falha
+ * inesperada. O aborto pelo PRAZO continua saindo como prazo: o `sendWithin`
+ * so preserva os erros de status (`isErrorStatus`).
+ */
+async function readJsonBody(response: Response): Promise<unknown> {
+  try {
+    return (await response.json()) as unknown
+  } catch (cause) {
+    if (cause instanceof SyntaxError) {
+      throw cause
+    }
+    throw new ApiError('A resposta foi interrompida no caminho.', response.status, null, {
+      cause,
+      kind: 'interrupted',
+    })
+  }
 }
 
 /**
@@ -429,7 +455,7 @@ async function sendWithin<T>(
   try {
     return await send<T>(path, { ...init, signal: combined.signal }, rearmForErrorBody)
   } catch (cause) {
-    if (deadline.signal.aborted && !hasResponseStatus(cause)) {
+    if (deadline.signal.aborted && !isErrorStatus(cause)) {
       throw new ApiTimeoutError({ cause })
     }
     throw cause
@@ -483,9 +509,13 @@ function linkSignals(caller: AbortSignal, deadline: AbortSignal): LinkedSignal {
   }
 }
 
-/** Se a falha ja traz o status de uma resposta que chegou. */
-function hasResponseStatus(cause: unknown): boolean {
-  return cause instanceof ApiError && cause.status !== null
+/**
+ * Se a falha e um status de ERRO que ja chegou (`kind` `http`). So esse e fato
+ * que o prazo nao apaga: um 200 cujo corpo caiu no prazo e resultado
+ * desconhecido, e sai como prazo mesmo trazendo o status.
+ */
+function isErrorStatus(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.kind === 'http'
 }
 
 /** Um evento do stream SSE, com o `data` ja desserializado. */
