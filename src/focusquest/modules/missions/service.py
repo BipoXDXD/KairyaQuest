@@ -139,6 +139,12 @@ def criar_missao(
     da missao passaria a ser uma decisao do esquema, visivel so depois que o
     INSERT volta -- e `Mapped[MissionState]` promete um valor que o objeto
     ainda nao teria.
+
+    O `deadline` e normalizado para UTC aqui, pelo motivo do `reagendar_missao`:
+    com `expire_on_commit=False`, o 201 serializaria o offset que o cliente
+    mandou (`-03:00`), e a mesma missao relida do banco -- o GET e o reenvio
+    da `Idempotency-Key` -- sairia em `Z`. Com o instante ja em UTC, as
+    respostas saem byte a byte iguais.
     """
     missao = Mission(
         user_id=user_id,
@@ -147,7 +153,7 @@ def criar_missao(
         completion_criterion=completion_criterion,
         difficulty=difficulty,
         estimated_minutes=estimated_minutes,
-        deadline=deadline,
+        deadline=prazo_em_utc(deadline),
         state=MissionState.PENDENTE,
     )
     session.add(missao)

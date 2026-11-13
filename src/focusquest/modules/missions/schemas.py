@@ -106,8 +106,9 @@ def _instante_representavel(prazo: datetime) -> datetime:
     `Asia/Tokyo` e em `America/Sao_Paulo`; `tests/integration/
     test_sessao_em_utc.py`).
     """
-    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica;
-    # o valor devolvido e o ORIGINAL, com o offset que o cliente mandou.
+    # A recusa e a do dominio (`prazo_em_utc`), a mesma que o servico aplica.
+    # A borda devolve o valor ORIGINAL, com o offset do cliente; quem normaliza
+    # para UTC antes de gravar e o servico (`criar_missao`, reagendamento).
     prazo_em_utc(prazo)
     return prazo
 
@@ -128,12 +129,12 @@ class MissionCreate(BaseModel):
     422. O motivo e um defeito medido, nao purismo. A coluna e `timestamptz`,
     entao a leitura seguinte sai com fuso -- sempre com `Z`, porque
     `core/database.py` fixa a sessao do PostgreSQL em UTC. Com
-    `expire_on_commit=False`, o 201 serializa o objeto como ele CHEGOU no
-    pedido, com o offset que o cliente mandou. Aceitar naive fazia o mesmo
-    prazo sair em duas serializacoes diferentes -- `"...T10:00:00"` no 201 e
-    `"...T10:00:00Z"` no GET --, e em JavaScript `new Date("...T10:00:00")` e
-    hora LOCAL enquanto `new Date("...T10:00:00Z")` e UTC. O mesmo campo
-    viraria dois instantes.
+    `expire_on_commit=False`, o 201 serializa o objeto em memoria -- por isso
+    `criar_missao` normaliza o prazo para UTC antes de gravar. Aceitar naive
+    fazia o mesmo prazo sair em duas serializacoes diferentes --
+    `"...T10:00:00"` no 201 e `"...T10:00:00Z"` no GET --, e em JavaScript
+    `new Date("...T10:00:00")` e hora LOCAL enquanto
+    `new Date("...T10:00:00Z")` e UTC. O mesmo campo viraria dois instantes.
 
     A alternativa -- normalizar naive para UTC em silencio -- foi recusada: quem
     manda "10:00" sem dizer onde nao informou o instante, e assumir um fuso por
