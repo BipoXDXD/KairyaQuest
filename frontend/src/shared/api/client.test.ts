@@ -108,6 +108,42 @@ describe('client', () => {
       expect((erro as InstanceType<typeof ApiError>).status).toBeNull()
       expect((erro as Error).message).toBe('Não foi possível falar com o servidor.')
     })
+
+    it('o abort do chamador durante a leitura do corpo de erro mantem o status, com code nulo', async () => {
+      // Os cabecalhos do 503 chegaram; o chamador cancela com o corpo ainda a
+      // caminho. O status ja e fato (mesma regra do prazo do corpo): sai
+      // `ApiError(503)` sem `code`, nunca prazo nem rede fora.
+      const controller = new AbortController()
+      const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+        const response = new Response(null, { status: 503 })
+        vi.spyOn(response, 'json').mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        )
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const { ApiError, ApiTimeoutError, requestJson } = await loadClient()
+
+      const pending = failureOf(requestJson('/missions', controller.signal))
+      await vi.waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledOnce()
+      })
+      controller.abort()
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(ApiTimeoutError)
+      expect((erro as InstanceType<typeof ApiError>).status).toBe(503)
+      expect((erro as InstanceType<typeof ApiError>).code).toBeNull()
+      expect((erro as InstanceType<typeof ApiError>).kind).toBe('http')
+      expect((erro as InstanceType<typeof ApiError>).retryAfterSeconds).toBeNull()
+      expect((erro as Error).message).toBe('O servidor respondeu 503.')
+    })
   })
 
   describe('requestJson com prazo', () => {

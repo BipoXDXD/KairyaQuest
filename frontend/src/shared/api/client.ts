@@ -171,8 +171,10 @@ export class ApiTimeoutError extends ApiError {
  */
 async function readCode(response: Response): Promise<string | null> {
   const body: unknown = await response.json().catch(() => null)
-  const code = (body as { code?: unknown } | null)?.code
-  return typeof code === 'string' ? code : null
+  if (typeof body !== 'object' || body === null || !('code' in body)) {
+    return null
+  }
+  return typeof body.code === 'string' ? body.code : null
 }
 
 /**
