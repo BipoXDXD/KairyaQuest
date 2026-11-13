@@ -1547,10 +1547,35 @@ def test_bootstrap_que_falha_preserva_o_que_alguem_escreveu(
     assert (ledger / "nota.txt").read_text() == "nota\n"
     assert destino.as_posix() in repo.worktrees()
     assert repo.git("branch", "--list", "wt/novo") != ""
-    assert f"git worktree remove {destino}" in resultado.stderr
-    assert "git branch -D wt/novo" in resultado.stderr
+    principal = repo.principal
+    assert f"git -C {principal} worktree remove {destino}" in resultado.stderr
+    assert f"git -C {principal} branch -D wt/novo" in resultado.stderr
     assert str(ledger) in resultado.stderr
+    # O motivo e o do proprio git (que cita --force em qualquer idioma), e nao
+    # um palpite do script.
+    assert "--force" in resultado.stderr
     assert not _trava(repo).exists()
+
+
+def test_bootstrap_que_falha_mantem_o_ledger_vazio_se_o_worktree_fica(
+    repo: Repositorio,
+) -> None:
+    """Se o worktree fica, o ledger vazio tambem fica: apaga-lo deixaria o
+    `.superpowers/sdd` do worktree como link quebrado. Ele entra nos comandos
+    para terminar a mao, como a branch."""
+    repo.falhar_o_bootstrap("echo meu > rascunho.txt")
+    destino = repo.principal / ".claude/worktrees/novo"
+    ledger = repo.principal / ".superpowers/sdd/worktree-ledgers/novo"
+
+    resultado = repo.rodar("novo")
+
+    assert resultado.returncode != 0
+    assert destino.as_posix() in repo.worktrees()
+    assert ledger.is_dir()
+    assert list(ledger.iterdir()) == []
+    assert (destino / ".superpowers/sdd").resolve() == ledger.resolve()
+    assert (destino / ".superpowers/sdd").exists()
+    assert f"rmdir {ledger}" in resultado.stderr
 
 
 # ---------------------------------------------------------------------------

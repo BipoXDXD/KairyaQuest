@@ -976,21 +976,27 @@ Sem eufemismo:
   - **`make bootstrap` falhou:** o script desfaz worktree, branch `wt/<nome>`
     e ledger, e o mesmo nome volta a servir. O desfazer não apaga trabalho:
     `git worktree remove` roda **sem `--force`** e recusa se o worktree tiver
-    arquivo não rastreado ou alteração; a branch só sai se o worktree saiu; o
-    ledger sai com `rmdir`, só vazio. O que não sai fica, e a mensagem lista
-    os comandos para terminar à mão. Testado em
-    `test_bootstrap_que_falha_desfaz_worktree_branch_e_ledger` e
-    `test_bootstrap_que_falha_preserva_o_que_alguem_escreveu`.
+    arquivo não rastreado ou alteração (ou por outra causa, como worktree
+    travado ou permissão; a mensagem repassa o motivo dado pelo git). A
+    branch e o ledger só saem se o worktree saiu, e o ledger só sai vazio
+    (`rmdir`); um worktree que fica mantém o ledger para o
+    `.superpowers/sdd` dele não virar link quebrado. O que não sai fica, e a
+    mensagem lista os comandos para terminar à mão, todos com
+    `git -C <principal>`. Testado em
+    `test_bootstrap_que_falha_desfaz_worktree_branch_e_ledger`,
+    `test_bootstrap_que_falha_preserva_o_que_alguem_escreveu` e
+    `test_bootstrap_que_falha_mantem_o_ledger_vazio_se_o_worktree_fica`.
   - **`.env` já existente no destino, `.env` que não pôde ser escrito, ou
     scratch `.superpowers/sdd` trazido pelo checkout:** o worktree e a branch
     **ficam** (o ledger ainda não existe), de propósito — num deles há dados
     que o script não escreveu e não deve apagar. A mensagem diz que o
     bootstrap não rodou; para liberar o nome, confira o destino e rode
-    `git worktree remove <destino>` e `git branch -D wt/<nome>`.
+    `git -C <principal> worktree remove <destino>` e
+    `git -C <principal> branch -D wt/<nome>`.
   - **Limites:** (1) `SIGKILL` (ou queda da máquina) não executa `trap`
     nenhum: a trava `novo-worktree.lock` e o que já tiver sido criado ficam, e
-    a limpeza é manual (`rmdir` da trava, mais os dois comandos acima e o
-    `rmdir` do ledger); um Ctrl-C durante o `make bootstrap` também não
+    a limpeza é manual (`rmdir` da trava, mais os dois comandos `git -C
+    <principal>` acima e o `rmdir` do ledger); um Ctrl-C durante o `make bootstrap` também não
     desfaz nada. (2) Arquivos **ignorados** pelo git (`.venv`,
     `node_modules`, `.env`) saem junto no `git worktree remove`, inclusive os
     que outra ferramenta tenha criado no worktree recém-nascido entre a

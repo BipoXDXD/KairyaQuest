@@ -61,3 +61,12 @@ inteiro passa. O resultado do `make check` está no PR.
 **Pendências.** Nenhuma nova. Os limites de limpeza documentados (SIGKILL,
 Ctrl-C no bootstrap, ignorados de terceiros) continuam sem automação, por
 decisão registrada acima.
+
+**Ajustes da revisão do PR.** O motivo de um `git worktree remove` recusado
+passa a ser o do próprio git, que a mensagem repassa; antes o script afirmava
+sempre "não rastreado". O ledger só sai se o worktree saiu, como a branch: um
+worktree que fica mantém o ledger, e o `.superpowers/sdd` dele não vira link
+quebrado. Os comandos de limpeza manual (script e `docs/QUALITY.md` §6) usam
+`git -C <principal>`. Os comentários do script deixaram de citar rótulos
+internos de pendência. Os testes novos e alterados foram vistos reprovando
+antes da correção.
