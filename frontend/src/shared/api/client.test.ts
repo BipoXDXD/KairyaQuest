@@ -144,6 +144,45 @@ describe('client', () => {
       expect((erro as InstanceType<typeof ApiError>).retryAfterSeconds).toBeNull()
       expect((erro as Error).message).toBe('O servidor respondeu 503.')
     })
+
+    it('a queda da rede no meio do corpo de um 200 vira ApiError interrupted, com a causa', async () => {
+      // Os cabecalhos do 200 chegaram e o corpo comecou a chegar; a rede cai
+      // no meio. O `json()` rejeita com o TypeError cru do fetch, que nenhuma
+      // tela sabe mostrar: tem de sair como a interrupcao do stream.
+      const stream = controlledStream()
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(stream.response))
+      const { ApiError, requestJson } = await loadClient()
+      const queda = new TypeError('network error')
+
+      const pending = failureOf(requestJson('/progress'))
+      stream.push('{"level": 2, "xp_')
+      stream.fail(queda)
+      const erro = await pending
+
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).toMatchObject({
+        kind: 'interrupted',
+        status: 200,
+        code: null,
+        message: 'A resposta foi interrompida no caminho.',
+      })
+      expect((erro as Error).cause).toBe(queda)
+    })
+
+    it('um 200 cujo corpo chegou inteiro mas nao e JSON nao e queda: segue SyntaxError', async () => {
+      // Defeito de contrato, nao de rede: as telas o tratam como falha
+      // inesperada, e nao podem dizer "a conexao caiu".
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response('<html>proxy</html>', { status: 200 })),
+      )
+      const { ApiError, requestJson } = await loadClient()
+
+      const erro = await failureOf(requestJson('/progress'))
+
+      expect(erro).toBeInstanceOf(SyntaxError)
+      expect(erro).not.toBeInstanceOf(ApiError)
+    })
   })
 
   describe('requestJson com prazo', () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestJson } from '../../shared/api/client'
 import { loadFailureFor, type LoadFailure } from '../../shared/i18n/failureText'
 import { useRefreshOnReturn } from '../../shared/hooks/useRefreshOnReturn'
+import { parseProgress } from './parseProgress'
 import type { Progress } from './types'
 
 /**
@@ -63,7 +64,8 @@ export function useProgress(): UseProgressResult {
   useEffect(() => {
     const id = (requestId.current += 1)
     const controller = new AbortController()
-    requestJson<Progress>('/progress', controller.signal)
+    requestJson<unknown>('/progress', controller.signal)
+      .then(parseProgress)
       .then((progress) => {
         if (requestId.current !== id) {
           return
@@ -83,7 +85,8 @@ export function useProgress(): UseProgressResult {
 
   const refresh = useCallback(() => {
     const id = (requestId.current += 1)
-    requestJson<Progress>('/progress')
+    requestJson<unknown>('/progress')
+      .then(parseProgress)
       .then((progress) => {
         if (requestId.current !== id) {
           return
