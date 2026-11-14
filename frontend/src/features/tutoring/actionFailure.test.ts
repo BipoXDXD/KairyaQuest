@@ -21,7 +21,7 @@ const INVALIDATED = {
 const ESTIMATE_OUT_OF_BOUNDS = {
   message: 'tutoring.actionFailure.estimateOutOfBounds.message',
   recovery: 'tutoring.actionFailure.askNewProposal',
-  vars: { max: 1440 },
+  vars: { min: 1, max: 1440 },
 }
 
 const DEADLINE_OUT_OF_BOUNDS = {

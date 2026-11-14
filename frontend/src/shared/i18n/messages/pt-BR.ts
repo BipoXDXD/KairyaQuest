@@ -410,7 +410,7 @@ export const ptBR = {
   'tutoring.actionFailure.rescheduleInvalid.message':
     'A missão mudou desde a proposta e não pôde ser reagendada.',
   'tutoring.actionFailure.estimateOutOfBounds.message':
-    'A estimativa desta proposta precisa ficar entre 1 e {max} minutos.',
+    'A estimativa desta proposta precisa ficar entre {min} e {max} minutos.',
   'tutoring.actionFailure.deadlineOutOfBounds.message':
     'O prazo desta proposta passa de {days} dias a partir de agora.',
   'tutoring.actionFailure.unconfirmedCreate.message': 'Não foi possível confirmar a missão.',

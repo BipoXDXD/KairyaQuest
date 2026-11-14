@@ -21,6 +21,7 @@ from focusquest.modules.missions.schemas import (
 )
 from focusquest.modules.missions.service import (
     ESTIMATIVA_MAXIMA_DA_AVULSA,
+    ESTIMATIVA_MINIMA_DA_AVULSA,
     HORIZONTE_DO_PRAZO_DA_AVULSA,
 )
 
@@ -49,6 +50,7 @@ def _ler_constante(caminho: Path, nome: str) -> int:
     ("arquivo", "nome", "valor_do_back"),
     [
         (TIPOS_DA_MISSAO, "MAX_DIFFICULTY", DIFICULDADE_MAXIMA),
+        (TIPOS_DA_MISSAO, "MIN_ESTIMATE_MINUTES", ESTIMATIVA_MINIMA_DA_AVULSA),
         (TIPOS_DA_MISSAO, "MAX_ESTIMATE_MINUTES", ESTIMATIVA_MAXIMA_DA_AVULSA),
         (TIPOS_DA_MISSAO, "MAX_DEADLINE_DAYS", HORIZONTE_DO_PRAZO_DA_AVULSA.days),
         (RASCUNHO_DO_PLANO, "MIN_DIFFICULTY", DIFICULDADE_MINIMA),

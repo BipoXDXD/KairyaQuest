@@ -53,12 +53,13 @@ export const DAYS_PER_MILESTONE = 7
 export const MAX_DIFFICULTY = 5
 
 /**
- * Os limites da missao avulsa, espelhos de `ESTIMATIVA_MAXIMA_DA_AVULSA` e
- * `HORIZONTE_DO_PRAZO_DA_AVULSA` (src/focusquest/modules/missions/service.py),
+ * Os limites da missao avulsa, espelhos de `ESTIMATIVA_MINIMA_DA_AVULSA`,
+ * `ESTIMATIVA_MAXIMA_DA_AVULSA` e `HORIZONTE_DO_PRAZO_DA_AVULSA` (src/focusquest/modules/missions/service.py),
  * presos pelo `tests/unit/test_paridade_dos_limites.py`. O servidor e quem
  * decide; aqui eles evitam um envio que voltaria recusado e entram nos textos
  * do catalogo, que nao escrevem o numero.
  */
+export const MIN_ESTIMATE_MINUTES = 1
 export const MAX_ESTIMATE_MINUTES = 1440
 export const MAX_DEADLINE_DAYS = 365
 

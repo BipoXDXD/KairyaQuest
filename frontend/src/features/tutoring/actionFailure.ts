@@ -2,7 +2,11 @@ import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
-import { MAX_DEADLINE_DAYS, MAX_ESTIMATE_MINUTES } from '../../shared/types/mission'
+import {
+  MAX_DEADLINE_DAYS,
+  MAX_ESTIMATE_MINUTES,
+  MIN_ESTIMATE_MINUTES,
+} from '../../shared/types/mission'
 import type { ActionErrorCode, ActionRead } from './types'
 
 /**
@@ -23,8 +27,9 @@ import type { ActionErrorCode, ActionRead } from './types'
  *   GRAVOU a acao como `falhou` antes de responder, e o cartao passa a esse
  *   estado, como no `expired`.
  * - `out-of-bounds`: a proposta saiu dos limites da avulsa (estimativa fora de
- *   `MAX_ESTIMATE_MINUTES`, prazo alem de `MAX_DEADLINE_DAYS`; pendencia 26); o backend GRAVOU
- *   a acao como `falhou` com esse code antes do 422, como no `expired`.
+ *   `MIN_ESTIMATE_MINUTES` a `MAX_ESTIMATE_MINUTES`, prazo alem de `MAX_DEADLINE_DAYS`;
+ *   pendencia 26); o backend GRAVOU a acao como `falhou` com esse code antes do 422,
+ *   como no `expired`.
  */
 export type DecisionAction =
   'retry' | 'retry-with-new-operation' | 'refresh' | 'expired' | 'invalidated' | 'out-of-bounds'
@@ -62,7 +67,7 @@ export const ACTION_FAILURE_BY_CODE: Readonly<Record<ActionErrorCode, ActionFail
   estimativa_fora_do_limite: {
     message: 'tutoring.actionFailure.estimateOutOfBounds.message',
     recovery: 'tutoring.actionFailure.askNewProposal',
-    vars: { max: MAX_ESTIMATE_MINUTES },
+    vars: { min: MIN_ESTIMATE_MINUTES, max: MAX_ESTIMATE_MINUTES },
     action: 'out-of-bounds',
   },
   prazo_fora_do_limite: {
