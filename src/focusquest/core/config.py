@@ -114,11 +114,10 @@ class Settings(ConfiguracaoDeLog):
     # de orcamento da API, nao regra do produto. O reenvio de uma pergunta
     # interrompida tambem conta, porque tambem e pago.
     tutor_daily_turn_limit: int = Field(default=60, ge=1)
-    # O fallback do lado do servidor para a recusa (pendencia 174, beta): a API
-    # refaz a requisicao recusada no modelo que a Anthropic recomenda para a
-    # categoria da recusa. Desligar com FOCUSQUEST_TUTOR_FALLBACK=false se o
-    # beta mudar e a API passar a recusar a requisicao inteira.
-    tutor_fallback: bool = True
+    # O fallback do lado do servidor para a recusa (beta): a API refaz a
+    # requisicao recusada em outro modelo, com custo proprio. Desligado por
+    # padrao; quem o quiser liga de proposito com FOCUSQUEST_TUTOR_FALLBACK=true.
+    tutor_fallback: bool = False
     # `output_config.effort` (os modelos 5.x recusam `temperature` e
     # `budget_tokens`): chat curto em `low`, a avaliacao da rubrica em `medium`.
     tutor_effort: Literal["low", "medium", "high"] = "low"

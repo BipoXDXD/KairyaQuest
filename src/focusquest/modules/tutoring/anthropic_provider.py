@@ -106,7 +106,7 @@ FILA_DO_POOL_SEGUNDOS = 1.0
 # `fallbacks="default"` so e aceito com `2026-07-01`; o `2026-06-01` aceita so a
 # lista explicita, e qualquer outra data da 400 (documentacao "Refusals and
 # fallback"). Um 400 aqui derruba TODA pergunta como `provedor_indisponivel`:
-# a saida e `FOCUSQUEST_TUTOR_FALLBACK=false`.
+# a saida e deixar `FOCUSQUEST_TUTOR_FALLBACK` desligado, que e o padrao.
 BETA_DO_FALLBACK = "server-side-fallback-2026-07-01"
 
 # Teto de saida da AVALIACAO, proprio e maior que o do chat (1024): um

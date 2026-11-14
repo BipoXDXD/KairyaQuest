@@ -15,7 +15,10 @@ from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import CodigoDeErro, app
 from focusquest.modules.missions.schemas import TAMANHO_MAXIMO_DO_IDENTIFICADOR
-from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.anthropic_provider import (
+    BETA_DO_FALLBACK,
+    ProvedorAnthropic,
+)
 from focusquest.modules.tutoring.dependencies import get_tutoria
 from focusquest.modules.tutoring.domain import (
     PRAZO_EXPIRADO,
@@ -601,3 +604,33 @@ def test_get_tutoria_leva_o_fallback_configurado(
         )
     )
     assert ("fallbacks" in falso.recebidas[0].corpo) is pede
+
+
+def test_get_tutoria_sem_a_variavel_nao_pede_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    falso: ServidorAnthropicFalso,
+) -> None:
+    """Sem `FOCUSQUEST_TUTOR_FALLBACK`, a requisicao sai sem `fallbacks` e sem
+    o beta: refazer a pergunta recusada em outro modelo e custo a mais, e so
+    acontece quando a configuracao o liga de proposito."""
+    import focusquest.modules.tutoring.dependencies as dependencias
+
+    monkeypatch.setattr(dependencias, "_tutoria", None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/d")
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:1/t")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_BASE_URL", falso.url)
+    monkeypatch.delenv("FOCUSQUEST_TUTOR_FALLBACK", raising=False)
+    falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
+    tutoria = dependencias.get_tutoria()
+    assert tutoria is not None
+    list(
+        tutoria.provedor.responder(
+            Turno(sistema="S", mensagens=(MensagemDoTurno("user", "oi"),))
+        )
+    )
+    (recebida,) = falso.recebidas
+    assert "fallbacks" not in recebida.corpo
+    assert BETA_DO_FALLBACK not in recebida.cabecalhos.get("anthropic-beta", "")

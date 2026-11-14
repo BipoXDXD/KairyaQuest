@@ -6,11 +6,13 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from anthropic import omit
 
 import focusquest.modules.tutoring.dependencies as dependencias
 from focusquest.core.config import Settings
-from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
+from focusquest.modules.tutoring.anthropic_provider import (
+    BETA_DO_FALLBACK,
+    ProvedorAnthropic,
+)
 from unit.anthropic_falso import FERRAMENTA, TURNO, instalar_cliente_falso
 
 
@@ -98,13 +100,13 @@ def test_o_teto_de_parede_do_stream_vem_de_tutor_timeout_seconds(
 def test_get_tutoria_repassa_esforco_e_fallback_ao_pedido(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Valores fora do padrao: um `esforco="low"` ou `fallback=True` fixos na
+    """Valores fora do padrao: um `esforco="low"` ou `fallback=False` fixos na
     fiacao passariam em todos os outros testes, porque coincidem com o padrao."""
     monkeypatch.setenv("FOCUSQUEST_ANTHROPIC_API_KEY", "sk-ant-ficticia")
     monkeypatch.setenv("FOCUSQUEST_TUTOR_MODEL", "claude-modelo-qualquer")
     monkeypatch.setenv("FOCUSQUEST_TUTOR_EFFORT", "high")
     monkeypatch.setenv("FOCUSQUEST_EVALUATION_EFFORT", "low")
-    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", "false")
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_FALLBACK", "true")
     criados = instalar_cliente_falso(monkeypatch)
     tutoria = dependencias.get_tutoria()
     assert tutoria is not None
@@ -115,7 +117,6 @@ def test_get_tutoria_repassa_esforco_e_fallback_ao_pedido(
     (chat, avaliacao) = criados[0].pedidos
     assert chat["model"] == "claude-modelo-qualquer"
     assert chat["output_config"] == {"effort": "high"}
-    assert {"fallbacks", "betas"}.isdisjoint(
-        chave for chave, valor in chat.items() if valor is not omit
-    )
+    assert chat["fallbacks"] == "default"
+    assert chat["betas"] == [BETA_DO_FALLBACK]
     assert avaliacao["output_config"] == {"effort": "low"}
