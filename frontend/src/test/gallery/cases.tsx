@@ -8,6 +8,7 @@ import {
   FieldCase,
   IconButtonCase,
   LanguageSwitcherCase,
+  MissionListCase,
   NavTabsCase,
   PanelCase,
   ProgressBarCase,
@@ -100,4 +101,12 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
     <EvidenceFormCase draft={{ ...EVIDENCIA, link: 'nao-e-link' }} />
   ),
   'evidence-form-retry': () => <EvidenceFormCase draft={EVIDENCIA} retryPending />,
+  // O quadro busca as missões na montagem: o spec intercepta o GET antes de
+  // abrir a página, e os estados em voo e as falhas vêm de um clique.
+  'mission-board': () => <MissionListCase />,
+  'mission-starting': () => <MissionListCase />,
+  'mission-start-failed': () => <MissionListCase />,
+  'mission-completing': () => <MissionListCase />,
+  'mission-completion-failed': () => <MissionListCase />,
+  'mission-completed-reward': () => <MissionListCase />,
 }

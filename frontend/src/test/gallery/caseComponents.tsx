@@ -1,7 +1,8 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { WeekPlanEntry, WeekPlanForm } from '../../features/campaigns'
 import { KairyaPresenceProvider } from '../../features/kairya'
-import { EvidenceForm, type EvidenceDraft } from '../../features/missions'
+import { EvidenceForm, MissionList, type EvidenceDraft } from '../../features/missions'
+import { AudioProvider } from '../../shared/audio/AudioProvider'
 import {
   RescheduleProposalCard,
   useActionKeys,
@@ -312,5 +313,21 @@ export function EvidenceFormCase({
   const [draft, setDraft] = useState(initial)
   return (
     <EvidenceForm draft={draft} onChange={setDraft} disabled={false} retryPending={retryPending} />
+  )
+}
+
+/**
+ * O quadro de missões inteiro, como o Quartel-General o monta. As missões vêm
+ * do `GET /api/missions` que o spec intercepta antes de abrir a página; os
+ * estados em voo e as falhas, de um clique com o POST interceptado.
+ */
+export function MissionListCase() {
+  // `storage={null}`: som desligado e nenhum arquivo de audio baixado.
+  return (
+    <AudioProvider storage={null}>
+      <KairyaPresenceProvider greeting={false}>
+        <MissionList />
+      </KairyaPresenceProvider>
+    </AudioProvider>
   )
 }
