@@ -41,13 +41,7 @@ const PANELS: readonly Panel[] = [
   {
     selector: '.rpg-tutor',
     roots: [`${TUTORING}TutorPanel.tsx`],
-    files: [
-      `${TUTORING}TutorPanel.tsx`,
-      `${TUTORING}TutorConversation.tsx`,
-      `${TUTORING}ProposalCard.tsx`,
-      `${TUTORING}RescheduleProposalCard.tsx`,
-      `${TUTORING}DecisionControls.tsx`,
-    ],
+    files: [`${TUTORING}TutorPanel.tsx`, `${TUTORING}TutorConversation.tsx`],
   },
 ]
 
@@ -55,11 +49,9 @@ const PANELS: readonly Panel[] = [
 // precisa ser visto para achar ou operar o componente, e estas não são isso.
 // Escapar daqui é decisão escrita, por arquivo; borda nova é medida.
 const DECORATIVE_BORDERS: Readonly<Record<string, readonly string[]>> = {
-  // `border-slate-800`: divisória entre o quadro e a coluna da Kairya, só no
-  // desktop. `border-slate-600`: borda do botão de recolher a conversa (2,1:1);
-  // o botão é identificado pelo rótulo e pelo glifo, então a borda não é o
-  // indicador essencial do componente.
-  'src/features/tutoring/TutorPanel.tsx': ['border-slate-800', 'border-slate-600'],
+  // `border-border-subtle`: contorno da bolha da Kairya. A bolha não é
+  // controle; o autor escrito em cada uma é o que a identifica.
+  'src/features/tutoring/TutorConversation.tsx': ['border-border-subtle'],
 }
 
 const source = (path: string): PanelSource => ({ path, text: readSource(path) })

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { FormEvent } from 'react'
+import { createRef, type FormEvent } from 'react'
 import { expect, test, vi } from 'vitest'
 import { Button } from './Button'
 
@@ -99,4 +99,10 @@ test('cada variante tem a classe da pirâmide (sólido, contorno, link, perigo)'
   expect(screen.getByRole('button', { name: 'B' })).toHaveClass('border-border-strong')
   expect(screen.getByRole('button', { name: 'C' })).toHaveClass('hover:underline')
   expect(screen.getByRole('button', { name: 'D' })).toHaveClass('bg-feedback-danger')
+})
+
+test('ref aponta para o <button>: quem devolve o foco ao botão não precisa de id', () => {
+  const ref = createRef<HTMLButtonElement>()
+  render(<Button ref={ref}>Salvar</Button>)
+  expect(ref.current).toBe(screen.getByRole('button', { name: 'Salvar' }))
 })

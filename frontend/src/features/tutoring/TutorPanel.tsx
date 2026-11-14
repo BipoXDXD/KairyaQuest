@@ -10,6 +10,7 @@ import { useTutorStatus } from './useTutorStatus'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useAudio } from '../../shared/audio/useAudio'
 import { useT } from '../../shared/i18n/useT'
+import { Button } from '../../shared/ui'
 import { KairyaFace, useKairya } from '../kairya'
 import { useTutorPresence } from './useTutorPresence'
 
@@ -261,7 +262,7 @@ export function TutorPanel({
       ref={panel}
       aria-label={t('tutoring.name')}
       data-testid="tutor-panel"
-      className="rpg-tutor lg:border-l lg:border-slate-800"
+      className="rpg-tutor lg:border-l"
     >
       <p role="status" data-testid="tutor-live" className="sr-only">
         {live === null ? '' : t(live)}
@@ -279,14 +280,11 @@ export function TutorPanel({
           >
             {desktopOpen && (
               <div className="flex-1">
-                <h2 className="tutor-name text-lg font-semibold text-slate-50">
-                  {t('tutoring.name')}
-                </h2>
-                <p className="text-xs text-slate-400">{t('tutoring.panel.subtitle')}</p>
+                <h2 className="tutor-name">{t('tutoring.name')}</h2>
+                <p className="text-xs text-text-muted">{t('tutoring.panel.subtitle')}</p>
               </div>
             )}
-            <button
-              type="button"
+            <Button
               ref={desktopToggle}
               data-testid="tutor-panel-toggle"
               aria-label={toggleLabel}
@@ -294,10 +292,9 @@ export function TutorPanel({
               aria-expanded={desktopOpen}
               aria-controls="tutor-panel-body"
               onClick={toggleDesktop}
-              className={`rounded border border-slate-600 text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ${desktopOpen ? 'px-2 py-1 text-xs' : 'flex h-11 w-11 items-center justify-center text-xl'}`}
             >
               {desktopOpen ? toggleLabel : <span aria-hidden="true">›</span>}
-            </button>
+            </Button>
           </header>
           {desktopOpen && (
             <div id="tutor-panel-body" className="flex min-h-0 flex-1 flex-col">
@@ -308,24 +305,25 @@ export function TutorPanel({
       ) : (
         <div key="mobile" ref={captureLayout}>
           {!sheetOpen && (
-            <button
-              ref={openButton}
-              type="button"
-              data-testid="tutor-sheet-open"
-              aria-expanded={false}
-              aria-controls="tutor-sheet"
-              onClick={openSheet}
-              className="fixed right-4 bottom-4 z-20 flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-            >
-              <Portrait scene={false} />
-              {t('tutoring.panel.openSheet')}
-            </button>
+            <div className="fixed right-4 bottom-4 z-20">
+              <Button
+                ref={openButton}
+                variant="primary"
+                data-testid="tutor-sheet-open"
+                aria-expanded={false}
+                aria-controls="tutor-sheet"
+                onClick={openSheet}
+              >
+                <Portrait scene={false} />
+                {t('tutoring.panel.openSheet')}
+              </Button>
+            </div>
           )}
           {sheetOpen && (
             <>
               <div
                 aria-hidden="true"
-                className="fixed inset-0 z-30 bg-black/60"
+                className="fixed inset-0 z-30 bg-bg-canvas/80"
                 onClick={closeSheet}
               />
               <div
@@ -335,22 +333,16 @@ export function TutorPanel({
                 aria-labelledby="tutor-sheet-title"
                 data-testid="tutor-sheet"
                 onKeyDown={onSheetKeyDown}
-                className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85dvh] flex-col gap-3 rounded-t-2xl bg-slate-950 p-4"
+                className="tutor-sheet fixed inset-x-0 bottom-0 z-40 flex flex-col gap-3 rounded-t-ui border-t border-border-strong bg-bg-canvas p-4"
               >
                 <header className="flex items-center gap-3">
                   <Portrait scene={false} />
-                  <h2 id="tutor-sheet-title" className="flex-1 text-lg font-semibold text-slate-50">
+                  <h2 id="tutor-sheet-title" className="flex-1 text-lg text-text-primary">
                     {t('tutoring.name')}
                   </h2>
-                  <button
-                    ref={sheetClose}
-                    type="button"
-                    data-testid="tutor-sheet-close"
-                    onClick={closeSheet}
-                    className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-                  >
+                  <Button ref={sheetClose} data-testid="tutor-sheet-close" onClick={closeSheet}>
                     {t('tutoring.panel.closeSheet')}
-                  </button>
+                  </Button>
                 </header>
                 {body}
               </div>

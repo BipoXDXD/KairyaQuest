@@ -95,6 +95,11 @@
   background: #0b1522;
 }
 
+.tutor-sheet {
+  /* A folha nunca cobre a tela inteira: o topo da página continua à vista. */
+  max-height: 85dvh;
+}
+
 .tutor-conversation form {
   padding-top: 8px;
 }

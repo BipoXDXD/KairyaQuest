@@ -86,9 +86,7 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
       </p>
       <details className="mt-3 border-t border-border-subtle pt-3">
         <summary className="min-h-6 w-fit cursor-pointer rounded-ui text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">
-          <h3 className="inline text-sm text-action-primary">
-            {t('progression.achievements.title')}
-          </h3>
+          <h3 className="inline text-sm">{t('progression.achievements.title')}</h3>
         </summary>
         <ul role="list" className="mt-3 grid gap-2 sm:grid-cols-2">
           {progress.achievements.map((a) => (
