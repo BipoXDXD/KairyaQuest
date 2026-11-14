@@ -1788,7 +1788,8 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       await screen.findByTestId('missions-list')
       const regiao = within(card(7)).getByTestId('mission-start-status')
       expect(regiao).toHaveAttribute('role', 'status')
-      expect(regiao).toBeEmptyDOMElement()
+      // O texto anunciado, e nao o DOM: a `StatusLine` guarda o icone decorativo.
+      expect(regiao.textContent).toBe('')
     })
 
     it('em voo diz "Iniciando…" desabilitado; no sucesso anuncia, mostra "Em andamento" e "Iniciada em"', async () => {
@@ -2032,7 +2033,8 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       await screen.findByTestId('missions-list')
       const regiao = within(card(7)).getByTestId('mission-reschedule-status')
       expect(regiao).toHaveAttribute('role', 'status')
-      expect(regiao).toBeEmptyDOMElement()
+      // O texto anunciado, e nao o DOM: a `StatusLine` guarda o icone decorativo.
+      expect(regiao.textContent).toBe('')
       preencherReagendamento(7, '2026-10-05T18:00', 'Falta de tempo')
       const salvar = within(card(7)).getByTestId('reschedule-submit')
       salvar.focus()
@@ -2605,7 +2607,7 @@ describe('MissionList -- iniciar, reagendar e historico de prazos (incremento F)
       })
       expect(originalCard).not.toBeInTheDocument()
       expect(within(card(7)).queryByTestId('mission-start-error')).not.toBeInTheDocument()
-      expect(within(card(7)).getByTestId('mission-start-status')).toBeEmptyDOMElement()
+      expect(within(card(7)).getByTestId('mission-start-status').textContent).toBe('')
       const retry = within(card(7)).getByRole('button', {
         name: `Tentar de novo a missão: ${pendente.instructions}`,
       })

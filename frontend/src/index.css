@@ -25,8 +25,6 @@
 /* Apresentação legada das features ainda não migradas (Tarefas 4.7–4.9).
    O shell e os cabeçalhos das áreas já vivem em tokens e componentes. */
 .rpg-progress,
-.rpg-cycle,
-.rpg-mission-card,
 .rpg-trail-card {
   border: 1px solid #54616f;
   border-radius: var(--radius-ui);
@@ -36,8 +34,7 @@
     0 8px 25px #0002;
 }
 
-.rpg-progress,
-.rpg-cycle {
+.rpg-progress {
   padding: 20px;
   margin-bottom: calc(var(--spacing) * 6);
 }
@@ -104,21 +101,6 @@
   outline: 2px solid var(--color-feedback-success);
   outline-offset: 4px;
   border-radius: 3px;
-}
-
-.rpg-mission-card {
-  padding: 20px;
-}
-
-.rpg-mission-card > dl {
-  padding-block: 12px;
-  border-block: 1px solid #405061;
-}
-
-.rpg-mission-state {
-  background: #12392d;
-  border-color: #43826c;
-  color: #a4edc9;
 }
 
 .rpg-trail-card {
@@ -250,13 +232,7 @@
 
 @media (max-width: 639px) {
   .rpg-progress,
-  .rpg-cycle,
-  .rpg-mission-card,
   .rpg-trail-card {
     padding: 16px;
-  }
-
-  .rpg-mission-card > div:first-child {
-    flex-wrap: wrap;
   }
 }

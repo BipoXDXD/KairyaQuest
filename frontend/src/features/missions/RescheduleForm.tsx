@@ -12,20 +12,7 @@ import type { OpenReschedule, RescheduleDraft } from './types'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
-
-const TOGGLE_CLASS =
-  'rounded text-sm font-medium text-emerald-200 underline-offset-2 hover:underline ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none'
-
-const FIELD_CLASS =
-  'rounded border border-slate-500 bg-slate-900 p-2 text-sm text-slate-100 ' +
-  'focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none ' +
-  'disabled:opacity-60'
-
-const SUBMIT_CLASS =
-  'self-start rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+import { Button, Field } from '../../shared/ui'
 
 /** A ordem dos motivos na tela: a do README §5. */
 const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_de_prioridade']
@@ -163,10 +150,10 @@ export function RescheduleForm({
       onSave(null)
     }
   }, [onSave])
-  const toggleRef = useRef<HTMLButtonElement>(null)
   const id = useId()
+  // O `Button` nao recebe `ref`: o foco volta ao disclosure pelo id dele.
+  const toggleId = `${id}-toggle`
   const regionId = `${id}-region`
-  const fieldId = `${id}-deadline`
   const blockedId = `${id}-blocked`
   const noticeId = `${id}-retry-notice`
 
@@ -176,9 +163,9 @@ export function RescheduleForm({
   const closedBySuccess = open !== null && !expanded
   useEffect(() => {
     if (closedBySuccess && document.activeElement === document.body) {
-      toggleRef.current?.focus({ preventScroll: true })
+      document.getElementById(toggleId)?.focus({ preventScroll: true })
     }
-  }, [closedBySuccess])
+  }, [closedBySuccess, toggleId])
 
   const draft: RescheduleDraft = current?.draft ?? { civil: '', reason: null }
   const bounds = deadlineWindow(current?.openedAtMs ?? 0)
@@ -188,9 +175,9 @@ export function RescheduleForm({
 
   return (
     <div className="mt-3">
-      <button
-        ref={toggleRef}
-        type="button"
+      <Button
+        id={toggleId}
+        variant="tertiary"
         data-testid="reschedule-toggle"
         aria-expanded={expanded}
         aria-controls={regionId}
@@ -210,35 +197,37 @@ export function RescheduleForm({
             },
           })
         }}
-        className={TOGGLE_CLASS}
       >
         {t('missions.reschedule.toggle')}
-      </button>
+      </Button>
       <div id={regionId} className="mt-2 flex flex-col gap-2">
         {current !== null && (
           <>
-            <label htmlFor={fieldId} className="text-sm font-medium text-slate-200">
-              {t('missions.reschedule.deadlineLabel')}
-            </label>
-            <input
-              id={fieldId}
-              data-testid="reschedule-deadline"
-              type="datetime-local"
-              min={bounds.min}
-              max={bounds.max}
-              value={draft.civil}
-              disabled={disabled}
-              onChange={(event) => {
-                keep({ ...current, draft: { ...draft, civil: event.target.value } })
-              }}
-              className={`${FIELD_CLASS} self-start`}
-            />
-            <fieldset className="flex flex-col gap-1" disabled={disabled}>
-              <legend className="text-sm font-medium text-slate-200">
+            <Field label={t('missions.reschedule.deadlineLabel')}>
+              {(control) => (
+                <input
+                  {...control}
+                  data-testid="reschedule-deadline"
+                  type="datetime-local"
+                  min={bounds.min}
+                  max={bounds.max}
+                  value={draft.civil}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    keep({ ...current, draft: { ...draft, civil: event.target.value } })
+                  }}
+                />
+              )}
+            </Field>
+            <fieldset className="flex min-w-0 flex-col gap-2" disabled={disabled}>
+              <legend className="mb-2 font-body text-base font-bold text-text-primary">
                 {t('missions.reschedule.reasonLegend')}
               </legend>
               {REASONS.map((reason) => (
-                <label key={reason} className="flex items-center gap-2 text-sm text-slate-200">
+                <label
+                  key={reason}
+                  className="flex min-h-11 items-center gap-2 text-base text-text-primary"
+                >
                   <input
                     type="radio"
                     name={`${id}-reason`}
@@ -248,7 +237,7 @@ export function RescheduleForm({
                     onChange={() => {
                       keep({ ...current, draft: { ...draft, reason } })
                     }}
-                    className="focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+                    className="size-4 accent-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                   />
                   {t(RESCHEDULE_REASON_LABELS[reason])}
                 </label>
@@ -258,33 +247,42 @@ export function RescheduleForm({
               <p
                 id={noticeId}
                 data-testid="reschedule-retry-notice"
-                className="text-xs text-amber-200"
+                className="text-xs text-action-primary"
               >
                 {t('missions.reschedule.retryNotice')}
               </p>
             )}
-            <button
-              type="button"
-              data-testid="reschedule-submit"
-              disabled={disabled || blocked !== null}
-              aria-describedby={joinIds(
-                blocked === null ? null : blockedId,
-                retrySame ? noticeId : null,
-              )}
-              onClick={() => {
-                onSubmit(draft)
-              }}
-              className={SUBMIT_CLASS}
-            >
-              {t(retryLabel ? 'missions.action.retry' : 'missions.reschedule.submit')}
-            </button>
+            {/* O `div` segura o botao no tamanho do rotulo: solto na coluna flex, esticaria. */}
+            <div>
+              <Button
+                data-testid="reschedule-submit"
+                disabled={disabled || blocked !== null}
+                aria-describedby={joinIds(
+                  blocked === null ? null : blockedId,
+                  retrySame ? noticeId : null,
+                )}
+                onClick={() => {
+                  onSubmit(draft)
+                }}
+              >
+                {t(retryLabel ? 'missions.action.retry' : 'missions.reschedule.submit')}
+              </Button>
+            </div>
             {blocked !== null && (
-              <p id={blockedId} data-testid="reschedule-blocked" className="text-sm text-amber-200">
+              <p
+                id={blockedId}
+                data-testid="reschedule-blocked"
+                className="text-sm text-action-primary"
+              >
                 {t(blocked, { days: MAX_DEADLINE_DAYS })}
               </p>
             )}
             {failure !== null && (
-              <p role="alert" data-testid="reschedule-error" className="text-sm text-red-300">
+              <p
+                role="alert"
+                data-testid="reschedule-error"
+                className="text-sm text-feedback-danger"
+              >
                 <FailureMessage failure={failure} />
               </p>
             )}

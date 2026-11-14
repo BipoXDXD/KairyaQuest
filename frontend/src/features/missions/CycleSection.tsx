@@ -23,6 +23,7 @@ import type { Locale } from '../../shared/i18n/locale'
 import { plural } from '../../shared/i18n/plural'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT, type Translate } from '../../shared/i18n/useT'
+import { Button, Panel, StatusLine } from '../../shared/ui'
 
 export interface CycleSectionHandle {
   refresh: () => void
@@ -128,12 +129,12 @@ function CycleLoaded({
     cycle.special === null ? null : lateSpecialReason(cycle.special, cycle.today)
   return (
     <div className="flex flex-col gap-3">
-      <p data-testid="cycle-today" className="text-sm text-slate-400">
+      <p data-testid="cycle-today" className="text-sm text-text-muted">
         {t('missions.cycle.today', { date: formatCivilDate(cycle.today, locale) })}
       </p>
       {cycle.mission === null ? (
         <>
-          <p data-testid="cycle-no-plan" className="text-sm text-slate-300">
+          <p data-testid="cycle-no-plan" className="text-sm text-text-primary">
             {t('missions.cycle.noPlan')}
           </p>
           <WeekPlanEntry onCreated={planEntry.onCreated} onExists={planEntry.onExists} />
@@ -154,10 +155,10 @@ function CycleLoaded({
           o Concluir pareceria um erro. */}
       {cycle.late_daily !== null && (
         <div data-testid="cycle-late-daily">
-          <h3 className="mb-1 text-base font-semibold text-amber-200">
+          <h3 className="mb-1 text-base text-action-primary">
             {t('missions.cycle.lateDaily.title')}
           </h3>
-          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-slate-300">
+          <p data-testid="cycle-late-daily-reason" className="mb-2 text-sm text-text-primary">
             {t(lateDailyReason(cycle.late_daily))}
           </p>
           <ul role="list" className="flex flex-col gap-3">
@@ -179,11 +180,11 @@ function CycleLoaded({
           documento. Sem isto, nem a mudanca da sequencia (ao concluir a
           diaria) nem o texto que muda quando ela chega ao marco eram
           anunciados. */}
-      <p role="status" data-testid="cycle-streak" className="text-sm font-medium text-slate-200">
+      <StatusLine data-testid="cycle-streak">
         {t('missions.cycle.streak', { days: streakText(cycle.streak, locale, t) })}
-      </p>
+      </StatusLine>
       {cycle.special === null ? (
-        <p data-testid="cycle-progress" className="text-sm text-slate-300">
+        <p data-testid="cycle-progress" className="text-sm text-text-primary">
           {t('missions.cycle.progress', {
             progress: cycle.streak % DAYS_PER_MILESTONE,
             total: DAYS_PER_MILESTONE,
@@ -192,13 +193,13 @@ function CycleLoaded({
         </p>
       ) : (
         <div data-testid="cycle-special">
-          <h3 className="mb-2 text-base font-semibold text-emerald-200">
+          <h3 className="mb-2 text-base text-feedback-success">
             {t('missions.cycle.special.title')}
           </h3>
           {/* F25: depois do fim da janela, o prazo impresso no
               cartao ja passou; sem o motivo, o Concluir pareceria um erro. */}
           {specialReason !== null && (
-            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-slate-300">
+            <p data-testid="cycle-special-late-reason" className="mb-2 text-sm text-text-primary">
               {t(specialReason)}
             </p>
           )}
@@ -216,16 +217,15 @@ function CycleLoaded({
         </div>
       )}
       {refreshFailed && (
-        <div role="alert" data-testid="cycle-stale" className="text-sm text-amber-200">
-          <p>{t('missions.cycle.refreshFailed')}</p>
-          <button
-            type="button"
-            data-testid="cycle-refresh"
-            onClick={card.onReload}
-            className="mt-2 rounded border border-amber-300/60 px-3 py-1 font-medium text-amber-100 hover:bg-amber-900/40 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:outline-none"
-          >
+        <div
+          role="alert"
+          data-testid="cycle-stale"
+          className="flex flex-col items-start gap-2 text-sm"
+        >
+          <p className="text-action-primary">{t('missions.cycle.refreshFailed')}</p>
+          <Button data-testid="cycle-refresh" onClick={card.onReload}>
             {t('missions.cycle.refresh')}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -247,33 +247,26 @@ function CycleContent({
   const t = useT()
   switch (state.status) {
     case 'loading':
-      return (
-        <p role="status" data-testid="cycle-loading" className="text-sm text-slate-400">
-          {t('missions.cycle.loading')}
-        </p>
-      )
+      return <StatusLine data-testid="cycle-loading">{t('missions.cycle.loading')}</StatusLine>
     case 'error':
       return (
-        <div
-          role="alert"
-          data-testid="cycle-error"
-          className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
-        >
-          <p className="font-semibold">{t('missions.cycle.loadFailed')}</p>
-          <p className="mt-1">
-            <LoadFailureMessage
-              failure={state.failure}
-              unexpected="missions.cycle.unexpectedFailure"
-            />
-          </p>
-          <button
-            type="button"
-            data-testid="cycle-retry"
-            onClick={card.onReload}
-            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
-          >
-            {t('missions.action.retryLoad')}
-          </button>
+        <div role="alert" data-testid="cycle-error">
+          <Panel elevation="raised">
+            <div className="flex flex-col items-start gap-3 text-sm">
+              <div>
+                <p className="font-bold text-feedback-danger">{t('missions.cycle.loadFailed')}</p>
+                <p className="mt-1">
+                  <LoadFailureMessage
+                    failure={state.failure}
+                    unexpected="missions.cycle.unexpectedFailure"
+                  />
+                </p>
+              </div>
+              <Button data-testid="cycle-retry" onClick={card.onReload}>
+                {t('missions.action.retryLoad')}
+              </Button>
+            </div>
+          </Panel>
         </div>
       )
     case 'loaded':
@@ -378,16 +371,19 @@ export function CycleSection({
     onExists: refresh,
   }
   return (
-    <section aria-labelledby="cycle-heading" data-testid="cycle" className="rpg-cycle mb-8">
-      <h2
-        ref={heading}
-        id="cycle-heading"
-        tabIndex={-1}
-        className="mb-3 rounded text-lg font-semibold text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
-      >
-        {t('missions.cycle.title')}
-      </h2>
-      <CycleContent state={state} card={card} dailyRef={dailyRef} planEntry={planEntry} />
-    </section>
+    // O `div` leva a margem: o `Panel` nao recebe classe, e o espaco ate o quadro e de fora dele.
+    <div className="mb-6">
+      <Panel as="section" elevation="sunken" aria-labelledby="cycle-heading" data-testid="cycle">
+        <h2
+          ref={heading}
+          id="cycle-heading"
+          tabIndex={-1}
+          className="mb-3 rounded-ui text-lg text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+        >
+          {t('missions.cycle.title')}
+        </h2>
+        <CycleContent state={state} card={card} dailyRef={dailyRef} planEntry={planEntry} />
+      </Panel>
+    </div>
   )
 }
