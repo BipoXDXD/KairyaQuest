@@ -47,14 +47,15 @@ import { definirRoteiro, reiniciar } from './falso'
  * cobre o quadro, entao os estados do quadro e os da Kairya sao auditados em
  * dois momentos (`abrirFolha`).
  *
- * **O que este spec NAO prova: contraste sobre gradiente.** `.rpg-progress` e
- * `.rpg-tutor` (src/index.css) tem fundo em `linear-gradient`, e sobre
- * gradiente o axe devolve `color-contrast` em `incomplete`, nunca em
- * `violations`. Os alertas que vivem nesses paineis passam neste spec SEM ter
- * o contraste decidido (medido, quando eram quatro paineis: trocar a cor de um
- * deles por quase preto nao reprovava nada). O cartao de missao e o ciclo
- * usam a superficie solida do `Panel` desde a migracao para o design system
- * (#173), e as cores de texto deles estao em `tokens/contrastPairs.ts`. Ver P-axe-transitorios-2-1 em
+ * **O que este spec NAO prova: contraste sobre gradiente.** `.rpg-tutor`
+ * (src/index.css) tem fundo em `linear-gradient`, e sobre gradiente o axe
+ * devolve `color-contrast` em `incomplete`, nunca em `violations`. Os alertas
+ * que vivem nesse painel passam neste spec SEM ter o contraste decidido
+ * (medido, quando eram quatro paineis: trocar a cor de um deles por quase
+ * preto nao reprovava nada). Quem mede e o `styles/gradientContrast.test.ts`.
+ * Missoes e Progressao usam a superficie solida do `Panel` desde a migracao
+ * para o design system (#173), e as cores de texto delas estao em
+ * `tokens/contrastPairs.ts`. Ver P-axe-transitorios-2-1 em
  * docs/handoff/2026-11-11-axe-transitorios-2.md.
  *
  * O banco e compartilhado e nao e limpo entre execucoes: as missoes semeadas

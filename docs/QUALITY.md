@@ -539,13 +539,14 @@ mesmos criaram.
   pelo cenário semeado do E2E, que sempre tem um plano carregado com
   sucesso (pendência, `docs/HANDOFF.md`).
 
-**Contraste sobre os quatro painéis com gradiente não é do axe: é do
+**Contraste sobre painel com gradiente não é do axe: é do
 Vitest.** Sobre `linear-gradient` o axe não decide contraste (devolve
 `color-contrast` em `incomplete`, nunca em `violations`), então
 `frontend/src/styles/gradientContrast.test.ts` mede cada cor de texto (4,5:1,
 WCAG 1.4.3), de borda de campo e de anel de foco (3:1, WCAG 1.4.11) dos
-componentes de `.rpg-mission-card`, `.rpg-cycle`, `.rpg-progress` e `.rpg-tutor`
-contra os **dois extremos** de cada gradiente. Os extremos vêm do
+componentes de `.rpg-tutor` contra os **dois extremos** do gradiente
+(Missões e Progressão saíram do gradiente na migração para o design system,
+#173). Os extremos vêm do
 `index.css`, as cores dos tokens e do tema do Tailwind, nada copiado; o
 cálculo está em `shared/ui/tokens/gradientPanels.ts`. Limites declarados:
 mede os extremos, não os pontos intermediários nem imagens; o app só tem o

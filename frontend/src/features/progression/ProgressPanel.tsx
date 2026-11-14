@@ -8,7 +8,7 @@ import { achievementText } from '../../shared/i18n/achievementText'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
-import { Badge } from '../../shared/ui/Badge'
+import { Badge, Button, Panel, ProgressBar, StatusLine } from '../../shared/ui'
 
 export interface ProgressPanelHandle {
   refresh: () => void
@@ -26,12 +26,12 @@ function AchievementItem({ achievement }: { achievement: Achievement }): ReactEl
       data-unlocked={String(unlockedAt !== null)}
       className={
         unlockedAt !== null
-          ? 'rounded border border-emerald-400/60 p-2 text-sm text-slate-100'
-          : 'rounded border border-slate-700 p-2 text-sm text-slate-400'
+          ? 'rounded-ui border border-feedback-success p-2 text-sm text-text-primary'
+          : 'rounded-ui border border-border-subtle p-2 text-sm text-text-muted'
       }
     >
       <span aria-hidden="true">{unlockedAt !== null ? '★' : '🔒'}</span>{' '}
-      <span className="font-medium">{title}</span>
+      <span className="font-bold">{title}</span>
       <p className="mt-1">
         {unlockedAt !== null
           ? t('progression.achievement.unlockedOn', {
@@ -54,43 +54,39 @@ function Loaded({ progress }: { progress: Progress }): ReactElement {
   // o aria-label da barra ja diz o nivel; o valor anunciado fica so com o XP, sem repetir o sufixo
   const valueText = t('progression.bar.valueText', amounts)
   return (
-    <div className="rpg-progress-content">
-      <p
-        data-testid="progress-level"
-        className="progress-level-value text-xl font-bold text-slate-50"
-      >
-        {t('progression.level', { level: progress.level })}
-      </p>
-      {rank !== null && (
-        <Badge tone="neutral" data-testid="progress-rank">
-          {t('progression.rank.label', { name: rank })}
-        </Badge>
-      )}
-      <p data-testid="progress-total" className="progress-total-value text-sm text-slate-300">
-        {t('progression.xpTotal', { xp: formatXp(progress.xp_total, locale) })}
-      </p>
-      <div
-        role="progressbar"
-        data-testid="progress-bar"
-        aria-label={t('progression.bar.label', { level: nextLevel })}
-        aria-valuemin={0}
-        aria-valuemax={span}
-        aria-valuenow={into}
-        aria-valuetext={valueText}
-        className="mt-2 h-2 w-full rounded bg-slate-800"
-      >
-        <div
-          className="h-2 rounded bg-emerald-400"
-          style={{ width: `${String((into / span) * 100)}%` }}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <p data-testid="progress-level" className="font-display text-2xl text-text-primary">
+            {t('progression.level', { level: progress.level })}
+          </p>
+          {rank !== null && (
+            <Badge tone="neutral" data-testid="progress-rank">
+              {t('progression.rank.label', { name: rank })}
+            </Badge>
+          )}
+        </div>
+        <p data-testid="progress-total" className="text-sm text-text-primary">
+          {t('progression.xpTotal', { xp: formatXp(progress.xp_total, locale) })}
+        </p>
+      </div>
+      {/* `parseProgress` garante custo de nivel positivo: o `max` da barra nunca e zero. */}
+      <div className="mt-2">
+        <ProgressBar
+          value={into}
+          max={span}
+          label={t('progression.bar.label', { level: nextLevel })}
+          valueText={valueText}
+          data-testid="progress-bar"
         />
       </div>
       {/* nome e valor da barra ja dizem este texto: fora da arvore, para nao ser lido duas vezes */}
-      <p data-testid="progress-bar-text" aria-hidden="true" className="mt-1 text-sm text-slate-300">
+      <p data-testid="progress-bar-text" aria-hidden="true" className="text-sm text-text-primary">
         {t('progression.bar.text', { ...amounts, level: nextLevel })}
       </p>
-      <details className="progress-achievements">
-        <summary>
-          <h3 className="inline text-sm font-semibold text-slate-200">
+      <details className="mt-3 border-t border-border-subtle pt-3">
+        <summary className="min-h-6 w-fit cursor-pointer rounded-ui text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">
+          <h3 className="inline text-sm text-action-primary">
             {t('progression.achievements.title')}
           </h3>
         </summary>
@@ -115,27 +111,24 @@ function ProgressContent({
   switch (state.status) {
     case 'loading':
       return (
-        <p role="status" data-testid="progress-loading" className="text-sm text-slate-400">
-          {t('progression.panel.loading')}
-        </p>
+        <StatusLine data-testid="progress-loading">{t('progression.panel.loading')}</StatusLine>
       )
     case 'error':
       return (
-        <div role="alert" data-testid="progress-error" className="text-sm text-red-300">
-          <p>
+        <div
+          role="alert"
+          data-testid="progress-error"
+          className="flex flex-col items-start gap-2 text-sm"
+        >
+          <p className="text-feedback-danger">
             <LoadFailureMessage
               failure={state.failure}
               unexpected="progression.panel.unexpectedFailure"
             />
           </p>
-          <button
-            type="button"
-            data-testid="progress-retry"
-            onClick={onReload}
-            className="mt-2 rounded border border-red-300/60 px-3 py-1 font-medium"
-          >
+          <Button data-testid="progress-retry" onClick={onReload}>
             {t('progression.panel.retry')}
-          </button>
+          </Button>
         </div>
       )
     case 'loaded':
@@ -143,16 +136,15 @@ function ProgressContent({
         <>
           <Loaded progress={state.progress} />
           {state.refreshFailed && (
-            <div role="alert" data-testid="progress-stale" className="mt-2 text-sm text-amber-200">
-              <p>{t('progression.panel.refreshFailed')}</p>
-              <button
-                type="button"
-                data-testid="progress-refresh"
-                onClick={onReload}
-                className="mt-2 rounded border border-amber-300/60 px-3 py-1 font-medium text-amber-100"
-              >
+            <div
+              role="alert"
+              data-testid="progress-stale"
+              className="mt-2 flex flex-col items-start gap-2 text-sm"
+            >
+              <p className="text-action-primary">{t('progression.panel.refreshFailed')}</p>
+              <Button data-testid="progress-refresh" onClick={onReload}>
                 {t('progression.panel.refresh')}
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -170,15 +162,14 @@ export function ProgressPanel({ ref }: { ref?: Ref<ProgressPanelHandle> }) {
   const { state, reload, refresh } = useProgress()
   useImperativeHandle(ref, () => ({ refresh }), [refresh])
   return (
-    <section
-      aria-labelledby="progress-heading"
-      data-testid="progress"
-      className="rpg-progress mb-8"
-    >
-      <h2 id="progress-heading" className="mb-3 text-lg font-semibold text-slate-200">
-        {t('progression.panel.title')}
-      </h2>
-      <ProgressContent state={state} onReload={reload} />
-    </section>
+    // O `div` leva a margem: o `Panel` nao recebe classe, e o espaco ate o quadro e de fora dele.
+    <div className="mb-6">
+      <Panel as="section" aria-labelledby="progress-heading" data-testid="progress">
+        <h2 id="progress-heading" className="mb-3 text-lg text-text-primary">
+          {t('progression.panel.title')}
+        </h2>
+        <ProgressContent state={state} onReload={reload} />
+      </Panel>
+    </div>
   )
 }
