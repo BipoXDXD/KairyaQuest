@@ -45,7 +45,6 @@ const RULES: readonly { name: string; pattern: RegExp }[] = [
 
 // Catraca: só encolhe. As Tarefas 4.6–4.9 tiram arquivos daqui; a 4.9 apaga a lista.
 const PENDING_MIGRATION: ReadonlySet<string> = new Set([
-  'src/features/progression/ProgressPanel.tsx',
   'src/features/tutoring/DecisionControls.tsx',
   'src/features/tutoring/ProposalCard.tsx',
   'src/features/tutoring/RescheduleProposalCard.tsx',

@@ -39,11 +39,6 @@ interface Panel {
 
 const PANELS: readonly Panel[] = [
   {
-    selector: '.rpg-progress',
-    roots: ['src/features/progression/ProgressPanel.tsx'],
-    files: ['src/features/progression/ProgressPanel.tsx', 'src/shared/ui/Badge.tsx'],
-  },
-  {
     selector: '.rpg-tutor',
     roots: [`${TUTORING}TutorPanel.tsx`],
     files: [
@@ -65,8 +60,6 @@ const DECORATIVE_BORDERS: Readonly<Record<string, readonly string[]>> = {
   // o botão é identificado pelo rótulo e pelo glifo, então a borda não é o
   // indicador essencial do componente.
   'src/features/tutoring/TutorPanel.tsx': ['border-slate-800', 'border-slate-600'],
-  // Moldura do aviso de rank indisponível: o texto dentro é o que informa.
-  'src/features/progression/ProgressPanel.tsx': ['border-slate-700'],
 }
 
 const source = (path: string): PanelSource => ({ path, text: readSource(path) })
@@ -74,7 +67,7 @@ const source = (path: string): PanelSource => ({ path, text: readSource(path) })
 test('a leitura é de verdade: o tema do Tailwind e o CSS do projeto trazem as cores', () => {
   expect(tailwindTheme).toContain('--color-slate-400')
   expect(tokens.get('color-text-muted')).toBe('var(--ink-300)')
-  expect(Object.keys(gradientStops(indexCss, '.rpg-progress'))).toEqual(['from', 'to'])
+  expect(Object.keys(gradientStops(indexCss, '.rpg-tutor'))).toEqual(['from', 'to'])
 })
 
 test.each(PANELS)(
@@ -94,24 +87,6 @@ test.each(PANELS)(
 
 // Cores declaradas no CSS (e não em classe) que também moram sobre o gradiente.
 const CSS_COLORS = [
-  {
-    panel: '.rpg-progress',
-    selector: '.rpg-progress-content > .progress-level-value',
-    property: 'color',
-    min: 4.5,
-  },
-  {
-    panel: '.rpg-progress',
-    selector: '.progress-achievements summary',
-    property: 'color',
-    min: 4.5,
-  },
-  {
-    panel: '.rpg-progress',
-    selector: '.progress-achievements summary:focus-visible',
-    property: 'outline',
-    min: 3,
-  },
   { panel: '.rpg-tutor', selector: '.tutor-name', property: 'color', min: 4.5 },
 ] as const
 
