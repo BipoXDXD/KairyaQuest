@@ -26,6 +26,8 @@ const COMPLETION_CASES: CompletionCase[] = [
   ['especial com nível', { type: 'especial', reward: COM_NIVEL }, 'level_up'],
   ['diária', { type: 'diaria', reward: SO_XP }, 'lantern_lit'],
   ['diária com nível e conquista', { type: 'diaria', reward: COM_NIVEL_E_CONQUISTA }, 'level_up'],
+  // Lanterna e conquista juntas (a primeira diária destrava uma): toca a conquista.
+  ['diária com conquista', { type: 'diaria', reward: COM_CONQUISTA }, 'achievement'],
   ['avulsa com conquista', { type: 'avulsa', reward: COM_CONQUISTA }, 'achievement'],
   ['diária sem reward', { type: 'diaria', reward: null }, 'lantern_lit'],
   ['avulsa com reward ausente', { type: 'avulsa', reward: undefined }, 'mission_done'],

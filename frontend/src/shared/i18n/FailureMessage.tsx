@@ -10,5 +10,5 @@ import { useT } from './useT'
  */
 export function FailureMessage({ failure }: { failure: FailureText }) {
   const t = useT()
-  return <>{`${t(failure.message)} ${t(failure.recovery)}`}</>
+  return <>{`${t(failure.message, failure.vars)} ${t(failure.recovery)}`}</>
 }

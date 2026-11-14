@@ -41,6 +41,7 @@ describe('describeRescheduleFailure', () => {
         message: 'missions.rescheduleFailure.tooFar.message',
         recovery: 'missions.rescheduleFailure.tooFar.recovery',
         action: 'edit',
+        vars: { days: 365 },
       },
     ],
     [

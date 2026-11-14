@@ -19,12 +19,17 @@ from focusquest.modules.missions.schemas import (
     TAMANHO_MAXIMO_DA_EVIDENCIA,
     TAMANHO_MAXIMO_DO_LINK,
 )
+from focusquest.modules.missions.service import (
+    ESTIMATIVA_MAXIMA_DA_AVULSA,
+    HORIZONTE_DO_PRAZO_DA_AVULSA,
+)
 
 RAIZ = Path(__file__).resolve().parents[2]
 FONTES_DO_FRONT = RAIZ / "frontend/src"
 TIPOS_DA_MISSAO = FONTES_DO_FRONT / "shared/types/mission.ts"
 RASCUNHO_DO_PLANO = FONTES_DO_FRONT / "features/campaigns/weekPlanDraft.ts"
 LIMITES_DA_EVIDENCIA = FONTES_DO_FRONT / "features/missions/evidenceLimit.ts"
+CATALOGOS = sorted((FONTES_DO_FRONT / "shared/i18n/messages").glob("*.ts"))
 
 
 def _ler_constante(caminho: Path, nome: str) -> int:
@@ -44,6 +49,8 @@ def _ler_constante(caminho: Path, nome: str) -> int:
     ("arquivo", "nome", "valor_do_back"),
     [
         (TIPOS_DA_MISSAO, "MAX_DIFFICULTY", DIFICULDADE_MAXIMA),
+        (TIPOS_DA_MISSAO, "MAX_ESTIMATE_MINUTES", ESTIMATIVA_MAXIMA_DA_AVULSA),
+        (TIPOS_DA_MISSAO, "MAX_DEADLINE_DAYS", HORIZONTE_DO_PRAZO_DA_AVULSA.days),
         (RASCUNHO_DO_PLANO, "MIN_DIFFICULTY", DIFICULDADE_MINIMA),
         (RASCUNHO_DO_PLANO, "MIN_MINUTES", MINUTOS_MINIMOS),
         (RASCUNHO_DO_PLANO, "MAX_MINUTES", MINUTOS_DO_DIA),
@@ -67,6 +74,32 @@ def test_max_difficulty_e_declarada_uma_vez_no_front() -> None:
     )
 
     assert declarantes == ["shared/types/mission.ts"]
+
+
+@pytest.mark.parametrize(
+    "limite",
+    [
+        ESTIMATIVA_MAXIMA_DA_AVULSA,
+        HORIZONTE_DO_PRAZO_DA_AVULSA.days,
+        MINUTOS_DO_DIA,
+    ],
+    ids=["estimativa_da_avulsa", "horizonte_do_prazo", "minutos_do_dia"],
+)
+def test_catalogo_interpola_o_limite_em_vez_de_escreve_lo(limite: int) -> None:
+    """O texto recebe o numero da constante; um literal no catalogo ficaria
+    para tras quando o limite mudasse."""
+    literal = re.compile(rf"(?<![\d{{]){limite}(?!\d)")
+    com_literal = [
+        f"{catalogo.name}:{numero}"
+        for catalogo in CATALOGOS
+        for numero, linha in enumerate(
+            catalogo.read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if literal.search(linha)
+    ]
+
+    assert CATALOGOS, "nenhum catalogo encontrado em shared/i18n/messages"
+    assert com_literal == []
 
 
 def test_leitura_da_constante_aceita_separador_de_milhar(tmp_path: Path) -> None:

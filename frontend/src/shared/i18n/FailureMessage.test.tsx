@@ -73,4 +73,18 @@ describe('FailureMessage', () => {
       unmount()
     }
   })
+
+  it('interpola as variaveis da mensagem', () => {
+    const { container } = renderWithI18n(
+      <FailureMessage
+        failure={{
+          message: 'missions.rescheduleFailure.tooFar.message',
+          recovery: 'missions.rescheduleFailure.tooFar.recovery',
+          vars: { days: 7 },
+        }}
+      />,
+    )
+
+    expect(container).toHaveTextContent(/ 7 dias /)
+  })
 })

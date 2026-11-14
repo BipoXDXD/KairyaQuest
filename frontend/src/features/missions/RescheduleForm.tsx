@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { isoToSaoPauloCivil, saoPauloCivilToIso } from '../../shared/lib/deadline'
+import { MAX_DEADLINE_DAYS } from '../../shared/types/mission'
 import {
   RESCHEDULE_REASON_LABELS,
   type Mission,
@@ -29,12 +30,14 @@ const SUBMIT_CLASS =
 /** A ordem dos motivos na tela: a do README §5. */
 const REASONS: RescheduleReason[] = ['dificuldade', 'falta_de_tempo', 'mudanca_de_prioridade']
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
 /**
  * O horizonte do prazo da avulsa, o mesmo do servidor (pendencia 26). O
  * servidor continua sendo quem decide (`prazo_fora_do_limite`); aqui ele so
  * evita um envio que voltaria recusado.
  */
-const HORIZONTE_DO_PRAZO_MS = 365 * 24 * 60 * 60 * 1000
+const HORIZONTE_DO_PRAZO_MS = MAX_DEADLINE_DAYS * MS_PER_DAY
 
 /** A janela do novo prazo, em hora civil de Sao Paulo, a partir de `nowMs`. */
 function deadlineWindow(nowMs: number): { min: string; max: string; maxMs: number } {
@@ -99,7 +102,7 @@ function blockedReason(draft: RescheduleDraft, maxMs: number): MessageKey | null
  *   o que foi digitado.
  * - **Salvar desabilitado com o porque em texto**, ligado por
  *   `aria-describedby`, como o motivo do Concluir bloqueado.
- * - **Janela do prazo de agora a agora+365 dias** (pendencia 26), contada do
+ * - **Janela do prazo de agora a agora+`MAX_DEADLINE_DAYS` dias** (pendencia 26), contada do
  *   instante em que o disclosure abriu: `min`/`max` no campo e o teto no
  *   bloqueio. O passado fica com o servidor (`prazo_expirado`).
  * - **Chave retida** (`pendingRetry`: o envio com resultado desconhecido): os
@@ -277,7 +280,7 @@ export function RescheduleForm({
             </button>
             {blocked !== null && (
               <p id={blockedId} data-testid="reschedule-blocked" className="text-sm text-amber-200">
-                {t(blocked)}
+                {t(blocked, { days: MAX_DEADLINE_DAYS })}
               </p>
             )}
             {failure !== null && (
