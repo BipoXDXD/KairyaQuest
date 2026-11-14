@@ -6,6 +6,7 @@ import { flushPendingEffects } from '../../test/flushEffects'
 import { HTTP_FAILURE_TEXT, renderWithI18n } from '../../test/i18n'
 import type { Availability, Mission } from '../../shared/types/mission'
 import { LanternTrail } from './LanternTrail'
+import { LANTERN_REVEAL_KEY } from './lanternReveal'
 import type { Plan, PlanDay, PlanSpecial } from './types'
 
 /** Uma diaria revelada; o conteudo nao aparece na trilha (R10), so a disponibilidade importa. */
@@ -496,7 +497,7 @@ describe('LanternTrail', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
-  it('nao anima nada por conta propria: respeita prefers-reduced-motion sem depender dele', async () => {
+  it('sem a lanterna de hoje acesa, nada anima', async () => {
     servir(plano())
     renderWithI18n(<LanternTrail />)
     await diasDaTrilha()
@@ -719,5 +720,113 @@ describe('LanternTrail -- efeitos', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(playing).toMatch(/\/audio\/sfx\/trail_step\.mp3$/)
     expect(rig.played()).toEqual(['trail_step'])
+  })
+})
+
+describe('LanternTrail -- a lanterna de hoje acende', () => {
+  const HOJE = DIAS[4]
+  /** Como a SEMANA_MISTA, mas com hoje (quinta) ja concluida. */
+  const HOJE_ACESA: Availability[] = [
+    'concluida',
+    'concluida',
+    'perdida',
+    'concluida',
+    'concluida',
+    'bloqueada',
+    'bloqueada',
+  ]
+  const ANIMACAO = 'motion-safe:animate-lantern-lit'
+
+  afterEach(() => {
+    setVisibility('visible')
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  const artes = () => screen.getAllByTestId('trail-day-art')
+  const animadas = () => artes().map((arte) => arte.classList.contains(ANIMACAO))
+  const SO_HOJE = [false, false, false, false, true, false, false]
+  const NENHUMA = [false, false, false, false, false, false, false]
+
+  it('na primeira vista depois de concluir, so o glifo de hoje acende, e o dia fica lembrado', async () => {
+    servir(plano(HOJE_ACESA))
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(SO_HOJE)
+    // So sob motion-safe: com prefers-reduced-motion, a lanterna ja aparece acesa.
+    expect(screen.getByTestId('campaign-trail').innerHTML).not.toMatch(/(?<!motion-safe:)animate-/)
+    await waitFor(() => {
+      expect(localStorage.getItem(LANTERN_REVEAL_KEY)).toBe(HOJE)
+    })
+  })
+
+  it('voltar a trilha no mesmo dia nao acende de novo', async () => {
+    servir(plano(HOJE_ACESA))
+    const { unmount } = renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    await waitFor(() => {
+      expect(localStorage.getItem(LANTERN_REVEAL_KEY)).toBe(HOJE)
+    })
+    unmount()
+
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(NENHUMA)
+  })
+
+  it('vista em outro dia, a lanterna de hoje acende', async () => {
+    localStorage.setItem(LANTERN_REVEAL_KEY, DIAS[3])
+    servir(plano(HOJE_ACESA))
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(SO_HOJE)
+  })
+
+  it('hoje ainda disponivel: nada acende e nada e lembrado', async () => {
+    servir(plano())
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    flushPendingEffects()
+    expect(animadas()).toEqual(NENHUMA)
+    expect(localStorage.getItem(LANTERN_REVEAL_KEY)).toBeNull()
+  })
+
+  it('com o storage falhando, nao anima', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('bloqueado', 'SecurityError')
+    })
+    servir(plano(HOJE_ACESA))
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(NENHUMA)
+  })
+
+  it('com o localStorage inacessivel (o getter lanca), nao anima', async () => {
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new DOMException('bloqueado', 'SecurityError')
+    })
+    servir(plano(HOJE_ACESA))
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(NENHUMA)
+  })
+
+  it('a lanterna de hoje que acende numa atualizacao em silencio tambem acende uma vez', async () => {
+    servir(plano())
+    renderWithI18n(<LanternTrail />)
+    await diasDaTrilha()
+    expect(animadas()).toEqual(NENHUMA)
+
+    servir(plano(HOJE_ACESA))
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await waitFor(() => {
+      expect(screen.getAllByTestId('trail-day')[4]).toHaveAttribute('data-state', 'lit')
+    })
+    expect(animadas()).toEqual(SO_HOJE)
+    await waitFor(() => {
+      expect(localStorage.getItem(LANTERN_REVEAL_KEY)).toBe(HOJE)
+    })
   })
 })
