@@ -135,6 +135,12 @@ O som nasce desligado: a primeira visita mostra um convite não modal, e a
 escolha (voz e efeitos, separados) fica em `localStorage` por dispositivo,
 sem passar pela conta. Com a preferência desligada, nenhum arquivo é pedido.
 
+Cada conclusão toca um único efeito, por prioridade: nível novo, depois
+conquista, depois o efeito do tipo da missão (`lantern_lit` na diária,
+`mission_done` nas outras). A diária que destrava uma conquista toca só
+`achievement`. O canal de efeitos toca um som por vez, e a regra está em
+`frontend/src/features/kairya/soundCues.ts` (`sfxForCompletion`).
+
 ### Totais
 
 | Item     | Créditos |

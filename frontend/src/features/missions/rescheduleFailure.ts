@@ -1,6 +1,7 @@
 import { ApiError } from '../../shared/api/client'
 import { type FailureLead, leadFor } from '../../shared/api/transportFailure'
 import { type FailureText, serverBusyText } from '../../shared/i18n/failureText'
+import { MAX_DEADLINE_DAYS } from '../../shared/types/mission'
 import type { RescheduleErrorCode } from './types'
 
 /**
@@ -37,6 +38,7 @@ export const RESCHEDULE_FAILURE_BY_CODE: Readonly<Record<RescheduleErrorCode, Re
       message: 'missions.rescheduleFailure.tooFar.message',
       recovery: 'missions.rescheduleFailure.tooFar.recovery',
       action: 'edit',
+      vars: { days: MAX_DEADLINE_DAYS },
     },
     prazo_inalterado: {
       message: 'missions.rescheduleFailure.unchanged.message',

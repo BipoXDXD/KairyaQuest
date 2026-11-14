@@ -1,14 +1,16 @@
 import { ApiError, type ApiErrorKind } from '../api/client'
-import type { MessageKey } from './catalog'
+import type { MessageKey, MessageVars } from './catalog'
 
 /**
  * O texto de uma falha, em duas chaves do catalogo: `message` diz o que falhou
  * e por que ("[o que falhou]. [causa]."), `recovery` diz o que fazer ("[o que
- * fazer]."). Quem exibe e o `FailureMessage`, que junta as duas.
+ * fazer]."). Quem exibe e o `FailureMessage`, que junta as duas. `vars`
+ * preenche os `{nome}` da `message`, como um limite vindo de uma constante.
  */
 export interface FailureText {
   message: MessageKey
   recovery: MessageKey
+  vars?: MessageVars
 }
 
 /** Exaustivo sobre o `kind`: um `kind` novo reprova o `tsc` ate ganhar texto. */

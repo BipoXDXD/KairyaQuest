@@ -144,7 +144,7 @@ export const ptBR = {
   'missions.rescheduleFailure.deadlinePassed.message': 'O novo prazo precisa estar no futuro.',
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Escolha uma data e um horário futuros.',
   'missions.rescheduleFailure.tooFar.message':
-    'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+    'O novo prazo pode ser no máximo {days} dias a partir de agora.',
   'missions.rescheduleFailure.tooFar.recovery': 'Escolha uma data mais próxima.',
   'missions.rescheduleFailure.unchanged.message': 'O novo prazo é igual ao atual.',
   'missions.rescheduleFailure.unchanged.recovery': 'Escolha outro horário.',
@@ -318,7 +318,7 @@ export const ptBR = {
   'missions.reschedule.blocked.nonexistentTime':
     'Esse horário não existe no horário de Brasília. Escolha outro.',
   'missions.reschedule.blocked.tooFar':
-    'O novo prazo pode ser no máximo 365 dias a partir de agora.',
+    'O novo prazo pode ser no máximo {days} dias a partir de agora.',
   'missions.reschedule.blocked.missingReason': 'Escolha o motivo para salvar o novo prazo.',
 
   'missions.evaluation.modelLabel':
@@ -410,9 +410,9 @@ export const ptBR = {
   'tutoring.actionFailure.rescheduleInvalid.message':
     'A missão mudou desde a proposta e não pôde ser reagendada.',
   'tutoring.actionFailure.estimateOutOfBounds.message':
-    'A estimativa desta proposta precisa ficar entre 1 e 1440 minutos.',
+    'A estimativa desta proposta precisa ficar entre 1 e {max} minutos.',
   'tutoring.actionFailure.deadlineOutOfBounds.message':
-    'O prazo desta proposta passa de 365 dias a partir de agora.',
+    'O prazo desta proposta passa de {days} dias a partir de agora.',
   'tutoring.actionFailure.unconfirmedCreate.message': 'Não foi possível confirmar a missão.',
   'tutoring.actionFailure.unconfirmedCreate.recovery':
     'Tentar de novo é seguro: nada será duplicado.',
@@ -507,7 +507,7 @@ export const ptBR = {
   'campaigns.form.cancel': 'Cancelar',
   'campaigns.form.error.required': 'Preencha este campo.',
   'campaigns.form.error.tooLong': 'Use até {max} caracteres.',
-  'campaigns.form.error.minutesRange': 'Use de 1 a 1440 minutos.',
+  'campaigns.form.error.minutesRange': 'Use de {minMinutes} a {maxMinutes} minutos.',
   'campaigns.form.error.invalidChars':
     'Este campo tem um caractere que não pode ser salvo. Remova-o.',
   'campaigns.form.error.summary.one': 'Falta 1 campo. Ele está destacado.',

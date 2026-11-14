@@ -73,8 +73,8 @@ function allFailures(): FailureText[] {
   ]
 }
 
-function englishText({ message, recovery }: FailureText): string {
-  return `${translate('en', message)} ${translate('en', recovery)}`
+function englishText({ message, recovery, vars }: FailureText): string {
+  return `${translate('en', message, vars)} ${translate('en', recovery)}`
 }
 
 function wordCount(text: string): number {

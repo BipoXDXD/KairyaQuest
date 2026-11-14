@@ -151,7 +151,7 @@ export const en = {
     "Couldn't reschedule. The new deadline is in the past.",
   'missions.rescheduleFailure.deadlinePassed.recovery': 'Pick a future date and time.',
   'missions.rescheduleFailure.tooFar.message':
-    "Couldn't reschedule. The new deadline is more than 365 days away.",
+    "Couldn't reschedule. The new deadline is more than {days} days away.",
   'missions.rescheduleFailure.tooFar.recovery': 'Pick an earlier date.',
   'missions.rescheduleFailure.unchanged.message':
     "Couldn't reschedule. The new deadline matches the current one.",
@@ -337,7 +337,7 @@ export const en = {
   'missions.reschedule.blocked.missingDeadline': 'Enter the date and time of the new deadline.',
   'missions.reschedule.blocked.nonexistentTime':
     "That time doesn't exist in Brasília time. Pick another.",
-  'missions.reschedule.blocked.tooFar': 'The new deadline can be at most 365 days from now.',
+  'missions.reschedule.blocked.tooFar': 'The new deadline can be at most {days} days from now.',
   'missions.reschedule.blocked.missingReason': 'Pick a reason to save the new deadline.',
 
   'missions.evaluation.modelLabel':
@@ -439,9 +439,9 @@ export const en = {
   'tutoring.actionFailure.rescheduleInvalid.message':
     "Couldn't reschedule the mission. It changed after the proposal.",
   'tutoring.actionFailure.estimateOutOfBounds.message':
-    "Couldn't confirm this proposal. Its estimate must be 1 to 1440 minutes.",
+    "Couldn't confirm this proposal. Its estimate must be 1 to {max} minutes.",
   'tutoring.actionFailure.deadlineOutOfBounds.message':
-    "Couldn't confirm this proposal. Its deadline is over 365 days away.",
+    "Couldn't confirm this proposal. Its deadline is over {days} days away.",
   'tutoring.actionFailure.unconfirmedCreate.message':
     "Couldn't confirm the mission. The server's answer was lost.",
   'tutoring.actionFailure.unconfirmedCreate.recovery':
@@ -539,7 +539,7 @@ export const en = {
   'campaigns.form.cancel': 'Cancel',
   'campaigns.form.error.required': 'Fill in this field.',
   'campaigns.form.error.tooLong': 'Use up to {max} characters.',
-  'campaigns.form.error.minutesRange': 'Use 1 to 1440 minutes.',
+  'campaigns.form.error.minutesRange': 'Use {minMinutes} to {maxMinutes} minutes.',
   'campaigns.form.error.invalidChars': "This field has a character that can't be saved. Remove it.",
   'campaigns.form.error.summary.one': '1 field needs attention. It is highlighted.',
   'campaigns.form.error.summary.other': '{n} fields need attention. The first one is highlighted.',

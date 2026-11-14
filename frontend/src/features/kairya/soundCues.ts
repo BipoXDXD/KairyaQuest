@@ -25,7 +25,14 @@ function rewardSfx(reward: Reward): 'level_up' | 'achievement' | null {
   return null
 }
 
-/** Um único efeito por conclusão: nível > conquista > o do tipo da missão. */
+/**
+ * Um único efeito por conclusão: nível > conquista > o do tipo da missão.
+ *
+ * A regra vale quando os eventos coincidem: a diária que destrava uma conquista
+ * toca só `achievement`, e `lantern_lit` fica de fora. O canal de efeitos toca um
+ * som por vez (cada `play` corta o anterior), e o evento mais raro é o que a
+ * pessoa precisa ouvir. Tocar os dois em sequência exigiria fila no player.
+ */
 export function sfxForCompletion(done: {
   type: MissionType
   reward: Reward | null | undefined

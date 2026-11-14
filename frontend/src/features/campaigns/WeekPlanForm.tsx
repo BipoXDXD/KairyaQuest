@@ -396,7 +396,11 @@ export function WeekPlanForm({
     error: (key) => {
       const error = invalidKeys.get(key)
       return error !== undefined && (attempted || touched.has(key))
-        ? t(ERROR_TEXT[error], { max: MAX_TEXT_LENGTH })
+        ? t(ERROR_TEXT[error], {
+            max: MAX_TEXT_LENGTH,
+            minMinutes: MIN_MINUTES,
+            maxMinutes: MAX_MINUTES,
+          })
         : undefined
     },
     touch: (key) => {
