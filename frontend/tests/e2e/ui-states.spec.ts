@@ -65,6 +65,28 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await expect(page.getByTestId('week-plan-status')).toBeVisible()
     await expect(page.getByTestId('week-plan-submit')).not.toHaveAttribute('aria-busy', 'true')
   },
+  'reschedule-proposal-confirming': async (page) => {
+    // O POST nunca responde: Confirmar e Recusar ficam travados no meio da decisao.
+    await page.route('**/api/tutoring/actions/31/confirm', () => new Promise<void>(() => undefined))
+    await page.getByTestId('proposal-confirm').click()
+    await expect(page.getByTestId('proposal-confirm')).toBeDisabled()
+    await expect(page.getByTestId('proposal-reject')).toBeDisabled()
+  },
+  'reschedule-proposal-confirm-failed': async (page) => {
+    // 503: o aviso de falha aparece e os botoes voltam a servir.
+    await page.route('**/api/tutoring/actions/31/confirm', (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    )
+    await page.getByTestId('proposal-confirm').click()
+    await expect(page.getByTestId('proposal-failure')).toBeVisible()
+    await expect(page.getByTestId('proposal-confirm')).toBeEnabled()
+  },
+  'evidence-form-link-error': async (page) => {
+    // O erro do link so aparece depois que o campo perde o foco.
+    await page.getByTestId('evidence-link').focus()
+    await page.getByTestId('evidence-text').focus()
+    await expect(page.getByTestId('evidence-link-error')).toBeVisible()
+  },
 }
 
 /** Segunda e prova preenchidas, e a segunda copiada para o resto: o formulario fica valido. */

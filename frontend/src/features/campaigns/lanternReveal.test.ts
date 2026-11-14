@@ -1,6 +1,12 @@
+import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { memoryStorage } from '../../test/audioDoubles'
-import { LANTERN_REVEAL_KEY, isRevealPending, markRevealSeen } from './lanternReveal'
+import {
+  LANTERN_REVEAL_KEY,
+  isRevealPending,
+  markRevealSeen,
+  useLanternReveal,
+} from './lanternReveal'
 
 const HOJE = '2026-09-25'
 
@@ -52,5 +58,20 @@ describe('markRevealSeen', () => {
     expect(() => {
       markRevealSeen(HOJE, null)
     }).not.toThrow()
+  })
+})
+
+describe('useLanternReveal', () => {
+  it('so grava o "ja vista" depois do render, com o render puro', () => {
+    const storage = memoryStorage()
+    const lidoNoRender: (string | null)[] = []
+    const { result } = renderHook(() => {
+      const pending = useLanternReveal(HOJE, storage)
+      lidoNoRender.push(storage.getItem(LANTERN_REVEAL_KEY))
+      return pending
+    })
+    expect(result.current).toBe(true)
+    expect(lidoNoRender[0]).toBeNull()
+    expect(storage.getItem(LANTERN_REVEAL_KEY)).toBe(HOJE)
   })
 })

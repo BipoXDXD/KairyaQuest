@@ -1,6 +1,13 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { WeekPlanEntry, WeekPlanForm } from '../../features/campaigns'
 import { KairyaPresenceProvider } from '../../features/kairya'
+import { EvidenceForm, type EvidenceDraft } from '../../features/missions'
+import {
+  RescheduleProposalCard,
+  useActionKeys,
+  type ActionState,
+  type RescheduleMissionAction,
+} from '../../features/tutoring'
 import { I18nContext } from '../../shared/i18n/i18nContext'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
@@ -245,5 +252,64 @@ export function WeekPlanFormCase() {
     <PlanContext>
       <WeekPlanForm onCreated={noop} onExists={noop} onCancel={noop} />
     </PlanContext>
+  )
+}
+
+/** O `h2` do painel da Kairya, que na tela real vem antes do cartão (`h3`). */
+function TutorContext({ children }: { children: ReactNode }) {
+  const t = useT()
+  return (
+    <>
+      <h2 className="sr-only">{t('tutoring.name')}</h2>
+      {children}
+    </>
+  )
+}
+
+/**
+ * O cartão de reagendamento em cada estado gravado da ação. O estado em voo
+ * ("confirmando") vem do spec, que clica em Confirmar com o POST interceptado.
+ */
+export function RescheduleProposalCase({ state }: { state: ActionState }) {
+  const keys = useActionKeys()
+  const action: RescheduleMissionAction = {
+    id: 31,
+    kind: 'reschedule_mission',
+    state,
+    payload: {
+      mission_id: 12,
+      new_deadline: '2026-10-05T21:00:00Z',
+      reason: 'falta_de_tempo',
+      instructions: 'Resumir o capítulo 3',
+      previous_deadline: '2026-10-02T21:00:00Z',
+    },
+    mission_id: state === 'executada' ? 12 : null,
+    error_code: state === 'falhou' ? 'reagendamento_invalido' : null,
+  }
+  return (
+    <TutorContext>
+      <RescheduleProposalCard
+        action={action}
+        keys={keys}
+        onChanged={noop}
+        onMissionCreated={noop}
+        onRefresh={noop}
+        boardHref="#missions-heading"
+      />
+    </TutorContext>
+  )
+}
+
+/** O formulário de evidência, controlado como no cartão da missão. */
+export function EvidenceFormCase({
+  draft: initial,
+  retryPending = false,
+}: {
+  draft: EvidenceDraft
+  retryPending?: boolean
+}) {
+  const [draft, setDraft] = useState(initial)
+  return (
+    <EvidenceForm draft={draft} onChange={setDraft} disabled={false} retryPending={retryPending} />
   )
 }
