@@ -24,9 +24,9 @@ export function RewardAnnouncement({ reward, bonus = false }: { reward: Reward; 
   return (
     <div
       data-testid="reward"
-      className="mt-2 text-sm text-emerald-200 motion-safe:animate-[reward-in_400ms_ease-out]"
+      className="mt-2 text-sm text-feedback-success motion-safe:animate-reward-in"
     >
-      <p data-testid="reward-xp" className="font-semibold">
+      <p data-testid="reward-xp" className="font-bold">
         {t(bonus ? 'missions.reward.bonusXp' : 'missions.reward.xp', { xp: reward.xp_awarded })}
       </p>
       {reward.level_after > reward.level_before && (

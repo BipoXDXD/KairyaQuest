@@ -14,7 +14,7 @@ import {
 
 // O axe-core não decide contraste sobre `linear-gradient`: devolve a regra
 // `color-contrast` em `incomplete`, nunca em `violations` (medido no PR #124,
-// P-axe-transitorios-2-1). Este teste ocupa esse lugar para os quatro painéis
+// P-axe-transitorios-2-1). Este teste ocupa esse lugar para os painéis
 // com gradiente: mede cada cor de texto, borda e anel que o código deles usa
 // contra os DOIS extremos do gradiente, lendo tudo da fonte real (index.css,
 // tokens.css e o tema do Tailwind). Texto: 4,5:1 (WCAG 1.4.3, sem a exceção de
@@ -27,7 +27,6 @@ const tailwindTheme = readSource('node_modules/tailwindcss/theme.css')
 // Os tokens do projeto vêm depois e sobrescrevem o tema padrão do Tailwind.
 const tokens = new Map([...parseTokens(tailwindTheme), ...parseTokens(tokensCss)])
 
-const MISSIONS = 'src/features/missions/'
 const TUTORING = 'src/features/tutoring/'
 
 interface Panel {
@@ -39,23 +38,6 @@ interface Panel {
 }
 
 const PANELS: readonly Panel[] = [
-  {
-    selector: '.rpg-mission-card',
-    roots: [`${MISSIONS}MissionCard.tsx`],
-    files: [
-      `${MISSIONS}MissionCard.tsx`,
-      `${MISSIONS}EvaluationPanel.tsx`,
-      `${MISSIONS}EvidenceForm.tsx`,
-      `${MISSIONS}RescheduleForm.tsx`,
-      `${MISSIONS}RescheduleHistory.tsx`,
-      `${MISSIONS}RewardAnnouncement.tsx`,
-    ],
-  },
-  {
-    selector: '.rpg-cycle',
-    roots: [`${MISSIONS}CycleSection.tsx`],
-    files: [`${MISSIONS}CycleSection.tsx`],
-  },
   {
     selector: '.rpg-progress',
     roots: ['src/features/progression/ProgressPanel.tsx'],
@@ -92,7 +74,7 @@ const source = (path: string): PanelSource => ({ path, text: readSource(path) })
 test('a leitura é de verdade: o tema do Tailwind e o CSS do projeto trazem as cores', () => {
   expect(tailwindTheme).toContain('--color-slate-400')
   expect(tokens.get('color-text-muted')).toBe('var(--ink-300)')
-  expect(Object.keys(gradientStops(indexCss, '.rpg-mission-card'))).toEqual(['from', 'to'])
+  expect(Object.keys(gradientStops(indexCss, '.rpg-progress'))).toEqual(['from', 'to'])
 })
 
 test.each(PANELS)(

@@ -4,6 +4,7 @@ import { useCompletionRegistry, type CompletionRegistry } from './useCompletionR
 import { useMissions, type MissionsState, type MoreMissionsState } from './useMissions'
 import { LoadFailureMessage } from '../../shared/i18n/LoadFailureMessage'
 import { useT } from '../../shared/i18n/useT'
+import { Button, Panel, StatusLine } from '../../shared/ui'
 
 /**
  * Os quatro estados da tela, um por ramo.
@@ -33,44 +34,37 @@ function MissionsContent({
   const t = useT()
   switch (state.status) {
     case 'loading':
-      return (
-        <p role="status" data-testid="missions-loading" className="text-sm text-slate-400">
-          {t('missions.list.loading')}
-        </p>
-      )
+      return <StatusLine data-testid="missions-loading">{t('missions.list.loading')}</StatusLine>
 
     // Vazio e erro sao telas DIFERENTES porque pedem acoes opostas: aqui a
     // leitura funcionou e o quadro esta vazio; no erro, nao se sabe o que ha
     // no quadro.
     case 'empty':
       return (
-        <p data-testid="missions-empty" className="text-sm text-slate-300">
+        <p data-testid="missions-empty" className="text-sm text-text-muted">
           {t('missions.list.empty')}
         </p>
       )
 
     case 'error':
       return (
-        <div
-          role="alert"
-          data-testid="missions-error"
-          className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
-        >
-          <p className="font-semibold">{t('missions.list.loadFailed')}</p>
-          <p className="mt-1">
-            <LoadFailureMessage
-              failure={state.failure}
-              unexpected="missions.list.unexpectedFailure"
-            />
-          </p>
-          <button
-            type="button"
-            data-testid="missions-retry"
-            onClick={onReload}
-            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
-          >
-            {t('missions.action.retryLoad')}
-          </button>
+        <div role="alert" data-testid="missions-error">
+          <Panel elevation="raised">
+            <div className="flex flex-col items-start gap-3 text-sm">
+              <div>
+                <p className="font-bold text-feedback-danger">{t('missions.list.loadFailed')}</p>
+                <p className="mt-1">
+                  <LoadFailureMessage
+                    failure={state.failure}
+                    unexpected="missions.list.unexpectedFailure"
+                  />
+                </p>
+              </div>
+              <Button data-testid="missions-retry" onClick={onReload}>
+                {t('missions.action.retryLoad')}
+              </Button>
+            </div>
+          </Panel>
         </div>
       )
 
@@ -106,9 +100,6 @@ function MissionsContent({
   }
 }
 
-const LOAD_MORE_BUTTON =
-  'mt-3 rounded border border-slate-500 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70'
-
 /**
  * O rodape da lista: pedir a pagina seguinte (#182). A falha daqui nao troca
  * a lista pelo erro -- as missoes ja carregadas continuam na tela, e so o
@@ -128,53 +119,45 @@ function MoreMissions({
 
     case 'available':
       return (
-        <button
-          type="button"
-          data-testid="missions-load-more"
-          onClick={onLoadMore}
-          className={LOAD_MORE_BUTTON}
-        >
-          {t('missions.list.loadMore')}
-        </button>
+        <div className="mt-3">
+          <Button data-testid="missions-load-more" onClick={onLoadMore}>
+            {t('missions.list.loadMore')}
+          </Button>
+        </div>
       )
 
     // O botao fica no lugar, desabilitado, para o foco nao cair no `body`
     // enquanto a pagina chega.
     case 'loading':
       return (
-        <button
-          type="button"
-          data-testid="missions-load-more"
-          disabled
-          aria-busy="true"
-          className={LOAD_MORE_BUTTON}
-        >
-          {t('missions.list.loadingMore')}
-        </button>
+        <div className="mt-3">
+          <Button data-testid="missions-load-more" disabled aria-busy="true">
+            {t('missions.list.loadingMore')}
+          </Button>
+        </div>
       )
 
     case 'error':
       return (
-        <div
-          role="alert"
-          data-testid="missions-load-more-error"
-          className="mt-3 rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-sm text-red-200"
-        >
-          <p className="font-semibold">{t('missions.list.loadMoreFailed')}</p>
-          <p className="mt-1">
-            <LoadFailureMessage
-              failure={more.failure}
-              unexpected="missions.list.unexpectedFailure"
-            />
-          </p>
-          <button
-            type="button"
-            data-testid="missions-load-more-retry"
-            onClick={onLoadMore}
-            className="mt-3 rounded border border-red-400/60 px-3 py-1 font-medium text-red-100 hover:bg-red-900/50 focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:outline-none"
-          >
-            {t('missions.action.retryLoad')}
-          </button>
+        <div role="alert" data-testid="missions-load-more-error" className="mt-3">
+          <Panel elevation="raised">
+            <div className="flex flex-col items-start gap-3 text-sm">
+              <div>
+                <p className="font-bold text-feedback-danger">
+                  {t('missions.list.loadMoreFailed')}
+                </p>
+                <p className="mt-1">
+                  <LoadFailureMessage
+                    failure={more.failure}
+                    unexpected="missions.list.unexpectedFailure"
+                  />
+                </p>
+              </div>
+              <Button data-testid="missions-load-more-retry" onClick={onLoadMore}>
+                {t('missions.action.retryLoad')}
+              </Button>
+            </div>
+          </Panel>
         </div>
       )
   }
@@ -239,7 +222,7 @@ export function MissionList({
 
   return (
     <section aria-labelledby="missions-heading" data-testid="missions">
-      <h2 id="missions-heading" className="mb-3 text-lg font-semibold text-slate-200">
+      <h2 id="missions-heading" className="mb-3 text-lg text-text-primary">
         {t('missions.list.title')}
       </h2>
       {/* A regiao viva da espera existe desde o primeiro render, vazia, em
