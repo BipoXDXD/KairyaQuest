@@ -83,12 +83,17 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
   'week-plan-form-error': () => <WeekPlanFormCase />,
   'week-plan-form-sending': () => <WeekPlanFormCase />,
   'week-plan-form-failure': () => <WeekPlanFormCase />,
+  'week-plan-copy-monday': () => <WeekPlanFormCase />,
+  // A proposta em aberto e a mesma nos casos abaixo: "confirmando", "recusando"
+  // e as falhas vem do clique que o SETUP do spec faz com o POST interceptado.
   'reschedule-proposal-open': () => <RescheduleProposalCase state="proposta" />,
   'reschedule-proposal-confirming': () => <RescheduleProposalCase state="proposta" />,
   'reschedule-proposal-confirm-failed': () => <RescheduleProposalCase state="proposta" />,
   'reschedule-proposal-rescheduled': () => <RescheduleProposalCase state="executada" />,
   'reschedule-proposal-rejected': () => <RescheduleProposalCase state="recusada" />,
   'reschedule-proposal-failed': () => <RescheduleProposalCase state="falhou" />,
+  'reschedule-proposal-rejecting': () => <RescheduleProposalCase state="proposta" />,
+  'reschedule-proposal-reject-failed': () => <RescheduleProposalCase state="proposta" />,
   'evidence-form-collapsed': () => <EvidenceFormCase draft={{ text: '', link: '' }} />,
   'evidence-form-open': () => <EvidenceFormCase draft={EVIDENCIA} />,
   'evidence-form-link-error': () => (

@@ -267,8 +267,9 @@ function TutorContext({ children }: { children: ReactNode }) {
 }
 
 /**
- * O cartão de reagendamento em cada estado gravado da ação. O estado em voo
- * ("confirmando") vem do spec, que clica em Confirmar com o POST interceptado.
+ * O cartão de reagendamento em cada estado gravado da ação. Os estados em voo
+ * e as falhas ("confirmando", "recusando" e as duas falhas) vêm do spec, que
+ * clica em Confirmar ou Recusar com o POST interceptado.
  */
 export function RescheduleProposalCase({ state }: { state: ActionState }) {
   const keys = useActionKeys()
