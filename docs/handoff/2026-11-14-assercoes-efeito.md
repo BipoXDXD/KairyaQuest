@@ -34,6 +34,11 @@ Revisão-base: `main` em `fb7d11b`.
   listagem do serviço nem no contexto enviado ao modelo; o teste HTTP da
   listagem passou a afirmar status 200, o conjunto exato de chaves da
   mensagem e da ação, e a ausência da mensagem alheia.
+- **Exigências da persona nos dois idiomas.** O README §5 e §6 vale para
+  o pt-BR e o inglês, mas os trechos eram conferidos só na persona em
+  pt-BR. Agora cada exigência traz o trecho de cada idioma e o teste roda
+  nos dois. Entraram também as metades que faltavam: a resposta completa
+  só a pedido e a incerteza declarada.
 - **Fora deste incremento.** Os itens médios de testes do frontend ficam
   para um PR do front: este mexe só na suíte Python.
 
@@ -45,6 +50,7 @@ Revisão-base: `main` em `fb7d11b`.
 - `tests/unit/test_missions_domain.py`: curva de XP literal.
 - `tests/integration/test_tutoring_service.py`: janela do histórico e
   mensagens de outro usuário.
+- `tests/unit/test_tutoring_persona.py`: exigências do README por idioma.
 
 ## Comandos e resultados
 - Sabotagem, cada uma revertida com `git restore src/`:
@@ -58,6 +64,9 @@ Revisão-base: `main` em `fb7d11b`.
     o caso do teto reprova;
   - `XP_INCREMENTO = 11` → a curva reprova;
   - sem `.limit(quantas)` no histórico → a janela reprova;
+  - "Never use guilt…" trocado na persona em inglês → o caso `en`
+    reprova; "resposta completa só quando a pessoa pedir" removido em
+    pt-BR → o caso `pt-BR` reprova;
   - sem o filtro de usuário na listagem → o teste do serviço e o HTTP
     reprovam; sem o filtro no histórico → o teste do serviço reprova.
 - Sem sabotagem possível nos 422 do plano: a validação acontece no
