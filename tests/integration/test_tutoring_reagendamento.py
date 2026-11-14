@@ -40,6 +40,7 @@ from focusquest.modules.missions.domain import (
 )
 from focusquest.modules.missions.models import (
     Mission,
+    MissionOperation,
     MissionReschedule,
     WeeklyPlan,
 )
@@ -599,6 +600,33 @@ def test_confirmar_reagenda_pela_kairya(session: Session) -> None:
     assert resultado.acao.operation_id == "op-t7-1"
     assert resultado.acao.decided_at == AGORA
     assert resultado.acao.error_code is None
+
+
+def test_recusar_reagendamento_nao_mexe_na_missao(session: Session) -> None:
+    """A recusa grava so o estado da acao: a missao fica com o prazo de antes,
+    sem linha no historico e sem operacao registrada."""
+    missao = _avulsa(session)
+    acao = _proposta(session, missao.id)
+    rejeitar_acao(session, ESTUDANTE, acao.id, clock=relogio(AGORA))
+
+    session.expire_all()
+    relida = session.get(Mission, missao.id)
+    assert relida is not None
+    assert (relida.deadline, relida.state) == (PRAZO_ATUAL, MissionState.PENDENTE)
+    assert _linhas(session, missao.id) == []
+    operacoes = session.execute(
+        select(func.count())
+        .select_from(MissionOperation)
+        .where(MissionOperation.mission_id == missao.id)
+    ).scalar_one()
+    assert operacoes == 0
+    recusada = session.get(TutorAction, acao.id)
+    assert recusada is not None
+    assert (recusada.state, recusada.mission_id, recusada.operation_id) == (
+        EstadoDaAcao.RECUSADA,
+        None,
+        None,
+    )
 
 
 def test_o_retrato_nao_decide_nada(session: Session) -> None:

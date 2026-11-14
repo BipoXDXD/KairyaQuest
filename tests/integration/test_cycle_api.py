@@ -279,9 +279,54 @@ def test_criar_o_plano_devolve_a_trilha_sem_revelar_o_futuro(
     ],
 )
 def test_validacao_do_plano_responde_422(
-    client: TestClient, relogio: list[datetime], ajuste: dict[str, Any]
+    client: TestClient,
+    session: Session,
+    relogio: list[datetime],
+    ajuste: dict[str, Any],
 ) -> None:
     assert client.post("/api/plans", json=_corpo(**ajuste)).status_code == 422
+    _confere_que_nada_foi_gravado(session)
+
+
+def _confere_que_nada_foi_gravado(session: Session) -> None:
+    """A recusa nao deixa plano nem missao para tras."""
+    session.expire_all()
+    assert session.scalars(select(WeeklyPlan)).all() == []
+    assert session.scalars(select(Mission)).all() == []
+
+
+@pytest.mark.parametrize(
+    ("dificuldade", "minutos", "minutos_do_bonus"),
+    [(1, 1, 1), (5, 1440, 1440)],
+    ids=["minimos", "maximos"],
+)
+def test_plano_nas_bordas_e_aceito_e_gravado_como_veio(
+    client: TestClient,
+    session: Session,
+    relogio: list[datetime],
+    dificuldade: int,
+    minutos: int,
+    minutos_do_bonus: int,
+) -> None:
+    """On point das faixas do plano: dificuldade 1..5, diaria e bonus de 1 a
+    1440 minutos. O off point de cada uma esta no 422 acima."""
+    corpo = _corpo()
+    for dia in corpo["days"]:
+        dia["difficulty"] = dificuldade
+        dia["estimated_minutes"] = minutos
+    corpo["bonus"]["estimated_minutes"] = minutos_do_bonus
+
+    assert client.post("/api/plans", json=corpo).status_code == 201
+
+    session.expire_all()
+    missoes = session.scalars(select(Mission)).all()
+    diarias = [m for m in missoes if m.mission_type is MissionType.DIARIA]
+    especiais = [m for m in missoes if m.mission_type is not MissionType.DIARIA]
+    assert len(diarias) == 7
+    assert {(m.difficulty, m.estimated_minutes) for m in diarias} == {
+        (dificuldade, minutos)
+    }
+    assert [m.estimated_minutes for m in especiais] == [minutos_do_bonus]
 
 
 def _corpo_com_texto(campo: str, texto: str) -> dict[str, Any]:
@@ -334,20 +379,26 @@ def test_texto_do_plano_acima_do_teto_responde_422_sem_gravar(
     ],
 )
 def test_semana_fora_do_alcance_responde_409_com_code(
-    client: TestClient, relogio: list[datetime], semana: date, code: str
+    client: TestClient,
+    session: Session,
+    relogio: list[datetime],
+    semana: date,
+    code: str,
 ) -> None:
     resposta = client.post("/api/plans", json=_corpo(semana))
     assert resposta.status_code == 409
     assert resposta.json()["code"] == code
+    _confere_que_nada_foi_gravado(session)
 
 
 def test_semana_no_ano_9999_e_distante_e_nao_500(
-    client: TestClient, relogio: list[datetime]
+    client: TestClient, session: Session, relogio: list[datetime]
 ) -> None:
     """9999-12-27 e a ultima segunda representavel: o fim do domingo seguinte
     estouraria o `datetime`. A recusa `semana_distante` vem antes da conta."""
     resposta = client.post("/api/plans", json=_corpo(date(9999, 12, 27)))
     assert (resposta.status_code, resposta.json()["code"]) == (409, "semana_distante")
+    _confere_que_nada_foi_gravado(session)
 
 
 def test_plano_repetido_responde_409_plano_existente(

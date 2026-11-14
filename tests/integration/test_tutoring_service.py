@@ -7,6 +7,7 @@ INSTANTE de cada evento.
 
 import threading
 from collections.abc import Callable, Generator
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -45,6 +46,7 @@ from focusquest.modules.tutoring.service import (
     preparar_turno,
     transmitir,
 )
+from focusquest.modules.users.models import User
 from integration.conftest import TIMEOUT_DA_DEMORA, Conversa
 from integration.provedor_falso import (
     APOS_O_PRIMEIRO_PEDACO,
@@ -58,6 +60,7 @@ from integration.provedor_falso import (
 )
 
 ESTUDANTE = 1
+OUTRO = 2
 AGORA = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 PROPOSTA_VALIDA = {
     "instructions": "Ler o capitulo 3",
@@ -1089,3 +1092,82 @@ def test_o_ciclo_e_lido_no_mesmo_instante_do_turno(
 
     assert [m["instructions"] for m in contexto["late_cycle_missions"]] == ["Diaria 2"]
     assert _tipos_tardios(contexto) == ["diária de ontem"]
+
+
+# --- O historico que vai ao modelo -------------------------------------------
+
+
+def test_o_contexto_leva_so_a_janela_do_historico(
+    session: Session, tutoria: Tutoria
+) -> None:
+    """Com janela de 3, a primeira troca fica de fora: sem o limite da
+    consulta, as cinco mensagens iriam ao modelo."""
+    pergunta = _completa(session, ESTUDANTE, "user", "A")
+    _completa(session, ESTUDANTE, "tutor", "a", resposta_a=pergunta.id)
+    pergunta = _completa(session, ESTUDANTE, "user", "B")
+    _completa(session, ESTUDANTE, "tutor", "b", resposta_a=pergunta.id)
+
+    preparo = preparar_turno(
+        session,
+        user_id=ESTUDANTE,
+        client_message_id="janela-c",
+        conteudo="C",
+        tutoria=replace(tutoria, historico=3),
+        clock=lambda: AGORA,
+    )
+
+    assert _falas(_para_gerar(preparo)) == [
+        ("user", "B"),
+        ("assistant", "b"),
+        ("user", "C"),
+    ]
+
+
+def test_mensagens_de_outro_usuario_ficam_fora_da_listagem_e_do_contexto(
+    session: Session, tutoria: Tutoria
+) -> None:
+    session.add(User(id=OUTRO, display_name="Outra pessoa"))
+    session.flush()
+    alheia = _completa(session, OUTRO, "user", "pergunta alheia")
+    _completa(session, OUTRO, "tutor", "resposta alheia", resposta_a=alheia.id)
+
+    preparo = preparar_turno(
+        session,
+        user_id=ESTUDANTE,
+        client_message_id="minha-pergunta",
+        conteudo="minha",
+        tutoria=tutoria,
+        clock=lambda: AGORA,
+    )
+
+    # A resposta vazia e a que o preparo deixa `gerando` para a transmissao.
+    assert [(m.role, m.content) for m in listar_mensagens(session, ESTUDANTE)] == [
+        ("user", "minha"),
+        ("tutor", ""),
+    ]
+    assert _falas(_para_gerar(preparo)) == [("user", "minha")]
+
+
+def _completa(
+    session: Session,
+    user_id: int,
+    papel: str,
+    conteudo: str,
+    resposta_a: int | None = None,
+) -> TutorMessage:
+    mensagem = TutorMessage(
+        user_id=user_id,
+        role=papel,
+        content=conteudo,
+        status=StatusDaMensagem.COMPLETA,
+        client_message_id=f"hist-{user_id}-{conteudo}" if papel == "user" else None,
+        reply_to_id=resposta_a,
+        created_at=AGORA,
+    )
+    session.add(mensagem)
+    session.flush()
+    return mensagem
+
+
+def _falas(preparo: ParaGerar) -> list[tuple[str, str]]:
+    return [(m.papel, m.texto) for m in preparo.turno.mensagens]

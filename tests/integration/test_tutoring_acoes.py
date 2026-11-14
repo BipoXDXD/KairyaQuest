@@ -284,18 +284,38 @@ def test_proposta_na_borda_do_limite_ainda_executa(
 
 def test_recusar_proposta(session: Session) -> None:
     acao = _proposta(session)
+    antes = _missoes(session)
     recusada = rejeitar_acao(session, ESTUDANTE, acao.id, clock=lambda: AGORA)
     assert recusada.state is EstadoDaAcao.RECUSADA
     assert recusada.decided_at == AGORA
+    _confere_que_a_recusa_nao_criou_missao(session, acao.id, antes)
 
 
 def test_recusar_de_novo_e_idempotente(session: Session) -> None:
     acao = _proposta(session)
+    antes = _missoes(session)
     rejeitar_acao(session, ESTUDANTE, acao.id, clock=lambda: AGORA)
     depois = AGORA + timedelta(hours=1)
     de_novo = rejeitar_acao(session, ESTUDANTE, acao.id, clock=lambda: depois)
     assert de_novo.state is EstadoDaAcao.RECUSADA
     assert de_novo.decided_at == AGORA
+    _confere_que_a_recusa_nao_criou_missao(session, acao.id, antes)
+
+
+def _confere_que_a_recusa_nao_criou_missao(
+    session: Session, acao_id: int, missoes_antes: int
+) -> None:
+    """Relê o banco: a recusa grava so o estado da acao. Nenhuma missao nasce
+    e a acao continua sem `mission_id` nem chave de operacao."""
+    session.expire_all()
+    assert _missoes(session) == missoes_antes
+    acao = session.get(TutorAction, acao_id)
+    assert acao is not None
+    assert (acao.state, acao.mission_id, acao.operation_id) == (
+        EstadoDaAcao.RECUSADA,
+        None,
+        None,
+    )
 
 
 def test_recusar_executada_e_transicao_ilegal(session: Session) -> None:

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from focusquest.core.clock import get_clock
 from focusquest.core.database import get_engine, get_session
 from focusquest.main import CodigoDeErro, app
+from focusquest.modules.missions.models import Mission
 from focusquest.modules.missions.schemas import TAMANHO_MAXIMO_DO_IDENTIFICADOR
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.dependencies import get_tutoria
@@ -28,6 +29,7 @@ from focusquest.modules.tutoring.models import TutorAction, TutorMessage
 from focusquest.modules.tutoring.provider import MensagemDoTurno, Turno
 from focusquest.modules.tutoring.schemas import TAMANHO_MAXIMO_DA_PERGUNTA
 from focusquest.modules.tutoring.service import Tutoria
+from focusquest.modules.users.models import User
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
@@ -39,6 +41,7 @@ from integration.provedor_falso import (
 )
 
 ESTUDANTE = 1
+OUTRO = 2
 AGORA = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 SEGREDO = "sk-ant-segredo-que-nao-pode-vazar"
 PROPOSTA: dict[str, Any] = {
@@ -358,9 +361,43 @@ def test_a_resposta_substituida_traz_o_modelo_no_done_e_no_historico(
 
 def test_listar_mensagens(cliente_na_sessao: TestClient, session: Session) -> None:
     _acao_proposta(session)
-    (pergunta, resposta) = cliente_na_sessao.get("/api/tutoring/messages").json()
-    assert pergunta["role"] == "user"
+    session.add(User(id=OUTRO, display_name="Outra pessoa"))
+    session.flush()
+    session.add(
+        TutorMessage(
+            user_id=OUTRO,
+            role=Papel.USUARIO,
+            content="pergunta alheia",
+            status=StatusDaMensagem.COMPLETA,
+            client_message_id="api-alheia",
+            created_at=AGORA,
+        )
+    )
+    session.flush()
+
+    resposta_http = cliente_na_sessao.get("/api/tutoring/messages")
+
+    assert resposta_http.status_code == 200
+    (pergunta, resposta) = resposta_http.json()
+    assert set(pergunta) == CHAVES_DA_MENSAGEM
+    assert set(resposta["actions"][0]) == CHAVES_DA_ACAO
+    assert (pergunta["role"], pergunta["content"]) == ("user", "oi")
     assert resposta["actions"][0]["state"] == "proposta"
+
+
+CHAVES_DA_MENSAGEM = {
+    "id",
+    "role",
+    "content",
+    "status",
+    "client_message_id",
+    "reply_to_id",
+    "error_code",
+    "fallback_model",
+    "created_at",
+    "actions",
+}
+CHAVES_DA_ACAO = {"id", "kind", "state", "payload", "mission_id", "error_code"}
 
 
 # --- Confirmar e recusar ---------------------------------------------------
@@ -451,11 +488,23 @@ def test_o_codigo_do_422_e_o_mesmo_gravado_na_acao() -> None:
 
 def test_recusar(cliente_na_sessao: TestClient, session: Session) -> None:
     acao_id = _acao_proposta(session)
+    missoes_antes = _missoes(session)
     url = f"/api/tutoring/actions/{acao_id}/reject"
     primeira = cliente_na_sessao.post(url)
     assert primeira.status_code == 200
     assert primeira.json()["action"]["state"] == "recusada"
+    assert primeira.json()["action"]["mission_id"] is None
     assert cliente_na_sessao.post(url).json() == primeira.json()
+    # O status nao basta: a recusa nao pode ter criado a missao proposta.
+    session.expire_all()
+    assert _missoes(session) == missoes_antes
+    acao = session.get(TutorAction, acao_id)
+    assert acao is not None
+    assert (acao.state, acao.mission_id) == (EstadoDaAcao.RECUSADA, None)
+
+
+def _missoes(session: Session) -> int:
+    return session.execute(select(func.count()).select_from(Mission)).scalar_one()
 
 
 def test_acao_inexistente_responde_404(
