@@ -43,12 +43,6 @@ const RULES: readonly { name: string; pattern: RegExp }[] = [
   { name: 'token legado --fq-', pattern: /--fq-/ },
 ]
 
-// Catraca: só encolhe. As Tarefas 4.6–4.9 tiram arquivos daqui; a 4.9 apaga a lista.
-const PENDING_MIGRATION: ReadonlySet<string> = new Set([
-  'src/features/tutoring/TutorConversation.tsx',
-  'src/features/tutoring/TutorPanel.tsx',
-])
-
 test('a varredura enxerga o CSS de verdade', () => {
   expect(sources['src/styles/tokens.css']).toContain('--ink-950')
   expect(sources['src/index.css']).toMatch(/@import/)
@@ -72,16 +66,9 @@ test.each([
   expect(RULES.some(({ pattern }) => pattern.test(text))).toBe(flagged)
 })
 
-test.each(RULES)('nenhum arquivo fora da lista pendente viola: $name', ({ pattern }) => {
+test.each(RULES)('nenhum arquivo viola: $name', ({ pattern }) => {
   const offenders = Object.entries(sources)
-    .filter(([path, text]) => !PENDING_MIGRATION.has(path) && pattern.test(text))
+    .filter(([, text]) => pattern.test(text))
     .map(([path]) => path)
   expect(offenders).toEqual([])
-})
-
-test('a lista pendente não tem arquivo já limpo nem arquivo inexistente', () => {
-  const stale = [...PENDING_MIGRATION].filter(
-    (p) => !(p in sources) || RULES.every(({ pattern }) => !pattern.test(sources[p])),
-  )
-  expect(stale).toEqual([])
 })

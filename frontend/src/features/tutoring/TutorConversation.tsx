@@ -10,6 +10,7 @@ import type { MessageKey } from '../../shared/i18n/catalog'
 import { plural } from '../../shared/i18n/plural'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
+import { Button, Skeleton } from '../../shared/ui'
 import type { Counter } from '../../shared/types/counter'
 import { MAX_QUESTION_LENGTH } from './questionLimit'
 
@@ -54,20 +55,14 @@ function proposalLine(message: MessageRead): MessageKey | null {
 }
 
 const BUBBLE = {
-  user: 'ml-8 rounded-lg bg-slate-800 p-3 text-sm text-slate-100',
-  tutor:
-    'mr-8 rounded-lg border border-emerald-700/60 bg-emerald-950/40 p-3 text-sm text-slate-100',
+  user: 'ml-8 rounded-ui bg-bg-raised p-3 text-sm text-text-primary',
+  tutor: 'mr-8 rounded-ui border border-border-subtle bg-bg-surface p-3 text-sm text-text-primary',
 } as const
-
-const BUTTON =
-  'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
 function Author({ role }: { role: MessageRead['role'] }) {
   const t = useT()
   return (
-    <p className="mb-1 text-xs font-semibold text-slate-400">
+    <p className="mb-1 text-xs font-bold text-text-muted">
       {t(role === 'user' ? 'tutoring.message.author.user' : 'tutoring.name')}
     </p>
   )
@@ -124,7 +119,7 @@ function MessageItem({
         </p>
       )}
       {mark !== null && (
-        <p data-testid="tutor-message-mark" className="mt-1 text-xs font-medium text-amber-300">
+        <p data-testid="tutor-message-mark" className="mt-1 text-xs font-bold text-action-primary">
           {t(mark)}
         </p>
       )}
@@ -132,7 +127,7 @@ function MessageItem({
           servidor depois de uma recusa). Dentro do `li`, para o leitor de
           tela ler junto com a mensagem; sem alarme e sem a categoria. */}
       {message.fallback_model !== null && (
-        <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-slate-400">
+        <p data-testid="tutor-message-fallback" className="mt-1 text-xs text-text-muted">
           {t('tutoring.message.fallback', { model: message.fallback_model })}
         </p>
       )}
@@ -159,37 +154,19 @@ function HistoryPlaceholder({
   const { history, messages } = conversation
   switch (history.status) {
     case 'loading':
-      return (
-        <div data-testid="tutor-history-loading" className="flex flex-col gap-2">
-          <p role="status" className="sr-only">
-            {t('tutoring.history.loading')}
-          </p>
-          {[0, 1, 2].map((n) => (
-            <div
-              key={n}
-              aria-hidden="true"
-              className="h-12 rounded-lg bg-slate-800 motion-safe:animate-pulse"
-            />
-          ))}
-        </div>
-      )
+      return <Skeleton data-testid="tutor-history-loading" label={t('tutoring.history.loading')} />
     case 'error':
       return (
-        <div data-testid="tutor-history-error" className="text-sm text-red-200">
-          <p>{t('tutoring.history.loadFailed')}</p>
-          <button
-            type="button"
-            data-testid="tutor-history-retry"
-            onClick={conversation.reloadHistory}
-            className={`mt-2 ${BUTTON}`}
-          >
+        <div data-testid="tutor-history-error" className="flex flex-col items-start gap-2 text-sm">
+          <p className="text-feedback-danger">{t('tutoring.history.loadFailed')}</p>
+          <Button data-testid="tutor-history-retry" onClick={conversation.reloadHistory}>
             {t('tutoring.retryLoad')}
-          </button>
+          </Button>
         </div>
       )
     case 'loaded':
       return messages.length === 0 && conversation.send.status === 'idle' ? (
-        <p data-testid="tutor-greeting" className="text-sm text-slate-300">
+        <p data-testid="tutor-greeting" className="text-sm text-text-muted">
           {t('tutoring.conversation.greeting')}
         </p>
       ) : null
@@ -209,7 +186,7 @@ function PartialAnswer({ send }: { send: UseTutorConversationResult['send'] }) {
     <li data-testid="tutor-partial" className={BUBBLE.tutor}>
       <Author role="tutor" />
       <p className="wrap-anywhere whitespace-pre-wrap">{send.partial}</p>
-      <p className="mt-1 text-xs text-emerald-300">{t('tutoring.writing')}</p>
+      <p className="mt-1 text-xs text-action-primary">{t('tutoring.writing')}</p>
     </li>
   )
 }
@@ -235,6 +212,9 @@ function visibleMessages(
   return messages.filter((m) => m.status !== 'gerando' || m.reply_to_id !== questionId)
 }
 
+/** O aviso e o botao abaixo dele, alinhado a esquerda (o `Button` nao estica). */
+const NOTICE = 'mt-2 flex flex-col items-start gap-2 text-sm'
+
 /** O aviso da falha e o "Tentar de novo", quando ha o que repetir. */
 function FailureNotice({
   conversation,
@@ -248,14 +228,14 @@ function FailureNotice({
   const { send, retryTarget, retry } = conversation
   const retryButton =
     retryTarget === null || !canRetry ? null : (
-      <button type="button" data-testid="tutor-retry" onClick={retry} className={`mt-2 ${BUTTON}`}>
+      <Button data-testid="tutor-retry" onClick={retry}>
         {t('tutoring.retry')}
-      </button>
+      </Button>
     )
   if (send.status === 'failed' && send.failure.action !== 'unavailable') {
     return (
-      <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
-        <p>
+      <div role="alert" data-testid="tutor-failure" className={NOTICE}>
+        <p className="text-feedback-danger">
           <FailureMessage failure={send.failure} />
         </p>
         {retryButton}
@@ -264,8 +244,8 @@ function FailureNotice({
   }
   if (send.status === 'unknown') {
     return (
-      <div role="alert" data-testid="tutor-failure" className="text-sm text-red-200">
-        <p>
+      <div role="alert" data-testid="tutor-failure" className={NOTICE}>
+        <p className="text-feedback-danger">
           <FailureMessage failure={UNKNOWN_RESULT} />
         </p>
         {retryButton}
@@ -274,8 +254,8 @@ function FailureNotice({
   }
   if (send.status === 'idle' && retryTarget !== null && canRetry) {
     return (
-      <div className="text-sm text-slate-300">
-        <p data-testid="tutor-history-retry-note">
+      <div className={NOTICE}>
+        <p data-testid="tutor-history-retry-note" className="text-text-muted">
           {t(unansweredNote(latestAnswerTo(conversation.messages, retryTarget.clientMessageId)))}
         </p>
         {retryButton}
@@ -325,24 +305,22 @@ export function TutorConversation({
         role="region"
         aria-label={t('tutoring.conversation.region')}
         tabIndex={0}
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-ui focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
         {unavailable && (
-          <p data-testid="tutor-unavailable" className="mb-3 text-sm font-medium text-amber-200">
+          <p data-testid="tutor-unavailable" className="mb-3 text-sm font-bold text-action-primary">
             {t(UNAVAILABLE_TEXT)}
           </p>
         )}
         {status.status === 'error' && (
-          <div data-testid="tutor-status-error" className="mb-3 text-sm text-red-200">
-            <p>{t('tutoring.status.loadFailed')}</p>
-            <button
-              type="button"
-              data-testid="tutor-status-retry"
-              onClick={onReloadStatus}
-              className={`mt-2 ${BUTTON}`}
-            >
+          <div
+            data-testid="tutor-status-error"
+            className="mb-3 flex flex-col items-start gap-2 text-sm"
+          >
+            <p className="text-feedback-danger">{t('tutoring.status.loadFailed')}</p>
+            <Button data-testid="tutor-status-retry" onClick={onReloadStatus}>
               {t('tutoring.retryLoad')}
-            </button>
+            </Button>
           </div>
         )}
         <HistoryPlaceholder conversation={conversation} />
@@ -364,7 +342,10 @@ export function TutorConversation({
           conversation.submit()
         }}
       >
-        <label htmlFor={`${counterId}-input`} className="text-sm font-medium text-slate-200">
+        <label
+          htmlFor={`${counterId}-input`}
+          className="font-body text-base font-bold text-text-primary"
+        >
           {t('tutoring.input.label')}
         </label>
         <textarea
@@ -378,20 +359,20 @@ export function TutorConversation({
           onChange={(event) => {
             conversation.setDraft(event.target.value)
           }}
-          className="w-full resize-none rounded border border-slate-500 bg-slate-900 p-2 text-sm text-slate-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none disabled:opacity-60"
+          className="w-full resize-none rounded-ui border border-border-strong bg-bg-canvas px-3 py-2 font-body text-base text-text-primary placeholder:text-text-muted hover:border-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-60"
         />
         <div className="flex items-center justify-between gap-2">
-          <p id={counterId} data-testid="tutor-counter" className="text-xs text-slate-400">
+          <p id={counterId} data-testid="tutor-counter" className="text-xs text-text-muted">
             {length.counter !== null && <CounterText counter={length.counter} />}
           </p>
-          <button
+          <Button
             type="submit"
+            variant="primary"
             data-testid="tutor-send"
             disabled={inputDisabled || !conversation.canSubmit}
-            className={BUTTON}
           >
             {t(busy ? 'tutoring.send.busy' : 'tutoring.send.idle')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
