@@ -3,16 +3,7 @@ import type { DecisionState } from './useDecideAction'
 import { FailureMessage } from '../../shared/i18n/FailureMessage'
 import type { MessageKey } from '../../shared/i18n/catalog'
 import { useT } from '../../shared/i18n/useT'
-
-const BUTTON =
-  'rounded border border-emerald-400/60 px-3 py-1 text-sm font-medium text-emerald-100 ' +
-  'hover:bg-emerald-900/50 focus-visible:ring-2 focus-visible:ring-emerald-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-
-const SECONDARY_BUTTON =
-  'rounded border border-slate-400/60 px-3 py-1 text-sm font-medium text-slate-100 ' +
-  'hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 ' +
-  'focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+import { Button } from '../../shared/ui'
 
 function confirmLabel(decision: DecisionState): MessageKey {
   if (decision.status === 'confirming') {
@@ -70,38 +61,30 @@ export function DecisionControls({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {failure?.action === 'refresh' ? (
-        <button
-          type="button"
-          data-testid="proposal-refresh"
-          onClick={onRefresh}
-          className={SECONDARY_BUTTON}
-        >
+        <Button data-testid="proposal-refresh" onClick={onRefresh}>
           {t('tutoring.decision.refresh')}
-        </button>
+        </Button>
       ) : (
         <>
-          <button
-            type="button"
+          <Button
+            variant="primary"
             data-testid="proposal-confirm"
             disabled={busy}
             onClick={onConfirm}
-            className={BUTTON}
           >
             {t(confirmLabel(decision))} <span className="sr-only">{target}</span>
-          </button>
-          <button
-            type="button"
-            data-testid="proposal-reject"
-            disabled={busy}
-            onClick={onReject}
-            className={SECONDARY_BUTTON}
-          >
+          </Button>
+          <Button data-testid="proposal-reject" disabled={busy} onClick={onReject}>
             {t(rejectLabel(decision))} <span className="sr-only">{target}</span>
-          </button>
+          </Button>
         </>
       )}
       {failure !== null && (
-        <p role="alert" data-testid="proposal-failure" className="w-full text-sm text-red-300">
+        <p
+          role="alert"
+          data-testid="proposal-failure"
+          className="w-full text-sm text-feedback-danger"
+        >
           <FailureMessage failure={failure} />
         </p>
       )}
@@ -135,7 +118,7 @@ export function RecordedFailure({
     <p
       data-testid="proposal-expired"
       role={announce ? 'alert' : undefined}
-      className="mt-3 text-sm text-amber-200"
+      className="mt-3 text-sm text-action-primary"
     >
       <FailureMessage failure={failedActionText(errorCode)} />
     </p>
@@ -155,7 +138,7 @@ export function BoardLink({ href, onGoToBoard }: { href: string; onGoToBoard?: (
       href={href}
       data-testid="proposal-board-link"
       onClick={onGoToBoard}
-      className="text-emerald-200 underline hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:outline-none"
+      className="rounded-ui text-action-primary underline underline-offset-2 hover:text-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
     >
       {t('tutoring.proposal.boardLink')}
     </a>

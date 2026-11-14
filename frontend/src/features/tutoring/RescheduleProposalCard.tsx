@@ -6,6 +6,7 @@ import type { ProposalCardProps, RescheduleMissionAction } from './types'
 import { useDecideAction, type DecisionState } from './useDecideAction'
 import { useLocale } from '../../shared/i18n/useLocale'
 import { useT } from '../../shared/i18n/useT'
+import { Panel } from '../../shared/ui'
 
 /**
  * O fim do cartao, um ramo por estado da acao.
@@ -46,7 +47,7 @@ function Outcome({
     case 'executada':
       return (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <p data-testid="proposal-rescheduled" className="font-medium text-emerald-300">
+          <p data-testid="proposal-rescheduled" className="font-bold text-feedback-success">
             {t('tutoring.reschedule.done')}
           </p>
           <BoardLink href={boardHref} onGoToBoard={onGoToBoard} />
@@ -54,7 +55,7 @@ function Outcome({
       )
     case 'recusada':
       return (
-        <p data-testid="proposal-rejected" className="mt-3 text-sm text-slate-400">
+        <p data-testid="proposal-rejected" className="mt-3 text-sm text-text-muted">
           {t('tutoring.proposal.rejected')}
         </p>
       )
@@ -104,40 +105,42 @@ export function RescheduleProposalCard({
       data-testid="tutor-reschedule-proposal"
       data-action-id={action.id}
       data-state={action.state}
-      className="mt-3 min-w-0 wrap-anywhere rounded-lg border border-slate-700/70 bg-slate-900/60 p-3"
+      className="mt-3 min-w-0 wrap-anywhere"
     >
-      <h3 className="text-sm font-semibold text-slate-50">{t('tutoring.reschedule.title')}</h3>
-      <p data-testid="reschedule-instructions" className="mt-1 text-sm text-slate-100">
-        {payload.instructions}
-      </p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-300">
-        <dt className="text-slate-400">{t('tutoring.reschedule.previousDeadline')}</dt>
-        <dd>
-          <time data-testid="reschedule-previous-deadline" dateTime={payload.previous_deadline}>
-            {formatDeadline(payload.previous_deadline, locale)}
-          </time>
-        </dd>
+      <Panel>
+        <h3 className="text-sm text-text-primary">{t('tutoring.reschedule.title')}</h3>
+        <p data-testid="reschedule-instructions" className="mt-1 text-sm text-text-primary">
+          {payload.instructions}
+        </p>
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-primary">
+          <dt className="text-text-muted">{t('tutoring.reschedule.previousDeadline')}</dt>
+          <dd>
+            <time data-testid="reschedule-previous-deadline" dateTime={payload.previous_deadline}>
+              {formatDeadline(payload.previous_deadline, locale)}
+            </time>
+          </dd>
 
-        <dt className="text-slate-400">{t('tutoring.reschedule.newDeadline')}</dt>
-        <dd>
-          <time data-testid="reschedule-new-deadline" dateTime={payload.new_deadline}>
-            {formatDeadline(payload.new_deadline, locale)}
-          </time>
-        </dd>
-      </dl>
-      <p data-testid="reschedule-reason" className="mt-1 text-sm text-slate-300">
-        <span className="text-slate-400">{t('tutoring.reschedule.reason')} </span>
-        {t(RESCHEDULE_REASON_LABELS[payload.reason])}
-      </p>
-      <Outcome
-        action={action}
-        decision={decision}
-        onConfirm={confirm}
-        onReject={reject}
-        onRefresh={onRefresh}
-        boardHref={boardHref}
-        onGoToBoard={onGoToBoard}
-      />
+          <dt className="text-text-muted">{t('tutoring.reschedule.newDeadline')}</dt>
+          <dd>
+            <time data-testid="reschedule-new-deadline" dateTime={payload.new_deadline}>
+              {formatDeadline(payload.new_deadline, locale)}
+            </time>
+          </dd>
+        </dl>
+        <p data-testid="reschedule-reason" className="mt-1 text-sm text-text-primary">
+          <span className="text-text-muted">{t('tutoring.reschedule.reason')} </span>
+          {t(RESCHEDULE_REASON_LABELS[payload.reason])}
+        </p>
+        <Outcome
+          action={action}
+          decision={decision}
+          onConfirm={confirm}
+          onReject={reject}
+          onRefresh={onRefresh}
+          boardHref={boardHref}
+          onGoToBoard={onGoToBoard}
+        />
+      </Panel>
     </div>
   )
 }
