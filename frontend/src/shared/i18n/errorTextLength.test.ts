@@ -142,8 +142,8 @@ function transportTexts(): FailureText[] {
   ])
 }
 
-function portugueseText({ message, recovery }: FailureText): string {
-  return `${translate('pt-BR', message)} ${translate('pt-BR', recovery)}`
+function portugueseText({ message, recovery, vars }: FailureText): string {
+  return `${translate('pt-BR', message, vars)} ${translate('pt-BR', recovery)}`
 }
 
 const TRANSPORT_TEXTS_PT = [...new Set(transportTexts().map(portugueseText))]

@@ -439,7 +439,7 @@ export const en = {
   'tutoring.actionFailure.rescheduleInvalid.message':
     "Couldn't reschedule the mission. It changed after the proposal.",
   'tutoring.actionFailure.estimateOutOfBounds.message':
-    "Couldn't confirm this proposal. Its estimate must be 1 to {max} minutes.",
+    "Couldn't confirm this proposal. Its estimate must be {min} to {max} minutes.",
   'tutoring.actionFailure.deadlineOutOfBounds.message':
     "Couldn't confirm this proposal. Its deadline is over {days} days away.",
   'tutoring.actionFailure.unconfirmedCreate.message':

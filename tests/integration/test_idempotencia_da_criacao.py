@@ -10,6 +10,7 @@ Os valores esperados sao literais: a chave, o instante e o prazo estao
 escritos a mao, e nenhum deles e recalculado pela logica sob teste.
 """
 
+import logging
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -50,6 +51,8 @@ CORPO: dict[str, Any] = {
     "deadline": PRAZO,
 }
 SEGUNDOS_LIMITE = 30
+# Impressao reconhecivel: o registro nao pode carrega-la.
+IMPRESSAO = "ab" * 32
 
 
 class Relogio:
@@ -289,6 +292,45 @@ def test_a_limpeza_remove_as_chaves_vencidas_so_do_proprio_usuario(
         (ESTUDANTE, UUID(OUTRA_CHAVE), depois),
         (OUTRO, UUID(CHAVE), AGORA),
     ]
+
+
+def test_cada_criacao_registra_o_tamanho_e_a_idade_das_reservas(
+    session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A reserva de outra pessoa nao e limpa pelo POST desta, entao envelhece
+    alem das 24 h: e esse acumulo que o registro deixa visivel. O retrato e
+    tirado depois da limpeza e antes da reserva nova."""
+    session.add(User(id=OUTRO, display_name="Outra pessoa"))
+    session.flush()
+    for user_id in (ESTUDANTE, OUTRO):
+        _criar_com_chave(session, user_id, CHAVE, AGORA)
+    caplog.set_level(logging.INFO, logger="focusquest")
+    caplog.clear()
+
+    depois = datetime(2026, 9, 19, 15, 0, 1, tzinfo=UTC)
+    _criar_com_chave(session, ESTUDANTE, OUTRA_CHAVE, depois, impressao=IMPRESSAO)
+
+    (registro,) = [r for r in caplog.records if r.name.startswith("focusquest")]
+    assert registro.levelno == logging.INFO
+    assert registro.getMessage() == (
+        "reservas de idempotencia: total=1 mais_antiga_s=86401"
+    )
+    assert vars(registro)["idempotency_keys_total"] == 1
+    assert vars(registro)["idempotency_keys_oldest_age_s"] == 86401
+    campos = repr(vars(registro))
+    for segredo in (CHAVE, OUTRA_CHAVE, IMPRESSAO):
+        assert segredo not in campos
+
+
+def test_sem_reservas_o_registro_traz_total_e_idade_zero(
+    session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger="focusquest")
+
+    _criar_com_chave(session, ESTUDANTE, CHAVE, AGORA)
+
+    (registro,) = [r for r in caplog.records if r.name.startswith("focusquest")]
+    assert registro.getMessage() == "reservas de idempotencia: total=0 mais_antiga_s=0"
 
 
 def _criar_com_chave(

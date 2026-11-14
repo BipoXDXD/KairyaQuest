@@ -434,6 +434,20 @@ foram medidos. O `tests/unit/test_log.py` repete as partes automatizáveis
 num subprocesso (a configuração padrão do uvicorn aplicada por
 `dictConfig`, e a partida em `DEBUG` com chave e senha conhecidas).
 
+**Retrato de `idempotency_keys`.** Cada `POST /api/missions` com
+`Idempotency-Key` deixa, no stderr do processo, uma linha
+`INFO focusquest.modules.missions.idempotency: reservas de idempotencia:
+total=N mais_antiga_s=S`. Os mesmos dois números vão nos campos
+`idempotency_keys_total` e `idempotency_keys_oldest_age_s` do registro. O
+retrato é tirado depois de apagadas as reservas vencidas do próprio usuário
+e antes da reserva nova. Ele traz só esses dois números, nunca a chave, a
+impressão do corpo nem o usuário. Valor esperado: com o usuário único, `S`
+fica abaixo de `86400` (24 h) e `N` não passa do número de criações com chave
+das últimas 24 h. `S` acima de `86400` quer dizer reserva de alguém que não
+voltou a criar e que a limpeza não alcança; `N` crescendo sem parar quer
+dizer acúmulo. Os dois casos pedem limpeza fora do POST. O teste é
+`tests/integration/test_idempotencia_da_criacao.py`.
+
 ### Diretório de trabalho (pendência 29)
 
 Os comandos do backend rodam **da raiz do repositório**, por decisão: o

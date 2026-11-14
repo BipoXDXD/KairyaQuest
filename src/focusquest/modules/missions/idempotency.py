@@ -17,16 +17,23 @@ de verdade em vez de ter de tentar de novo.
 do proprio usuario sao apagadas no inicio da mesma transacao: e o mecanismo
 mais simples que garante o teto da tabela sem job agendado, e a chave vencida
 fica livre exatamente quando seria reutilizada.
+
+**O retrato da tabela.** A limpeza so alcanca o proprio usuario: a reserva de
+quem nao volta a criar fica. Cada criacao com chave registra em INFO o total
+de reservas e a idade da mais antiga, tirados depois da limpeza -- nunca a
+chave, a impressao nem o usuario. Leitura e valor esperado em
+`docs/ARCHITECTURE.md`, secao do `POST /api/missions`.
 """
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -40,6 +47,8 @@ from focusquest.modules.missions.schemas import MissionCreate
 VALIDADE_DA_CHAVE = timedelta(hours=24)
 UNICIDADE_DA_CHAVE = "uq_idempotency_keys_user_id_key"
 VERSAO_DA_IMPRESSAO = "v1"
+
+_LOG = logging.getLogger(__name__)
 
 # So a forma canonica 8-4-4-4-12 (sem chaves, sem `urn:uuid:`, sem espacos):
 # `UUID()` sozinho aceitaria todas essas variacoes, e a mesma chave teria
@@ -103,6 +112,7 @@ def criar_com_chave(
             IdempotencyKey.created_at <= agora - VALIDADE_DA_CHAVE,
         )
     )
+    _registrar_retrato(session, agora)
     reserva = session.execute(
         insert(IdempotencyKey)
         .values(
@@ -120,6 +130,25 @@ def criar_com_chave(
         .values(mission_id=missao.id)
     )
     return missao
+
+
+def _registrar_retrato(session: Session, agora: datetime) -> None:
+    """Registra so o tamanho da tabela e a idade, em segundos, da reserva mais
+    antiga (0 com a tabela vazia). Os dois valores vao tambem como campos do
+    registro, para quem filtrar o log sem interpretar o texto."""
+    total, mais_antiga = session.execute(
+        select(func.count(), func.min(IdempotencyKey.created_at))
+    ).one()
+    idade_s = 0 if mais_antiga is None else int((agora - mais_antiga).total_seconds())
+    _LOG.info(
+        "reservas de idempotencia: total=%d mais_antiga_s=%d",
+        total,
+        idade_s,
+        extra={
+            "idempotency_keys_total": total,
+            "idempotency_keys_oldest_age_s": idade_s,
+        },
+    )
 
 
 def _missao_reservada(
