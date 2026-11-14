@@ -6,6 +6,13 @@ import {
   GALLERY_CASE_IDS,
   type GalleryCaseId,
 } from '../../src/test/gallery/caseIds'
+import {
+  AVALIACAO_FALHOU,
+  AVALIADA,
+  CONCLUSAO_COM_RECOMPENSA,
+  EM_ANDAMENTO,
+  PENDENTE,
+} from './missoesGaleria'
 
 /**
  * axe sem violacoes e alvos de toque de 44px em cada estado dos componentes de
@@ -145,6 +152,101 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
       nomeNaProposta('Confirmar'),
     )
   },
+  'mission-board': async (page) => {
+    // Um cartão por estado: pendente, em andamento, avaliada e avaliação que falhou.
+    await expect(page.getByTestId('mission-item')).toHaveCount(QUADRO.length)
+    const concluidas = QUADRO.filter((m) => m.state === 'concluida')
+    await expect(page.getByTestId('evaluation-panel')).toHaveCount(concluidas.length)
+    // A contagem sozinha passaria com a falha desenhada como aprovada.
+    await expect(cartao(page, AVALIADA.instructions).getByTestId('evaluation-verdict')).toHaveText(
+      'Critério atendido',
+    )
+    await expect(
+      cartao(page, AVALIACAO_FALHOU.instructions).getByTestId('evaluation-error'),
+    ).toContainText('A Kairya não conseguiu avaliar agora.')
+    // Iniciar só na pendente; Concluir em todas as que não estão concluídas.
+    await expect(page.getByTestId('mission-start')).toHaveCount(
+      QUADRO.filter((m) => m.state === 'pendente').length,
+    )
+    await expect(page.getByTestId('mission-complete')).toHaveCount(
+      QUADRO.length - concluidas.length,
+    )
+  },
+  'mission-starting': async (page) => {
+    // O POST nunca responde; o fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
+    await page.route(
+      `**/api/missions/${PENDENTE.id}/start`,
+      () => new Promise<void>(() => undefined),
+    )
+    const iniciar = page.getByTestId('mission-start')
+    await iniciar.click()
+    await expect(iniciar).toBeDisabled()
+    await expect(iniciar).toHaveAccessibleName(nomeNoCartao('Iniciando…', PENDENTE.instructions))
+    await expect(
+      cartao(page, PENDENTE.instructions).getByTestId('mission-start-status'),
+    ).toHaveText('Iniciando a missão…')
+  },
+  'mission-start-failed': async (page) => {
+    // 503 com corpo vazio: o aviso aparece e o Iniciar vira "Tentar de novo".
+    await page.route(`**/api/missions/${PENDENTE.id}/start`, (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    )
+    const item = cartao(page, PENDENTE.instructions)
+    await item.getByTestId('mission-start').click()
+    await expect(item.getByTestId('mission-start-error')).toContainText(
+      'Não foi possível confirmar o início.',
+    )
+    await expect(item.getByTestId('mission-start')).toHaveAccessibleName(
+      nomeNoCartao('Tentar de novo', PENDENTE.instructions),
+    )
+    await expect(item.getByTestId('mission-start')).toBeEnabled()
+  },
+  'mission-completing': async (page) => {
+    // O POST nunca responde; o fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
+    await page.route(
+      `**/api/missions/${EM_ANDAMENTO.id}/complete`,
+      () => new Promise<void>(() => undefined),
+    )
+    const item = cartao(page, EM_ANDAMENTO.instructions)
+    const concluir = item.getByTestId('mission-complete')
+    await concluir.click()
+    await expect(concluir).toBeDisabled()
+    await expect(concluir).toHaveAccessibleName(
+      nomeNoCartao('Concluindo…', EM_ANDAMENTO.instructions),
+    )
+    await expect(item.getByTestId('mission-completion-text')).toHaveText('Concluindo a missão…')
+  },
+  'mission-completion-failed': async (page) => {
+    // 503 com corpo vazio: o aviso aparece e o Concluir vira "Tentar de novo".
+    await page.route(`**/api/missions/${EM_ANDAMENTO.id}/complete`, (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    )
+    const item = cartao(page, EM_ANDAMENTO.instructions)
+    await item.getByTestId('mission-complete').click()
+    await expect(item.getByTestId('mission-completion-error')).toContainText(
+      'Não foi possível confirmar a conclusão.',
+    )
+    await expect(item.getByTestId('mission-complete')).toHaveAccessibleName(
+      nomeNoCartao('Tentar de novo', EM_ANDAMENTO.instructions),
+    )
+    await expect(item.getByTestId('mission-complete')).toBeEnabled()
+  },
+  'mission-completed-reward': async (page) => {
+    // 200 com recompensa: o anúncio do XP aparece na região viva do cartão.
+    await page.route(`**/api/missions/${EM_ANDAMENTO.id}/complete`, (route) =>
+      route.fulfill({ json: CONCLUSAO_COM_RECOMPENSA }),
+    )
+    const item = cartao(page, EM_ANDAMENTO.instructions)
+    await item.getByTestId('mission-complete').click()
+    await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
+    await expect(item.getByTestId('reward-xp')).toHaveText('+80 XP')
+    await expect(item.getByTestId('reward-level-up')).toHaveText('Subiu para o nível 2!')
+    // A entrada anima a opacidade por 400 ms: no meio dela o axe lê o texto
+    // misturado ao fundo. O contraste que importa é o do quadro final.
+    await item
+      .getByTestId('reward')
+      .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+  },
   'evidence-form-link-error': async (page) => {
     // O erro do link so aparece depois que o campo perde o foco.
     await page.getByTestId('evidence-link').focus()
@@ -153,12 +255,42 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
   },
 }
 
+const QUADRO = [PENDENTE, EM_ANDAMENTO, AVALIADA, AVALIACAO_FALHOU]
+
+/** O quadro busca as missoes na montagem: a rota precisa existir antes do goto. */
+async function servirQuadro(page: Page): Promise<void> {
+  await page.route(
+    (url) => url.pathname === '/api/missions',
+    (route) => route.fulfill({ json: QUADRO }),
+  )
+}
+
+// Rotas que precisam estar de pe antes de a pagina abrir.
+const ROTAS: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
+  'mission-board': servirQuadro,
+  'mission-starting': servirQuadro,
+  'mission-start-failed': servirQuadro,
+  'mission-completing': servirQuadro,
+  'mission-completion-failed': servirQuadro,
+  'mission-completed-reward': servirQuadro,
+}
+
+/** O nome acessivel de Iniciar/Concluir num cartao do quadro. */
+function nomeNoCartao(rotulo: string, instrucoes: string): string {
+  return `${rotulo} a missão: ${instrucoes}`
+}
+
 /**
  * O nome acessivel de Confirmar/Recusar no cartao da galeria: o rotulo visivel
  * mais o alvo `sr-only`, separados pelo espaco que fica fora do `span`.
  */
 function nomeNaProposta(rotulo: string): string {
   return `${rotulo} o reagendamento: Resumir o capítulo 3`
+}
+
+/** O cartao do quadro que traz estas instrucoes. */
+function cartao(page: Page, instrucoes: string) {
+  return page.getByTestId('mission-item').filter({ hasText: instrucoes })
 }
 
 /** Segunda e prova preenchidas, e a segunda copiada para o resto: o formulario fica valido. */
@@ -180,6 +312,7 @@ const VARIANTES = [
 
 for (const { id, query, nome } of VARIANTES) {
   test(`axe sem violações e alvos de 44px: ${nome}`, async ({ page }) => {
+    await ROTAS[id]?.(page)
     await page.goto(`/ui-gallery.html?${query}`)
     const root = page.locator(`[data-gallery-case="${id}"]`)
     // Nao deixa o axe rodar sobre uma pagina vazia. A guarda olha o conteudo, e

@@ -71,6 +71,12 @@ export const GALLERY_CASE_IDS = [
   'evidence-form-open',
   'evidence-form-link-error',
   'evidence-form-retry',
+  'mission-board',
+  'mission-starting',
+  'mission-start-failed',
+  'mission-completing',
+  'mission-completion-failed',
+  'mission-completed-reward',
 ] as const
 
 export type GalleryCaseId = (typeof GALLERY_CASE_IDS)[number]
