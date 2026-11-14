@@ -1,4 +1,4 @@
-# wt/lote21-base: `novo-worktree.sh` nasce da `origin/main` (lote 21) — 2026-11-12
+# `novo-worktree.sh` nasce da `origin/main` (#149) — 2026-11-12
 
 Objetivo: resolver a pendência **P-worktree-base-1** do `docs/HANDOFF.md`. O
 `scripts/novo-worktree.sh` criava o worktree a partir da `main` local
@@ -84,7 +84,7 @@ banco sem `_test`.
 Este PR não toca o `docs/HANDOFF.md` (o `make check-handoff` reprova). A
 consolidação deve:
 
-- riscar a pendência **P-worktree-base-1** como resolvida (lote 21, este PR),
+- riscar a pendência da base do worktree como resolvida (#149, este PR),
   tirando o "Contorno" (`git merge --ff-only origin/main` no worktree novo);
 - na tabela de Comandos, trocar "Árvore interna a partir da `main` local (ver
   P-worktree-base-1)" por "Árvore interna a partir da `origin/main`, buscada pelo

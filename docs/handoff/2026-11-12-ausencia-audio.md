@@ -1,4 +1,4 @@
-# Lote 25 -- afirmacao de AUSENCIA de som sem descarregar efeitos
+# Afirmacao de AUSENCIA de som sem descarregar efeitos (#159)
 
 ## Objetivo
 O PR #157 mostrou que a voz sai de um efeito passivo, que o React descarrega numa

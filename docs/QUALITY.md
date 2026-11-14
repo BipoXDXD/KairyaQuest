@@ -837,6 +837,21 @@ não se paga com cinco jobs; revisar quando houver mais.
 
 Sem eufemismo:
 
+- **Markdown fica fora de qualquer verificação de formato, por decisão.** O
+  `prettier --check` do `check-web` roda só dentro de `frontend/`; nenhum
+  alvo formata ou verifica os `.md` da raiz e de `docs/`. Medido em
+  2026-11-13, com o Prettier que o front já usa: 75 dos 131 arquivos
+  (`docs/**/*.md`, `README.md`, `AGENTS.md`) reprovam, e formatá-los mexe em
+  ~1.500 linhas desses 75 arquivos, a maior parte em realinhar tabelas. O
+  `docs/HANDOFF.md`, o maior deles, só muda na consolidação (o
+  `check-handoff` reprova a branch que o edita fora dela), e tabelas com
+  células longas, como a do denominador da cobertura (§3), ficam menos
+  legíveis depois do realinhamento. O estilo do Markdown pode derivar sem
+  aviso; o que o gate confere nesses arquivos é o conteúdo (por exemplo,
+  `tests/unit/test_sem_franquia.py` lê `docs/`). Para reverter: um alvo novo no
+  `Makefile` (`prettier --check` sobre os `.md`), depois um job próprio no CI
+  (paridade, §5), num PR que formate os arquivos na mesma passada, com o
+  `docs/HANDOFF.md` numa consolidação.
 - **O `pre-push` valida o topo de cada ref enviada, não cada commit
   intermediário.** `scripts/check-push.sh` roda `make bootstrap` e
   `make check` uma vez por ref, no SHA que está no topo dela, em um

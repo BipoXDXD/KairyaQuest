@@ -1,4 +1,4 @@
-# wt/fitness-varredura: varredura de AST mais barata nos testes de fitness do frontend (lote 18) — 2026-11-12
+# Varredura de AST mais barata nos testes de fitness do frontend (#140) — 2026-11-12
 
 Objetivo: `noCrossFeatureInternals.test.ts` e `noMathRandom.test.ts` estouraram
 o timeout de 5 s do Vitest com a máquina carregada (load > 15; ocorrência

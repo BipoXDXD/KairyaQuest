@@ -275,7 +275,7 @@ def test_cria_o_worktree_com_banco_e_portas_proprios(repo: Repositorio) -> None:
 
 
 def test_nao_instala_hooks_e_aponta_para_o_script_unico(repo: Repositorio) -> None:
-    """Lote 20: `pre-commit install` por worktree fixava o `.venv` dele nos hooks
+    """Antes do #146, `pre-commit install` por worktree fixava o `.venv` dele nos hooks
     do `.git` comum. O script nao instala hook nenhum; so manda usar o unico
     instalador, uma vez por clone."""
     hooks = repo.principal / ".git" / "hooks"
@@ -1147,7 +1147,7 @@ def test_a_recusa_do_fetch_nao_vaza_credencial_da_url_do_remoto(
 
 
 # ---------------------------------------------------------------------------
-# Alocacao do deslocamento: o primeiro LIVRE, de verdade (lote 19b)
+# Alocacao do deslocamento: o primeiro LIVRE, de verdade (#143)
 # ---------------------------------------------------------------------------
 #
 # "Livre" = nenhum outro worktree o reivindica no `.env` E nenhuma das quatro

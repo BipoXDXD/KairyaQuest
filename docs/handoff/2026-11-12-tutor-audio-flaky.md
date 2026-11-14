@@ -1,4 +1,4 @@
-# Lote 24 -- flaky em `TutorPanel.audio.test.tsx:182`
+# Flaky em `TutorPanel.audio.test.tsx:182` (#157)
 
 ## Sintoma
 "no desktop, aceitar a proposta toca a voz da legenda visivel" falhou uma vez no

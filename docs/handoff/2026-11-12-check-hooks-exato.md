@@ -1,4 +1,4 @@
-# wt/lote23-check-hooks: `make check-hooks` com regra exata (lote 23) — 2026-11-12
+# `make check-hooks` com regra exata (#155) — 2026-11-12
 
 Objetivo: o `scripts/verificar-hooks.sh` só reprovava `INSTALL_PYTHON` inexistente ou
 dentro de worktree. Um `pre-commit install` rodado de um worktree **vivo**, do Python do
@@ -47,7 +47,7 @@ com o Python correto agora sendo o do `.hooks-venv`.
     para um Python existente fora de `.claude/worktrees`") deve virar "o
     `INSTALL_PYTHON` dos três hooks é exatamente `<principal>/.hooks-venv/bin/python`";
   - a linha da tabela de Comandos que mandava `uv run pre-commit install
-    --install-hooks` (pendência `P-hooks-venv-1` do lote 20) já aparece como
+    --install-hooks` (pendência do #146) já aparece como
     `scripts/instalar-hooks.sh` no `HANDOFF.md` da `main` em `e3236c6`; se alguma
     cópia ainda trouxer a forma antiga, ela deve virar `scripts/instalar-hooks.sh`.
 - `make check-hooks` continua fora do `make check` e não roda a cada commit

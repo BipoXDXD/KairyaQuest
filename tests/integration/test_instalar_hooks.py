@@ -1,4 +1,4 @@
-"""Testes do `scripts/instalar-hooks.sh` e do `scripts/verificar-hooks.sh` (lote 20).
+"""Testes do `scripts/instalar-hooks.sh` e do `scripts/verificar-hooks.sh` (#146).
 
 O problema: `pre-commit install` grava, em cada hook do `.git` comum, o
 `INSTALL_PYTHON` do interpretador que o rodou. Rodado num worktree, o hook passa
@@ -386,7 +386,7 @@ def test_verificador_aprova_o_python_do_hooks_venv(repo: Repositorio) -> None:
 def test_verificador_reprova_python_dentro_de_claude_worktrees(
     repo: Repositorio, hook: str
 ) -> None:
-    """A sabotagem do lote 20: o estado em que os hooks reais estavam."""
+    """A sabotagem do #146: o estado em que os hooks reais estavam."""
     bom = _python_esperado(repo)
     ruim_dir = repo.principal / ".claude" / "worktrees" / "x" / ".venv" / "bin"
     ruim_dir.mkdir(parents=True)
@@ -480,7 +480,7 @@ def test_verificador_roda_de_dentro_de_um_worktree(repo: Repositorio) -> None:
 
 
 # ---------------------------------------------------------------------------
-# verificar-hooks.sh -- regra EXATA (lote 23): o INSTALL_PYTHON dos tres hooks
+# verificar-hooks.sh -- regra EXATA (#155): o INSTALL_PYTHON dos tres hooks
 # tem de ser `<pai do .git comum>/.hooks-venv/bin/python`, nada mais
 # ---------------------------------------------------------------------------
 
@@ -499,7 +499,7 @@ def test_verificador_reprova_pre_commit_install_rodado_de_um_worktree_que_existe
     repo: Repositorio,
 ) -> None:
     """O cenario real: o instalador rodou, depois alguem rodou `pre-commit install`
-    de um worktree vivo. O `.venv` dele existe, e antes do lote 23 isso passava
+    de um worktree vivo. O `.venv` dele existe, e antes do #155 isso passava
     despercebido enquanto o worktree nao fosse removido.
     """
     assert repo.instalar().returncode == 0

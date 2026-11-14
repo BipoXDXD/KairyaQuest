@@ -1,4 +1,4 @@
-# wt/worktree-offset: `novo-worktree.sh` aloca o primeiro deslocamento livre de verdade (lote 19b) — 2026-11-12
+# `novo-worktree.sh` aloca o primeiro deslocamento livre de verdade (#143) — 2026-11-12
 
 Objetivo: `scripts/novo-worktree.sh <nome>` escolhia o deslocamento das portas do E2E
 só pelos `.env` dos worktrees, numa faixa fixa de 1 a 24, e recusou com 25 worktrees,
