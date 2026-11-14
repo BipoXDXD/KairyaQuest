@@ -4,12 +4,14 @@ import {
   ButtonCase,
   ConfirmDialogCase,
   EmptyStateCase,
+  EvidenceFormCase,
   FieldCase,
   IconButtonCase,
   LanguageSwitcherCase,
   NavTabsCase,
   PanelCase,
   ProgressBarCase,
+  RescheduleProposalCase,
   SkeletonCase,
   SoundToggleCase,
   SpeechBubbleCase,
@@ -18,6 +20,11 @@ import {
   WeekPlanFormCase,
 } from './caseComponents'
 import type { GalleryCaseId } from './caseIds'
+
+const EVIDENCIA = {
+  text: 'Resumo do capítulo 3, com os exercícios feitos.',
+  link: 'https://example.com/resumo',
+}
 
 // `Record`: o compilador exige um caso para cada id, e nenhum a mais.
 export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
@@ -76,4 +83,16 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
   'week-plan-form-error': () => <WeekPlanFormCase />,
   'week-plan-form-sending': () => <WeekPlanFormCase />,
   'week-plan-form-failure': () => <WeekPlanFormCase />,
+  'reschedule-proposal-open': () => <RescheduleProposalCase state="proposta" />,
+  'reschedule-proposal-confirming': () => <RescheduleProposalCase state="proposta" />,
+  'reschedule-proposal-confirm-failed': () => <RescheduleProposalCase state="proposta" />,
+  'reschedule-proposal-rescheduled': () => <RescheduleProposalCase state="executada" />,
+  'reschedule-proposal-rejected': () => <RescheduleProposalCase state="recusada" />,
+  'reschedule-proposal-failed': () => <RescheduleProposalCase state="falhou" />,
+  'evidence-form-collapsed': () => <EvidenceFormCase draft={{ text: '', link: '' }} />,
+  'evidence-form-open': () => <EvidenceFormCase draft={EVIDENCIA} />,
+  'evidence-form-link-error': () => (
+    <EvidenceFormCase draft={{ ...EVIDENCIA, link: 'nao-e-link' }} />
+  ),
+  'evidence-form-retry': () => <EvidenceFormCase draft={EVIDENCIA} retryPending />,
 }

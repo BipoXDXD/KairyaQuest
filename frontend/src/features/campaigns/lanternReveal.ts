@@ -40,8 +40,9 @@ function decide(litDay: string | null, storage: Storage | null): Reveal {
  *
  * A decisão só lê o storage, durante o render, e vale até `litDay` mudar
  * (por exemplo, numa atualização em silêncio que acende a lanterna). A
- * gravação do "já vista" fica no efeito: assim o render duplo do
- * `StrictMode` não grava antes da segunda leitura e apaga a animação.
+ * gravação do "já vista" fica no efeito porque o render tem de ser puro: o
+ * React pode descartar um render sem levá-lo à tela, e gravar ali marcaria
+ * como vista uma lanterna que ninguém viu acender.
  */
 export function useLanternReveal(litDay: string | null, storage = defaultStorage()): boolean {
   const [reveal, setReveal] = useState(() => decide(litDay, storage))

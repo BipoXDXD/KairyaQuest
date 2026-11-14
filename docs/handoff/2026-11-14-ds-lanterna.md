@@ -16,8 +16,11 @@ Revisão-base: `main` em `7fb07c2`.
 - **Storage ausente ou que lança na leitura: não anima.** Sem como lembrar,
   a animação repetiria a cada visita. Falha na escrita é engolida.
 - **Decide no render, grava no efeito.** `useLanternReveal` só lê o storage
-  durante o render e guarda a decisão até o dia aceso mudar. Gravar no
-  render faria o render duplo do `StrictMode` apagar a animação. A troca de
+  durante o render e guarda a decisão até o dia aceso mudar. O render tem de
+  ser puro: um render descartado pelo React gravaria como vista uma lanterna
+  que não apareceu. (A primeira versão desta nota culpava o render duplo do
+  `StrictMode`, o que não se confirma no React 19; corrigido no PR seguinte,
+  com o teste `useLanternReveal` em `lanternReveal.test.ts`.) A troca de
   `litDay` (uma atualização em silêncio que acende a lanterna com a trilha
   aberta) decide de novo, pelo padrão de ajustar estado durante o render.
 - **Movimento reduzido.** A classe é `motion-safe:animate-lantern-lit`; sob

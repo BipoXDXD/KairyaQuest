@@ -58,6 +58,16 @@ export const GALLERY_CASE_IDS = [
   'week-plan-form-error',
   'week-plan-form-sending',
   'week-plan-form-failure',
+  'reschedule-proposal-open',
+  'reschedule-proposal-confirming',
+  'reschedule-proposal-confirm-failed',
+  'reschedule-proposal-rescheduled',
+  'reschedule-proposal-rejected',
+  'reschedule-proposal-failed',
+  'evidence-form-collapsed',
+  'evidence-form-open',
+  'evidence-form-link-error',
+  'evidence-form-retry',
 ] as const
 
 export type GalleryCaseId = (typeof GALLERY_CASE_IDS)[number]
