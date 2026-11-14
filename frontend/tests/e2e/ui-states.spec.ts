@@ -153,12 +153,24 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     )
   },
   'mission-board': async (page) => {
-    // Um cartao por estado: pendente, em andamento, avaliada e avaliacao que falhou.
+    // Um cartão por estado: pendente, em andamento, avaliada e avaliação que falhou.
     await expect(page.getByTestId('mission-item')).toHaveCount(QUADRO.length)
-    await expect(page.getByTestId('evaluation-panel')).toHaveCount(2)
-    // Iniciar só na pendente; Concluir nas duas que não estão concluídas.
-    await expect(page.getByTestId('mission-start')).toHaveCount(1)
-    await expect(page.getByTestId('mission-complete')).toHaveCount(2)
+    const concluidas = QUADRO.filter((m) => m.state === 'concluida')
+    await expect(page.getByTestId('evaluation-panel')).toHaveCount(concluidas.length)
+    // A contagem sozinha passaria com a falha desenhada como aprovada.
+    await expect(cartao(page, AVALIADA.instructions).getByTestId('evaluation-verdict')).toHaveText(
+      'Critério atendido',
+    )
+    await expect(
+      cartao(page, AVALIACAO_FALHOU.instructions).getByTestId('evaluation-error'),
+    ).toContainText('A Kairya não conseguiu avaliar agora.')
+    // Iniciar só na pendente; Concluir em todas as que não estão concluídas.
+    await expect(page.getByTestId('mission-start')).toHaveCount(
+      QUADRO.filter((m) => m.state === 'pendente').length,
+    )
+    await expect(page.getByTestId('mission-complete')).toHaveCount(
+      QUADRO.length - concluidas.length,
+    )
   },
   'mission-starting': async (page) => {
     // O POST nunca responde; o fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
@@ -179,14 +191,15 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await page.route(`**/api/missions/${PENDENTE.id}/start`, (route) =>
       route.fulfill({ status: 503, body: '' }),
     )
-    await page.getByTestId('mission-start').click()
-    await expect(page.getByTestId('mission-start-error')).toContainText(
+    const item = cartao(page, PENDENTE.instructions)
+    await item.getByTestId('mission-start').click()
+    await expect(item.getByTestId('mission-start-error')).toContainText(
       'Não foi possível confirmar o início.',
     )
-    await expect(page.getByTestId('mission-start')).toHaveAccessibleName(
+    await expect(item.getByTestId('mission-start')).toHaveAccessibleName(
       nomeNoCartao('Tentar de novo', PENDENTE.instructions),
     )
-    await expect(page.getByTestId('mission-start')).toBeEnabled()
+    await expect(item.getByTestId('mission-start')).toBeEnabled()
   },
   'mission-completing': async (page) => {
     // O POST nunca responde; o fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
@@ -194,12 +207,14 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
       `**/api/missions/${EM_ANDAMENTO.id}/complete`,
       () => new Promise<void>(() => undefined),
     )
-    const concluir = cartao(page, EM_ANDAMENTO.instructions).getByTestId('mission-complete')
+    const item = cartao(page, EM_ANDAMENTO.instructions)
+    const concluir = item.getByTestId('mission-complete')
     await concluir.click()
     await expect(concluir).toBeDisabled()
     await expect(concluir).toHaveAccessibleName(
       nomeNoCartao('Concluindo…', EM_ANDAMENTO.instructions),
     )
+    await expect(item.getByTestId('mission-completion-text')).toHaveText('Concluindo a missão…')
   },
   'mission-completion-failed': async (page) => {
     // 503 com corpo vazio: o aviso aparece e o Concluir vira "Tentar de novo".
@@ -217,7 +232,7 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await expect(item.getByTestId('mission-complete')).toBeEnabled()
   },
   'mission-completed-reward': async (page) => {
-    // 200 com recompensa: o anuncio do XP aparece na regiao viva do cartao.
+    // 200 com recompensa: o anúncio do XP aparece na região viva do cartão.
     await page.route(`**/api/missions/${EM_ANDAMENTO.id}/complete`, (route) =>
       route.fulfill({ json: CONCLUSAO_COM_RECOMPENSA }),
     )
@@ -225,8 +240,9 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await item.getByTestId('mission-complete').click()
     await expect(item.getByTestId('mission-completion-text')).toHaveText('Missão concluída.')
     await expect(item.getByTestId('reward-xp')).toHaveText('+80 XP')
-    // A entrada anima a opacidade por 400 ms: no meio dela o axe le o texto
-    // misturado ao fundo. O contraste que importa e o do quadro final.
+    await expect(item.getByTestId('reward-level-up')).toHaveText('Subiu para o nível 2!')
+    // A entrada anima a opacidade por 400 ms: no meio dela o axe lê o texto
+    // misturado ao fundo. O contraste que importa é o do quadro final.
     await item
       .getByTestId('reward')
       .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
