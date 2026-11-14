@@ -8,6 +8,7 @@ import { civilWeekday, formatCivilDate } from '../../shared/lib/civilDate'
 import { DAYS_PER_MILESTONE, type Availability } from '../../shared/types/mission'
 import { Badge, Button, Panel, Skeleton } from '../../shared/ui'
 import { LanternGlyph } from './LanternGlyph'
+import { useLanternReveal } from './lanternReveal'
 import {
   lanternsOf,
   todayIndexOf,
@@ -64,7 +65,18 @@ function LanternStatus({ state, children }: { state: LanternState; children: str
   )
 }
 
-function DayItem({ lantern, isToday }: { lantern: DayLantern; isToday: boolean }) {
+/** A lanterna de hoje que acende: so sob `motion-safe:` (README §7, movimento reduzido). */
+const REVEAL = 'motion-safe:animate-lantern-lit'
+
+function DayItem({
+  lantern,
+  isToday,
+  revealing,
+}: {
+  lantern: DayLantern
+  isToday: boolean
+  revealing: boolean
+}) {
   const t = useT()
   const { locale } = useLocale()
   return (
@@ -75,7 +87,10 @@ function DayItem({ lantern, isToday }: { lantern: DayLantern; isToday: boolean }
       data-state={lantern.state}
       className={`${ITEM_BASE} ${ITEM_TONE[lantern.state]}`}
     >
-      <span className="flex w-16 shrink-0 justify-center">
+      <span
+        data-testid="trail-day-art"
+        className={`flex w-16 shrink-0 justify-center ${revealing ? REVEAL : ''}`}
+      >
         <LanternGlyph state={lantern.state} size="small" />
       </span>
       <div className="flex min-w-0 flex-col gap-1">
@@ -180,6 +195,9 @@ function TrailLoaded({
   const { locale } = useLocale()
   const { days, special } = lanternsOf(plan)
   const todayIndex = todayIndexOf(plan)
+  // `days[-1]` e `undefined`: sem dia revelado, nao ha lanterna de hoje.
+  const todayLantern = days[todayIndex]
+  const revealing = useLanternReveal(todayLantern?.state === 'lit' ? todayLantern.day : null)
   const lit = days.filter((lantern) => lantern.state === 'lit').length
   const hasReadyLantern = [...days, special].some(
     (lantern) => lantern.availability === 'disponivel',
@@ -194,7 +212,12 @@ function TrailLoaded({
       </p>
       <ol aria-label={t('campaigns.lantern.list')} className="flex flex-col gap-3">
         {days.map((lantern, index) => (
-          <DayItem key={lantern.day} lantern={lantern} isToday={index === todayIndex} />
+          <DayItem
+            key={lantern.day}
+            lantern={lantern}
+            isToday={index === todayIndex}
+            revealing={revealing && index === todayIndex}
+          />
         ))}
         <SpecialItem lantern={special} progress={plan.special.progress} />
       </ol>

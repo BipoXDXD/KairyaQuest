@@ -300,6 +300,52 @@ test('Campanhas abre pela navegacao, com a trilha do plano semeado, e passa no a
   expect(resultadoQuartel.violations).toEqual([])
 })
 
+/** A chave que a trilha grava ao acender a lanterna de hoje (`LANTERN_REVEAL_KEY`, em `lanternReveal.ts`). */
+const CHAVE_DA_LANTERNA_VISTA = 'kairyaquest.lanternRevealSeen'
+
+/**
+ * A lanterna de hoje (concluida no primeiro cenario) acende na primeira vista
+ * da trilha, uma vez por dia. Com movimento reduzido, nem a primeira vista
+ * anima: a lanterna so aparece acesa. Cada teste tem contexto proprio, entao
+ * o storage comeca vazio.
+ */
+test('a lanterna de hoje acende na primeira vista da trilha, uma vez por dia, e nao anima com movimento reduzido', async ({
+  page,
+}) => {
+  const diaDeHoje = page
+    .getByTestId('campaigns')
+    .locator(`[data-testid="trail-day"][data-day="${hoje}"]`)
+  const arteDeHoje = diaDeHoje.getByTestId('trail-day-art')
+  const animacaoDaArte = () => arteDeHoje.evaluate((arte) => getComputedStyle(arte).animationName)
+  const lanternaVista = () =>
+    page.evaluate((chave) => window.localStorage.getItem(chave), CHAVE_DA_LANTERNA_VISTA)
+
+  await page.goto('/')
+  await page.getByTestId('nav-campaigns').click()
+  await expect(diaDeHoje).toHaveAttribute('data-state', 'lit')
+  await expect(arteDeHoje).toHaveClass(/motion-safe:animate-lantern-lit/)
+  expect(await animacaoDaArte()).toBe('lantern-lit')
+  await expect.poll(lanternaVista).toBe(hoje)
+
+  // De volta no mesmo dia: a lanterna continua acesa, sem acender de novo.
+  await page.reload()
+  await page.getByTestId('nav-campaigns').click()
+  await expect(diaDeHoje).toHaveAttribute('data-state', 'lit')
+  await expect(arteDeHoje).not.toHaveClass(/animate-lantern-lit/)
+  expect(await animacaoDaArte()).toBe('none')
+
+  // Movimento reduzido, com o dia ainda nao visto: a classe sai, mas nada anima.
+  await page.evaluate((chave) => {
+    window.localStorage.removeItem(chave)
+  }, CHAVE_DA_LANTERNA_VISTA)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.reload()
+  await page.getByTestId('nav-campaigns').click()
+  await expect(diaDeHoje).toHaveAttribute('data-state', 'lit')
+  await expect(arteDeHoje).toHaveClass(/motion-safe:animate-lantern-lit/)
+  expect(await animacaoDaArte()).toBe('none')
+})
+
 test('Campanhas abre pelo teclado: Tab pelo idioma e pelo som ate a navegacao, Enter, e o foco vai para o titulo', async ({
   page,
 }) => {

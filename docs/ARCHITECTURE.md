@@ -1429,7 +1429,11 @@ ciclo (`late_daily`) está em "O contrato HTTP do ciclo diário", acima.
   `disponivel` e a prop opcional `onOpenHeadquarters`, aparece um botão
   `trail-go-headquarters` (Ruling R5), sem ela um texto. Quando
   `refreshFailed`, o `data-testid="trail-stale"` avisa, com "Atualizar"
-  chamando `reload`. Nada anima: o brilho da lanterna acesa é estático.
+  chamando `reload`. O brilho da lanterna acesa é estático; a única
+  animação é a lanterna de hoje acendendo (cerca de 900 ms, só sob
+  `motion-safe:`) na primeira vista da trilha depois de concluir a diária.
+  O dia visto fica no `localStorage` (`lanternReveal.ts`); sem storage, ou
+  com ele falhando, nada anima.
 - **`src/shared/api/`** *(existe)* — o cliente HTTP único (`client.ts`), com
   `requestJson` (GET), `postJson` (POST) e, desde o 1b-2, `postStream`
   (`fetch` + `ReadableStream` + `TextDecoder`, sem biblioteca de SSE, com

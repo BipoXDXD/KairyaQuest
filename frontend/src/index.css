@@ -16,10 +16,31 @@
   }
 }
 
+/* A lanterna de hoje que acende na primeira vista da trilha depois de
+   concluir a diaria (LanternTrail.tsx, `useLanternReveal`), so sob
+   `motion-safe:`. O brilho cresce com o filtro do token e assenta no
+   `shadow-glow-lantern` estatico do item. */
+@keyframes lantern-lit {
+  from {
+    opacity: 0.3;
+    transform: scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter: var(--glow-lantern-filter);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Gera a classe `animate-reward-in`, sem valor arbitrario (o designLint os
    reprova); a bolha da Kairya a usa sob `motion-safe:`. */
 @theme {
   --animate-reward-in: reward-in 400ms ease-out;
+  --animate-lantern-lit: lantern-lit 900ms ease-out;
 }
 
 .area-main section > h2 {
