@@ -18,6 +18,7 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   ...onEverySurface('color-feedback-success', 4.5, 'texto de sucesso'),
   ...onEverySurface('color-feedback-danger', 4.5, 'texto de erro'),
   ...onEverySurface('color-action-primary', 4.5, 'link terciário e Badge action'),
+  ...onEverySurface('color-action-primary-hover', 4.5, 'link em hover'),
   { fg: 'color-text-on-action', bg: 'color-action-primary', min: 4.5, use: 'botão primário' },
   {
     fg: 'color-text-on-action',
