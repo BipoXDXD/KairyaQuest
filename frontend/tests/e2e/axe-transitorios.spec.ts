@@ -696,11 +696,16 @@ for (const ambiente of AMBIENTES) {
               .getByRole('button', { name: `Concluir a missão: ${missao.instructions}` })
               .click()
 
-            await expect(cartao.getByTestId('mission-completion-text')).toHaveText(
-              'Concluindo a missão…',
-            )
-            await expect(cartao.getByTestId('mission-complete')).toBeDisabled()
+            const texto = cartao.getByTestId('mission-completion-text')
+            const botao = cartao.getByTestId('mission-complete')
+            await expect(texto).toHaveText('Concluindo a missão…')
+            await expect(botao).toBeDisabled()
+
             await semViolacoes(page)
+
+            // O estado ainda era o em voo DEPOIS do axe (ver `iniciando`).
+            await expect(texto).toHaveText('Concluindo a missão…')
+            await expect(botao).toBeDisabled()
 
             soltar()
             await expect(cartao.getByTestId('mission-state')).toHaveText('Concluída')
@@ -728,11 +733,16 @@ for (const ambiente of AMBIENTES) {
           async (soltar) => {
             await cartao.getByTestId('evaluation-request').click()
 
-            await expect(cartao.getByTestId('evaluation-status-text')).toHaveText(
-              'A Kairya está avaliando…',
-            )
-            await expect(cartao.getByTestId('evaluation-request')).toBeDisabled()
+            const texto = cartao.getByTestId('evaluation-status-text')
+            const botao = cartao.getByTestId('evaluation-request')
+            await expect(texto).toHaveText('A Kairya está avaliando…')
+            await expect(botao).toBeDisabled()
+
             await semViolacoes(page)
+
+            // O estado ainda era o em voo DEPOIS do axe (ver `iniciando`).
+            await expect(texto).toHaveText('A Kairya está avaliando…')
+            await expect(botao).toBeDisabled()
 
             soltar()
             await expect(cartao.getByText('Critério atendido', { exact: true })).toBeVisible()

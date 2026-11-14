@@ -195,26 +195,68 @@ jobs:
       # tentativa contra o host morto gastava ~11 min e estourava o teto do
       # job), e da 2a em diante em qualquer caso. A troca vem antes do
       # `--with-deps`, que e quem chama o apt. A lista de arquivos e filtrada
-      # pelos que existem, para o sed nao falhar por arquivo ausente.
+      # pelos que existem, para o sed nao falhar por arquivo ausente; sem
+      # nenhum, o passo reprova com mensagem, em vez de o sed abortar sem
+      # argumento.
+      #
+      # O que o passo grava, sempre (inclusive no caminho feliz): o
+      # `Acquire::Retries "5"` em /etc/apt/apt.conf.d/80-retries, para que um
+      # erro passageiro de um pacote seja repetido pelo apt antes de gastar uma
+      # tentativa inteira. So no fallback: a troca do host nos arquivos de
+      # sources.
+      #
+      # Orcamento: as tentativas dividem PRAZO_S (600 s), e cada uma roda sob
+      # `timeout` com o que sobrou (o `timeout` mata o grupo de processos,
+      # inclusive o apt). O teto do passo (12 min) e a rede de seguranca. Com
+      # o resto do job em ~5 min (preparo ~1 min, gate ponta a ponta ~4 min,
+      # medido no CI em 13/11), o pior caso fica abaixo dos 25 min do job. Na
+      # falha final, o passo sai com o codigo do ultimo `npx` (124 se foi o
+      # `timeout`), nao com 1.
+      #
+      # Limitacoes aceitas: (a) a troca cobre os hosts `*.ubuntu.com/ubuntu`,
+      # inclusive os regionais com hifen ou digito; o
+      # `ports.ubuntu.com/ubuntu-ports` de outras arquiteturas fica intocado
+      # (o caminho tem de terminar em `/ubuntu`) -- o runner e x86_64 e nao o
+      # usa; (b) o pocket security vai junto para o espelho
+      # alternativo, que pode estar algumas horas atras do security.ubuntu.com
+      # -- o passo so instala bibliotecas e fontes do Chromium num runner
+      # descartavel.
       - name: Instalar o Chromium do Playwright
+        timeout-minutes: 12
         run: |
           usar_kernel_org() {
             local fontes=() f
             for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
               if [ -f "$f" ]; then fontes+=("$f"); fi
             done
-            sudo sed -i -E 's#https?://[a-z.]*ubuntu\.com/ubuntu/?#http://mirrors.edge.kernel.org/ubuntu/#g' "${fontes[@]}"
+            if [ "${#fontes[@]}" -eq 0 ]; then
+              echo "::error::nenhum arquivo de sources do apt encontrado; nao ha onde trocar o espelho"
+              exit 1
+            fi
+            sudo sed -i -E 's#https?://[a-z0-9.-]*ubuntu\.com/ubuntu/?([[:space:]]|$)#http://mirrors.edge.kernel.org/ubuntu/\1#g' "${fontes[@]}"
           }
           echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries >/dev/null
           if ! timeout 10 getent hosts archive.ubuntu.com >/dev/null; then
             echo "archive.ubuntu.com sem DNS: apt no mirrors.edge.kernel.org desde a 1a tentativa"
             usar_kernel_org
           fi
+          PRAZO_S=600
+          status=0
           for tentativa in 1 2 3; do
-            npx playwright install --with-deps chromium && break
-            [ "$tentativa" = 3 ] && exit 1
+            restante=$((PRAZO_S - SECONDS))
+            if [ "$restante" -le 0 ]; then
+              echo "::error::prazo de ${PRAZO_S} s esgotado antes da tentativa ${tentativa}"
+              exit "$status"
+            fi
+            status=0
+            timeout "$restante" npx playwright install --with-deps chromium || status=$?
+            [ "$status" -eq 0 ] && break
+            if [ "$tentativa" -eq 3 ]; then
+              echo "::error::playwright install falhou 3 vezes; ultimo codigo de saida: ${status}"
+              exit "$status"
+            fi
             usar_kernel_org
-            sleep $((30 * tentativa))
+            sleep $((15 * tentativa))
           done
         working-directory: frontend
       - name: Gate ponta a ponta
