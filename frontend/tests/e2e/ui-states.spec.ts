@@ -65,21 +65,85 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await expect(page.getByTestId('week-plan-status')).toBeVisible()
     await expect(page.getByTestId('week-plan-submit')).not.toHaveAttribute('aria-busy', 'true')
   },
+  'week-plan-copy-monday': async (page) => {
+    // Copiar a segunda preenche os dias vazios e o aviso neutro confirma, no idioma da variante.
+    await page.getByTestId('week-plan-day-0-instructions').fill('Resolver listas')
+    await page.getByTestId('week-plan-copy-monday').click()
+    await expect(page.getByTestId('week-plan-day-1-instructions')).toHaveValue('Resolver listas')
+    const status = page.getByTestId('week-plan-status')
+    await expect(status).toHaveAttribute('data-tone', 'neutral')
+    const emIngles = new URL(page.url()).searchParams.get('lang') === 'en'
+    await expect(status).toHaveText(
+      emIngles ? 'Monday copied to the empty days.' : 'Segunda copiada para os dias vazios.',
+    )
+  },
   'reschedule-proposal-confirming': async (page) => {
     // O POST nunca responde: Confirmar e Recusar ficam travados no meio da decisao.
+    // O fetch desiste sozinho no MUTATION_TIMEOUT_MS (20 s), bem depois do axe.
     await page.route('**/api/tutoring/actions/31/confirm', () => new Promise<void>(() => undefined))
     await page.getByTestId('proposal-confirm').click()
     await expect(page.getByTestId('proposal-confirm')).toBeDisabled()
+    await expect(page.getByTestId('proposal-confirm')).toHaveAccessibleName(
+      nomeNaProposta('Confirmando…'),
+    )
     await expect(page.getByTestId('proposal-reject')).toBeDisabled()
+    await expect(page.getByTestId('proposal-reject')).toHaveAccessibleName(
+      nomeNaProposta('Recusar'),
+    )
   },
   'reschedule-proposal-confirm-failed': async (page) => {
-    // 503: o aviso de falha aparece e os botoes voltam a servir.
-    await page.route('**/api/tutoring/actions/31/confirm', (route) =>
-      route.fulfill({ status: 503, body: '' }),
-    )
+    // 503: o aviso de falha aparece, o Confirmar vira "Tentar de novo" e a
+    // segunda tentativa reusa a mesma chave de operacao.
+    const ids: string[] = []
+    await page.route('**/api/tutoring/actions/31/confirm', (route) => {
+      ids.push((route.request().postDataJSON() as { operation_id: string }).operation_id)
+      return route.fulfill({ status: 503, body: '' })
+    })
     await page.getByTestId('proposal-confirm').click()
     await expect(page.getByTestId('proposal-failure')).toBeVisible()
+    await expect(page.getByTestId('proposal-confirm')).toHaveAccessibleName(
+      nomeNaProposta('Tentar de novo'),
+    )
+    await page.getByTestId('proposal-confirm').click()
+    await expect.poll(() => ids.length).toBe(2)
+    expect(ids[1]).toBe(ids[0])
+    await expect(page.getByTestId('proposal-failure')).toBeVisible()
     await expect(page.getByTestId('proposal-confirm')).toBeEnabled()
+    await expect(page.getByTestId('proposal-reject')).toHaveAccessibleName(
+      nomeNaProposta('Recusar'),
+    )
+  },
+  'reschedule-proposal-rejecting': async (page) => {
+    // O POST da recusa nunca responde: os dois botoes travam e o Recusar diz
+    // "Recusando…". O fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
+    await page.route('**/api/tutoring/actions/31/reject', () => new Promise<void>(() => undefined))
+    await page.getByTestId('proposal-reject').click()
+    await expect(page.getByTestId('proposal-reject')).toBeDisabled()
+    await expect(page.getByTestId('proposal-reject')).toHaveAccessibleName(
+      nomeNaProposta('Recusando…'),
+    )
+    await expect(page.getByTestId('proposal-confirm')).toBeDisabled()
+    await expect(page.getByTestId('proposal-confirm')).toHaveAccessibleName(
+      nomeNaProposta('Confirmar'),
+    )
+  },
+  'reschedule-proposal-reject-failed': async (page) => {
+    // 503 com corpo vazio e falha que se repete: o aviso aparece, o Recusar
+    // vira "Tentar de novo" e o Confirmar volta ao normal.
+    await page.route('**/api/tutoring/actions/31/reject', (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    )
+    await page.getByTestId('proposal-reject').click()
+    await expect(page.getByTestId('proposal-failure')).toContainText(
+      'Não foi possível recusar a proposta',
+    )
+    await expect(page.getByTestId('proposal-reject')).toHaveAccessibleName(
+      nomeNaProposta('Tentar de novo'),
+    )
+    await expect(page.getByTestId('proposal-reject')).toBeEnabled()
+    await expect(page.getByTestId('proposal-confirm')).toHaveAccessibleName(
+      nomeNaProposta('Confirmar'),
+    )
   },
   'evidence-form-link-error': async (page) => {
     // O erro do link so aparece depois que o campo perde o foco.
@@ -87,6 +151,14 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await page.getByTestId('evidence-text').focus()
     await expect(page.getByTestId('evidence-link-error')).toBeVisible()
   },
+}
+
+/**
+ * O nome acessivel de Confirmar/Recusar no cartao da galeria: o rotulo visivel
+ * mais o alvo `sr-only`, separados pelo espaco que fica fora do `span`.
+ */
+function nomeNaProposta(rotulo: string): string {
+  return `${rotulo} o reagendamento: Resumir o capítulo 3`
 }
 
 /** Segunda e prova preenchidas, e a segunda copiada para o resto: o formulario fica valido. */
