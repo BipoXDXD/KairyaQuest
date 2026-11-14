@@ -1,4 +1,4 @@
-# Lote 26 -- flaky latente sob Scheduler lento (P-ausencia-audio-1)
+# Flaky latente sob Scheduler lento (#161)
 
 ## Objetivo
 Resolver a `P-ausencia-audio-1`: sob um Scheduler do React lento, dois testes que nao

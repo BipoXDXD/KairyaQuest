@@ -1,4 +1,4 @@
-# Lote 14: ressalvas Minor acumuladas — 2026-11-11
+# Ressalvas Minor acumuladas (#131) — 2026-11-11
 
 Branch `wt/ressalvas-minor`. Tipos, comentários, docstrings e docs, com uma
 única mudança de comportamento (item 2, corpo `undefined`), coberta por um caso

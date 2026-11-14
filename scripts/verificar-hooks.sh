@@ -6,7 +6,7 @@
 #
 #   uso: scripts/verificar-hooks.sh
 #
-# Por que existe (lote 20): os hooks moram no .git COMUM, compartilhado por todos
+# Por que existe (#146): os hooks moram no .git COMUM, compartilhado por todos
 # os worktrees, e "pre-commit install" grava neles o interpretador de QUEM o
 # rodou. Rodado dentro de um worktree, ele fixa o .venv DAQUELE worktree -- e
 # remover o worktree (o fim normal de uma branch) quebra o hook de todos os
@@ -18,7 +18,7 @@
 #  - hook ausente, ou sem a linha INSTALL_PYTHON= (nao e hook do pre-commit);
 #  - INSTALL_PYTHON diferente do esperado, seja qual for: dentro de um worktree
 #    (some quando ele e removido), o python do sistema, o venv de outro
-#    projeto. Lote 23: antes so se reprovava worktree ou caminho inexistente, e
+#    projeto. Antes do #155 so se reprovava worktree ou caminho inexistente, e
 #    um "pre-commit install" de um worktree VIVO (ou de qualquer outro venv)
 #    passava despercebido. A causa provavel e "pre-commit install" rodado a mao;
 #  - INSTALL_PYTHON certo, mas que nao existe ou nao e executavel (o hook

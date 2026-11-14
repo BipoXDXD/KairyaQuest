@@ -1,4 +1,4 @@
-# wt/lote22c-isolamento: nenhum pedido do cenário anterior sobrevive ao reset do E2E (lote 22c) — 2026-11-12
+# Nenhum pedido do cenário anterior sobrevive ao reset do E2E (#151) — 2026-11-12
 
 Objetivo: fechar a **cascata** da pendência `P-e2e-flaky-1` (`docs/HANDOFF.md`): o
 cenário "avaliando" de `axe-transitorios` estourou a janela de 5 s, o pedido de

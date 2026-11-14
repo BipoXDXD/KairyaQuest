@@ -1,4 +1,4 @@
-# wt/hooks-venv: hooks de git com Python fora de qualquer worktree (lote 20) — 2026-11-12
+# Hooks de git com Python fora de qualquer worktree (#146) — 2026-11-12
 
 Objetivo: cada `pre-commit install --install-hooks` rodado num worktree reescrevia os
 hooks do `.git` comum com `INSTALL_PYTHON` apontando para o `.venv` **daquele**

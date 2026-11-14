@@ -4,7 +4,7 @@
 #
 #   uso: scripts/instalar-hooks.sh        (de qualquer worktree, sem argumentos)
 #
-# O problema que resolve (lote 20): "pre-commit install" grava, em cada hook do
+# O problema que resolve (#146): "pre-commit install" grava, em cada hook do
 # .git COMUM (compartilhado por todos os worktrees), o interpretador de quem o
 # rodou (INSTALL_PYTHON). Rodado num worktree, o hook passava a apontar para o
 # .venv daquele worktree; remover o worktree quebrava os hooks de todos.

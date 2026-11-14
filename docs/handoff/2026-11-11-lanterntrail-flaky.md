@@ -1,4 +1,4 @@
-# Lote 17: LanternTrail intermitente sob carga (issue #136), 2026-11-11
+# LanternTrail intermitente sob carga (issue #136, PR #137), 2026-11-11
 
 Revisão-base: `origin/main` 8936820 (#134). Branch `wt/lanterntrail-flaky`.
 Resolve a issue #136. Não toca `docs/HANDOFF.md`, backend nem catálogos i18n.
