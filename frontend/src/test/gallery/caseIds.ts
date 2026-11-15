@@ -77,6 +77,9 @@ export const GALLERY_CASE_IDS = [
   'mission-completing',
   'mission-completion-failed',
   'mission-completed-reward',
+  'mission-load-more',
+  'mission-loading-more',
+  'mission-load-more-failed',
 ] as const
 
 export type GalleryCaseId = (typeof GALLERY_CASE_IDS)[number]

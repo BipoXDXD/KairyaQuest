@@ -31,6 +31,16 @@ const BASE: Mission = {
 
 export const PENDENTE: Mission = { ...BASE, id: 41 }
 
+const TAMANHO_PAGINA = 50
+
+// O último prazo é distinto para o teste poder conferir de qual cartão saiu o cursor.
+export const PAGINA_CHEIA: Mission[] = Array.from({ length: TAMANHO_PAGINA }, (_, index) => ({
+  ...PENDENTE,
+  id: 101 + index,
+  instructions: `Resolver o exercício ${index + 1} de algoritmos`,
+  deadline: index === TAMANHO_PAGINA - 1 ? '2026-11-21T13:00:00Z' : PENDENTE.deadline,
+}))
+
 export const EM_ANDAMENTO: Mission = {
   ...BASE,
   id: 42,
