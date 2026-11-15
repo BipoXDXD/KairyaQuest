@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type Page } from '@playwright/test'
+import type { Locale } from '../../src/shared/i18n/locale'
 import { test } from './saudacaoJaVista'
 import {
   ENGLISH_CASE_IDS,
@@ -24,7 +25,7 @@ import {
 // Estados que so existem depois de uma interacao: o spec a faz e afirma o
 // estado antes do axe (decisao N3: a API dos componentes nao ganha prop so
 // para a galeria).
-const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
+const SETUP: Partial<Record<GalleryCaseId, (page: Page, locale: Locale) => Promise<void>>> = {
   'confirm-dialog-confirming': async (page) => {
     // O onConfirm do caso nunca resolve.
     const confirm = page.getByRole('dialog').locator('[data-variant="danger-confirm"]')
@@ -153,18 +154,24 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
       nomeNaProposta('Confirmar'),
     )
   },
-  'mission-board': async (page) => {
+  'mission-board': async (page, locale) => {
+    const emIngles = locale === 'en'
+    await expect(page.locator('html')).toHaveAttribute('lang', locale)
     // Um cartão por estado: pendente, em andamento, avaliada e avaliação que falhou.
     await expect(page.getByTestId('mission-item')).toHaveCount(QUADRO.length)
     const concluidas = QUADRO.filter((m) => m.state === 'concluida')
     await expect(page.getByTestId('evaluation-panel')).toHaveCount(concluidas.length)
     // A contagem sozinha passaria com a falha desenhada como aprovada.
     await expect(cartao(page, AVALIADA.instructions).getByTestId('evaluation-verdict')).toHaveText(
-      'Critério atendido',
+      emIngles ? 'Criterion met' : 'Critério atendido',
     )
     await expect(
       cartao(page, AVALIACAO_FALHOU.instructions).getByTestId('evaluation-error'),
-    ).toContainText('A Kairya não conseguiu avaliar agora.')
+    ).toContainText(
+      emIngles
+        ? "Kairya couldn't evaluate this right now."
+        : 'A Kairya não conseguiu avaliar agora.',
+    )
     // Iniciar só na pendente; Concluir em todas as que não estão concluídas.
     await expect(page.getByTestId('mission-start')).toHaveCount(
       QUADRO.filter((m) => m.state === 'pendente').length,
@@ -172,6 +179,23 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
     await expect(page.getByTestId('mission-complete')).toHaveCount(
       QUADRO.length - concluidas.length,
     )
+    if (emIngles) {
+      await expect(
+        page.getByRole('heading', { name: 'Other missions — tasks with a deadline', exact: true }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole('button', {
+          name: `Start (mission: ${PENDENTE.instructions})`,
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole('button', {
+          name: `Complete (mission: ${EM_ANDAMENTO.instructions})`,
+          exact: true,
+        }),
+      ).toBeVisible()
+    }
   },
   'mission-starting': async (page) => {
     // O POST nunca responde; o fetch desiste no MUTATION_TIMEOUT_MS (20 s), depois do axe.
@@ -385,13 +409,22 @@ async function preencherPlano(page: Page): Promise<void> {
 
 const ALVO_MINIMO_PX = 44
 
-// Todo caso em portugues; os do formulario do plano tambem em ingles (`&lang=en`).
 const VARIANTES = [
-  ...GALLERY_CASE_IDS.map((id) => ({ id, query: `case=${id}`, nome: id })),
-  ...ENGLISH_CASE_IDS.map((id) => ({ id, query: `case=${id}&lang=en`, nome: `${id} (en)` })),
+  ...GALLERY_CASE_IDS.map((id) => ({
+    id,
+    locale: 'pt-BR' as const,
+    query: `case=${id}`,
+    nome: id,
+  })),
+  ...ENGLISH_CASE_IDS.map((id) => ({
+    id,
+    locale: 'en' as const,
+    query: `case=${id}&lang=en`,
+    nome: `${id} (en)`,
+  })),
 ]
 
-for (const { id, query, nome } of VARIANTES) {
+for (const { id, locale, query, nome } of VARIANTES) {
   test(`axe sem violações e alvos de 44px: ${nome}`, async ({ page }) => {
     await ROTAS[id]?.(page)
     await page.goto(`/ui-gallery.html?${query}`)
@@ -400,7 +433,7 @@ for (const { id, query, nome } of VARIANTES) {
     // nao a secao: um <dialog> modal vai para a top layer e deixa a secao com
     // tamanho zero, que o Playwright considera oculta.
     await expect(root.locator('*').filter({ visible: true }).first()).toBeVisible()
-    await SETUP[id]?.(page)
+    await SETUP[id]?.(page, locale)
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
     for (const b of await page.getByRole('button').all()) {
       const box = await b.boundingBox()

@@ -84,8 +84,7 @@ export const GALLERY_CASE_IDS = [
 
 export type GalleryCaseId = (typeof GALLERY_CASE_IDS)[number]
 
-// Os casos que o spec roda também em inglês (`&lang=en`): o formulário do plano
-// tem texto próprio nos dois idiomas, e o axe mede contraste e rótulos de cada um.
+// Casos que o spec audita também na variante em inglês (`&lang=en`).
 export const ENGLISH_CASE_IDS: readonly GalleryCaseId[] = [
   'week-plan-entry',
   'week-plan-form-open',
@@ -93,6 +92,7 @@ export const ENGLISH_CASE_IDS: readonly GalleryCaseId[] = [
   'week-plan-form-sending',
   'week-plan-form-failure',
   'week-plan-copy-monday',
+  'mission-board',
 ]
 
 export function isGalleryCaseId(value: string | null): value is GalleryCaseId {
