@@ -6,7 +6,7 @@ que afirmavam só o status HTTP passam a reler o banco, e trechos sem caso de
 borda ou sem valor literal ganham o teste que faltava. Nenhum código de
 produção muda.
 
-Revisão-base: `main` em `fb7d11b`.
+Revisão-base: `main` em `bdd72af` (trabalho iniciado sobre `fb7d11b`).
 
 ## Decisões e porquê
 - **Reler o banco depois da recusa.** Recusar uma ação da tutoria (proposta
@@ -14,6 +14,8 @@ Revisão-base: `main` em `fb7d11b`.
   teste confere que a contagem de missões não mudou, que o prazo e o estado
   da missão reagendável ficaram iguais, que nenhuma `MissionOperation` nasceu
   e que a ação ficou `recusada` sem `mission_id` nem `operation_id`.
+  Pela API, o banco é relido depois da primeira recusa e depois do reenvio,
+  dentro da transação de teste isolada por savepoint.
 - **422 e 409 do plano sem gravação.** As rejeições do plano semanal (422 de
   validação, 409 de semana fora do alcance, ano 9999) conferem que
   `weekly_plans` e `missions` continuam vazias. O 409 de plano repetido
@@ -22,9 +24,10 @@ Revisão-base: `main` em `fb7d11b`.
   já garante que não há duplicata.
 - **Bordas do plano.** Mínimos (1, 1, 1) e máximos (5, 1440, 1440) são
   aceitos e gravados como vieram, conferidos relendo as missões.
-- **Teto do id na avaliação.** `0`, `-1` e `2**31` respondem 422 antes do
-  banco; `2**31 - 1` (o maior `integer` do PostgreSQL) ainda é 404 de
-  inexistente, com o mesmo corpo da conclusão.
+- **Teto do id na avaliação.** `0`, `-1` e `2**31` respondem 422 no
+  parâmetro `["path", "mission_id"]`. O teste existente já cobre
+  `2**31 - 1` (o maior `integer` do PostgreSQL): 404 de inexistente, com
+  o mesmo corpo da conclusão.
 - **Curva de XP com valores literais.** `[20, 40, 80, 140, 220]` para as
   dificuldades 1 a 5, calculados à mão; os testes antigos só afirmavam que a
   curva cresce e é positiva.
@@ -52,7 +55,7 @@ Revisão-base: `main` em `fb7d11b`.
   mensagens de outro usuário.
 - `tests/unit/test_tutoring_persona.py`: exigências do README por idioma.
 
-## Comandos e resultados
+## Comandos e resultados da preparação sobre `fb7d11b`
 - Sabotagem, cada uma revertida com `git restore src/`:
   - recusa criando missão ou movendo o prazo → os 4 testes de recusa
     reprovam;
@@ -60,8 +63,8 @@ Revisão-base: `main` em `fb7d11b`.
     reprovam;
   - `flush` do plano antes da checagem da semana → os dois 409 e o caso
     9999 reprovam;
-  - sem o teto do id → os 3 casos fora da faixa reprovam; `le=MAIOR-1` →
-    o caso do teto reprova;
+  - sem a validação da faixa do id → o teste dos ids inválidos reprova;
+    `le=MAIOR-1` → o caso do teto reprova;
   - `XP_INCREMENTO = 11` → a curva reprova;
   - sem `.limit(quantas)` no histórico → a janela reprova;
   - "Never use guilt…" trocado na persona em inglês → o caso `en`

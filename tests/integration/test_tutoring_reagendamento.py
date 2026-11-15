@@ -609,6 +609,8 @@ def test_recusar_reagendamento_nao_mexe_na_missao(session: Session) -> None:
     acao = _proposta(session, missao.id)
     rejeitar_acao(session, ESTUDANTE, acao.id, clock=relogio(AGORA))
 
+    # O commit da rota persiste tambem qualquer escrita pendente.
+    session.flush()
     session.expire_all()
     relida = session.get(Mission, missao.id)
     assert relida is not None

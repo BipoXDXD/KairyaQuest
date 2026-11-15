@@ -274,6 +274,7 @@ def _corpo_do_404_da_conclusao(cliente: TestClient, mission_id: int) -> Any:
 
 
 def test_inexistente_e_404_com_o_corpo_da_conclusao(cliente: TestClient) -> None:
+    # O maior integer do PostgreSQL ainda e um id aceito pela rota.
     resposta = _avaliar(cliente, 2**31 - 1)
     assert resposta.status_code == 404
     assert resposta.json() == _corpo_do_404_da_conclusao(cliente, 2**31 - 1)
@@ -317,13 +318,9 @@ def test_diaria_futura_e_404_com_o_corpo_da_conclusao(
     "mission_id", [0, -1, 2**31], ids=["zero", "negativo", "acima-do-teto"]
 )
 def test_id_fora_da_faixa_e_422(cliente: TestClient, mission_id: int) -> None:
-    assert _avaliar(cliente, mission_id).status_code == 422
-
-
-def test_id_no_teto_e_404_de_inexistente(cliente: TestClient) -> None:
-    resposta = _avaliar(cliente, 2**31 - 1)
-    assert resposta.status_code == 404
-    assert resposta.json() == _corpo_do_404_da_conclusao(cliente, 2**31 - 1)
+    resposta = _avaliar(cliente, mission_id)
+    assert resposta.status_code == 422
+    assert ["path", "mission_id"] in [erro["loc"] for erro in resposta.json()["detail"]]
 
 
 @pytest.mark.parametrize(

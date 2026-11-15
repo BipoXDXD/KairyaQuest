@@ -182,6 +182,8 @@ Avalie cobranças ao abrir o aplicativo ou consultar o chat. Não anuncie notifi
 
 O recorte inicial pode ser local e de usuário único, explicitamente. Não improvise autenticação. Antes de contas reais, implemente autenticação e autorização por recurso, incluindo conversas e recompensas.
 
+**A API não autentica sozinha.** Toda rota atende o usuário único (`src/focusquest/core/usuario_unico.py`), e o dono não vem de token nem de cabeçalho. Por isso, quem alcança a porta 8000 da API lê e altera esses dados sem credencial. A senha de acesso fica no proxy do frontend (`auth_basic` em `docker/nginx.conf`), que descarta o `Authorization` antes de repassar para a API e deve ser o único caminho até ela. Enquanto a autenticação por recurso não existir, a API não publica porta no host, não entra em rede pública nem em rede compartilhada com serviços de terceiros, e só fala com o proxy por uma rede interna.
+
 ## 9. Comando único de qualidade
 
 Crie `make check`: gate completo, reproduzível e não interativo. Execute todo o projeto, não só arquivos alterados. Vale para qualquer branch, inclusive mudanças de documentação.

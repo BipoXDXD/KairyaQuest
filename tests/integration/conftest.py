@@ -176,7 +176,8 @@ def tutoria(falso: ServidorAnthropicFalso, prazo_do_provedor: float) -> Tutoria:
             modelo="claude-opus-5",
             max_tokens=256,
             timeout_segundos=prazo_do_provedor,
-            # O padrao de producao (`Settings.tutor_fallback`, pendencia 174).
+            # Ligado de proposito para exercitar o caminho do fallback; o padrao
+            # de `Settings.tutor_fallback` e desligado.
             fallback=True,
             esforco="low",
             esforco_da_avaliacao="medium",
