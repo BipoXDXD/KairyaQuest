@@ -189,7 +189,7 @@ def test_padroes_da_tutoria(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     assert settings.tutor_timeout_seconds == 54
     assert settings.tutor_history_messages == 20
     assert settings.tutor_daily_turn_limit == 60
-    assert settings.tutor_fallback is True
+    assert settings.tutor_fallback is False
     assert settings.tutor_effort == "low"
     assert settings.evaluation_effort == "medium"
 
