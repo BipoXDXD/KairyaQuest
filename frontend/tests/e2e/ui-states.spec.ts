@@ -11,6 +11,7 @@ import {
   AVALIADA,
   CONCLUSAO_COM_RECOMPENSA,
   EM_ANDAMENTO,
+  PAGINA_CHEIA,
   PENDENTE,
 } from './missoesGaleria'
 
@@ -247,6 +248,32 @@ const SETUP: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
       .getByTestId('reward')
       .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
   },
+  'mission-load-more': async (page) => {
+    await afirmarPrimeiraPagina(page)
+    const botao = page.getByTestId('missions-load-more')
+    await expect(botao).toBeVisible()
+    await expect(botao).toBeEnabled()
+    await expect(botao).not.toHaveAttribute('aria-busy', 'true')
+    await expect(botao).toHaveAccessibleName('Carregar mais missões')
+  },
+  'mission-loading-more': async (page) => {
+    await pedirProximaPagina(page)
+    await afirmarCarregandoMais(page)
+  },
+  'mission-load-more-failed': async (page) => {
+    await pedirProximaPagina(page)
+    const erro = page.getByTestId('missions-load-more-error')
+    await expect(erro).toBeVisible()
+    await expect(erro).toHaveAttribute('role', 'alert')
+    await expect(erro).toContainText(
+      'Falha ao carregar mais missões. As que já estão no quadro continuam aqui.',
+    )
+    await expect(erro).toContainText('O servidor não conseguiu atender o pedido.')
+    const tentar = erro.getByTestId('missions-load-more-retry')
+    await expect(tentar).toHaveAccessibleName('Tentar novamente')
+    await expect(tentar).toBeEnabled()
+    await afirmarPrimeiraPagina(page)
+  },
   'evidence-form-link-error': async (page) => {
     // O erro do link so aparece depois que o campo perde o foco.
     await page.getByTestId('evidence-link').focus()
@@ -265,6 +292,22 @@ async function servirQuadro(page: Page): Promise<void> {
   )
 }
 
+async function servirPaginaCheia(page: Page, falharProxima = false): Promise<void> {
+  await page.route(
+    (url) => url.pathname === '/api/missions',
+    (route) => {
+      if (!new URL(route.request().url()).searchParams.has('after_id')) {
+        return route.fulfill({ json: PAGINA_CHEIA })
+      }
+      if (falharProxima) {
+        return route.fulfill({ status: 503, body: '' })
+      }
+      // A página seguinte fica em voo durante a auditoria. O GET tem 20 s de prazo.
+      return new Promise<void>(() => undefined)
+    },
+  )
+}
+
 // Rotas que precisam estar de pe antes de a pagina abrir.
 const ROTAS: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
   'mission-board': servirQuadro,
@@ -273,6 +316,44 @@ const ROTAS: Partial<Record<GalleryCaseId, (page: Page) => Promise<void>>> = {
   'mission-completing': servirQuadro,
   'mission-completion-failed': servirQuadro,
   'mission-completed-reward': servirQuadro,
+  'mission-load-more': servirPaginaCheia,
+  'mission-loading-more': servirPaginaCheia,
+  'mission-load-more-failed': (page) => servirPaginaCheia(page, true),
+}
+
+async function afirmarPrimeiraPagina(page: Page): Promise<void> {
+  const cartoes = page.getByTestId('mission-item')
+  await expect
+    .poll(() =>
+      cartoes.evaluateAll((itens) => itens.map((item) => item.getAttribute('data-mission-id'))),
+    )
+    .toEqual(PAGINA_CHEIA.map((missao) => String(missao.id)))
+}
+
+async function pedirProximaPagina(page: Page): Promise<void> {
+  await afirmarPrimeiraPagina(page)
+  const [pedido] = await Promise.all([
+    page.waitForRequest((request) => {
+      const url = new URL(request.url())
+      return request.method() === 'GET' && url.pathname === '/api/missions' && url.search !== ''
+    }),
+    page.getByTestId('missions-load-more').click(),
+  ])
+  const ultima = PAGINA_CHEIA[PAGINA_CHEIA.length - 1]
+  expect(Object.fromEntries(new URL(pedido.url()).searchParams)).toEqual({
+    limit: String(PAGINA_CHEIA.length),
+    after_deadline: ultima.deadline,
+    after_id: String(ultima.id),
+  })
+}
+
+async function afirmarCarregandoMais(page: Page): Promise<void> {
+  const botao = page.getByTestId('missions-load-more')
+  await expect(botao).toBeVisible()
+  await expect(botao).toBeDisabled()
+  await expect(botao).toHaveAttribute('aria-busy', 'true')
+  await expect(botao).toHaveAccessibleName('Carregando mais missões…')
+  await afirmarPrimeiraPagina(page)
 }
 
 /** O nome acessivel de Iniciar/Concluir num cartao do quadro. */
@@ -324,6 +405,9 @@ for (const { id, query, nome } of VARIANTES) {
     for (const b of await page.getByRole('button').all()) {
       const box = await b.boundingBox()
       expect(box !== null && box.width >= ALVO_MINIMO_PX && box.height >= ALVO_MINIMO_PX).toBe(true)
+    }
+    if (id === 'mission-loading-more') {
+      await afirmarCarregandoMais(page)
     }
   })
 }

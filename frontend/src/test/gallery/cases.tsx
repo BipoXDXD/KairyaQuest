@@ -109,4 +109,7 @@ export const GALLERY_CASES: Record<GalleryCaseId, () => JSX.Element> = {
   'mission-completing': () => <MissionListCase />,
   'mission-completion-failed': () => <MissionListCase />,
   'mission-completed-reward': () => <MissionListCase />,
+  'mission-load-more': () => <MissionListCase />,
+  'mission-loading-more': () => <MissionListCase />,
+  'mission-load-more-failed': () => <MissionListCase />,
 }
