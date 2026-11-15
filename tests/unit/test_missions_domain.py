@@ -73,6 +73,12 @@ def test_xp_cresce_com_a_dificuldade(dificuldade: int) -> None:
         assert xp_para_dificuldade(dificuldade) > xp_para_dificuldade(dificuldade - 1)
 
 
+def test_curva_de_xp_por_dificuldade() -> None:
+    # Valores fixados a mao: crescer e ser positivo nao prende a curva, e os
+    # testes da API so dizem que "a curva tem teste proprio".
+    assert [xp_para_dificuldade(d) for d in range(1, 6)] == [20, 40, 80, 140, 220]
+
+
 def test_xp_e_sempre_positivo() -> None:
     for dificuldade in range(1, 11):
         assert xp_para_dificuldade(dificuldade) > 0
