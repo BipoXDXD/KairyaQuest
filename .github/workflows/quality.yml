@@ -357,6 +357,17 @@ jobs:
       - name: Prompts dentro do wheel
         run: make check-wheel
 
+  check-proxy:
+    runs-on: ubuntu-24.04
+    # Docker Compose ja esta no runner. O teto cobre o download das imagens.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Autenticacao HTTP do proxy
+        run: make check-proxy
+
   quality-gate:
     runs-on: ubuntu-24.04
     # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
@@ -364,9 +375,8 @@ jobs:
     timeout-minutes: 5
     # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
     # o agregador aprovaria sem te-lo verificado (limitacao registrada em
-    # docs/QUALITY.md s5). Os seis jobs de verificacao estao aqui, e o loop
-    # abaixo confere os seis.
-    needs: [check-handoff, check-web, check-api, check-e2e, check-secrets, check-wheel]
+    # docs/QUALITY.md s5). Todos os jobs de verificacao estao aqui.
+    needs: [check-handoff, check-web, check-api, check-proxy, check-e2e, check-secrets, check-wheel]
     if: always()
     steps:
       - name: Exigir sucesso explicito de todos os jobs
@@ -374,10 +384,11 @@ jobs:
           echo "check-handoff=${{ needs.check-handoff.result }}"
           echo "check-web=${{ needs.check-web.result }}"
           echo "check-api=${{ needs.check-api.result }}"
+          echo "check-proxy=${{ needs.check-proxy.result }}"
           echo "check-e2e=${{ needs.check-e2e.result }}"
           echo "check-secrets=${{ needs.check-secrets.result }}"
           echo "check-wheel=${{ needs.check-wheel.result }}"
-          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}" "${{ needs.check-wheel.result }}"; do
+          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-proxy.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}" "${{ needs.check-wheel.result }}"; do
             if [ "$r" != "success" ]; then
               echo "quality-gate reprovado: um job nao terminou em success" >&2
               exit 1

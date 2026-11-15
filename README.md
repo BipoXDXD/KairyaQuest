@@ -182,7 +182,7 @@ Avalie cobranças ao abrir o aplicativo ou consultar o chat. Não anuncie notifi
 
 O recorte inicial pode ser local e de usuário único, explicitamente. Não improvise autenticação. Antes de contas reais, implemente autenticação e autorização por recurso, incluindo conversas e recompensas.
 
-**A API não autentica sozinha.** Toda rota atende o usuário único (`src/focusquest/core/usuario_unico.py`), e o dono não vem de token nem de cabeçalho. Por isso, quem alcança a porta 8000 da API lê e altera esses dados sem credencial. A senha de acesso fica no proxy do frontend (`auth_basic` em `docker/nginx.conf`), que descarta o `Authorization` antes de repassar para a API e deve ser o único caminho até ela. Enquanto a autenticação por recurso não existir, a API não publica porta no host, não entra em rede pública nem em rede compartilhada com serviços de terceiros, e só fala com o proxy por uma rede interna.
+**A API não autentica sozinha.** Toda rota atende o usuário único (`src/focusquest/core/usuario_unico.py`), e o dono não vem de token nem de cabeçalho. Por isso, quem alcança a porta 8000 da API lê e altera esses dados sem credencial. A senha de acesso fica no proxy do frontend (`auth_basic` em `docker/nginx.conf`), que descarta o `Authorization` ao encaminhar as requisições de `/api/*` e deve ser o único caminho até a API. Enquanto a autenticação por recurso não existir, a API não publica porta no host, não entra em rede pública nem em rede compartilhada com serviços de terceiros, e só fala com o proxy por uma rede interna.
 
 ## 9. Comando único de qualidade
 
@@ -288,7 +288,7 @@ Os Dockerfiles versionados ficam em `docker/`; a configuração privada do Nginx
 
 ### Publicação automática no GHCR
 
-Cada push na `main` só publica depois dos quatro checks e do `quality-gate` aprovados.
+Cada push na `main` só publica depois de o `quality-gate` confirmar o sucesso dos seus jobs de verificação.
 As imagens são `ghcr.io/bipoxdxd/kairyaquest-api` e `ghcr.io/bipoxdxd/kairyaquest-web`,
 com `linux/amd64` e `linux/arm64`. A tag `sha-<SHA completo>` identifica o commit;
 a referência `@sha256:...` identifica o conteúdo exato. `main` e `latest` só são
