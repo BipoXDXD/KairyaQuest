@@ -629,8 +629,8 @@ tela, e volta ao contexto quando é reenviada. Um stream sem `done` nem
 uvicorn real em `tests/integration/test_tutoring_desconexao.py`, M9 do
 plano — o `TestClient` bufferiza a resposta inteira e não desconecta).
 
-**Fallback histórico, desativado em produção** (pendência 174, beta da
-Anthropic, preservado somente nos testes explícitos do adaptador legado): o adaptador chama
+**Fallback opcional, desligado por padrão** (pendência 174, beta da
+Anthropic, com custo próprio; `FOCUSQUEST_TUTOR_FALLBACK=true` o liga). Ligado, o adaptador chama
 `client.beta.messages.stream` com `fallbacks="default"` e o beta
 `server-side-fallback-2026-07-01` (`BETA_DO_FALLBACK`), e a API refaz a
 requisição recusada no modelo que a Anthropic recomenda para a categoria da
