@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-handoff check-hooks check-web check-api check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
+.PHONY: help bootstrap check check-handoff check-hooks check-web check-api check-proxy check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -33,7 +33,7 @@ bootstrap: ## Instala as dependencias dos dois ecossistemas
 	uv sync --locked
 	./scripts/install-gitleaks.sh
 
-check: check-handoff check-web check-api check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
+check: check-handoff check-web check-api check-proxy check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
 
 check-web: ## ESLint, Prettier, TypeScript e testes do frontend
 	cd $(WEB) && npm run lint
@@ -67,6 +67,9 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # mypy de fora era a unica assimetria.
 	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py scripts/varrer_traces.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
+
+check-proxy: ## Testa a autenticacao HTTP e as rotas de saude no Nginx em containers
+	./scripts/check-proxy.sh
 
 # `reset-test-db` e PRE-REQUISITO, e nao `migrate-test`: desde o Incremento B
 # o E2E semeia um plano semanal, que e unico por semana -- sem esquema limpo,

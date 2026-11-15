@@ -169,9 +169,10 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 |---|---|
 | `make help` | Lista os alvos disponíveis do Makefile, com a descrição de cada um. |
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
-| `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
+| `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-proxy`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
 | `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
 | `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação, `scripts/check_wheel.py` e `scripts/varrer_traces.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check-proxy` | Testa por HTTP o `docker/nginx.conf` com Docker Compose. Verifica o desafio Basic e o 401, o acesso com credencial sintética sem repasse de `Authorization` em `/api/*` e as exceções de `/health` e `/ready`. |
 | `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-handoff` | `scripts/check-handoff.sh`: reprova a branch cujo `git diff origin/main...HEAD` toca `docs/HANDOFF.md`, exceto as branches `wt/consolidar-handoff*`. A branch vem de `FQ_HANDOFF_BRANCH`, que o `check-push.sh` preenche com a ref enviada (o worktree do push é destacado). O handoff de cada PR mora em `docs/handoff/`. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
@@ -183,7 +184,8 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste** — só migra, não apaga. |
 | `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (**desde a Frente 0, cria o banco de teste se ele não existir**; depois apaga e recria o schema `public` dele, tudo atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
 
-Os alvos de verificação são os seis `check-*`. `bootstrap`, `format`,
+Os alvos de verificação do gate são os sete `check-*` da receita de
+`make check`. `bootstrap`, `format`,
 `db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
 ação manual — por isso nenhum deles tem job próprio no CI (seção 5).
 
@@ -660,11 +662,20 @@ verificação executa **um** alvo, e nada além dele:
 |---|---|---|---|
 | `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
 | `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
+| `check-proxy` | `make check-proxy` | checkout, Docker Compose do runner | 5 |
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium`; **só em falha:** varredura dos traces e upload (parágrafo abaixo) | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
 | `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
-| `quality-gate` | nenhum alvo: agrega os seis acima | — | 5 |
+| `quality-gate` | agrega os sete jobs acima | — | 5 |
+
+O `check-proxy` usa as imagens-base fixadas em `docker/web.Dockerfile` e
+`docker/api.Dockerfile`, com um backend de teste que sinaliza a presença
+do cabeçalho. O Compose de teste sobe uma rede interna por execução, sem
+portas publicadas, e usa apenas credenciais sintéticas. O alvo pode rodar
+isoladamente com Docker Compose e as duas imagens no cache local. Em
+cache frio, o Docker baixa essas imagens. O Compose segue a arquitetura
+nativa do daemon. O E2E de navegador continua usando o proxy do Vite.
 
 Depois do gate, somente em push da `main`, `publish-api` e `publish-web`
 executam build e push de uma tag pelo commit com AMD64 e
@@ -678,7 +689,7 @@ O helper `scripts/promote_images.py` consulta o HEAD atual da `main` antes e
 depois do preflight; uma execução superada conserva sua tag por commit e não
 escreve os aliases. O alvo revalida os digests antes de
 atualizar `main`/`latest`; confere cada alias depois da escrita. São jobs de
-publicação, separados dos seis jobs de qualidade da tabela. Só eles recebem
+publicação, separados dos sete jobs de qualidade da tabela. Só eles recebem
 `packages: write`, com autenticação pelo `GITHUB_TOKEN` temporário. Actions,
 QEMU e BuildKit usados na publicação ficam fixados por SHA/digest. A concorrência
 já existente da `main` cobre o workflow inteiro, incluindo publicação, sem
@@ -822,8 +833,8 @@ um nome só. Ele precisa de `if: always()` porque, sem isso, um `needs` que
 falha faz o job dependente ser **pulado**, e um check pulado não reprova
 nada: o status obrigatório simplesmente nunca reportaria, e um PR quebrado
 apareceria como "sem verificação pendente" em vez de vermelho. Com
-`always()`, o job roda sempre e exige o literal `success` de cada uma das
-cinco dependências, num laço — `failure`, `cancelled` e `skipped`
+`always()`, o job roda sempre e exige o literal `success` de cada
+dependência, num laço — `failure`, `cancelled` e `skipped`
 reprovam do mesmo jeito. Aprovar por não ter conseguido olhar é o que o
 gate proíbe em todas as camadas, e aqui não é diferente.
 
@@ -832,7 +843,7 @@ do `quality-gate` e o laço que confere os resultados são estáticos, então
 um job novo que alguém esqueça de acrescentar nos dois lugares passaria
 despercebido pelo agregador. O conserto (gerar a lista, ou usar uma action
 de agregação de terceiros) traz dependência ou metaprogramação de YAML que
-não se paga com cinco jobs; revisar quando houver mais.
+não se paga com o conjunto atual de checks.
 
 ## 6. Limitações conhecidas
 
