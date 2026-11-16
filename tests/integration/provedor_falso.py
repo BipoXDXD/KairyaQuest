@@ -174,6 +174,9 @@ class Roteiro:
     - `status_http` diferente de 200: responde um erro JSON, sem stream.
     - `cortar_apos_eventos`: fecha a conexao depois de N eventos, sem
       `message_stop` (o corte que o SDK nao denuncia).
+    - `sobrecarregar_apos_primeiro_texto`: num stream HTTP 200, emite um
+      quadro SSE `error` com `overloaded_error` depois do primeiro delta de
+      texto e encerra a resposta ali.
     - `atrasar_evento`: `(indice, segundos)`, uma demora antes do evento.
     - `atrasar_cabecalhos`: uma demora antes de responder qualquer coisa.
     - `retry_after`: o cabecalho `Retry-After` (segundos) do erro HTTP. E o que
@@ -202,6 +205,7 @@ class Roteiro:
     pensar: bool = True
     stop_reason: MotivoDeParada | None = None
     substituicao: Substituicao | None = None
+    sobrecarregar_apos_primeiro_texto: bool = False
 
 
 @dataclass(frozen=True)
@@ -451,6 +455,21 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
             dados = evento.model_dump_json(by_alias=True)
             self.wfile.write(f"event: {evento.type}\ndata: {dados}\n\n".encode())
             self.wfile.flush()
+            if (
+                roteiro.sobrecarregar_apos_primeiro_texto
+                and isinstance(evento, BetaRawContentBlockDeltaEvent)
+                and isinstance(evento.delta, BetaTextDelta)
+            ):
+                erro_sse = json.dumps(
+                    {
+                        "type": "error",
+                        "error": {"type": "overloaded_error", "message": "falso"},
+                    }
+                )
+                self.wfile.write(f"event: error\ndata: {erro_sse}\n\n".encode())
+                self.wfile.flush()
+                self.close_connection = True
+                return
 
     def log_message(self, format: str, *args: Any) -> None:
         """Silencio: o log de acesso do http.server so poluiria a saida do pytest."""

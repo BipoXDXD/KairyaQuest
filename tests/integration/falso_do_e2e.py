@@ -34,6 +34,7 @@ _OPCOES = frozenset(
         "http_status",
         "cut_after_events",
         "hold_after_events",
+        "overload_after_first_text",
         "stop_reason",
         "fallback",
     }
@@ -152,6 +153,9 @@ def roteiro_do_json(dados: object) -> Roteiro:
     # `Roteiro` e reprova no `atrasar_evento: tuple[int, float] | None`
     # (medido).
     status = _inteiro(dados, "http_status", 100, 599)
+    sobrecarregar = dados.get("overload_after_first_text", False)
+    if not isinstance(sobrecarregar, bool):
+        raise ValueError("overload_after_first_text precisa ser booleano")
     return Roteiro(
         blocos=tuple(_bloco(b) for b in blocos),
         status_http=200 if status is None else status,
@@ -159,6 +163,7 @@ def roteiro_do_json(dados: object) -> Roteiro:
         segurar_apos_eventos=_inteiro(dados, "hold_after_events", 0, _MAX_EVENTOS),
         stop_reason=_motivo(dados),
         substituicao=_substituicao(dados),
+        sobrecarregar_apos_primeiro_texto=sobrecarregar,
     )
 
 
