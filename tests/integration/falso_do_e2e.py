@@ -14,6 +14,7 @@ para ca por `FOCUSQUEST_ANTHROPIC_BASE_URL`, e a guarda de
 import argparse
 import json
 import threading
+from math import inf
 from typing import Any, cast, get_args
 from urllib.parse import urlsplit
 
@@ -32,6 +33,7 @@ _OPCOES = frozenset(
     {
         "blocks",
         "http_status",
+        "retry_after",
         "cut_after_events",
         "hold_after_events",
         "overload_after_first_text",
@@ -81,6 +83,21 @@ def _motivo(dados: dict[str, object]) -> MotivoDeParada | None:
     if valor not in validos:
         raise ValueError(f"stop_reason precisa ser um de: {', '.join(validos)}")
     return cast(MotivoDeParada, valor)
+
+
+def _retry_after(dados: dict[str, object], status: int | None) -> float | None:
+    if "retry_after" not in dados:
+        return None
+    if status is None or status < 400:
+        raise ValueError("retry_after exige um http_status de erro")
+    valor = dados["retry_after"]
+    if (
+        not isinstance(valor, (int, float))
+        or isinstance(valor, bool)
+        or not 0 <= valor < inf
+    ):
+        raise ValueError("retry_after precisa ser um numero finito e nao negativo")
+    return valor
 
 
 def _substituicao(dados: dict[str, object]) -> Substituicao | None:
@@ -159,6 +176,7 @@ def roteiro_do_json(dados: object) -> Roteiro:
     return Roteiro(
         blocos=tuple(_bloco(b) for b in blocos),
         status_http=200 if status is None else status,
+        retry_after=_retry_after(dados, status),
         cortar_apos_eventos=_inteiro(dados, "cut_after_events", 0, _MAX_EVENTOS),
         segurar_apos_eventos=_inteiro(dados, "hold_after_events", 0, _MAX_EVENTOS),
         stop_reason=_motivo(dados),

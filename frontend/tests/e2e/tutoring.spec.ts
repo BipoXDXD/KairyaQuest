@@ -209,7 +209,11 @@ for (const status of [429, 529]) {
           new URL(response.url()).pathname === '/api/tutoring/messages',
       )
     // Se o falso ignorar http_status, este roteiro tem uma resposta válida e não gera o alerta.
-    await definirRoteiro({ blocks: [{ text: [resposta] }], http_status: status })
+    await definirRoteiro({
+      blocks: [{ text: [resposta] }],
+      http_status: status,
+      ...(status === 429 ? { retry_after: 30 } : {}),
+    })
     await abrirPainel(page)
     const [tentativa] = await Promise.all([aguardarEnvio(), perguntar(page, pergunta)])
     expect(tentativa.status()).toBe(200)

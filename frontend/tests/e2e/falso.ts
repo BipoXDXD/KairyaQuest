@@ -12,6 +12,8 @@ export type Bloco = { text: string[] } | { tool_input: Record<string, unknown>; 
 export interface RoteiroDoFalso {
   blocks: Bloco[]
   http_status?: number
+  /** Segundos no cabeçalho Retry-After de um status HTTP de erro. */
+  retry_after?: number
   cut_after_events?: number
   hold_after_events?: number
   /** Encerra o stream HTTP 200 com `overloaded_error` após o primeiro delta de texto. */
