@@ -112,6 +112,12 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
     assert roteiro_do_json(dados) == roteiro
 
 
+@pytest.mark.parametrize("sobrecarregar", [True, False])
+def test_roteiro_do_json_seleciona_erro_sse(sobrecarregar: bool) -> None:
+    roteiro = roteiro_do_json({"overload_after_first_text": sobrecarregar})
+    assert roteiro.sobrecarregar_apos_primeiro_texto is sobrecarregar
+
+
 @pytest.mark.parametrize(
     ("dados", "motivo"),
     [
@@ -136,6 +142,10 @@ def test_as_bordas_da_faixa_sao_aceitas(dados: object, roteiro: Roteiro) -> None
         (
             {"blocks": [], "hold_after_events": True},
             "hold_after_events precisa ser inteiro",
+        ),
+        (
+            {"overload_after_first_text": 1},
+            "overload_after_first_text precisa ser booleano",
         ),
         ({"blocks": [], "fantasia": 1}, "chave desconhecida: fantasia"),
         # Um motivo inventado viraria, no SDK, um `stop_reason` que a API
@@ -239,6 +249,61 @@ def test_o_endpoint_beta_responde_o_roteiro(controlado: ServidorAnthropicFalso) 
         final = stream.get_final_message()
     assert final.model == "claude-opus-4-8"
     assert controlado.recebidas[-1].corpo["fallbacks"] == "default"
+
+
+@pytest.fixture
+def controlado_com_erro_sse(
+    controlado: ServidorAnthropicFalso,
+) -> ServidorAnthropicFalso:
+    resposta = httpx.put(
+        f"{controlado.url}/_control/script",
+        json={
+            "blocks": [{"text": ["parcial", "não deve chegar"]}],
+            "overload_after_first_text": True,
+        },
+    )
+    assert resposta.status_code == 204
+    return controlado
+
+
+def test_erro_sse_depois_do_primeiro_texto_chega_ao_sdk_beta(
+    controlado_com_erro_sse: ServidorAnthropicFalso,
+) -> None:
+    with _sdk(controlado_com_erro_sse).beta.messages.stream(
+        model="claude-opus-5",
+        max_tokens=10,
+        messages=[{"role": "user", "content": "oi"}],
+    ) as stream:
+        textos = stream.text_stream
+        assert next(textos) == "parcial"
+        with pytest.raises(anthropic.APIStatusError) as falha:
+            next(textos)
+
+    assert falha.value.status_code == 200
+    assert falha.value.body == {
+        "type": "error",
+        "error": {"type": "overloaded_error", "message": "falso"},
+    }
+    assert len(controlado_com_erro_sse.recebidas) == 1
+
+
+def test_erro_sse_e_o_ultimo_quadro_no_fio(
+    controlado_com_erro_sse: ServidorAnthropicFalso,
+) -> None:
+    resposta = httpx.post(
+        f"{controlado_com_erro_sse.url}/v1/messages?beta=true",
+        json={"messages": [{"role": "user", "content": "oi"}]},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "text/event-stream"
+    eventos = [
+        linha.removeprefix("event: ")
+        for linha in resposta.text.splitlines()
+        if linha.startswith("event: ")
+    ]
+    assert eventos[-2:] == ["content_block_delta", "error"]
+    assert "message_stop" not in eventos
 
 
 def test_o_roteiro_definido_pelo_controle_chega_ao_sdk(

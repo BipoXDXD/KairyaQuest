@@ -14,6 +14,8 @@ export interface RoteiroDoFalso {
   http_status?: number
   cut_after_events?: number
   hold_after_events?: number
+  /** Encerra o stream HTTP 200 com `overloaded_error` após o primeiro delta de texto. */
+  overload_after_first_text?: boolean
   /** O motivo de parada; sem ele, o falso deriva do roteiro (pendencia 120). */
   stop_reason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'model_context_window_exceeded' | 'refusal'
   /**
