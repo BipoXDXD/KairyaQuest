@@ -198,6 +198,71 @@ test('(c) a resposta cortada no meio, e o Tentar de novo sem duplicar a pergunta
   expect(await requisicoes()).toHaveLength(2)
 })
 
+for (const status of [429, 529]) {
+  test(`falha HTTP ${status} do provedor: Tentar de novo preserva a pergunta`, async ({ page }) => {
+    const pergunta = `Explica esta falha (${status}, e2e ${EXECUCAO})`
+    const resposta = `Resposta depois do retry (${status}, e2e ${EXECUCAO}).`
+    const aguardarEnvio = () =>
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === '/api/tutoring/messages',
+      )
+    // Se o falso ignorar http_status, este roteiro tem uma resposta válida e não gera o alerta.
+    await definirRoteiro({ blocks: [{ text: [resposta] }], http_status: status })
+    await abrirPainel(page)
+    const [tentativa] = await Promise.all([aguardarEnvio(), perguntar(page, pergunta)])
+    expect(tentativa.status()).toBe(200)
+    expect(tentativa.headers()['content-type']).toContain('text/event-stream')
+
+    const aviso = page.getByTestId('tutor-failure').and(page.getByRole('alert'))
+    await expect(aviso).toContainText('A Kairya não conseguiu responder agora.')
+    const tentarDeNovo = aviso.getByRole('button', { name: 'Tentar de novo', exact: true })
+    await expect(tentarDeNovo).toBeEnabled()
+    const chamadas = await requisicoes()
+    // O SDK não repete 429/5xx por conta própria. O retry é uma ação do estudante.
+    expect(chamadas).toHaveLength(1)
+    expect(chamadas[0]?.body).toMatchObject({
+      messages: expect.arrayContaining([
+        { role: 'user', content: expect.stringContaining(pergunta) },
+      ]),
+    })
+
+    const antes = await conversa(page)
+    const perguntas = antes.filter(
+      (mensagem) => mensagem.role === 'user' && mensagem.content === pergunta,
+    )
+    expect(perguntas).toHaveLength(1)
+    const perguntaId = perguntas[0]?.id
+    const falhas = antes.filter((mensagem) => mensagem.reply_to_id === perguntaId)
+    expect(falhas).toMatchObject([
+      {
+        role: 'tutor',
+        status: 'falhou',
+        content: '',
+        error_code: 'provedor_indisponivel',
+        actions: [],
+      },
+    ])
+
+    await definirRoteiro({ blocks: [{ text: [resposta] }] })
+    const [retry] = await Promise.all([aguardarEnvio(), tentarDeNovo.click()])
+    expect(retry.request().postDataJSON()).toEqual(tentativa.request().postDataJSON())
+    await expect(page.getByTestId('tutor-message').filter({ hasText: resposta })).toHaveCount(1)
+    await expect(page.getByTestId('tutor-message').filter({ hasText: pergunta })).toHaveCount(1)
+
+    const depois = await conversa(page)
+    expect(
+      depois.filter((mensagem) => mensagem.role === 'user' && mensagem.content === pergunta),
+    ).toEqual(perguntas)
+    expect(depois.filter((mensagem) => mensagem.reply_to_id === perguntaId)).toMatchObject([
+      { id: falhas[0]?.id, status: 'falhou', error_code: 'provedor_indisponivel' },
+      { role: 'tutor', status: 'completa', content: resposta, error_code: null },
+    ])
+    expect(await requisicoes()).toHaveLength(2)
+  })
+}
+
 for (const motivo of ['max_tokens', 'model_context_window_exceeded'] as const) {
   test(`(f) a resposta cortada por tamanho (${motivo}): anunciada como cortada, com a nota de pedir por partes`, async ({
     page,
