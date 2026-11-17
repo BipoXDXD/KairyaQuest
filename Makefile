@@ -1,4 +1,7 @@
 .DEFAULT_GOAL := help
+# O pytest e o Playwright compartilham o banco de teste. Serialize uma
+# invocacao do Make mesmo quando -j vier de MAKEFLAGS.
+.NOTPARALLEL:
 .PHONY: help bootstrap check check-handoff check-hooks check-web check-api check-proxy check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
