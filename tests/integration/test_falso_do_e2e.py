@@ -147,6 +147,11 @@ def test_roteiro_do_json_seleciona_erro_sse(sobrecarregar: bool) -> None:
             {"overload_after_first_text": 1},
             "overload_after_first_text precisa ser booleano",
         ),
+        ({"retry_after": 5}, "retry_after exige um http_status de erro"),
+        (
+            {"http_status": 302, "retry_after": 5},
+            "retry_after exige um http_status de erro",
+        ),
         ({"blocks": [], "fantasia": 1}, "chave desconhecida: fantasia"),
         # Um motivo inventado viraria, no SDK, um `stop_reason` que a API
         # nunca manda -- o cenario provaria um caminho que nao existe.
@@ -185,6 +190,12 @@ def test_roteiro_invalido_e_recusado_com_o_motivo(dados: object, motivo: str) ->
     virar uma resposta vazia que o cenario leria como "a Kairya nao disse nada"."""
     with pytest.raises(ValueError, match=motivo):
         roteiro_do_json(dados)
+
+
+@pytest.mark.parametrize("valor", [None, True, "3", -1, float("nan"), float("inf")])
+def test_retry_after_recusa_valor_invalido(valor: object) -> None:
+    with pytest.raises(ValueError, match="retry_after precisa ser um numero finito"):
+        roteiro_do_json({"http_status": 429, "retry_after": valor})
 
 
 @pytest.mark.parametrize(
@@ -304,6 +315,39 @@ def test_erro_sse_e_o_ultimo_quadro_no_fio(
     ]
     assert eventos[-2:] == ["content_block_delta", "error"]
     assert "message_stop" not in eventos
+
+
+@pytest.mark.parametrize(
+    ("status", "tipo", "retry_after", "cabecalho"),
+    [
+        (429, "rate_limit_error", 0, "0"),
+        (429, "rate_limit_error", 1.5, "1.5"),
+        (529, "overloaded_error", None, None),
+        (500, "api_error", None, None),
+    ],
+)
+def test_erro_http_roteirizado_preserva_tipo_e_retry_after(
+    controlado: ServidorAnthropicFalso,
+    status: int,
+    tipo: str,
+    retry_after: float | None,
+    cabecalho: str | None,
+) -> None:
+    roteiro: dict[str, object] = {"http_status": status}
+    if retry_after is not None:
+        roteiro["retry_after"] = retry_after
+    controle = httpx.put(f"{controlado.url}/_control/script", json=roteiro)
+    assert controle.status_code == 204
+
+    resposta = httpx.post(f"{controlado.url}/v1/messages", json={})
+
+    assert resposta.status_code == status
+    assert resposta.headers["content-type"] == "application/json"
+    assert resposta.headers.get("retry-after") == cabecalho
+    assert resposta.json() == {
+        "type": "error",
+        "error": {"type": tipo, "message": "falso"},
+    }
 
 
 def test_o_roteiro_definido_pelo_controle_chega_ao_sdk(

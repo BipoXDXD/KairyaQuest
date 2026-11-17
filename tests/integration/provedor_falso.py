@@ -427,8 +427,11 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
         if roteiro.atrasar_cabecalhos:
             time.sleep(roteiro.atrasar_cabecalhos)
         if roteiro.status_http != 200:
+            tipo_erro = {429: "rate_limit_error", 529: "overloaded_error"}.get(
+                roteiro.status_http, "api_error"
+            )
             erro = json.dumps(
-                {"type": "error", "error": {"type": "api_error", "message": "falso"}}
+                {"type": "error", "error": {"type": tipo_erro, "message": "falso"}}
             ).encode()
             self.send_response(roteiro.status_http)
             self.send_header("content-type", "application/json")
