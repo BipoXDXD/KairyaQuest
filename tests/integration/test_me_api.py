@@ -74,11 +74,12 @@ def test_patch_me_troca_um_idioma_ja_escolhido(
     assert _locale_gravado(session) == "pt-BR"
 
 
-def test_patch_me_repetido_e_idempotente(client: TestClient) -> None:
-    client.patch("/api/me", json={"locale": "en"})
+def test_patch_me_repetido_e_idempotente(client: TestClient, session: Session) -> None:
+    assert client.patch("/api/me", json={"locale": "en"}).status_code == 200
     resposta = client.patch("/api/me", json={"locale": "en"})
     assert resposta.status_code == 200
-    assert resposta.json()["locale"] == "en"
+    assert resposta.json() == {"display_name": "Estudante", "locale": "en"}
+    assert _locale_gravado(session) == "en"
 
 
 @pytest.mark.parametrize(
@@ -128,6 +129,28 @@ def test_valor_invalido_ou_corpo_nao_objeto_e_422(
     resposta = client.patch("/api/me", json=corpo)
     assert resposta.status_code == 422
     assert _locale_gravado(session) is None
+
+
+@pytest.mark.parametrize(
+    "locale",
+    [
+        pytest.param(" en", id="espaco-inicial"),
+        pytest.param("en ", id="espaco-final"),
+        pytest.param("pt-br", id="minusculas"),
+        pytest.param("pt_BR", id="sublinhado"),
+        pytest.param("en" + "x" * 9_998, id="dez-mil-caracteres"),
+    ],
+)
+def test_variante_de_idioma_e_422_e_preserva_escolha(
+    client: TestClient, session: Session, locale: str
+) -> None:
+    assert client.patch("/api/me", json={"locale": "pt-BR"}).status_code == 200
+    assert _locale_gravado(session) == "pt-BR"
+
+    resposta = client.patch("/api/me", json={"locale": locale})
+
+    assert resposta.status_code == 422
+    assert _locale_gravado(session) == "pt-BR"
 
 
 @pytest.mark.parametrize(
