@@ -185,6 +185,27 @@ def test_stream_cortado_termina_sem_fim_e_sem_erro(
     assert _todos(falso) == [Delta("meio")]
 
 
+def test_erro_sse_apos_delta_vira_indisponivel_com_http_200(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("meio", "resto")),),
+        sobrecarregar_apos_primeiro_texto=True,
+    )
+
+    eventos: list[EventoDoProvedor] = []
+    with pytest.raises(ProvedorIndisponivelError) as falha:
+        for evento in _provedor(falso).responder(TURNO):
+            eventos.append(evento)
+
+    assert eventos == [Delta("meio")]
+    causa = falha.value.__cause__
+    assert isinstance(causa, anthropic.APIStatusError)
+    assert causa.status_code == 200
+    assert causa.type == "overloaded_error"
+    assert len(falso.recebidas) == 1
+
+
 def test_demora_no_meio_vira_tempo_esgotado(falso: ServidorAnthropicFalso) -> None:
     falso.roteiro = Roteiro(
         # A demora cai antes do segundo pedaco: "meio" ja chegou.

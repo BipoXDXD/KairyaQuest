@@ -61,6 +61,14 @@ async function perguntar(page: Page, texto: string): Promise<void> {
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
 }
 
+function aguardarEnvioTutoria(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/tutoring/messages',
+  )
+}
+
 // `exact: true` nos nomes curtos ("Enviar", "Tentar de novo"): o Playwright
 // casa nome acessivel por SUBSTRING por padrao, e o quadro tem botoes como
 // "Tentar de novo a missão: ..." que casariam por acidente.
@@ -202,12 +210,6 @@ for (const status of [429, 529]) {
   test(`falha HTTP ${status} do provedor: Tentar de novo preserva a pergunta`, async ({ page }) => {
     const pergunta = `Explica esta falha (${status}, e2e ${EXECUCAO})`
     const resposta = `Resposta depois do retry (${status}, e2e ${EXECUCAO}).`
-    const aguardarEnvio = () =>
-      page.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' &&
-          new URL(response.url()).pathname === '/api/tutoring/messages',
-      )
     // Se o falso ignorar http_status, este roteiro tem uma resposta válida e não gera o alerta.
     await definirRoteiro({
       blocks: [{ text: [resposta] }],
@@ -215,7 +217,7 @@ for (const status of [429, 529]) {
       ...(status === 429 ? { retry_after: 30 } : {}),
     })
     await abrirPainel(page)
-    const [tentativa] = await Promise.all([aguardarEnvio(), perguntar(page, pergunta)])
+    const [tentativa] = await Promise.all([aguardarEnvioTutoria(page), perguntar(page, pergunta)])
     expect(tentativa.status()).toBe(200)
     expect(tentativa.headers()['content-type']).toContain('text/event-stream')
 
@@ -250,7 +252,7 @@ for (const status of [429, 529]) {
     ])
 
     await definirRoteiro({ blocks: [{ text: [resposta] }] })
-    const [retry] = await Promise.all([aguardarEnvio(), tentarDeNovo.click()])
+    const [retry] = await Promise.all([aguardarEnvioTutoria(page), tentarDeNovo.click()])
     expect(retry.request().postDataJSON()).toEqual(tentativa.request().postDataJSON())
     await expect(page.getByTestId('tutor-message').filter({ hasText: resposta })).toHaveCount(1)
     await expect(page.getByTestId('tutor-message').filter({ hasText: pergunta })).toHaveCount(1)
@@ -266,6 +268,86 @@ for (const status of [429, 529]) {
     expect(await requisicoes()).toHaveLength(2)
   })
 }
+
+test('erro SSE do provedor após HTTP 200: retry preserva a pergunta e o parcial', async ({
+  page,
+}) => {
+  const pergunta = `Explica a sobrecarga no meio da resposta (e2e ${EXECUCAO})`
+  const parcial = `Primeiro trecho da resposta (e2e ${EXECUCAO}).`
+  const restante = `Trecho que não deve chegar (e2e ${EXECUCAO}).`
+  const completa = `Resposta completa depois da sobrecarga (e2e ${EXECUCAO}).`
+  await definirRoteiro({
+    blocks: [{ text: [parcial, restante] }],
+    overload_after_first_text: true,
+  })
+  await abrirPainel(page)
+
+  const [tentativa] = await Promise.all([aguardarEnvioTutoria(page), perguntar(page, pergunta)])
+  expect(tentativa.status()).toBe(200)
+  expect(tentativa.headers()['content-type']).toContain('text/event-stream')
+  const aviso = page.getByTestId('tutor-failure').and(page.getByRole('alert'))
+  await expect(aviso).toContainText('A Kairya não conseguiu responder agora.')
+  const tentarDeNovo = aviso.getByRole('button', { name: 'Tentar de novo', exact: true })
+  await expect(tentarDeNovo).toBeEnabled()
+
+  const antes = await conversa(page)
+  const perguntas = antes.filter(
+    (mensagem) => mensagem.role === 'user' && mensagem.content === pergunta,
+  )
+  expect(perguntas).toHaveLength(1)
+  const pedido = perguntas[0]
+  expect(pedido?.client_message_id).toEqual(expect.any(String))
+  expect(tentativa.request().postDataJSON()).toEqual({
+    client_message_id: pedido?.client_message_id,
+    content: pergunta,
+  })
+  const respostas = antes.filter((mensagem) => mensagem.reply_to_id === pedido?.id)
+  expect(respostas).toMatchObject([
+    {
+      role: 'tutor',
+      status: 'falhou',
+      content: parcial,
+      error_code: 'provedor_indisponivel',
+      actions: [],
+    },
+  ])
+  const falha = respostas[0]
+  const bolhaParcial = page.getByTestId('tutor-message').filter({
+    has: page.getByTestId('tutor-message-content').and(page.getByText(parcial, { exact: true })),
+  })
+  await expect(bolhaParcial).toBeVisible()
+  await expect(bolhaParcial).toHaveAttribute('data-message-id', String(falha?.id))
+  await expect(bolhaParcial.getByTestId('tutor-message-mark')).toHaveText('Resposta com falha')
+  expect(await requisicoes()).toHaveLength(1)
+
+  await definirRoteiro({ blocks: [{ text: [completa] }] })
+  const [retry] = await Promise.all([aguardarEnvioTutoria(page), tentarDeNovo.click()])
+  expect(retry.request().postDataJSON()).toEqual(tentativa.request().postDataJSON())
+  const conteudo = page.getByTestId('tutor-message-content')
+  await expect(conteudo.and(page.getByText(completa, { exact: true }))).toBeVisible()
+  await expect(conteudo.and(page.getByText(pergunta, { exact: true }))).toHaveCount(1)
+  await expect(bolhaParcial).toHaveAttribute('data-message-id', String(falha?.id))
+  await expect(bolhaParcial.getByTestId('tutor-message-mark')).toHaveText('Resposta com falha')
+  await expect(conteudo.filter({ hasText: restante })).toHaveCount(0)
+  await expect(aviso).toHaveCount(0)
+  await expect(page.getByTestId('tutor-retry')).toHaveCount(0)
+
+  const depois = await conversa(page)
+  expect(
+    depois.filter((mensagem) => mensagem.role === 'user' && mensagem.content === pergunta),
+  ).toEqual(perguntas)
+  const respostasDepois = depois.filter((mensagem) => mensagem.reply_to_id === pedido?.id)
+  expect(respostasDepois).toHaveLength(2)
+  expect(respostasDepois.find((mensagem) => mensagem.id === falha?.id)).toEqual(falha)
+  expect(respostasDepois.find((mensagem) => mensagem.id !== falha?.id)).toMatchObject({
+    role: 'tutor',
+    status: 'completa',
+    content: completa,
+    error_code: null,
+    actions: [],
+  })
+  expect(await requisicoes()).toHaveLength(2)
+})
 
 for (const motivo of ['max_tokens', 'model_context_window_exceeded'] as const) {
   test(`(f) a resposta cortada por tamanho (${motivo}): anunciada como cortada, com a nota de pedir por partes`, async ({
