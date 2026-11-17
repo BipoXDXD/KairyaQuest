@@ -11,6 +11,7 @@ import json
 import urllib.request
 
 import anthropic
+import httpx
 import pytest
 from anthropic.types.beta import (
     BetaFallbackBlock,
@@ -23,6 +24,7 @@ from anthropic.types.beta import (
 )
 
 from integration.provedor_falso import (
+    APOS_O_PRIMEIRO_PEDACO,
     MODELO_DO_FALSO,
     ChamadaDeFerramenta,
     MotivoDeParada,
@@ -103,7 +105,9 @@ def test_o_roteiro_escolhe_o_motivo_de_parada(
     assert final.stop_reason == stop_reason
 
 
-def test_o_falso_registra_corpo_e_cabecalhos(falso: ServidorAnthropicFalso) -> None:
+def test_o_falso_registra_caminho_corpo_e_cabecalhos(
+    falso: ServidorAnthropicFalso,
+) -> None:
     """E o contador que prova, em outros testes, que um reenvio nao chamou o
     modelo -- e o registro que prova QUAL chave foi usada."""
     falso.roteiro = Roteiro(blocos=(Texto(("ok",)),))
@@ -114,8 +118,74 @@ def test_o_falso_registra_corpo_e_cabecalhos(falso: ServidorAnthropicFalso) -> N
     ) as stream:
         stream.get_final_message()
     assert len(falso.recebidas) == 1
+    assert falso.recebidas[0].caminho == "/v1/messages"
     assert falso.recebidas[0].corpo["max_tokens"] == 7
     assert falso.recebidas[0].cabecalhos["x-api-key"] == "sk-ant-teste"
+
+
+def test_o_falso_recusa_outra_rota_sem_registrar_requisicao(
+    falso: ServidorAnthropicFalso,
+) -> None:
+    resposta = httpx.post(f"{falso.url}/v1/outra?beta=true", json={})
+
+    assert resposta.status_code == 404
+    assert falso.recebidas == []
+
+
+@pytest.fixture
+def falso_com_espera_expirada(
+    falso: ServidorAnthropicFalso, monkeypatch: pytest.MonkeyPatch
+) -> ServidorAnthropicFalso:
+    def expirar(timeout: float) -> bool:
+        assert timeout == 30
+        return False
+
+    monkeypatch.setattr(falso.liberar, "wait", expirar)
+    falso.roteiro = Roteiro(
+        blocos=(Texto(("parcial", "trecho retido")),),
+        segurar_apos_eventos=APOS_O_PRIMEIRO_PEDACO,
+    )
+    return falso
+
+
+def test_espera_expirada_registra_erro_e_corta_o_stream(
+    falso_com_espera_expirada: ServidorAnthropicFalso, caplog: pytest.LogCaptureFixture
+) -> None:
+    resposta = httpx.post(f"{falso_com_espera_expirada.url}/v1/messages", json={})
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "text/event-stream"
+    assert "parcial" in resposta.text
+    assert "trecho retido" not in resposta.text
+    assert "event: message_stop" not in resposta.text
+    ultimo = resposta.text.strip().split("\n\n")[-1].splitlines()
+    assert ultimo[0] == "event: error"
+    erro = json.loads(ultimo[1].removeprefix("data: "))
+    assert erro == {
+        "type": "error",
+        "error": {
+            "type": "api_error",
+            "message": "O falso expirou aguardando liberar o stream.",
+        },
+    }
+    assert "O falso expirou aguardando liberar o stream." in caplog.messages
+
+
+def test_o_sdk_recebe_o_erro_da_espera_expirada(
+    falso_com_espera_expirada: ServidorAnthropicFalso,
+) -> None:
+    with _cliente(falso_com_espera_expirada).messages.stream(
+        model=MODELO_DO_FALSO,
+        max_tokens=10,
+        messages=[{"role": "user", "content": "oi"}],
+    ) as stream:
+        textos = stream.text_stream
+        assert next(textos) == "parcial"
+        with pytest.raises(anthropic.APIStatusError) as falha:
+            next(textos)
+
+    assert falha.value.status_code == 200
+    assert "O falso expirou aguardando liberar o stream." in str(falha.value)
 
 
 def test_status_de_erro_vira_o_erro_do_sdk(falso: ServidorAnthropicFalso) -> None:
@@ -273,3 +343,4 @@ def test_o_sdk_beta_monta_a_troca_do_stream_do_falso(
         "message",
         "fallback_message",
     ]
+    assert falso.recebidas[0].caminho == "/v1/messages"

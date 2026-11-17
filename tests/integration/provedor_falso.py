@@ -11,6 +11,7 @@ e um campo errado reprova no mypy.
 """
 
 import json
+import logging
 import sys
 import threading
 import time
@@ -19,6 +20,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import TracebackType
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 # Os tipos do endpoint BETA, que e o que o adaptador chama (pendencia 174): o
 # `content_block_start` estavel nao aceita o bloco `fallback`, e o uso estavel
@@ -48,6 +50,8 @@ from anthropic.types.beta import (
 from anthropic.types.beta.beta_raw_message_delta_event import Delta as DeltaDaMensagem
 
 from focusquest.modules.tutoring.context import CABECALHO_DO_CONTEXTO
+
+_LOG = logging.getLogger(__name__)
 
 # O modelo que o falso diz ter respondido, e o PEDIDO quando ha substituicao.
 MODELO_DO_FALSO = "claude-opus-5"
@@ -183,7 +187,8 @@ class Roteiro:
       o SDK obedece sem teto para dormir antes de chamar de novo.
     - `segurar_apos_eventos`: depois de N eventos, espera `liberar` antes de
       continuar. E o que deixa um teste desconectar o cliente com a resposta
-      comprovadamente no meio.
+      comprovadamente no meio. Se a espera expirar, registra a falha e encerra
+      o stream com um quadro `error`.
     - `pensar`: emite, antes dos `blocos`, o bloco de thinking que a API real
       manda (`EVENTOS_DO_PENSAMENTO` eventos, que entram nas contagens
       acima). Ligado por padrao, para o falso se parecer com a API real
@@ -210,6 +215,7 @@ class Roteiro:
 
 @dataclass(frozen=True)
 class Recebida:
+    caminho: str
     corpo: dict[str, Any]
     cabecalhos: dict[str, str]
 
@@ -399,20 +405,15 @@ def eventos_do_roteiro(roteiro: Roteiro) -> list[BetaRawMessageStreamEvent]:
 
 
 class TratadorDoFalso(BaseHTTPRequestHandler):
-    """O tratador do falso: `POST` em qualquer caminho responde o roteiro. O do
+    """O tratador do falso: `POST /v1/messages` responde o roteiro. O do
     E2E (`falso_do_e2e.TratadorComControle`) o estende com o controle HTTP."""
 
     protocol_version = "HTTP/1.1"
 
     def do_POST(self) -> None:
-        falso = falso_do_tratador(self)
-        tamanho = int(self.headers["content-length"])
-        corpo = json.loads(self.rfile.read(tamanho))
-        falso.recebidas.append(
-            Recebida(
-                corpo=corpo, cabecalhos={k.lower(): v for k, v in self.headers.items()}
-            )
-        )
+        falso = self._receber_mensagem()
+        if falso is None:
+            return
         # `liberar` e `roteiro` sao capturados JUNTOS, aqui, e o tratador
         # espera no `liberar` capturado -- nunca no `falso.liberar` do momento
         # da espera. O reset do E2E (`falso_do_e2e`) troca o `Event` por um
@@ -449,8 +450,11 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
             if roteiro.cortar_apos_eventos == indice:
                 self.close_connection = True
                 return
-            if roteiro.segurar_apos_eventos == indice:
-                liberar.wait(timeout=30)
+            if roteiro.segurar_apos_eventos == indice and not liberar.wait(timeout=30):
+                mensagem = "O falso expirou aguardando liberar o stream."
+                _LOG.error(mensagem)
+                self._encerrar_com_erro("api_error", mensagem)
+                return
             if roteiro.atrasar_evento and roteiro.atrasar_evento[0] == indice:
                 time.sleep(roteiro.atrasar_evento[1])
             # `by_alias`: o bloco `fallback` sai com `from`, o nome do fio, e
@@ -463,16 +467,34 @@ class TratadorDoFalso(BaseHTTPRequestHandler):
                 and isinstance(evento, BetaRawContentBlockDeltaEvent)
                 and isinstance(evento.delta, BetaTextDelta)
             ):
-                erro_sse = json.dumps(
-                    {
-                        "type": "error",
-                        "error": {"type": "overloaded_error", "message": "falso"},
-                    }
-                )
-                self.wfile.write(f"event: error\ndata: {erro_sse}\n\n".encode())
-                self.wfile.flush()
-                self.close_connection = True
+                self._encerrar_com_erro("overloaded_error", "falso")
                 return
+
+    def _receber_mensagem(self) -> ServidorAnthropicFalso | None:
+        # O SDK beta manda a mesma rota com `?beta=true`.
+        caminho = urlsplit(self.path).path
+        if caminho != "/v1/messages":
+            self.send_error(404)
+            return None
+        falso = falso_do_tratador(self)
+        tamanho = int(self.headers["content-length"])
+        corpo = json.loads(self.rfile.read(tamanho))
+        falso.recebidas.append(
+            Recebida(
+                caminho=caminho,
+                corpo=corpo,
+                cabecalhos={k.lower(): v for k, v in self.headers.items()},
+            )
+        )
+        return falso
+
+    def _encerrar_com_erro(self, tipo: str, mensagem: str) -> None:
+        erro_sse = json.dumps(
+            {"type": "error", "error": {"type": tipo, "message": mensagem}}
+        )
+        self.close_connection = True
+        self.wfile.write(f"event: error\ndata: {erro_sse}\n\n".encode())
+        self.wfile.flush()
 
     def log_message(self, format: str, *args: Any) -> None:
         """Silencio: o log de acesso do http.server so poluiria a saida do pytest."""

@@ -37,13 +37,11 @@ from focusquest.modules.tutoring.service import (
 from integration.conftest import Conversa
 from integration.provedor_falso import (
     ChamadaDeFerramenta,
-    Recebida,
     Roteiro,
     ServidorAnthropicFalso,
     Texto,
     TratadorDoFalso,
     eventos_do_roteiro,
-    falso_do_tratador,
 )
 
 AGORA = datetime(2026, 9, 21, 15, tzinfo=UTC)
@@ -62,14 +60,9 @@ class TratadorUnicodeEscapado(TratadorDoFalso):
     """O falso usa JSON ASCII escapado: surrogate e dado real recebido pelo SDK."""
 
     def do_POST(self) -> None:
-        falso = falso_do_tratador(self)
-        tamanho = int(self.headers["content-length"])
-        falso.recebidas.append(
-            Recebida(
-                corpo=json.loads(self.rfile.read(tamanho)),
-                cabecalhos={k.lower(): v for k, v in self.headers.items()},
-            )
-        )
+        falso = self._receber_mensagem()
+        if falso is None:
+            return
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.send_header("connection", "close")
