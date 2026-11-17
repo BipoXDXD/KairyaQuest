@@ -1,7 +1,15 @@
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import { useT } from '../../shared/i18n/useT'
+import { ART } from '../../shared/ui/art'
 import type { Mood } from './events'
 import { faceFor } from './faceArt'
+
+const FALLBACK_FACE = {
+  src: ART.kairya.avatar,
+  width: 128,
+  height: 160,
+  altKey: 'kairya.speaker',
+} as const
 
 /**
  * O rosto da Kairya com a expressao do momento. A troca e instantanea, sem
@@ -11,13 +19,24 @@ import { faceFor } from './faceArt'
 export function KairyaFace({ mood, size }: { mood: Mood; size: 'scene' | 'thumb' }): ReactElement {
   const t = useT()
   const face = faceFor(mood)
+  const [failedSource, setFailedSource] = useState<string | null>(null)
+  const isFallback = failedSource === face.src
+  const image = isFallback ? FALLBACK_FACE : face
   return (
     <img
-      src={face.src}
-      alt={size === 'scene' ? t(face.altKey) : ''}
-      width={face.width}
-      height={face.height}
+      key={face.src}
+      src={image.src}
+      alt={size === 'scene' ? t(image.altKey) : ''}
+      width={image.width}
+      height={image.height}
       decoding="async"
+      onError={
+        isFallback
+          ? undefined
+          : () => {
+              setFailedSource(face.src)
+            }
+      }
     />
   )
 }
