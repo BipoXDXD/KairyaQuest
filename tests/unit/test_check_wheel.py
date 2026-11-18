@@ -12,6 +12,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / ".git").exists())
 SCRIPT = ROOT / "scripts" / "check_wheel.py"
 
@@ -36,13 +38,26 @@ def _wheel(raiz: Path, conteudo: dict[str, str]) -> Path:
     return wheel
 
 
-def _conferir(wheel: Path, src: Path) -> subprocess.CompletedProcess[str]:
+def _conferir(*argumentos: Path | str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT), str(wheel), str(src)],
+        [sys.executable, str(SCRIPT), *(str(arg) for arg in argumentos)],
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+@pytest.mark.parametrize("quantidade", [0, 1, 3], ids=["nenhum", "um", "um-a-mais"])
+def test_uso_errado_exibe_instrucoes(tmp_path: Path, quantidade: int) -> None:
+    src = _checkout(tmp_path, PERSONA)
+    wheel = _wheel(tmp_path, {PERSONA: "texto"})
+    argumentos: list[Path | str] = [wheel, src, "extra"]
+
+    resultado = _conferir(*argumentos[:quantidade])
+
+    assert resultado.returncode == 2
+    assert resultado.stderr.strip() == "uso: check_wheel.py <wheel> <src>"
+    assert resultado.stdout == ""
 
 
 def test_aprova_quando_todo_prompt_do_checkout_esta_no_wheel(tmp_path: Path) -> None:
