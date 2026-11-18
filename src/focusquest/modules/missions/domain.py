@@ -249,7 +249,11 @@ def problema_do_novo_prazo(
     Instantes comparam como instantes: o mesmo momento em `Z` e em `-03:00` e
     o mesmo prazo.
     """
-    if novo.tzinfo is None or atual.tzinfo is None or agora.tzinfo is None:
+    if (
+        novo.utcoffset() is None
+        or atual.utcoffset() is None
+        or agora.utcoffset() is None
+    ):
         raise ValueError("instante sem fuso: o prazo e um instante, nao uma hora")
     if novo <= agora:
         return ProblemaDoNovoPrazo.NO_PASSADO

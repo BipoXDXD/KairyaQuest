@@ -1,6 +1,6 @@
 """O dominio do acompanhamento: sem banco, sem relogio (Incremento F)."""
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -65,10 +65,28 @@ def test_prazo_passado_igual_ao_atual_e_antes_de_tudo_passado() -> None:
     )
 
 
+class FusoSemDeslocamento(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> None:
+        return None
+
+    def dst(self, dt: datetime | None) -> None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> None:
+        return None
+
+
 @pytest.mark.parametrize("campo", ["novo", "atual", "agora"])
-def test_instante_sem_fuso_e_recusado(campo: str) -> None:
+@pytest.mark.parametrize(
+    "fuso",
+    [
+        pytest.param(None, id="sem-tzinfo"),
+        pytest.param(FusoSemDeslocamento(), id="sem-deslocamento"),
+    ],
+)
+def test_instante_sem_fuso_e_recusado(campo: str, fuso: tzinfo | None) -> None:
     valores = {"novo": ATUAL + timedelta(days=1), "atual": ATUAL, "agora": AGORA}
-    valores[campo] = valores[campo].replace(tzinfo=None)
+    valores[campo] = valores[campo].replace(tzinfo=fuso)
     with pytest.raises(ValueError, match="sem fuso"):
         problema_do_novo_prazo(valores["novo"], valores["atual"], valores["agora"])
 
