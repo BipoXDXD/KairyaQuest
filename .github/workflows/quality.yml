@@ -116,6 +116,9 @@ jobs:
       # tem um lugar so.
       - name: Criar o banco de teste
         run: PGPASSWORD=focusquest_local psql -h 127.0.0.1 -p 55432 -U focusquest -d focusquest -v ON_ERROR_STOP=1 -f scripts/init-test-db.sql
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
       - name: Gate do backend
         run: make check-api
 
@@ -368,6 +371,36 @@ jobs:
       - name: Autenticacao HTTP do proxy
         run: make check-proxy
 
+  check-supply-chain-npm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias do frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: frontend
+      - name: Reservar pasta dos relatórios
+        run: |
+          reports=$(mktemp -d "$RUNNER_TEMP/kq-supply-chain-npm.XXXXXX")
+          echo "FQ_SUPPLY_CHAIN_REPORTS=$reports" >> "$GITHUB_ENV"
+      - name: Verificar cadeia de suprimentos npm
+        run: make check-supply-chain-npm
+      - name: Preservar relatórios de supply chain
+        if: ${{ !cancelled() && env.FQ_SUPPLY_CHAIN_REPORTS != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supply-chain-npm
+          path: ${{ env.FQ_SUPPLY_CHAIN_REPORTS }}/
+          if-no-files-found: error
+          retention-days: 30
+
   quality-gate:
     runs-on: ubuntu-24.04
     # Agregador: checkout nenhum, um `echo` e um laco. Segundos. O teto e baixo
@@ -376,19 +409,20 @@ jobs:
     # A lista e estatica: um job novo que nao entre aqui passa despercebido, e
     # o agregador aprovaria sem te-lo verificado (limitacao registrada em
     # docs/QUALITY.md s5). Todos os jobs de verificacao estao aqui.
-    needs: [check-handoff, check-web, check-api, check-proxy, check-e2e, check-secrets, check-wheel]
+    needs: [check-handoff, check-supply-chain-npm, check-web, check-api, check-proxy, check-e2e, check-secrets, check-wheel]
     if: always()
     steps:
       - name: Exigir sucesso explicito de todos os jobs
         run: |
           echo "check-handoff=${{ needs.check-handoff.result }}"
+          echo "check-supply-chain-npm=${{ needs.check-supply-chain-npm.result }}"
           echo "check-web=${{ needs.check-web.result }}"
           echo "check-api=${{ needs.check-api.result }}"
           echo "check-proxy=${{ needs.check-proxy.result }}"
           echo "check-e2e=${{ needs.check-e2e.result }}"
           echo "check-secrets=${{ needs.check-secrets.result }}"
           echo "check-wheel=${{ needs.check-wheel.result }}"
-          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-proxy.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}" "${{ needs.check-wheel.result }}"; do
+          for r in "${{ needs.check-handoff.result }}" "${{ needs.check-supply-chain-npm.result }}" "${{ needs.check-web.result }}" "${{ needs.check-api.result }}" "${{ needs.check-proxy.result }}" "${{ needs.check-e2e.result }}" "${{ needs.check-secrets.result }}" "${{ needs.check-wheel.result }}"; do
             if [ "$r" != "success" ]; then
               echo "quality-gate reprovado: um job nao terminou em success" >&2
               exit 1

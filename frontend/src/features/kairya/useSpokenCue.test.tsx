@@ -5,6 +5,7 @@ import { AUTOPLAY_BLOCKED_WARNING } from '../../shared/audio/audioPlayer'
 import { useAudio } from '../../shared/audio/useAudio'
 import { LanguageSwitcher } from '../../shared/ui/LanguageSwitcher'
 import { fakeAudio, memoryStorage, settlePlays, type FakeAudio } from '../../test/audioDoubles'
+import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
 import { renderWithI18n } from '../../test/i18n'
 import { useKairya } from './useKairya'
 import type { SpeechCue } from './useKairyaMood'
@@ -89,6 +90,7 @@ const flushMicrotasks = () => act(async () => Promise.resolve())
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('useSpokenCue', () => {
@@ -105,8 +107,10 @@ describe('useSpokenCue', () => {
     expect(rig.voice()?.src).toBe('/audio/pt-BR/greet_morning_1.mp3')
   })
 
-  it('a mesma cue com re-render e troca de idioma não toca de novo', () => {
+  it('a troca de idioma corta a fala em curso e usa o idioma novo na próxima cue', async () => {
     const rig = audioRig()
+    const savedLocale = Response.json({ display_name: 'Aventureira', locale: 'en' })
+    const mock = routeFetch({ 'PATCH /api/me': () => savedLocale })
     const tree = (
       <>
         <LanguageSwitcher />
@@ -115,8 +119,25 @@ describe('useSpokenCue', () => {
     )
     const view = renderWithI18n(tree, { audio: rig.audio })
     view.rerender(tree)
-    fireEvent.click(screen.getByRole('button', { name: 'EN, English' }))
+    const pausesBefore = rig.voice()?.pause.mock.calls.length ?? 0
+    const english = screen.getByRole('button', { name: 'EN, English' })
+    fireEvent.click(english)
+    expect(rig.voice()?.pause).toHaveBeenCalledTimes(pausesBefore + 1)
     expect(rig.voice()?.play).toHaveBeenCalledTimes(1)
+
+    await flushMicrotasks()
+    expect(requestsTo(mock, 'PATCH /api/me').map(jsonBody)).toEqual([{ locale: 'en' }])
+    expect(savedLocale.bodyUsed).toBe(true)
+    expect(english).toHaveAttribute('aria-pressed', 'true')
+
+    view.rerender(
+      <>
+        <LanguageSwitcher />
+        <Speaker cue={CUE_B} />
+      </>,
+    )
+    expect(rig.voice()?.src).toBe('/audio/en/mission_done_1.mp3')
+    expect(rig.voice()?.play).toHaveBeenCalledTimes(2)
   })
 
   it('cue nova interrompe a anterior e continua tocando', async () => {
