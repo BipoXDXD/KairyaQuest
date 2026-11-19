@@ -362,6 +362,7 @@ for (const width of [320, 375]) {
     })
 
     test('evidência, avaliação e formulário de reagendamento cabem no cartão', async ({ page }) => {
+      await page.emulateMedia({ colorScheme: 'light' })
       await layoutData(page, [
         mission,
         {
@@ -387,7 +388,10 @@ for (const width of [320, 375]) {
       await readableText(page.getByTestId('evaluation-evidence-link'), LONG_TEXT)
       await readableText(page.getByTestId('evaluation-feedback'), LONG_TEXT)
       await page.getByTestId('reschedule-toggle').click()
-      await expect(page.getByTestId('reschedule-deadline')).toBeVisible()
+      const deadline = page.getByTestId('reschedule-deadline')
+      await expect(deadline).toBeVisible()
+      await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark')
+      await expect(deadline).toHaveCSS('color-scheme', 'dark')
       await noHorizontalOverflow(page)
       await accessible(page)
     })
