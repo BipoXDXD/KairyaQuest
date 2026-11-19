@@ -27,6 +27,9 @@ export function useSpokenCue(cue: SpeechCue | null, anchor: RefObject<Element | 
   // Último valor em ref: mudar idioma ou preferência não reexecuta o efeito.
   const latest = useRef({ audio, locale, readStreak })
   useEffect(() => {
+    if (latest.current.locale !== locale) {
+      audio.stopVoice()
+    }
     latest.current = { audio, locale, readStreak }
   }, [audio, locale, readStreak])
   const spoken = useRef(new WeakSet<SpeechCue>())
