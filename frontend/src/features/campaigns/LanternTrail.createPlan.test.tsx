@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KairyaBubble } from '../kairya'
 import { jsonBody, requestsTo, routeFetch } from '../../test/fetchRoutes'
@@ -130,6 +130,105 @@ describe('LanternTrail: criar o plano da semana', () => {
     expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
     expect(screen.queryByTestId('week-plan-form')).not.toBeInTheDocument()
   })
+
+  it.each([
+    { week: 'next', status: 201 },
+    { week: 'current', status: 201 },
+    { week: 'current', status: 409 },
+  ])(
+    'preserva a nova abertura após resposta $status da tentativa cancelada ($week)',
+    async ({ week, status }) => {
+      const newWeek = week === 'next' ? 'current' : 'next'
+      const oldWeekStart = week === 'next' ? '2026-09-28' : PLANO.week_start
+      const newWeekStart = newWeek === 'next' ? '2026-09-28' : PLANO.week_start
+      let deliverOldResponse: (response: Response) => void = () => {
+        throw new Error('A tentativa antiga ainda não recebeu um resolvedor.')
+      }
+      const pending = new Promise<Response>((resolve) => {
+        deliverOldResponse = resolve
+      })
+      let createdCurrent = false
+      const fetchMock = routeFetch({
+        'GET /api/plans/current': () => Response.json({ plan: createdCurrent ? PLANO : null }),
+        'POST /api/plans': (_init, call) => {
+          if (call === 1) return pending
+          createdCurrent = newWeek === 'current'
+          return Response.json({ week_start: newWeekStart }, { status: 201 })
+        },
+      })
+      renderWithI18n(
+        <>
+          <KairyaBubble />
+          <LanternTrail />
+        </>,
+        { strict: true },
+      )
+      await screen.findByTestId('trail-no-plan')
+      const reads = requestsTo(fetchMock, 'GET /api/plans/current').length
+      fireEvent.click(screen.getByTestId('week-plan-open'))
+      fillWeek()
+      fireEvent.click(screen.getByTestId(`week-plan-week-${week}`))
+      fireEvent.click(screen.getByTestId('week-plan-submit'))
+      expect(requestsTo(fetchMock, 'POST /api/plans')).toHaveLength(1)
+      expect(jsonBody(requestsTo(fetchMock, 'POST /api/plans')[0])).toMatchObject({
+        week_start: oldWeekStart,
+      })
+      const submit = screen.getByTestId('week-plan-submit')
+      expect(submit).toHaveAttribute('aria-disabled', 'true')
+      expect(submit).toHaveAttribute('aria-busy', 'true')
+      fireEvent.click(submit)
+      expect(requestsTo(fetchMock, 'POST /api/plans')).toHaveLength(1)
+      expect(screen.getByTestId('week-plan-cancel')).toBeEnabled()
+
+      fireEvent.click(screen.getByTestId('week-plan-cancel'))
+      expect(screen.getByTestId('week-plan-open')).toHaveFocus()
+      fireEvent.click(screen.getByTestId('week-plan-open'))
+      fillWeek()
+      fireEvent.click(screen.getByTestId(`week-plan-week-${newWeek}`))
+      const form = screen.getByTestId('week-plan-form')
+      const draft = screen.getByTestId('week-plan-day-0-instructions')
+      change('week-plan-day-0-instructions', 'Novo rascunho')
+      draft.focus()
+
+      const reply = Response.json(
+        status === 409 ? { detail: 'x', code: 'plano_existente' } : { week_start: oldWeekStart },
+        { status },
+      )
+      let finishRead: () => void = () => {
+        throw new Error('A leitura ainda não recebeu um resolvedor.')
+      }
+      const read = new Promise<void>((resolve) => {
+        finishRead = resolve
+      })
+      const parseBody = reply.json.bind(reply)
+      vi.spyOn(reply, 'json').mockImplementation(async () => {
+        const body: unknown = await parseBody()
+        finishRead()
+        return body
+      })
+      await act(async () => {
+        deliverOldResponse(reply)
+        await read
+      })
+
+      expect(form).toBeInTheDocument()
+      expect(draft).toHaveValue('Novo rascunho')
+      expect(draft).toHaveFocus()
+      expect(screen.queryByTestId('week-plan-created-next')).not.toBeInTheDocument()
+      expect(screen.queryByText('Plano feito. Agora é um dia de cada vez.')).not.toBeInTheDocument()
+      expect(requestsTo(fetchMock, 'GET /api/plans/current')).toHaveLength(reads)
+
+      fireEvent.click(screen.getByTestId('week-plan-submit'))
+      if (newWeek === 'next') {
+        expect(await screen.findByTestId('week-plan-created-next')).toBeInTheDocument()
+      } else {
+        expect(await screen.findAllByTestId('trail-day')).toHaveLength(7)
+      }
+      const writes = requestsTo(fetchMock, 'POST /api/plans')
+      expect(writes).toHaveLength(2)
+      expect(jsonBody(writes[1])).toMatchObject({ week_start: newWeekStart })
+    },
+  )
 
   it('falha de rede: o formulario fica com os dados e a trilha continua sem plano', async () => {
     routeFetch({
