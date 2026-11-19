@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap check check-handoff check-hooks check-web check-api check-proxy check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
+.PHONY: help bootstrap check check-handoff check-hooks check-supply-chain-npm check-web check-api check-proxy check-e2e check-secrets check-wheel format db-up db-down migrate migrate-test reset-test-db
 
 WEB := frontend
 
@@ -33,9 +33,13 @@ bootstrap: ## Instala as dependencias dos dois ecossistemas
 	uv sync --locked
 	./scripts/install-gitleaks.sh
 
-check: check-handoff check-web check-api check-proxy check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
+check: check-handoff check-supply-chain-npm check-web check-api check-proxy check-e2e check-secrets check-wheel ## Gate completo. E o que os hooks e o CI executam.
+
+check-supply-chain-npm: ## Verifica o lock npm, o backport instalado e os HIGH/CRITICAL
+	./scripts/check-supply-chain-npm.sh
 
 check-web: ## ESLint, Prettier, TypeScript e testes do frontend
+	python3 scripts/picomatch_backport.py verify .
 	cd $(WEB) && npm run lint
 	cd $(WEB) && npm run format:check
 	cd $(WEB) && npm run typecheck
@@ -54,10 +58,9 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # recebia aviso nenhum, e o `docs/QUALITY.md` §4 prometeu essa validacao
 # DENTRO do alvo.
 #
-# Nao ha equivalente npm no check-web, de proposito: nao existe comando barato
-# e confiavel que compare `package.json` com `package-lock.json` sem instalar,
-# e forcar `npm ci` no check-web faria o gate local reinstalar tudo a cada
-# execucao. A assimetria e declarada, nao consertada com verificacao fragil.
+# A sincronizacao geral npm continua no npm ci do bootstrap e do CI.
+# O check-web confere o lock especifico e o backport instalado antes dos testes.
+# Tanto a paridade quanto essa distincao estao no docs/QUALITY.md.
 	uv lock --check
 	uv run ruff check .
 	uv run ruff format --check .
@@ -65,7 +68,7 @@ check-api: ## Ruff, mypy e pytest com cobertura no backend
 # banco e as migracoes escrevem DDL -- codigo onde um erro de tipo custa
 # dados, nao um traceback. O Ruff ja o cobria via `ruff check .`; deixar o
 # mypy de fora era a unica assimetria.
-	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py scripts/varrer_traces.py
+	uv run mypy src tests alembic scripts/verify_image_platforms.py scripts/promote_images.py scripts/check_wheel.py scripts/turntable_params.py scripts/varrer_traces.py scripts/picomatch_backport.py
 	uv run pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
 check-proxy: ## Testa a autenticacao HTTP e as rotas de saude no Nginx em containers
@@ -92,6 +95,7 @@ check-proxy: ## Testa a autenticacao HTTP e as rotas de saude no Nginx em contai
 # prefixada ao comando (`VAR=$$(...) npx ...`), ela seria ignorada e o E2E
 # subiria com deslocamento vazio -- as portas de outro worktree.
 check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-core
+	python3 scripts/picomatch_backport.py verify .
 	cd $(WEB) && VITE_API_URL=/api npm run build
 	deslocamento="$$(uv run python -c 'from focusquest.core.config import Settings; print(Settings().e2e_port_offset)')" \
 		&& cd $(WEB) && FOCUSQUEST_E2E_PORT_OFFSET="$$deslocamento" npx playwright test
