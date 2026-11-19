@@ -34,6 +34,9 @@ def problemas_do_wheel(wheel: Path, esperados: list[str]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) != 3:
+        print("uso: check_wheel.py <wheel> <src>", file=sys.stderr)
+        return 2
     wheel, src = Path(argv[1]), Path(argv[2])
     esperados = prompts_do_checkout(src)
     if not esperados:

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -380,7 +381,14 @@ export function WeekPlanForm({
   const fields = useRef(new Map<string, HTMLElement>())
   const firstRadio = useRef<HTMLInputElement>(null)
   const statusBox = useRef<HTMLDivElement>(null)
+  const activeSubmission = useRef<symbol | null>(null)
 
+  useLayoutEffect(
+    () => () => {
+      activeSubmission.current = null
+    },
+    [],
+  )
   useEffect(() => {
     firstRadio.current?.focus()
   }, [])
@@ -452,12 +460,17 @@ export function WeekPlanForm({
       setFocusRequest({ key: first.key })
       return
     }
+    const submission = Symbol()
+    activeSubmission.current = submission
     setNotice({ kind: 'sending' })
     try {
       await postJson<Plan>('/plans', toPlanBody(draft, weeks[draft.week]), {
         timeoutMs: MUTATION_TIMEOUT_MS,
       })
     } catch (error) {
+      if (activeSubmission.current !== submission) {
+        return
+      }
       const failure = describePlanFailure(error, draft.week)
       setNotice({ kind: 'failed', failure })
       // O foco estava no botao; a falha e dita na linha de status.
@@ -468,6 +481,9 @@ export function WeekPlanForm({
       if (failure.action === 'refresh') {
         onExists()
       }
+      return
+    }
+    if (activeSubmission.current !== submission) {
       return
     }
     setNotice({ kind: 'created' })
@@ -587,7 +603,14 @@ export function WeekPlanForm({
         <Button type="submit" variant="primary" loading={busy} data-testid="week-plan-submit">
           {t(busy ? 'campaigns.form.submitting' : 'campaigns.form.submit')}
         </Button>
-        <Button data-testid="week-plan-cancel" onClick={onCancel}>
+        <Button
+          data-testid="week-plan-cancel"
+          onClick={() => {
+            // O servidor ainda pode gravar o plano. Descarte os efeitos desta abertura.
+            activeSubmission.current = null
+            onCancel()
+          }}
+        >
           {t('campaigns.form.cancel')}
         </Button>
       </div>

@@ -2,6 +2,10 @@
    Fica em @layer base para que as utilities (font-bold, text-lg etc.)
    num título continuem vencendo; uma regra fora de layer ganharia delas. */
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
   body {
     font-family: var(--font-body);
     line-height: var(--leading-body);

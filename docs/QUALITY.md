@@ -169,11 +169,12 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 |---|---|
 | `make help` | Lista os alvos disponíveis do Makefile, com a descrição de cada um. |
 | `make bootstrap` | Instala as dependências: `npm ci` no frontend, o Chromium do Playwright (`npx playwright install chromium`, sem `--with-deps`), `uv sync --locked` na raiz Python e o Gitleaks fixado via `scripts/install-gitleaks.sh`. |
-| `make check` | Gate completo. Agrega `check-handoff`, `check-web`, `check-api`, `check-proxy`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
-| `make check-web` | ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
-| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação, `scripts/check_wheel.py` e `scripts/varrer_traces.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
+| `make check` | Gate completo. Agrega `check-handoff`, `check-supply-chain-npm`, `check-web`, `check-api`, `check-proxy`, `check-e2e`, `check-secrets` e `check-wheel`, nesta ordem. É o que os hooks (`pre-commit`, `pre-merge-commit`) e o `pre-push` (via `scripts/check-push.sh`) executam. |
+| `make check-supply-chain-npm` | Confere o lock e o backport instalado. Compara os relatórios bruto e final do Trivy com a mesma base e reprova achados HIGH ou CRITICAL ativos. |
+| `make check-web` | Confere o backport e os consumidores antes de executar ESLint (`--max-warnings 0`), depois Prettier em modo verificação, depois TypeScript sem emissão (`tsc -b`), depois Vitest com cobertura exigida de 100%, nesta ordem. |
+| `make check-api` | `uv lock --check`, depois Ruff lint, depois Ruff `format --check`, depois mypy estrito sobre `src tests alembic`, os dois scripts de publicação, `scripts/check_wheel.py`, `scripts/turntable_params.py`, `scripts/varrer_traces.py` e `scripts/picomatch_backport.py`, depois pytest com cobertura (relatórios no terminal, em `htmlcov/` e em `coverage.xml`). Detalhe na seção 4. |
 | `make check-proxy` | Testa por HTTP o `docker/nginx.conf` com Docker Compose. Verifica o desafio Basic e o 401, o acesso com credencial sintética sem repasse de `Authorization` em `/api/*` e as exceções de `/health` e `/ready`. |
-| `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db` (não mais `migrate-test`); depois o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
+| `make check-e2e` | **Desde o Incremento B**, pré-requisito `reset-test-db`; depois a conferência do backport instalado e o build de produção do frontend com `VITE_API_URL=/api` e o Playwright em Chromium, com axe-core. Detalhe na seção 4. |
 | `make check-handoff` | `scripts/check-handoff.sh`: reprova a branch cujo `git diff origin/main...HEAD` toca `docs/HANDOFF.md`, exceto as branches `wt/consolidar-handoff*`. A branch vem de `FQ_HANDOFF_BRANCH`, que o `check-push.sh` preenche com a ref enviada (o worktree do push é destacado). O handoff de cada PR mora em `docs/handoff/`. |
 | `make check-secrets` | Instala o Gitleaks (idempotente) e varre o repositório inteiro em busca de segredos, com `--config .gitleaks.toml`. |
 | `make check-wheel` | `scripts/check-wheel.sh`: constrói o wheel (`uv build --wheel`, num diretório temporário) e `scripts/check_wheel.py` reprova se faltar nele, ou estiver vazio, algum `.md` de `src/**/prompts/` do checkout (lista derivada dos arquivos, não fixa; a conferência tem teste unitário com wheel falso no `check-api`). A imagem da API instala o wheel, e o pacote lê os `.md` por `importlib.resources`: um `.md` fora do build passaria nos testes (que rodam do checkout) e só quebraria no primeiro turno em produção. Fica fora do `check-api` porque o `uv build` baixa o backend de build (hatchling). |
@@ -184,7 +185,7 @@ sobrescrever: o worktree fica criado, mas o bootstrap não roda.
 | `make migrate-test` | `uv run alembic -x test=true upgrade head` no banco de **teste** — só migra, não apaga. |
 | `make reset-test-db` | **Novo no Incremento B.** DESTRUTIVO: `PYTHONPATH=tests uv run python -m integration.banco_de_teste` (**desde a Frente 0, cria o banco de teste se ele não existir**; depois apaga e recria o schema `public` dele, tudo atrás da mesma guarda de `tests/integration/conftest.py`) e em seguida `uv run alembic -x test=true upgrade head`. Pré-requisito do `check-e2e` (seção 4). |
 
-Os alvos de verificação do gate são os sete `check-*` da receita de
+Os alvos de verificação do gate são os oito `check-*` da receita de
 `make check`. `bootstrap`, `format`,
 `db-up`, `db-down`, `migrate` e `migrate-test` são preparação de ambiente ou
 ação manual — por isso nenhum deles tem job próprio no CI (seção 5).
@@ -636,16 +637,19 @@ ao `pyproject.toml` sem regravar o lock, `uv sync --frozen` passou, e
 `uv sync --locked` e `uv lock --check` reprovaram com "The lockfile at
 `uv.lock` needs to be updated").
 
-**npm: validado só no CI.** `npm ci` também reprova um `package-lock.json`
-defasado, mas ele roda apenas no `make bootstrap` e no preparo dos jobs
-`check-web` e `check-e2e` — o `check-web` local **não** valida o lockfile do
-npm. É deliberado: não existe comando barato e confiável que compare
-`package.json` com `package-lock.json` sem instalar, e forçar `npm ci`
-dentro do `check-web` faria o gate local reinstalar tudo a cada execução.
-Consequência, sem eufemismo: **um `package-lock.json` defasado passa no
-`make check` local e reprova no CI** — falha fechada, mas no lugar errado.
-Quem mexer no `frontend/package.json` roda `npm install` (que regrava o
-lock) antes de commitar.
+**npm.** A sincronização geral entre `package.json` e
+`package-lock.json` é verificada por `npm ci` no `make bootstrap` e no
+preparo dos jobs `check-web`, `check-e2e` e `check-supply-chain-npm`.
+Quem altera `frontend/package.json` precisa atualizar o lock antes do
+commit.
+
+A guarda do Picomatch roda localmente e no CI. Confere o lock
+específico, a referência `file:`, o SRI, a proveniência e todos os
+arquivos instalados. Exige que Vite, Vitest, tinyglobby e fdir
+resolvam a cópia verificada. O hook vincula a prova à árvore do índice.
+No GitHub Actions, essa árvore deve coincidir com a do commit usado
+pelo job.
+
 
 ## 5. Integração contínua
 
@@ -666,14 +670,22 @@ verificação executa **um** alvo, e nada além dele:
 
 | Job | Executa | Preparo de ambiente antes do alvo | `timeout-minutes` |
 |---|---|---|---|
+| `check-supply-chain-npm` | `make check-supply-chain-npm` | checkout, `setup-node`, `npm ci`, pasta de relatórios e Docker do runner | 20 |
 | `check-web` | `make check-web` | checkout, `setup-node` (Node 24, cache de npm), `npm ci` | 10 |
-| `check-api` | `make check-api` | checkout, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
+| `check-api` | `make check-api` | checkout, `setup-node` para o teste do resolvedor, `setup-uv`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test` | 15 |
 | `check-proxy` | `make check-proxy` | checkout, Docker Compose do runner | 5 |
 | `check-e2e` | `make check-e2e` | checkout, `setup-node`, `setup-uv`, `npm ci`, `uv sync --locked`, serviço PostgreSQL, criação do `focusquest_test`, `npx playwright install --with-deps chromium`; **só em falha:** varredura dos traces e upload (parágrafo abaixo) | 25 |
 | `check-secrets` | `make check-secrets` | checkout, `actions/cache` do `.tools/` (binário do Gitleaks) | 10 |
 | `check-handoff` | `make check-handoff` | checkout com `fetch-depth: 0` (traz a `origin/main`) | 5 |
 | `check-wheel` | `make check-wheel` | checkout, `setup-uv`, `uv sync --locked` | 10 |
-| `quality-gate` | agrega os sete jobs acima | — | 5 |
+| `quality-gate` | agrega os oito jobs acima | — | 5 |
+
+O scanner npm usa a imagem Trivy 0.76.2 fixada por digest. As
+duas varreduras usam o mesmo lock e a mesma base de dados, com o
+relatório final offline. A declaração VEX se limita ao advisory
+do Picomatch cuja origem e conteúdo instalado o guard comprovou.
+Os hashes, a prova de instalação e os relatórios ficam no artefato
+do job. Outros achados altos ou críticos ativos reprovam o alvo.
 
 O `check-proxy` usa as imagens-base fixadas em `docker/web.Dockerfile` e
 `docker/api.Dockerfile`, com um backend de teste que sinaliza a presença
@@ -695,7 +707,7 @@ O helper `scripts/promote_images.py` consulta o HEAD atual da `main` antes e
 depois do preflight; uma execução superada conserva sua tag por commit e não
 escreve os aliases. O alvo revalida os digests antes de
 atualizar `main`/`latest`; confere cada alias depois da escrita. São jobs de
-publicação, separados dos sete jobs de qualidade da tabela. Só eles recebem
+publicação, separados dos oito jobs de qualidade da tabela. Só eles recebem
 `packages: write`, com autenticação pelo `GITHUB_TOKEN` temporário. Actions,
 QEMU e BuildKit usados na publicação ficam fixados por SHA/digest. A concorrência
 já existente da `main` cobre o workflow inteiro, incluindo publicação, sem

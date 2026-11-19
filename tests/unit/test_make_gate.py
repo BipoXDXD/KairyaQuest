@@ -27,7 +27,7 @@ def test_gate_termina_check_api_antes_do_reset_do_e2e(
     simulacao.write_text(
         "\n".join(regras)
         + """
-check-handoff check-web check-proxy check-secrets check-wheel:
+check-handoff check-supply-chain-npm check-web check-proxy check-secrets check-wheel:
 \t@:
 check-api:
 \t@sleep 1
