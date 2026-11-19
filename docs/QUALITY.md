@@ -194,6 +194,12 @@ O `make` para no primeiro alvo que falha: `check` não chega ao `check-api`
 se o `check-web` reprovar, e dentro de cada alvo uma receita só roda se a
 anterior passar.
 
+O Makefile serializa as receitas de uma mesma invocação com
+`.NOTPARALLEL:`, inclusive com `-j` explícito ou herdado em `MAKEFLAGS`.
+O `check-api` termina antes que `reset-test-db` prepare o banco compartilhado
+para o `check-e2e`. Para invocações simultâneas, cada gate precisa de banco e
+portas próprios, conforme a seção 4.
+
 Uma precisão sobre "só `make format` modifica": `make check` **escreve** em
 disco — relatórios de cobertura (`frontend/coverage/`, `htmlcov/`,
 `coverage.xml`, `.coverage`), o build (`frontend/dist/`), a saída do
