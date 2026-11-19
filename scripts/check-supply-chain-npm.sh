@@ -44,15 +44,15 @@ hash_da_base > "$reports/dataset-digests.sha256"
 cmp -- frontend/package-lock.json "$alvo/frontend/package-lock.json"
 python3 "$verificador" emit "$root" "$reports" "$versao"
 
-vex=()
+politica=(--exit-code 1 --output /reports/trivy-policy.json)
 if [[ -f $reports/picomatch.openvex.json ]]; then
-    vex=(--vex /reports/picomatch.openvex.json)
+    politica=(--vex /reports/picomatch.openvex.json "${politica[@]}")
 fi
 python3 "$verificador" guard "$root" "$reports" "$versao"
 hash_da_base | cmp - "$reports/dataset-digests.sha256"
 status=0
 varrer none --offline-scan --skip-db-update --skip-java-db-update --skip-check-update \
-    "${vex[@]}" --exit-code 1 --output /reports/trivy-policy.json || status=$?
+    "${politica[@]}" || status=$?
 hash_da_base | cmp - "$reports/dataset-digests.sha256"
 cmp -- frontend/package-lock.json "$alvo/frontend/package-lock.json"
 python3 "$verificador" audit "$root" "$reports" "$versao"
