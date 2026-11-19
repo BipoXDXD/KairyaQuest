@@ -2,8 +2,13 @@
 FROM --platform=$BUILDPLATFORM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS build
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/vendor/picomatch-4.0.7-backport4.tgz ./vendor/
 RUN npm ci --ignore-scripts --no-audit --no-fund
-COPY frontend/ ./
+COPY frontend/tsconfig*.json frontend/vite.config.ts frontend/playwright.config.ts frontend/index.html ./
+COPY frontend/src/ ./src/
+COPY frontend/public/ ./public/
+COPY frontend/tests/e2e/ ./tests/e2e/
+COPY frontend/tests/unit/ ./tests/unit/
 RUN VITE_API_URL=/api npm run build
 
 FROM nginx:1.30.6-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
