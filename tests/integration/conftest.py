@@ -3,6 +3,7 @@
 from argparse import Namespace
 from collections.abc import Iterator
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from alembic import command
@@ -11,6 +12,7 @@ from sqlalchemy import Engine, delete
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url
 from focusquest.modules.tutoring.anthropic_provider import ProvedorAnthropic
 from focusquest.modules.tutoring.models import TutorMessage
@@ -28,11 +30,17 @@ from .banco_de_teste import criar_banco_se_ausente, recriar_esquema
 # `falhou` antes da hora.
 TIMEOUT_DA_DEMORA = 0.3
 TIMEOUT_FOLGADO = 30.0
+ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     return Settings()
+
+
+@pytest.fixture(scope="session")
+def configuracao_de_teste() -> ConfiguracaoDeTeste:
+    return ConfiguracaoDeTeste()
 
 
 @pytest.fixture
@@ -42,7 +50,7 @@ def falso() -> Iterator[ServidorAnthropicFalso]:
 
 
 @pytest.fixture(scope="session")
-def engine(settings: Settings) -> Iterator[Engine]:
+def engine(configuracao_de_teste: ConfiguracaoDeTeste) -> Iterator[Engine]:
     """A engine do banco de teste, CRIADO aqui se ainda nao existir.
 
     A criacao mora nesta fixture, e nao so no `make reset-test-db`, por dois
@@ -57,10 +65,12 @@ def engine(settings: Settings) -> Iterator[Engine]:
     A guarda de nome e de alvo vem antes de qualquer conexao
     (`criar_banco_se_ausente`), a mesma do `DROP SCHEMA`.
     """
-    engine = create_engine_from_url(settings.test_database_url)
-    criar_banco_se_ausente(engine)
-    yield engine
-    engine.dispose()
+    engine = create_engine_from_url(configuracao_de_teste.test_database_url)
+    try:
+        criar_banco_se_ausente(engine)
+        yield engine
+    finally:
+        engine.dispose()
 
 
 def alembic_config() -> Config:
@@ -73,7 +83,7 @@ def alembic_config() -> Config:
     Sem esse `x`, o env.py cairia no banco de DESENVOLVIMENTO, e o
     `DROP SCHEMA` de `banco_migrado` destruiria dados reais.
     """
-    return Config("alembic.ini", cmd_opts=Namespace(x=["test=true"]))
+    return Config(ALEMBIC_INI, cmd_opts=Namespace(x=["test=true"]))
 
 
 @pytest.fixture(scope="session")

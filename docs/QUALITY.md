@@ -26,10 +26,16 @@ make migrate-test                                 # esquema no banco de teste
 make check                                        # confirma que o gate passa
 ```
 
-O `.env` é obrigatório para o gate, não para a aplicação apenas:
-`src/focusquest/core/config.py` exige `FOCUSQUEST_DATABASE_URL` e
-`FOCUSQUEST_TEST_DATABASE_URL` sem valor padrão, e sem elas o `check-api`
-reprova na partida. O `make db-up` precisa vir antes do `make check` porque
+O gate exige `FOCUSQUEST_DATABASE_URL` para os testes que exercitam a
+configuração da aplicação e `FOCUSQUEST_TEST_DATABASE_URL` para as ferramentas
+de teste. Forneça os dois valores pelo ambiente ou pelo `.env`. A API e o
+Alembic no modo padrão exigem apenas a URL da aplicação. Com `-x test=true`,
+o Alembic exige a URL de teste e valida o destino antes de conectar. O modo
+padrão vale também para `-x test=false`. Outros valores são recusados.
+A URL de teste exige um nome terminado em `_test` dentro do limite de 63 bytes
+do PostgreSQL. A consulta aceita as opções de transporte e diagnóstico
+listadas em `configuracao_de_teste.py`.
+O `make db-up` precisa vir antes do `make check` porque
 a suíte de integração e o E2E falam com um PostgreSQL real. O
 `make migrate-test` à parte não é estritamente necessário — a fixture do
 pytest migra o banco de teste por conta própria —, mas rodá-lo sozinho
@@ -392,9 +398,9 @@ próprio por worktree desde a Frente 0 (abaixo). **O banco nasce sob
 demanda:** a fixture `engine` chama `criar_banco_se_ausente`
 (`tests/integration/banco_de_teste.py`), que conecta ao banco de manutenção
 `postgres` do mesmo servidor (derivado da própria URL) e cria o que falta —
-só **depois** da mesma guarda dupla do `DROP SCHEMA` (alvo igual ao
-configurado **e** nome terminado em `_test`) e de uma recusa a nomes acima de
-63 bytes, que o PostgreSQL truncaria em silêncio. A criação mora na fixture, e
+só **depois** da mesma guarda do `DROP SCHEMA` (alvo igual ao configurado,
+nome terminado em `_test` e com até 63 bytes). O PostgreSQL trunca nomes
+maiores em silêncio. A criação mora na fixture, e
 não só no `make reset-test-db`, porque no `make check` o `check-api` roda
 **antes** do `check-e2e`, e o worktree do pre-push começa sempre com um banco
 novo. Nenhum código do projeto apaga um banco (`DROP DATABASE`). A fixture `banco_migrado`
@@ -474,7 +480,7 @@ mesmos criaram.
   galeria começa acima do topo do frontend para nenhum deslocamento válido
   pôr as duas na mesma porta), e o
   `playwright.config.ts` deriva **todas** as portas dele. O valor chega ao
-  Playwright pelo `Makefile`, e só ele: o `Settings` (campo
+  Playwright pelo `Makefile`. A `ConfiguracaoDeTeste` (campo
   `e2e_port_offset`, mesma faixa, ambiente acima do `.env`) o resolve, e a
   receita repassa apenas essa chave. **Faixa por convenção:** 0 a 24 para
   worktrees (0 é o padrão, o do principal) e 25 a 49 reservada ao pre-push,
@@ -482,7 +488,7 @@ mesmos criaram.
   que os limites do Python, do TypeScript e do `push-env.sh` batem
   (`tests/unit/test_config.py`).
 - **`scripts/e2e-env.sh`** aponta `FOCUSQUEST_DATABASE_URL` da API do E2E
-  para o banco de **teste** (lido de `Settings().test_database_url`, sem
+  para o banco de **teste** (lido de `ConfiguracaoDeTeste().test_database_url`, sem
   repetir a URL) e recusa subir se o nome do banco não terminar em `_test`.
   Desde o 1b-2, o script ganhou duas guardas a mais (Task 6): recusa subir a
   API se o host de `anthropic_base_url` não for loopback (`127.0.0.1`,

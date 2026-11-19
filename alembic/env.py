@@ -3,7 +3,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import make_url, pool
 
 # Importados pelo efeito colateral de registrar as tabelas no `Base.metadata`:
 # sem eles, o `target_metadata` do autogenerate nao conheceria a tutoria.
@@ -13,6 +13,10 @@ import focusquest.modules.tutoring.models  # noqa: F401
 import focusquest.modules.users.models  # noqa: F401
 from focusquest.core.base import Base
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import (
+    ConfiguracaoDeTeste,
+    exigir_alvo_de_banco_de_teste,
+)
 from focusquest.core.database import create_engine_from_url
 
 config = context.config
@@ -38,16 +42,15 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
-    """URL do banco.
-
-    `-x test=true` aponta para o banco de teste. Sem isso, rodar a suite de
-    migracao apagaria o banco de desenvolvimento -- e o README s10 manda
-    recusar alvos de desenvolvimento.
-    """
-    settings = Settings()
-    if context.get_x_argument(as_dictionary=True).get("test") == "true":
-        return settings.test_database_url
-    return settings.database_url
+    """Em modo de teste, valida o alvo antes de configurar a migracao."""
+    modo = context.get_x_argument(as_dictionary=True).get("test", "false")
+    if modo == "false":
+        return Settings().database_url
+    if modo != "true":
+        raise ValueError("valor inválido para -x test; use true ou false")
+    url = ConfiguracaoDeTeste().test_database_url
+    exigir_alvo_de_banco_de_teste(make_url(url))
+    return url
 
 
 def run_migrations_offline() -> None:

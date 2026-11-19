@@ -9,6 +9,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 
 # A raiz do repositorio, onde mora o `.env.example`.
 RAIZ = Path(__file__).resolve().parents[2]
@@ -18,16 +19,13 @@ def test_le_a_url_do_banco_do_ambiente(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/d")
-    monkeypatch.setenv(
-        "FOCUSQUEST_TEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/t"
-    )
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     # Sem o chdir, este teste le o .env real do repositorio: com
     # extra="forbid" ativo, qualquer chave FOCUSQUEST_* que alguem acrescente
     # la derruba este teste por um motivo que ele nao afirma testar.
     monkeypatch.chdir(tmp_path)
     settings = Settings()
     assert settings.database_url == "postgresql+psycopg://u:p@h:55432/d"
-    assert settings.test_database_url == "postgresql+psycopg://u:p@h:55432/t"
 
 
 def test_falha_quando_a_url_do_banco_nao_esta_no_ambiente(
@@ -39,8 +37,38 @@ def test_falha_quando_a_url_do_banco_nao_esta_no_ambiente(
     # o chdir, o .env real do repositorio (README s4) esconderia a
     # falta de configuracao e o teste pararia de testar o que promete.
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError) as erro:
         Settings()
+    assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
+        (("database_url",), "missing")
+    ]
+
+
+def test_runtime_aceita_dotenv_compartilhado_sem_validar_chaves_de_teste(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "FOCUSQUEST_DATABASE_URL=postgresql+psycopg://u:p@h:55432/d\n"
+        "FOCUSQUEST_TEST_DATABASE_URL=valor-que-o-runtime-ignora\n"
+        "FOCUSQUEST_E2E_PORT_OFFSET=fora-da-faixa\n"
+    )
+    assert Settings().database_url.endswith("/d")
+
+
+def test_configuracao_de_teste_exige_sua_propria_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://u:p@h:55432/d")
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValidationError) as erro:
+        ConfiguracaoDeTeste()
+    assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
+        (("test_database_url",), "missing")
+    ]
 
 
 def test_falha_quando_ha_variavel_desconhecida_no_env(
@@ -337,18 +365,17 @@ def test_o_deslocamento_das_portas_do_e2e_e_zero_por_padrao(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Quem nao configura nada ve as portas de sempre (8100, 5273, 8150)."""
-    assert _settings_do_arquivo(monkeypatch, tmp_path, "").e2e_port_offset == 0
+    _settings_do_arquivo(monkeypatch, tmp_path, "")
+    assert ConfiguracaoDeTeste().e2e_port_offset == 0
 
 
 def test_o_deslocamento_das_portas_do_e2e_vem_do_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Campo declarado: sem ele, o `.env` de um worktree com a linha seria
-    recusado inteiro por `extra_forbidden`."""
-    settings = _settings_do_arquivo(
-        monkeypatch, tmp_path, "FOCUSQUEST_E2E_PORT_OFFSET=7\n"
-    )
-    assert settings.e2e_port_offset == 7
+    _settings_do_arquivo(monkeypatch, tmp_path, "FOCUSQUEST_E2E_PORT_OFFSET=7\n")
+    assert ConfiguracaoDeTeste().e2e_port_offset == 7
+    monkeypatch.setenv("FOCUSQUEST_E2E_PORT_OFFSET", "11")
+    assert ConfiguracaoDeTeste().e2e_port_offset == 11
 
 
 @pytest.mark.parametrize("valor", ["-1", "50", "abc", "1.5"])
@@ -362,10 +389,9 @@ def test_o_deslocamento_das_portas_do_e2e_recusa_fora_da_faixa(
     declarado, a mesma linha tambem reprova -- por `extra_forbidden`, que cita
     o mesmo nome. Afirmar so o nome deixaria este teste verde sem a validacao.
     """
+    _settings_do_arquivo(monkeypatch, tmp_path, f"FOCUSQUEST_E2E_PORT_OFFSET={valor}\n")
     with pytest.raises(ValidationError) as erro:
-        _settings_do_arquivo(
-            monkeypatch, tmp_path, f"FOCUSQUEST_E2E_PORT_OFFSET={valor}\n"
-        )
+        ConfiguracaoDeTeste()
     assert [(e["loc"], e["type"]) for e in erro.value.errors()] == [
         (
             ("e2e_port_offset",),
@@ -389,7 +415,7 @@ def test_o_limite_do_deslocamento_e_o_mesmo_do_servers_ts() -> None:
         return int(achado.group(1))
 
     maximo_do_ts = porta("PORTA_DO_FALSO") - porta("PORTA_DA_API") - 1
-    limites = Settings.model_fields["e2e_port_offset"].metadata
+    limites = ConfiguracaoDeTeste.model_fields["e2e_port_offset"].metadata
     assert [getattr(m, "ge", None) for m in limites if hasattr(m, "ge")] == [0]
     assert [getattr(m, "le", None) for m in limites if hasattr(m, "le")] == [
         maximo_do_ts
@@ -398,7 +424,7 @@ def test_o_limite_do_deslocamento_e_o_mesmo_do_servers_ts() -> None:
 
 
 def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
-    """A faixa de 0 ao limite do `Settings` se divide em duas metades iguais:
+    """A faixa de 0 ao limite da `ConfiguracaoDeTeste` se divide em duas metades iguais:
     0..24 para worktrees e 25..49 para o pre-push, que soma a reserva ao
     deslocamento do worktree (`scripts/push-env.sh`). Se o limite mudar e a
     reserva nao, o push de um worktree alto sairia da faixa -- ou a faixa dos
@@ -406,7 +432,7 @@ def test_a_reserva_do_push_divide_a_faixa_ao_meio() -> None:
     achado = re.search(r"^FQ_RESERVA_DO_PUSH=(\d+)$", PUSH_ENV.read_text(), re.M)
     assert achado is not None
     reserva = int(achado.group(1))
-    limites = Settings.model_fields["e2e_port_offset"].metadata
+    limites = ConfiguracaoDeTeste.model_fields["e2e_port_offset"].metadata
     teto = next(m.le for m in limites if hasattr(m, "le"))
     assert 2 * reserva - 1 == teto
 

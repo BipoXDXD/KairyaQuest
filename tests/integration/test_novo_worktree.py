@@ -331,8 +331,9 @@ def test_o_env_do_worktree_nasce_so_do_exemplo_e_passa_no_settings(
     """Nada do `.env` do principal vai para o do worktree: nem a chave que o
     exemplo nao conhece (`FOCUSQUEST_CHAVE_REMOVIDA` ja foi uma), nem uma variavel
     qualquer, nem o servidor, a credencial e a query da URL do banco dele. O
-    resultado e carregado pelo `Settings` (`extra="forbid"`)."""
+    resultado e carregado pela configuracao da API e pela de teste."""
     from focusquest.core.config import Settings
+    from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 
     canario_removida = f"CANARY-{uuid.uuid4()}"
     canario_outra = f"CANARY-{uuid.uuid4()}"
@@ -359,8 +360,11 @@ def test_o_env_do_worktree_nasce_so_do_exemplo_e_passa_no_settings(
     )
     for chave in [c for c in os.environ if c.startswith("FOCUSQUEST_")]:
         monkeypatch.delenv(chave)
-    settings = Settings(_env_file=repo.principal / ".claude/worktrees/so-exemplo/.env")
-    assert settings.test_database_url.endswith("/focusquest_so-exemplo_test")
+    arquivo_env = repo.principal / ".claude/worktrees/so-exemplo/.env"
+    assert Settings(_env_file=arquivo_env).database_url == f"{PREFIXO}focusquest"
+    assert ConfiguracaoDeTeste(_env_file=arquivo_env).test_database_url.endswith(
+        "/focusquest_so-exemplo_test"
+    )
 
 
 def test_recusa_se_a_main_nao_tem_env_example(repo: Repositorio) -> None:

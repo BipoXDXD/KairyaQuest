@@ -82,7 +82,7 @@ exportar_env_focusquest() {
   if [ -n "$faltando" ]; then
     echo "!! configuracao ausente: o gate nao pode rodar no worktree de validacao, push rejeitado" >&2
     echo "!! variaveis obrigatorias sem valor:${faltando}" >&2
-    echo "!! elas nao tem default em src/focusquest/core/config.py, e o worktree temporario nao herda o .env (ele e gitignored)" >&2
+    echo "!! Settings exige a URL da aplicacao e ConfiguracaoDeTeste exige a URL de teste. O worktree temporario nao herda o .env" >&2
     echo "!! conserte de um dos dois jeitos, no repositorio principal (${raiz}):" >&2
     echo "!!   1. crie o .env a partir do modelo:  cp .env.example .env  (e ajuste o que precisar)" >&2
     echo "!!   2. ou exporte as variaveis no shell que dispara o push" >&2
@@ -107,7 +107,7 @@ exportar_env_focusquest() {
 #    banco nasce sozinho no gate (fixture "engine" da suite pytest).
 #
 #  - As portas: deslocamento do worktree + FQ_RESERVA_DO_PUSH. A faixa inteira
-#    vai de 0 a 49 (o limite do servers.ts e do Settings); por convencao, 0 a 24
+#    vai de 0 a 49 (o limite do servers.ts e de ConfiguracaoDeTeste); por convencao, 0 a 24
 #    e dos worktrees e 25 a 49, do push. O push de um worktree nunca cai no de
 #    outro (deslocamentos distintos somados a mesma reserva) nem num worktree.
 #
