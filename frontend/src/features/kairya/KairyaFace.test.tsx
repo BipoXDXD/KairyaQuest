@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithI18n } from '../../test/i18n'
 import { translate, type MessageKey } from '../../shared/i18n/catalog'
@@ -47,6 +47,29 @@ describe('KairyaFace', () => {
     rerender(<KairyaFace mood="celebrating" size="scene" />)
     expect(screen.getByRole('img')).toHaveAttribute('height', '1152')
   })
+
+  it.each(['scene', 'thumb'] as const)(
+    'usa o retrato compacto quando a arte falha em %s',
+    (size) => {
+      const { container, rerender } = renderWithI18n(<KairyaFace mood="thinking" size={size} />)
+      const image = container.querySelector('img')
+      if (image === null) throw new Error('A imagem do retrato deveria estar presente.')
+
+      fireEvent.error(image)
+
+      expect(image).toHaveAttribute('src', '/art/kairya/avatar.webp')
+      expect(image).toHaveAttribute('width', '128')
+      expect(image).toHaveAttribute('height', '160')
+      const alt = size === 'scene' ? translate('pt-BR', 'kairya.speaker') : ''
+      expect(image).toHaveAttribute('alt', alt)
+
+      fireEvent.error(image)
+      expect(image).toHaveAttribute('src', '/art/kairya/avatar.webp')
+
+      rerender(<KairyaFace mood="listening" size={size} />)
+      expect(container.querySelector('img')).toHaveAttribute('src', '/art/kairya/listening.webp')
+    },
+  )
 
   it('troca src e alt no mesmo ato, sem timer', () => {
     vi.useFakeTimers()
