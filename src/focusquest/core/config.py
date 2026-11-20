@@ -1,9 +1,14 @@
 """Configuracao da aplicacao, lida do ambiente."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BeforeValidator, Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # Os nomes que o `logging` conhece, em caixa alta. `NOTSET` fica de fora: no
 # logger do app ele quer dizer "herde da raiz" (so WARNING ou acima), que e o
@@ -42,8 +47,8 @@ class ConfiguracaoDeLog(BaseSettings):
 class Settings(ConfiguracaoDeLog):
     """Configuracao da aplicacao.
 
-    Nenhum campo tem valor padrao para credencial de BANCO: esquecer de
-    configurar precisa falhar na partida, nao conectar em um banco qualquer.
+    A URL do banco e obrigatoria quando a aplicacao resolve a engine.
+    O `/health` usa somente a configuracao de log.
 
     A excecao e a chave da Anthropic, e ela e deliberada. O README s14 manda
     mostrar indisponibilidade quando nao ha credencial: a ausencia dela e um
@@ -51,10 +56,8 @@ class Settings(ConfiguracaoDeLog):
     uma configuracao esquecida. Por isso `anthropic_api_key` e opcional, e
     `SecretStr` a esconde do `repr` e dos logs.
 
-    Variaveis desconhecidas sao REJEITADAS, nao ignoradas. Uma variavel que
-    o .env precisa carregar para outro consumidor -- como o compose -- e
-    declarada aqui, para que o conjunto de configuracao do projeto tenha um
-    lugar so onde esta escrito.
+    O .env compartilhado aceita as duas chaves usadas pelas ferramentas de
+    teste. Chaves desconhecidas continuam sendo rejeitadas.
 
     Variavel VAZIA conta como ausente (`env_ignore_empty`): o .env.example
     traz a chave como `FOCUSQUEST_ANTHROPIC_API_KEY=`, e uma chave vazia que
@@ -69,28 +72,32 @@ class Settings(ConfiguracaoDeLog):
     # e de init. A fonte de AMBIENTE le apenas as variaveis dos campos
     # declarados, entao `FOCUSQUEST_ALGO_ERRADO=1` exportado no processo e
     # descartada em silencio (fixado em tests/unit/test_config.py).
-    model_config = SettingsConfigDict(
-        env_prefix="FOCUSQUEST_",
-        env_file=".env",
-        env_ignore_empty=True,
-        # O valor pode ser segredo: sem isto o erro imprime `input_value=...`.
-        hide_input_in_errors=True,
-        extra="forbid",
-    )
+    model_config = SettingsConfigDict(extra="forbid")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # A fonte de ambiente ja le so os campos declarados. No .env
+        # compartilhado, deixe passar apenas as excecoes conhecidas de teste.
+        dotenv = cast(DotEnvSettingsSource, dotenv_settings)
+        dotenv.env_vars = {
+            chave: valor
+            for chave, valor in dotenv.env_vars.items()
+            if chave.lower()
+            not in {"focusquest_test_database_url", "focusquest_e2e_port_offset"}
+        }
+        return init_settings, env_settings, dotenv, file_secret_settings
 
     database_url: str
-    test_database_url: str
     # Consumida pelo compose.yaml, nao pelo Python. Declarada aqui porque o
     # .env a carrega e porque variavel desconhecida deve continuar sendo erro.
     db_port: int = 55432
-    # Consumida pelo E2E (frontend/tests/e2e/servers.ts, via Makefile), nao pela
-    # aplicacao: desloca as tres portas do E2E para dois gates rodarem ao mesmo
-    # tempo em worktrees diferentes (pendencia 19). De 0 a 49 -- o limite e o
-    # vao entre a API (8100) e o falso (8150), menos um; o servers.ts o deriva
-    # das portas e tests/unit/test_config.py confere que os dois batem. Faixa
-    # por convencao: 0 a 24 para worktrees, 25 a 49 para o pre-push
-    # (scripts/push-env.sh).
-    e2e_port_offset: int = Field(default=0, ge=0, le=49)
 
     anthropic_api_key: SecretStr | None = None
     # Escrito por extenso, e nao `None`: com `base_url=None` o SDK obedece a

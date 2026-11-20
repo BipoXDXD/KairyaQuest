@@ -184,11 +184,11 @@ export FQ_TOOLS_DIR="${ROOT}/.tools"
 # "git worktree add", entao ele tem apenas o que esta VERSIONADO, e precisa de
 # um recurso que mora no repositorio principal e que o git nao carrega.
 #
-# O mecanismo. O .env e gitignored, logo NAO EXISTE no worktree; e o Settings()
-# (src/focusquest/core/config.py) exige FOCUSQUEST_DATABASE_URL e
-# FOCUSQUEST_TEST_DATABASE_URL SEM valor padrao. Sem este bloco, o check-api do
-# worktree morre com ValidationError e TODO push e recusado -- e o check-e2e
-# herda a mesma condicao. O buraco nunca apareceu porque os pull requests
+# O .env do principal e ignorado pelo Git, entao suas variaveis nao chegam
+# ao worktree automaticamente. O check-api exercita a configuracao da API
+# e as ferramentas de teste, por isso precisa das duas URLs de banco.
+# Sem este bloco, todo push reprova no check-api. O check-e2e depende da
+# URL de teste. O buraco nunca apareceu porque os pull requests
 # anteriores sao todos anteriores ao alvo check-api existir: o primeiro push
 # desta branch seria o primeiro a exercitar este caminho.
 #

@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, delete, text
 from sqlalchemy.orm import Session
 
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url, get_engine
 from focusquest.main import app
 from focusquest.modules.missions.domain import MissionState, MissionType
@@ -40,7 +40,7 @@ OESTE = "America/Sao_Paulo"
 def engine_com_pgtz(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     banco_migrado: Engine,
 ) -> Iterator[Engine]:
     """Engine da aplicacao criada com `PGTZ` apontando para `request.param`.
@@ -49,7 +49,7 @@ def engine_com_pgtz(
     e outra, nova, cujas conexoes todas nascem com o `PGTZ` definido.
     """
     monkeypatch.setenv("PGTZ", request.param)
-    engine = create_engine_from_url(settings.test_database_url)
+    engine = create_engine_from_url(configuracao_de_teste.test_database_url)
     yield engine
     engine.dispose()
 
@@ -97,7 +97,9 @@ def _corpo(prazo: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize("engine_com_pgtz", [LESTE, OESTE], indirect=True)
 def test_sessao_fica_em_utc_mesmo_com_pgtz_em_outro_fuso(
-    engine_com_pgtz: Engine, settings: Settings, request: pytest.FixtureRequest
+    engine_com_pgtz: Engine,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    request: pytest.FixtureRequest,
 ) -> None:
     """`SHOW TimeZone` responde `UTC` na engine da aplicacao, com `PGTZ` em
     outro fuso -- e continua respondendo no SEGUNDO uso da mesma conexao.
@@ -115,7 +117,7 @@ def test_sessao_fica_em_utc_mesmo_com_pgtz_em_outro_fuso(
     duas leituras de baixo nao provaria nada.
     """
     fuso_pedido = request.node.callspec.params["engine_com_pgtz"]
-    crua = create_engine(settings.test_database_url)
+    crua = create_engine(configuracao_de_teste.test_database_url)
     try:
         assert _fuso_da_sessao(crua) == fuso_pedido
     finally:

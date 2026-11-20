@@ -1,27 +1,103 @@
 """A migracao precisa aplicar em banco VAZIO (README s10)."""
 
+from argparse import Namespace
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
+from io import StringIO
+from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.config import Config
+from pydantic import ValidationError
 from sqlalchemy import Engine, delete, inspect, make_url, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from focusquest.core import database
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url
 from focusquest.modules.missions.domain import MissionState, MissionType
 from focusquest.modules.missions.models import Mission, WeeklyPlan
 
 from .banco_de_teste import exigir_banco_de_teste
-from .conftest import alembic_config
+from .conftest import ALEMBIC_INI, alembic_config
 
 # As TABELAS que a migracao cria, sem `alembic_version` -- essa e do proprio
 # Alembic e sobrevive ao `downgrade base`.
 TABELAS_DA_MIGRACAO = frozenset(
     {"users", "missions", "mission_operations", "weekly_plans"}
 )
+
+
+@pytest.mark.parametrize("modo", [None, "false", "true"])
+def test_alembic_le_so_a_url_do_modo_escolhido(
+    modo: str | None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FOCUSQUEST_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    sufixo = "TEST_DATABASE_URL" if modo == "true" else "DATABASE_URL"
+    nome = "focusquest_test" if modo == "true" else "focusquest"
+    monkeypatch.setenv(
+        f"FOCUSQUEST_{sufixo}", f"postgresql+psycopg://127.0.0.1:9/{nome}"
+    )
+
+    saida = StringIO()
+    config = Config(
+        ALEMBIC_INI,
+        cmd_opts=Namespace(x=[f"test={modo}"]) if modo is not None else None,
+        output_buffer=saida,
+    )
+    command.upgrade(config, "0001", sql=True)
+    assert "CREATE TABLE users" in saida.getvalue()
+
+
+def test_alembic_recusa_seletor_de_modo_desconhecido_antes_da_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(
+        "FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://127.0.0.1:9/fixture"
+    )
+    config = Config(ALEMBIC_INI, cmd_opts=Namespace(x=["test=desconhecido"]))
+
+    def engine_inesperada(*args: object, **kwargs: object) -> None:
+        pytest.fail("seletor desconhecido não deve criar uma engine")
+
+    monkeypatch.setattr(database, "create_engine_from_url", engine_inesperada)
+    with pytest.raises(ValueError, match="valor inválido para -x test"):
+        command.upgrade(config, "head")
+
+
+@pytest.mark.parametrize(
+    ("nome", "erro", "mensagem"),
+    [
+        (None, ValidationError, "test_database_url"),
+        ("focusquest", RuntimeError, "termine em '_test'"),
+        ("x" * 60 + "_test", RuntimeError, "63 bytes"),
+    ],
+)
+def test_alembic_em_modo_teste_recusa_alvo_incompleto_ou_inseguro(
+    nome: str | None,
+    erro: type[Exception],
+    mensagem: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(
+        "FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://127.0.0.1:9/dev"
+    )
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    if nome is not None:
+        monkeypatch.setenv(
+            "FOCUSQUEST_TEST_DATABASE_URL", f"postgresql+psycopg://127.0.0.1:9/{nome}"
+        )
+
+    with pytest.raises(erro, match=mensagem):
+        command.downgrade(alembic_config(), "base")
 
 
 def test_migracao_aplica_em_banco_vazio(banco_migrado: Engine) -> None:
@@ -114,7 +190,9 @@ def engine_de_desenvolvimento(settings: Settings) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def engine_em_outro_servidor(settings: Settings) -> Iterator[Engine]:
+def engine_em_outro_servidor(
+    configuracao_de_teste: ConfiguracaoDeTeste,
+) -> Iterator[Engine]:
     """Engine com nome de banco aceitavel e SERVIDOR errado.
 
     Derivada da URL de teste, trocando so a porta e o nome: mesma credencial,
@@ -125,7 +203,9 @@ def engine_em_outro_servidor(settings: Settings) -> Iterator[Engine]:
     Vale aqui a mesma ressalva da fixture acima, e com mais peso: nada nunca
     deve conectar nesta URL. A guarda recusa antes, porque so le `engine.url`.
     """
-    alvo = make_url(settings.test_database_url).set(port=5432, database="qualquer_test")
+    alvo = make_url(configuracao_de_teste.test_database_url).set(
+        port=5432, database="qualquer_test"
+    )
     engine = create_engine_from_url(alvo.render_as_string(hide_password=False))
     yield engine
     engine.dispose()
@@ -166,9 +246,9 @@ def test_guarda_recusa_o_banco_de_desenvolvimento(
 
     mensagem = str(excecao.value)
     assert "recusando rodar teste destrutivo" in mensagem
-    # O alvo recusado precisa aparecer: uma recusa que nao diz CONTRA QUE
-    # banco ela foi obriga quem le o traceback a adivinhar.
-    assert "/focusquest'" in mensagem
+    # A mensagem identifica o alvo efetivo da fixture, com a senha redigida.
+    alvo = engine_de_desenvolvimento.url.set(query={}).render_as_string()
+    assert f"o alvo '{alvo}' nao e o banco de teste configurado" in mensagem
 
 
 def test_guarda_recusa_configuracao_de_teste_apontada_para_o_banco_errado(

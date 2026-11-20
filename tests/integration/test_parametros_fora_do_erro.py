@@ -11,14 +11,16 @@ import pytest
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url
 
 CANARIO = f"CANARY-{uuid.uuid4()}"
 
 
-def test_engine_nasce_escondendo_parametros(settings: Settings) -> None:
-    engine = create_engine_from_url(settings.test_database_url)
+def test_engine_nasce_escondendo_parametros(
+    configuracao_de_teste: ConfiguracaoDeTeste,
+) -> None:
+    engine = create_engine_from_url(configuracao_de_teste.test_database_url)
     try:
         assert engine.hide_parameters is True
     finally:

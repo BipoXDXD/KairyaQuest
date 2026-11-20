@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool, QueuePool
 
 from focusquest.core import database
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import (
     SQLSTATE_DA_TRANSACAO_OCIOSA,
     LimitesDaSessao,
@@ -92,7 +92,10 @@ def _tetos_da_sessao(engine: Engine) -> tuple[int, str, str, str]:
 
 @pytest.fixture
 def engine_da_aplicacao(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, settings: Settings, engine: Engine
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    engine: Engine,
 ) -> Iterator[Callable[[], Engine]]:
     """A engine de `get_engine`, apontada para o banco de TESTE.
 
@@ -100,8 +103,10 @@ def engine_da_aplicacao(
     nunca e usada. O `chdir` tira o .env do caminho: so o ambiente do teste
     configura o `Settings`.
     """
-    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", settings.test_database_url)
-    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", settings.test_database_url)
+    monkeypatch.setenv(
+        "FOCUSQUEST_DATABASE_URL", configuracao_de_teste.test_database_url
+    )
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     for variavel in (
         "FOCUSQUEST_DB_LOCK_TIMEOUT_MS",
         "FOCUSQUEST_DB_STATEMENT_TIMEOUT_MS",
@@ -142,9 +147,13 @@ def test_os_tetos_vem_do_settings_e_sobrevivem_a_devolucao_ao_pool(
     assert segunda == primeira
 
 
-def test_a_engine_sem_limites_nasce_sem_tetos(settings: Settings) -> None:
+def test_a_engine_sem_limites_nasce_sem_tetos(
+    configuracao_de_teste: ConfiguracaoDeTeste,
+) -> None:
     """O caminho do `alembic/env.py`: uma migracao longa nao pode ser cortada."""
-    engine = create_engine_from_url(settings.test_database_url, poolclass=NullPool)
+    engine = create_engine_from_url(
+        configuracao_de_teste.test_database_url, poolclass=NullPool
+    )
     try:
         _, trava, comando, ociosa = _tetos_da_sessao(engine)
     finally:
@@ -188,14 +197,14 @@ def _sem_vazamento(corpo: str, *proibidos: str) -> None:
 
 def test_trava_presa_vira_503_com_retry_after(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
 ) -> None:
     operation_id = "teto-trava-presa"
     with (
         _missao_commitada(banco_migrado) as mission_id,
         _engine_com_tetos(
-            settings.test_database_url, lock_timeout_ms=TETO_CURTO_MS
+            configuracao_de_teste.test_database_url, lock_timeout_ms=TETO_CURTO_MS
         ) as engine,
         banco_migrado.connect() as segurando,
     ):
@@ -241,13 +250,13 @@ def test_trava_presa_vira_503_com_retry_after(
 
 def test_comando_acima_do_teto_vira_503(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
 ) -> None:
     """`pg_sleep` de 1 s na sessao da requisicao, com `statement_timeout` de
     300 ms: o PostgreSQL cancela o comando (57014) e a rota responde 503."""
     with _engine_com_tetos(
-        settings.test_database_url, statement_timeout_ms=TETO_CURTO_MS
+        configuracao_de_teste.test_database_url, statement_timeout_ms=TETO_CURTO_MS
     ) as engine:
 
         def sessao_lenta() -> Iterator[Session]:
@@ -267,14 +276,17 @@ def test_comando_acima_do_teto_vira_503(
 
 def test_pool_esgotado_vira_503(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
 ) -> None:
     """Engine crua, e nao `create_engine_from_url`: so assim o pool tem uma
     conexao e uma espera de 200 ms, em vez dos 15 lugares e 4 s da aplicacao.
     O que se prova e o handler do `TimeoutError` do pool, nao o tamanho dele."""
     engine = create_engine(
-        settings.test_database_url, pool_size=1, max_overflow=0, pool_timeout=0.2
+        configuracao_de_teste.test_database_url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=0.2,
     )
     try:
         with engine.connect(), cliente_sobre(engine) as cliente:
@@ -290,13 +302,13 @@ def test_pool_esgotado_vira_503(
 
 def test_outro_erro_operacional_continua_500(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
 ) -> None:
     """A sessao encerra o proprio backend: o PostgreSQL responde 57P01
     (`admin_shutdown`), um `OperationalError` fora da lista transitoria. Ele
     nao e "banco ocupado", e repetir nao resolve: segue 500, sem `code`."""
-    with _engine_com_tetos(settings.test_database_url) as engine:
+    with _engine_com_tetos(configuracao_de_teste.test_database_url) as engine:
 
         def sessao_derrubada() -> Iterator[Session]:
             with Session(bind=engine) as sessao:
@@ -313,11 +325,12 @@ def test_outro_erro_operacional_continua_500(
 
 
 def test_transacao_ociosa_acima_do_teto_encerra_a_sessao(
-    banco_migrado: Engine, settings: Settings
+    banco_migrado: Engine, configuracao_de_teste: ConfiguracaoDeTeste
 ) -> None:
     with (
         _engine_com_tetos(
-            settings.test_database_url, idle_in_transaction_timeout_ms=TETO_CURTO_MS
+            configuracao_de_teste.test_database_url,
+            idle_in_transaction_timeout_ms=TETO_CURTO_MS,
         ) as engine,
         engine.connect() as ociosa,
     ):
@@ -370,7 +383,7 @@ def _backend_espera_trava(observador: Connection, pids: list[int]) -> bool:
 
 def test_transacao_ociosa_numa_rota_vira_503_e_loga_erro(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -378,7 +391,8 @@ def test_transacao_ociosa_numa_rota_vira_503_e_loga_erro(
     depois de o PostgreSQL derrubar o backend a rota roda a consulta. O 25P03
     chega pela rota com SQLSTATE: 503, e log em `error` (defeito, ADR 0001)."""
     with _engine_com_tetos(
-        settings.test_database_url, idle_in_transaction_timeout_ms=TETO_CURTO_MS
+        configuracao_de_teste.test_database_url,
+        idle_in_transaction_timeout_ms=TETO_CURTO_MS,
     ) as engine:
 
         def sessao_esquecida() -> Iterator[Session]:
@@ -407,7 +421,7 @@ def test_transacao_ociosa_numa_rota_vira_503_e_loga_erro(
 
 def test_deadlock_real_numa_rota_vira_503(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     cliente_sobre: Callable[[Engine], TestClient],
 ) -> None:
     """`FOR UPDATE` cruzado: a requisicao trava B (na sessao) e espera A (na
@@ -421,7 +435,7 @@ def test_deadlock_real_numa_rota_vira_503(
     with (
         _missao_commitada(banco_migrado) as missao_a,
         _missao_commitada(banco_migrado) as missao_b,
-        _engine_com_tetos(settings.test_database_url) as engine,
+        _engine_com_tetos(configuracao_de_teste.test_database_url) as engine,
         banco_migrado.connect() as de_fora,
         banco_migrado.connect() as observador,
     ):

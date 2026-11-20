@@ -15,7 +15,10 @@ mesmo arranjo do servidor falso do E2E.
 from sqlalchemy import Engine, make_url, text
 from sqlalchemy.engine import URL
 
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import (
+    ConfiguracaoDeTeste,
+    exigir_alvo_de_banco_de_teste,
+)
 from focusquest.core.database import create_engine_from_url
 
 
@@ -49,33 +52,20 @@ def exigir_banco_de_teste(engine: Engine) -> None:
     Juntas: a 1 impede apontar para outro servidor, a 2 impede apontar a
     variavel de teste para o banco errado.
     """
-    esperado = make_url(Settings().test_database_url)
+    esperado = make_url(ConfiguracaoDeTeste().test_database_url)
 
     # Condicao 1: alvo igual ao configurado. A comparacao e entre objetos URL,
     # nao entre strings, para nao depender de detalhe de formatacao. A
-    # mensagem mostra as duas URLs REDIGIDAS (`render_as_string()` esconde a
-    # senha por padrao): um traceback nao e lugar de credencial.
+    # mensagem mostra as URLs sem a consulta e com a senha redigida.
     if engine.url != esperado:
         raise RuntimeError(
             "recusando rodar teste destrutivo: o alvo "
-            f"'{engine.url.render_as_string()}' nao e o banco de teste "
-            f"configurado ('{esperado.render_as_string()}')"
+            f"'{engine.url.set(query={}).render_as_string()}' nao e o banco de teste "
+            f"configurado ('{esperado.set(query={}).render_as_string()}')"
         )
 
-    # Condicao 2: convencao de nome, conferida sem consultar a configuracao.
-    nome = engine.url.database or ""
-    if not nome.endswith("_test"):
-        raise RuntimeError(
-            f"recusando rodar teste destrutivo contra o banco '{nome}'; "
-            "esperado um banco cujo nome termine em '_test' -- confira "
-            "FOCUSQUEST_TEST_DATABASE_URL"
-        )
+    exigir_alvo_de_banco_de_teste(engine.url)
 
-
-# O PostgreSQL trunca em silencio um identificador acima de 63 bytes
-# (NAMEDATALEN - 1). Um nome de banco truncado deixaria de terminar em `_test`
-# -- e a guarda de nome teria aprovado a string ANTES do corte.
-LIMITE_DO_IDENTIFICADOR = 63
 
 # O banco de MANUTENCAO do servidor: existe em toda instalacao do PostgreSQL
 # (inclusive no servico do CI e no container do compose), e e dele que se
@@ -103,8 +93,8 @@ def criar_banco_se_ausente(engine: Engine) -> None:
 
     A guarda vem ANTES de qualquer conexao, e e a MESMA de `recriar_esquema`:
     um nome que nao termine em `_test`, ou um alvo que nao seja o banco de
-    teste configurado, nunca e criado. Depois dela, o limite de 63 bytes do
-    identificador, pelo mesmo motivo (ver `LIMITE_DO_IDENTIFICADOR`).
+    teste configurado, nunca e criado. A guarda tambem recusa identificadores
+    que o PostgreSQL truncaria.
 
     `CREATE DATABASE` nao roda dentro de transacao, dai o `AUTOCOMMIT`; e o
     nome vai entre aspas pelo preparador do dialeto, porque o
@@ -113,12 +103,6 @@ def criar_banco_se_ausente(engine: Engine) -> None:
     """
     exigir_banco_de_teste(engine)
     nome = engine.url.database or ""
-    if len(nome.encode()) > LIMITE_DO_IDENTIFICADOR:
-        raise RuntimeError(
-            f"recusando criar o banco '{nome}': o nome passa de "
-            f"{LIMITE_DO_IDENTIFICADOR} bytes, e o PostgreSQL o truncaria em "
-            "silencio -- escolha um nome de worktree mais curto"
-        )
 
     manutencao = create_engine_from_url(_url_de_manutencao(engine.url))
     try:
@@ -149,7 +133,7 @@ def recriar_esquema(engine: Engine) -> None:
 
 
 def main() -> None:
-    engine = create_engine_from_url(Settings().test_database_url)
+    engine = create_engine_from_url(ConfiguracaoDeTeste().test_database_url)
     try:
         criar_banco_se_ausente(engine)
         recriar_esquema(engine)

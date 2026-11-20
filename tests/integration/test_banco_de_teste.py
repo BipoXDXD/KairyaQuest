@@ -3,7 +3,7 @@
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,13 +11,49 @@ import pytest
 from alembic import command
 from sqlalchemy import Engine, inspect, make_url, text
 
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url
 
-from .banco_de_teste import criar_banco_se_ausente, recriar_esquema
+from .banco_de_teste import (
+    criar_banco_se_ausente,
+    exigir_banco_de_teste,
+    recriar_esquema,
+)
 from .conftest import alembic_config
 
 RAIZ = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("operacao", [criar_banco_se_ausente, recriar_esquema])
+def test_ddl_recusa_parametro_de_alvo_antes_de_conectar(
+    operacao: Callable[[Engine], None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = make_url("postgresql+psycopg://127.0.0.1:9/fixture_test")
+    url = url.update_query_dict({"dbname": "outro_fixture_test"})
+    texto = url.render_as_string(hide_password=False)
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", texto)
+    engine = create_engine_from_url(texto)
+    dbapi = engine.dialect.loaded_dbapi
+
+    def conexao_inesperada(*args: object, **kwargs: object) -> None:
+        pytest.fail("a guarda deve recusar a URL antes de conectar")
+
+    monkeypatch.setattr(dbapi, "connect", conexao_inesperada)
+    try:
+        with pytest.raises(RuntimeError, match="parâmetros de conexão não permitidos"):
+            operacao(engine)
+    finally:
+        engine.dispose()
+
+
+def test_guarda_aceita_opcoes_de_transporte(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "postgresql+psycopg://127.0.0.1:9/fixture_test?sslmode=require&connect_timeout=5"
+    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", url)
+    engine = create_engine_from_url(url)
+    try:
+        exigir_banco_de_teste(engine)
+    finally:
+        engine.dispose()
 
 
 def test_recriar_esquema_recusa_o_banco_de_desenvolvimento() -> None:
@@ -74,10 +110,10 @@ def test_o_modulo_como_comando_recusa_o_banco_errado() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _existe(settings: Settings, nome: str) -> bool:
+def _existe(configuracao_de_teste: ConfiguracaoDeTeste, nome: str) -> bool:
     """Consulta o `pg_database` pelo banco de MANUTENCAO do mesmo servidor."""
     manutencao = create_engine_from_url(
-        make_url(settings.test_database_url)
+        make_url(configuracao_de_teste.test_database_url)
         .set(database="postgres")
         .render_as_string(hide_password=False)
     )
@@ -94,11 +130,11 @@ def _existe(settings: Settings, nome: str) -> bool:
         manutencao.dispose()
 
 
-def _apagar_se_existir(settings: Settings, nome: str) -> None:
+def _apagar_se_existir(configuracao_de_teste: ConfiguracaoDeTeste, nome: str) -> None:
     """Limpeza do banco que o PROPRIO teste criou -- sempre um nome `_test`."""
     assert nome.endswith("_test")
     manutencao = create_engine_from_url(
-        make_url(settings.test_database_url)
+        make_url(configuracao_de_teste.test_database_url)
         .set(database="postgres")
         .render_as_string(hide_password=False)
     )
@@ -112,7 +148,7 @@ def _apagar_se_existir(settings: Settings, nome: str) -> None:
 
 
 @pytest.fixture
-def banco_novo(settings: Settings) -> Iterator[tuple[str, str]]:
+def banco_novo(configuracao_de_teste: ConfiguracaoDeTeste) -> Iterator[tuple[str, str]]:
     """Um banco de teste que AINDA NAO EXISTE: nome e URL completa.
 
     O hifen no nome e de proposito: o `novo-worktree.sh` aceita `[a-z0-9-]`, e
@@ -120,15 +156,15 @@ def banco_novo(settings: Settings) -> Iterator[tuple[str, str]]:
     """
     nome = f"focusquest_criacao-{uuid4().hex[:8]}_test"
     url = (
-        make_url(settings.test_database_url)
+        make_url(configuracao_de_teste.test_database_url)
         .set(database=nome)
         .render_as_string(hide_password=False)
     )
-    assert not _existe(settings, nome)
+    assert not _existe(configuracao_de_teste, nome)
     try:
         yield nome, url
     finally:
-        _apagar_se_existir(settings, nome)
+        _apagar_se_existir(configuracao_de_teste, nome)
 
 
 def test_criar_banco_recusa_nome_sem_sufixo_antes_de_conectar(
@@ -177,7 +213,7 @@ def test_criar_banco_recusa_nome_que_o_postgresql_truncaria(
 
 def test_criar_banco_cria_o_que_falta_e_e_idempotente(
     monkeypatch: pytest.MonkeyPatch,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     banco_novo: tuple[str, str],
 ) -> None:
     nome, url = banco_novo
@@ -185,7 +221,7 @@ def test_criar_banco_cria_o_que_falta_e_e_idempotente(
     engine = create_engine_from_url(url)
     try:
         criar_banco_se_ausente(engine)
-        assert _existe(settings, nome)
+        assert _existe(configuracao_de_teste, nome)
         # A segunda chamada encontra o banco e nao faz nada -- sem erro de
         # "already exists".
         criar_banco_se_ausente(engine)
@@ -218,18 +254,18 @@ def _rodar(
 
 
 def test_o_modulo_como_comando_cria_o_banco_que_falta(
-    settings: Settings, banco_novo: tuple[str, str]
+    configuracao_de_teste: ConfiguracaoDeTeste, banco_novo: tuple[str, str]
 ) -> None:
     """O caminho do `make reset-test-db` num worktree novo: o banco ainda nao
     existe, e o comando o cria antes de recriar o esquema."""
     nome, url = banco_novo
     resultado = _rodar(["-m", "integration.banco_de_teste"], url)
     assert resultado.returncode == 0, resultado.stderr
-    assert _existe(settings, nome)
+    assert _existe(configuracao_de_teste, nome)
 
 
 def test_a_suite_roda_contra_um_banco_que_ainda_nao_existe(
-    settings: Settings, banco_novo: tuple[str, str]
+    configuracao_de_teste: ConfiguracaoDeTeste, banco_novo: tuple[str, str]
 ) -> None:
     """A fixture do pytest cria o banco sob demanda: no `make check` o
     `check-api` roda ANTES do `check-e2e` (e do `reset-test-db` dele), e o
@@ -251,4 +287,4 @@ def test_a_suite_roda_contra_um_banco_que_ainda_nao_existe(
     )
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert "1 passed" in resultado.stdout
-    assert _existe(settings, nome)
+    assert _existe(configuracao_de_teste, nome)

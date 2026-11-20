@@ -25,7 +25,7 @@ from sqlalchemy.exc import TimeoutError as PoolEsgotadoError
 from sqlalchemy.orm import Session, sessionmaker
 
 from focusquest.core.clock import get_clock
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import LimitesDaSessao, create_engine_from_url, get_engine
 from focusquest.main import CodigoDeErro, app
 from focusquest.modules.tutoring.dependencies import get_tutoria
@@ -96,9 +96,11 @@ def _tutoria(segurando: Connection | None) -> Tutoria:
 
 
 @contextmanager
-def _engine_com_trava_curta(settings: Settings) -> Iterator[Engine]:
+def _engine_com_trava_curta(
+    configuracao_de_teste: ConfiguracaoDeTeste,
+) -> Iterator[Engine]:
     engine = create_engine_from_url(
-        settings.test_database_url,
+        configuracao_de_teste.test_database_url,
         limites=LimitesDaSessao(
             lock_timeout_ms=TETO_CURTO_MS,
             statement_timeout_ms=15_000,
@@ -188,7 +190,7 @@ def _preparar(engine: Engine, cid: str, tutoria: Tutoria) -> ParaGerar:
 
 def test_trava_na_gravacao_final_fecha_o_stream_com_banco_ocupado(
     banco_migrado: Engine,
-    settings: Settings,
+    configuracao_de_teste: ConfiguracaoDeTeste,
     conversa: Conversa,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -197,7 +199,7 @@ def test_trava_na_gravacao_final_fecha_o_stream_com_banco_ocupado(
     orfaos. Nem o corpo nem o log levam SQL, parametros ou o texto."""
     cid = conversa.id("banco-ocupado-rota")
     with (
-        _engine_com_trava_curta(settings) as engine,
+        _engine_com_trava_curta(configuracao_de_teste) as engine,
         _segurando(banco_migrado) as segurando,
         _cliente(engine, _tutoria(segurando)) as cliente,
         caplog.at_level(logging.WARNING),
@@ -226,14 +228,16 @@ def test_trava_na_gravacao_final_fecha_o_stream_com_banco_ocupado(
 
 
 def test_a_segunda_tentativa_grava_falhou_e_o_reenvio_e_aceito(
-    banco_migrado: Engine, settings: Settings, conversa: Conversa
+    banco_migrado: Engine,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    conversa: Conversa,
 ) -> None:
     """A gravacao final esbarra na trava; a trava sai antes da segunda
     tentativa, que grava `falhou`/`banco_ocupado`. Por isso o "Tentar de
     novo" com o mesmo `client_message_id` gera de novo, sem 409."""
     cid = conversa.id("banco-ocupado-segunda")
     with (
-        _engine_com_trava_curta(settings) as engine,
+        _engine_com_trava_curta(configuracao_de_teste) as engine,
         _segurando(banco_migrado) as segurando,
     ):
         tutoria = _tutoria(segurando)
@@ -269,7 +273,9 @@ def test_a_segunda_tentativa_grava_falhou_e_o_reenvio_e_aceito(
 
 
 def test_pool_esgotado_depois_do_commit_nao_desmente_a_resposta_completa(
-    banco_migrado: Engine, settings: Settings, conversa: Conversa
+    banco_migrado: Engine,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    conversa: Conversa,
 ) -> None:
     """Depois do commit que grava `completa`, nada mais pede conexao ao pool.
 
@@ -278,7 +284,7 @@ def test_pool_esgotado_depois_do_commit_nao_desmente_a_resposta_completa(
     o "Tentar de novo" de uma `interrompida` gastaria mais um turno pago."""
     cid = conversa.id("banco-ocupado-depois-do-commit")
     tutoria = _tutoria(None)
-    with _engine_com_trava_curta(settings) as engine:
+    with _engine_com_trava_curta(configuracao_de_teste) as engine:
         preparo = _preparar(engine, cid, tutoria)
         pedidos = 0
 
@@ -309,7 +315,9 @@ def test_pool_esgotado_depois_do_commit_nao_desmente_a_resposta_completa(
 
 
 def test_erro_de_banco_nao_transitorio_continua_propagando(
-    banco_migrado: Engine, settings: Settings, conversa: Conversa
+    banco_migrado: Engine,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    conversa: Conversa,
 ) -> None:
     """Transacao somente leitura: o `SELECT ... FOR UPDATE` da gravacao final
     falha com 25006, que repetir nao resolve. Nada de `banco_ocupado`."""
@@ -317,7 +325,7 @@ def test_erro_de_banco_nao_transitorio_continua_propagando(
     tutoria = _tutoria(None)
     preparo = _preparar(banco_migrado, cid, tutoria)
     somente_leitura = create_engine(
-        settings.test_database_url,
+        configuracao_de_teste.test_database_url,
         connect_args={"options": "-c default_transaction_read_only=on"},
     )
     eventos: list[EventoDoTurno] = []
@@ -335,17 +343,19 @@ def test_erro_de_banco_nao_transitorio_continua_propagando(
 
 
 def test_erro_nao_transitorio_na_segunda_tentativa_propaga(
-    banco_migrado: Engine, settings: Settings, conversa: Conversa
+    banco_migrado: Engine,
+    configuracao_de_teste: ConfiguracaoDeTeste,
+    conversa: Conversa,
 ) -> None:
     """A gravacao final esbarra na trava; a segunda tentativa cai numa
     transacao somente leitura (25006). So o corte transitorio e engolido."""
     cid = conversa.id("banco-ocupado-segunda-nao-transitoria")
     somente_leitura = create_engine(
-        settings.test_database_url,
+        configuracao_de_teste.test_database_url,
         connect_args={"options": "-c default_transaction_read_only=on"},
     )
     with (
-        _engine_com_trava_curta(settings) as engine,
+        _engine_com_trava_curta(configuracao_de_teste) as engine,
         _segurando(banco_migrado) as segurando,
     ):
         tutoria = _tutoria(segurando)

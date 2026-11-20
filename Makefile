@@ -90,9 +90,8 @@ check-proxy: ## Testa a autenticacao HTTP e as rotas de saude no Nginx em contai
 # O deslocamento das portas (FOCUSQUEST_E2E_PORT_OFFSET, pendencia 19) chega ao
 # Playwright por esta receita, e SO ele: o `servers.ts` le a variavel do
 # ambiente do processo, e o Node nao le o `.env`. Quem resolve o valor e o
-# `Settings` -- o mesmo leitor do `.env` que a aplicacao usa, com a mesma
-# precedencia (ambiente acima do `.env`, como no pre-push) e a mesma validacao
-# (0 a 49) --, e a receita repassa apenas esse campo; nenhuma outra linha do
+# `ConfiguracaoDeTeste`: le o ambiente antes do `.env` e valida a faixa de
+# 0 a 49. A receita repassa apenas esse campo; nenhuma outra linha do
 # `.env` vai para o ambiente do Playwright. A atribuicao fica SOZINHA antes do
 # `&&`: numa atribuicao isolada, a falha da substituicao derruba a receita;
 # prefixada ao comando (`VAR=$$(...) npx ...`), ela seria ignorada e o E2E
@@ -100,7 +99,7 @@ check-proxy: ## Testa a autenticacao HTTP e as rotas de saude no Nginx em contai
 check-e2e: reset-test-db ## Build e testes ponta a ponta com Playwright e axe-core
 	python3 scripts/picomatch_backport.py verify .
 	cd $(WEB) && VITE_API_URL=/api npm run build
-	deslocamento="$$(uv run python -c 'from focusquest.core.config import Settings; print(Settings().e2e_port_offset)')" \
+	deslocamento="$$(uv run python -c 'from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste; print(ConfiguracaoDeTeste().e2e_port_offset)')" \
 		&& cd $(WEB) && FOCUSQUEST_E2E_PORT_OFFSET="$$deslocamento" npx playwright test
 
 # Desde a pendencia 19 o banco de teste e POR WORKTREE (o nome vem do .env), e

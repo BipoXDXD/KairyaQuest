@@ -19,8 +19,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from sqlalchemy import make_url
 
-from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "e2e-env.sh"
 
@@ -56,10 +57,24 @@ def test_recusa_banco_sem_sufixo_de_teste() -> None:
     assert "A GUARDA DEIXOU PASSAR" not in resultado.stdout
 
 
+def test_recusa_parametro_de_alvo_antes_de_subir_api() -> None:
+    url = make_url(URL_DE_DESENVOLVIMENTO).set(
+        database="fixture_test", query={"service": "fixture"}
+    )
+    resultado = _rodar(
+        ["echo", "A API SUBIU"],
+        {"FOCUSQUEST_TEST_DATABASE_URL": url.render_as_string(hide_password=False)},
+    )
+
+    assert resultado.returncode != 0
+    assert "parâmetros de conexão não permitidos" in resultado.stderr
+    assert "A API SUBIU" not in resultado.stdout
+
+
 def test_aponta_focusquest_database_url_para_o_banco_de_teste() -> None:
     """A guarda diz SIM: o processo filho recebe a URL do banco de TESTE.
 
-    A comparacao e com `Settings().test_database_url` -- a mesma fonte que o
+    A comparacao e com `ConfiguracaoDeTeste().test_database_url` -- a mesma fonte que o
     script consulta --, e nao com uma URL escrita aqui: o teste confere que a
     variavel do FILHO passou a ser a de teste, nao qual banco esta configurado
     nesta maquina.
@@ -67,7 +82,7 @@ def test_aponta_focusquest_database_url_para_o_banco_de_teste() -> None:
     resultado = _rodar(["printenv", "FOCUSQUEST_DATABASE_URL"], {})
 
     assert resultado.returncode == 0, resultado.stderr
-    assert resultado.stdout.strip() == Settings().test_database_url
+    assert resultado.stdout.strip() == ConfiguracaoDeTeste().test_database_url
 
 
 FALSO_LOCAL = "http://127.0.0.1:8150"

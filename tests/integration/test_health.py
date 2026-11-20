@@ -162,39 +162,24 @@ def test_ready_sem_configuracao_de_banco_responde_503(
     assert resposta.json() == {"status": "unavailable", "database": "not_configured"}
 
 
-@pytest.mark.parametrize(
-    ("variavel", "valor"),
-    [
-        # Um campo que nao e do banco, invalido, com a URL presente.
-        ("FOCUSQUEST_TUTOR_MAX_TOKENS", "0"),
-        # Falta so a URL de TESTE: tambem nao e "banco nao configurado".
-        ("FOCUSQUEST_TEST_DATABASE_URL", None),
-    ],
-)
 def test_ready_com_outra_configuracao_invalida_sobe_o_erro(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    settings: Settings,
-    variavel: str,
-    valor: str | None,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """So a AUSENCIA da `database_url` vira `not_configured` (revisao I1).
-    Qualquer outro erro do `Settings` continua subindo como antes -- 500 com o
-    traceback que nomeia o campo --, em vez de um 503 que aponta o banco."""
+    """Com URL configurada, um valor de runtime invalido continua sendo erro."""
     monkeypatch.setattr(database, "_engine", None)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", settings.database_url)
-    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", settings.test_database_url)
-    if valor is None:
-        monkeypatch.delenv(variavel)
-    else:
-        monkeypatch.setenv(variavel, valor)
+    monkeypatch.setenv(
+        "FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://127.0.0.1:9/dev"
+    )
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    monkeypatch.setenv("FOCUSQUEST_TUTOR_MAX_TOKENS", "0")
 
     with TestClient(app) as c, pytest.raises(ValidationError) as erro:
         c.get("/ready")
 
     (falha,) = erro.value.errors()
-    assert falha["loc"] != ("database_url",)
+    assert falha["loc"] == ("tutor_max_tokens",)
+    assert falha["type"] == "greater_than_equal"
 
 
 def test_get_engine_se_configurada_devolve_a_engine_compartilhada(
@@ -266,32 +251,51 @@ def test_ready_nao_oculta_erro_inesperado_na_conexao(
         c.get("/ready")
 
 
-def test_ready_resolve_engine_real_sem_override_reaproveita_e_descarta_no_fim(
+def test_ready_sem_url_de_teste_chega_a_verificar_o_banco(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", "postgresql+psycopg://127.0.0.1:9/db")
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
+    monkeypatch.setattr(database, "_engine", None)
+
+    with TestClient(app) as c:
+        resposta = c.get("/ready")
+
+    assert resposta.status_code == 503
+    assert resposta.json() == {"status": "unavailable", "database": "unavailable"}
+
+
+def test_api_funciona_sem_url_de_teste_e_descarta_a_engine_no_fim(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    settings: Settings,
-    engine: Engine,
+    banco_migrado: Engine,
     descartar_engines: list[Engine],
 ) -> None:
-    # A fixture engine garante que o banco proprio existe. NUNCA usar a URL
-    # de desenvolvimento para o caminho real sem override, nem para SELECT 1.
-    monkeypatch.setenv("FOCUSQUEST_DATABASE_URL", settings.test_database_url)
-    monkeypatch.setenv("FOCUSQUEST_TEST_DATABASE_URL", settings.test_database_url)
+    # O runtime usa seu caminho normal, apontado para o PostgreSQL isolado.
+    monkeypatch.setenv(
+        "FOCUSQUEST_DATABASE_URL",
+        banco_migrado.url.render_as_string(hide_password=False),
+    )
+    monkeypatch.delenv("FOCUSQUEST_TEST_DATABASE_URL", raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(database, "_engine", None)
     try:
         with TestClient(app) as c:
-            primeira_resposta = c.get("/ready")
+            saude = c.get("/health")
+            prontidao = c.get("/ready")
             primeira_engine = database._engine
-            segunda_resposta = c.get("/ready")
-            # Reaproveita: a segunda requisicao nao criou outra engine.
+            perfil = c.get("/api/me")
+            # O /ready e a rota de negocio usam a mesma engine.
             assert database._engine is primeira_engine
-        assert primeira_resposta.status_code == 200
-        assert primeira_resposta.json() == {"status": "ok", "database": "ok"}
-        assert segunda_resposta.status_code == 200
-        assert segunda_resposta.json() == {"status": "ok", "database": "ok"}
+        assert saude.status_code == 200
+        assert saude.json() == {"status": "ok"}
+        assert prontidao.status_code == 200
+        assert prontidao.json() == {"status": "ok", "database": "ok"}
+        assert perfil.status_code == 200
+        assert perfil.json()["display_name"] == "Estudante"
         assert primeira_engine is not None
-        assert primeira_engine.url == engine.url
+        assert primeira_engine.url == banco_migrado.url
         # O desligamento do app descarta a engine (pendencia 14): a
         # referencia global volta a None, e a proxima chamada cria outra.
         assert database._engine is None

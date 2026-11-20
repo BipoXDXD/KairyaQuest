@@ -265,11 +265,8 @@ def get_engine_se_configurada() -> Engine | None:
     partida, e o `/health` segue sem tocar em nada disto.
 
     So a AUSENCIA da `database_url` vira None (revisao I1 do lote back): um
-    outro campo invalido -- `tutor_max_tokens=0`, chave desconhecida no .env,
-    a URL de teste faltando -- nao e "banco nao configurado", e sobe como
-    antes, com o traceback que nomeia o campo. "Contem", e nao "e so": sem
-    configuracao nenhuma, a URL de teste falta junto, e o banco de fato nao
-    esta configurado.
+    outro campo invalido, como `tutor_max_tokens=0` ou uma chave desconhecida
+    no .env, sobe com o traceback que nomeia o campo.
     """
     try:
         return get_engine()

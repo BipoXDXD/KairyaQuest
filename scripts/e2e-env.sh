@@ -16,8 +16,7 @@
 # teste no banco de desenvolvimento. Por isso o webServer do Playwright chama
 # este script em vez de chamar o uvicorn direto.
 #
-# A URL NAO esta escrita aqui. Ela vem de `Settings().test_database_url`, o
-# unico lugar do projeto que sabe onde o banco de teste mora: repetir a URL
+# A URL vem de `ConfiguracaoDeTeste().test_database_url`. Repetir a URL
 # aqui criaria uma segunda copia para divergir da primeira -- quem mudasse a
 # porta ou o nome do banco no .env mudaria um e esqueceria o outro. O motivo e
 # uma fonte so, e nao sigilo: a credencial LOCAL ja esta versionada, de
@@ -50,11 +49,19 @@ cd "$ROOT"
 url="$(PYTHONPATH=tests uv run python - <<'PY'
 from urllib.parse import urlsplit
 
+from pydantic import ValidationError
+
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.core.database import create_engine_from_url
 from integration.banco_de_teste import exigir_banco_de_teste
 
-engine = create_engine_from_url(Settings().test_database_url)
+try:
+    url = ConfiguracaoDeTeste().test_database_url
+except ValidationError as erro:
+    raise SystemExit(f"recusando subir a API do E2E: {erro}") from None
+
+engine = create_engine_from_url(url)
 try:
     exigir_banco_de_teste(engine)
 except RuntimeError as erro:
@@ -70,7 +77,7 @@ finally:
 # provedor fora da maquina -- a Anthropic, um proxy, um IP --, essa chave e o
 # gasto iriam para longe do teste. So o HOST vai para a mensagem: uma URL com
 # credencial embutida iria inteira para o log.
-endereco = Settings().anthropic_base_url
+endereco = Settings(database_url=url).anthropic_base_url
 host = urlsplit(endereco).hostname
 if host not in {"127.0.0.1", "localhost", "::1"}:
     raise SystemExit(

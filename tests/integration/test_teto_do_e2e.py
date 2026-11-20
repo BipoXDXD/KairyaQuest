@@ -14,6 +14,7 @@ from sqlalchemy import func, make_url, select
 from sqlalchemy.orm import Session
 
 from focusquest.core.config import Settings
+from focusquest.core.configuracao_de_teste import ConfiguracaoDeTeste
 from focusquest.modules.tutoring.domain import Papel, StatusDaMensagem
 from focusquest.modules.tutoring.models import TutorMessage
 from focusquest.modules.tutoring.service import turnos_de_hoje
@@ -153,13 +154,13 @@ def test_apagar_sem_nada_semeado_e_sucesso(session: Session) -> None:
 
 
 def test_o_comando_recusa_um_banco_que_nao_e_o_de_teste(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
+    monkeypatch: pytest.MonkeyPatch, configuracao_de_teste: ConfiguracaoDeTeste
 ) -> None:
     # Um alvo que comprovadamente nao e o de teste: o mesmo servidor do banco
     # de teste com outro nome de banco. Derivado da URL de teste, e nao da
     # `database_url`, para nao depender do que o ambiente aponta como dev.
     fora_do_teste = (
-        make_url(settings.test_database_url)
+        make_url(configuracao_de_teste.test_database_url)
         .set(database="focusquest_nao_e_teste")
         .render_as_string(hide_password=False)
     )
